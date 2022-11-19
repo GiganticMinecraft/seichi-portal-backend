@@ -60,6 +60,9 @@ url: POST /api/form/blacklist/{contents}
 
 - IPアドレス{ip_address}
 
+### 備考
+1MCIDにつき1個だけ
+
 ## その他のお問い合わせ
 url: POST /api/form/else-inquiry/{contents}
 
