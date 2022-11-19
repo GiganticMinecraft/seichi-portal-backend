@@ -19,7 +19,7 @@
  アカウント情報{account_info}を必ず含める。
 
  ## 通報
- url: POST /api/form/report/{contents}
+ url: POST /api/form/report/
  
  - 報告内容の要約{report_title}
  - 通報内容{report_content}
@@ -28,35 +28,35 @@
  - 個人チャットの内容を含むか{is_include_private_chats}
 
  ## 不具合報告
-  url: POST /api/form/bug-report/{contents}
+  url: POST /api/form/bug-report/
 
  - 不具合の種類{bug-type}
  - 不具合の内容{bug-content}
 
 ## ご意見ご感想リクエスト
- url: POST /api/form/request/{contents}
+ url: POST /api/form/request/
 
 - 投稿内容{content}
 
 ## 処罰への異議申し立て
-url: POST /api/form/ban-objection/{contents}
+url: POST /api/form/ban-objection/
 
 - 申立内容{content}
 
 ## Modの使用可否
-url: POST /api/form/can-mod-use/{contents}
+url: POST /api/form/can-mod-use/
 
 - Mod名{mod_name}
 - Modの内容{mod_content}
 - Modの説明があるサイトのリンク{mod_explanation}
 
 ## 経験値のオーバーフロー
-url: POST /api/form/exp-overflow/{contents}
+url: POST /api/form/exp-overflow/
 
 - 内容{content}
 
 ## blacklistと表示される
-url: POST /api/form/blacklist/{contents}
+url: POST /api/form/blacklist/
 
 - IPアドレス{ip_address}
 
@@ -64,6 +64,6 @@ url: POST /api/form/blacklist/{contents}
 1MCIDにつき1個だけ
 
 ## その他のお問い合わせ
-url: POST /api/form/general-inquiry/{contents}
+url: POST /api/form/general-inquiry/
 
 - 内容{content}
