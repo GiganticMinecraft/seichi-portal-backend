@@ -28,7 +28,7 @@
  - 個人チャットの内容を含むか{is_include_private_chats}
 
  ## 不具合報告
-  url: POST /api/form/bugReport/{contents}
+  url: POST /api/form/bug-report/{contents}
 
  - 不具合の種類{bug-type}
  - 不具合の内容{bug-content}
@@ -64,6 +64,6 @@ url: POST /api/form/blacklist/{contents}
 1MCIDにつき1個だけ
 
 ## その他のお問い合わせ
-url: POST /api/form/else-inquiry/{contents}
+url: POST /api/form/general-inquiry/{contents}
 
 - 内容{content}
