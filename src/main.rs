@@ -13,7 +13,7 @@ async fn main() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::form::domain::RawForm;
+    use crate::form::controllers::raw_form::RawForm;
     use actix_web::{dev::Service, http, test, App};
 
     use super::*;
