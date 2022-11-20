@@ -18,7 +18,7 @@ impl From<Form> for DomainForm {
         DomainForm {
             form_titles: f
                 .form_titles()
-                .into_iter()
+                .iter()
                 .map(|t| FormTitle {
                     title: t.to_string(),
                 })

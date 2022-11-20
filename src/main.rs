@@ -14,8 +14,8 @@ async fn main() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::form::domain::{Form, FormId, FormTitle};
-    use actix_web::{http, test, web, App};
+    use crate::form::domain::{Form};
+    use actix_web::{dev::Service, http, test, App};
 
     use super::*;
 
