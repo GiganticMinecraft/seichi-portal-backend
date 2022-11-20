@@ -1,21 +1,14 @@
+use crate::form::controllers::raw_form::RawForm;
 use crate::form::domain::{FormId, FormTitle};
-use derive_getters::Getters;
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Getters)]
-pub struct Form {
-    pub form_titles: Vec<String>,
-    pub form_id: u8,
-}
-
-struct DomainForm {
+struct Form {
     form_titles: Vec<FormTitle>,
     form_id: FormId,
 }
 
-impl From<Form> for DomainForm {
-    fn from(f: Form) -> Self {
-        DomainForm {
+impl From<RawForm> for Form {
+    fn from(f: RawForm) -> Self {
+        Form {
             form_titles: f
                 .form_titles()
                 .iter()
@@ -23,7 +16,9 @@ impl From<Form> for DomainForm {
                     title: t.to_string(),
                 })
                 .collect(),
-            form_id: FormId { form_id: f.form_id },
+            form_id: FormId {
+                form_id: *f.form_id(),
+            },
         }
     }
 }
