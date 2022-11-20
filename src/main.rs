@@ -1,14 +1,19 @@
-use actix_web::{App, HttpServer};
+use actix_web::{web, App, HttpServer, Responder};
 use form::listeners::create_form_listener;
+use form::listeners::delete_form_listener;
 
 mod form;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| App::new().service(create_form_listener))
-        .bind(("127.0.0.1", 9000))?
-        .run()
-        .await
+    HttpServer::new(|| {
+        App::new()
+            .service(create_form_listener)
+            .service(delete_form_listener)
+    })
+    .bind(("127.0.0.1", 9000))?
+    .run()
+    .await
 }
 
 #[cfg(test)]
