@@ -21,9 +21,31 @@ url: POST /api/form/create
 フォーム作成サンプル
 ```json
 {
-  "form_titles": [
-    "test1",
-    "test2"
+  "form_name": "formName",
+  "form_questions": [
+    {
+      "question": "question1",
+      "description": "description1",
+      "question_type": "text"
+    },
+    {
+      "question": "question2",
+      "description": "description2",
+      "question_type": "pulldown",
+      "choices": [
+        "value1",
+        "value2"
+      ]
+    },
+    {
+      "question": "question3",
+      "description": "description3",
+      "question_type": "checkbox",
+      "choices": [
+        "value1",
+        "value2"
+      ]
+    }
   ]
 }
 ```
