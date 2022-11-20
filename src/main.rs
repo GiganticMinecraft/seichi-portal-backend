@@ -15,7 +15,7 @@ async fn main() -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::form::domain::{Form, FormId, FormTitle};
-    use actix_web::{body::to_bytes, dev::Service, http, test, web, App};
+    use actix_web::{http, test, web, App};
 
     use super::*;
 
@@ -26,10 +26,8 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/api/form/create")
             .set_json(&Form {
-                form_titles: vec![FormTitle {
-                    title: "test1".parse().unwrap(),
-                }],
-                form_id: FormId { form_id: 1 },
+                form_titles: vec!["test1".to_owned()],
+                form_id: 1,
             })
             .to_request();
         let resp = app.call(req).await.unwrap();
