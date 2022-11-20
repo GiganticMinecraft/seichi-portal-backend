@@ -15,11 +15,11 @@
 
  また、受け取る方式としてはJSONを利用する
 
- ## フォームの作成
- url: POST /api/form/create
+## フォームの作成
+url: POST /api/form/create
 
- フォーム作成サンプル
- ```json
+フォーム作成サンプル
+```json
 {
   "form_titles": [
     "test1",
@@ -27,7 +27,11 @@
   ],
   "form_id": 1
 }
- ```
+```
+
+### 想定される返り値
+- Success (成功)
+- AlreadyExists (すでに存在する)
 
 ## フォームの削除
 url: POST /api/form/delete
@@ -38,3 +42,7 @@ url: POST /api/form/delete
   "form_id": 1
 }
 ```
+
+### 想定される返り値
+- Success (成功)
+- NotExists (指定されたフォームが存在しなかった)
