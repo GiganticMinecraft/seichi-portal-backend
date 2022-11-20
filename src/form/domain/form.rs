@@ -1,10 +1,9 @@
 use crate::form::domain::{FormId, FormTitle};
-use serde::Deserialize;
+use derive_getters::Getters;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Getters)]
 pub struct Form {
-    form_titles: Vec<FormTitle>,
-    form_id: Vec<FormId>,
+    pub form_titles: Vec<FormTitle>,
+    pub form_id: FormId,
 }
-
-// TODO: Formを動的生成できるようなシステムを作ってそれでフォームを作る

@@ -368,6 +368,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-getters"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c5905670fd9c320154f3a4a01c9e609733cd7b753f3c58777ab7d5ce26686b3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,6 +1088,7 @@ name = "seichi-form-backend"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "derive-getters",
  "reqwest",
  "serde",
  "serde_json",
