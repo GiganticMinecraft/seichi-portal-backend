@@ -5,7 +5,6 @@ mod form;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("test");
     HttpServer::new(|| App::new().service(create_form_listener))
         .bind(("127.0.0.1", 9000))?
         .run()
