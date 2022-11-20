@@ -2,7 +2,7 @@
  ## フォームログイン可能アカウント
  - Microsoftアカウント
 
- ※ [wiki](https://wiki.vg/Microsoft_Authentication_Scheme)を見る限りMicrosoftアカウントと連携すればマインクラフトアカウントを取得できそう
+ ※ [wiki](https://wiki.vg/Microsoft_Authentication_Scheme)を見る限りMicrosoftアカウントと連携すればMinecraftアカウントを取得できそう
 
  を用いてアカウントログインが可能になるようにする
  
