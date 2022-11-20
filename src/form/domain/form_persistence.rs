@@ -1,7 +1,11 @@
-pub trait FormPersistence {
-    //! formを生成する
-    fn create_form(form: &Form) -> Unit;
+use crate::form::domain::{Form, FormId};
 
-    //! formを削除する
-    fn delete_form(form_id: &FormId) -> Unit;
+/// formを生成する
+fn create_form(_form: &Form) {
+    todo!()
+}
+
+/// formを削除する
+fn delete_form(_form_id: &FormId) {
+    todo!()
 }
