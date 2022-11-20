@@ -1,0 +1,3 @@
+struct FormTitle {
+    title: String,
+}
