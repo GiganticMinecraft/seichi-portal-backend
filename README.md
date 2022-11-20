@@ -24,14 +24,12 @@ url: POST /api/form/create
   "form_titles": [
     "test1",
     "test2"
-  ],
-  "form_id": 1
+  ]
 }
 ```
 
 ### 想定される返り値
-- Success (成功)
-- AlreadyExists (すでに存在する)
+- Success (成功) StatusCode: 200
 
 ## フォームの削除
 url: POST /api/form/delete
@@ -44,5 +42,5 @@ url: POST /api/form/delete
 ```
 
 ### 想定される返り値
-- Success (成功)
-- NotExists (指定されたフォームが存在しなかった)
+- Success (成功) StatusCode: 200
+- NotExists (指定されたフォームが存在しなかった) StatusCode: 409
