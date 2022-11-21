@@ -1,6 +1,6 @@
 use actix_web::{App, HttpServer};
-use form::listeners::create_form_listener;
-use form::listeners::delete_form_listener;
+use form::handlers::create_form_handler;
+use form::handlers::delete_form_handler;
 
 mod form;
 
@@ -8,8 +8,8 @@ mod form;
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .service(create_form_listener)
-            .service(delete_form_listener)
+            .service(create_form_handler)
+            .service(delete_form_handler)
     })
     .bind(("127.0.0.1", 9000))?
     .run()
@@ -25,7 +25,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_index() {
-        let app = test::init_service(App::new().service(create_form_listener)).await;
+        let app = test::init_service(App::new().service(create_form_handler)).await;
 
         let req = test::TestRequest::post()
             .uri("/api/form/create")

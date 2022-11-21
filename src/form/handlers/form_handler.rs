@@ -3,7 +3,7 @@ use crate::form::domain::{create_form, delete_form};
 use actix_web::{post, web::Json, HttpResponse, Responder};
 
 #[post("/api/form/create")]
-pub async fn create_form_listener(info: Json<RawForm>) -> impl Responder {
+pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
     println!("{:?}", info.0.form_titles());
     println!("{:?}", info.0.form_id());
     create_form(info.0);
@@ -11,7 +11,7 @@ pub async fn create_form_listener(info: Json<RawForm>) -> impl Responder {
 }
 
 #[post("/api/form/delete")]
-pub async fn delete_form_listener(info: Json<RawFormId>) -> impl Responder {
+pub async fn delete_form_handler(info: Json<RawFormId>) -> impl Responder {
     println!("{:?}", info.0.form_id());
     delete_form(info.0);
     HttpResponse::Ok().body("Success")
