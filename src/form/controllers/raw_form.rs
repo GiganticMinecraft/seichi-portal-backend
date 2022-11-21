@@ -1,4 +1,4 @@
-use crate::form::domain::Form;
+use crate::form::domain::{Form, FormId, FormTitle};
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
@@ -10,17 +10,16 @@ pub struct RawForm {
 
 impl From<RawForm> for Form {
     fn from(f: RawForm) -> Self {
-        Form {
-            form_titles: f
-                .form_titles()
-                .iter()
-                .map(|t| FormTitle {
-                    title: t.to_string(),
-                })
-                .collect(),
-            form_id: FormId {
-                form_id: *f.form_id(),
-            },
-        }
+        Form::builder()
+            .form_titles(
+                f.form_titles()
+                    .iter()
+                    .map(|t| FormTitle {
+                        title: t.to_string(),
+                    })
+                    .collect(),
+            )
+            .form_id(FormId::builder().form_id(*f.form_id()).build())
+            .build()
     }
 }
