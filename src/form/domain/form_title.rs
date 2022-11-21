@@ -1,3 +1,6 @@
+use typed_builder::TypedBuilder;
+
+#[derive(TypedBuilder)]
 pub struct FormTitle {
-    pub title: String,
+    title: String,
 }

@@ -14,9 +14,7 @@ impl From<RawForm> for Form {
             .form_titles(
                 f.form_titles()
                     .iter()
-                    .map(|t| FormTitle {
-                        title: t.to_string(),
-                    })
+                    .map(|t| FormTitle::builder().title(t.to_string()))
                     .collect(),
             )
             .form_id(FormId::builder().form_id(*f.form_id()).build())
