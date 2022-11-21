@@ -1,5 +1,5 @@
 use crate::form::controllers::{raw_form::RawForm, raw_form_id::RawFormId};
-use crate::form::domain::{create_form, delete_form};
+use crate::form::infrastructure::{create_form, delete_form};
 use actix_web::{post, web::Json, HttpResponse, Responder};
 
 #[post("/api/form/create")]
