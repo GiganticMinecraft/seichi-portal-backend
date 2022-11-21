@@ -10,6 +10,8 @@ services:
       - MYSQL_DATABASE=seichi_portal
     ports:
       - "3306:3306"
+    networks:
+      - seichi_portal
     restart: always
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
@@ -23,9 +25,25 @@ services:
       - PMA_PASSWORD=root
     ports:
       - "8080:80"
+    networks:
+      - seichi_portal
     volumes:
       - ./docker/db/data:/var/lib/mysql
       - ./docker/db/my.cnf:/etc/mysql/conf.d/my.cnf
     depends_on:
       - db
     restart: always
+  seichi_portal_backend:
+    build:
+      context: .
+      dockerfile: ./docker/seichi_portal/Dockerfile
+    entrypoint: ["diesel", "migration", "run"]
+    networks:
+     - seichi_portal
+    depends_on:
+      - db
+      - phpmyadmin
+
+networks:
+  seichi_portal:
+    external: false
