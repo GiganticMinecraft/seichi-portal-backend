@@ -37,12 +37,13 @@ services:
     build:
       context: .
       dockerfile: ./docker/seichi_portal/Dockerfile
-    entrypoint: ["diesel", "migration", "run"]
+    command: bash -c "diesel migration run && cargo run"
     networks:
      - seichi_portal
     depends_on:
       - db
       - phpmyadmin
+    restart: always
 
 networks:
   seichi_portal:

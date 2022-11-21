@@ -1,4 +1,4 @@
-use crate::database::connection;
+// use crate::database::connection;
 use actix_web::{App, HttpServer};
 use diesel::backend::Backend;
 use diesel::connection::LoadConnection;
@@ -11,7 +11,7 @@ mod form;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let connection = connection::database_connection();
+    // let connection = connection::database_connection();
     HttpServer::new(|| {
         App::new()
             .service(create_form_handler)
