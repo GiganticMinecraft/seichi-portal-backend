@@ -8,4 +8,4 @@ CREATE TABLE IF NOT EXISTS forms(
     PRIMARY KEY(id)
 );
 
-USE seichi_portal; -- dieselの関係上最後は.envで指定しているdbに選択を戻さないと行けない
+USE seichi_portal; -- dieselの関係上最後は.envで指定しているdbに選択を戻さないといけない
