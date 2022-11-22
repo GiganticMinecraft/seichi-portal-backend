@@ -1,4 +1,4 @@
-use crate::form::infrastructure::domain_for_infra::{raw_form::RawForm, raw_form_id::RawFormId};
+use crate::form::handlers::domain_for_user_input::{raw_form::RawForm, raw_form_id::RawFormId};
 use crate::form::infrastructure::{create_form, delete_form};
 use actix_web::{post, web::Json, HttpResponse, Responder};
 

@@ -2,5 +2,5 @@ use typed_builder::TypedBuilder;
 
 #[derive(TypedBuilder)]
 pub struct FormId {
-    form_id: u8,
+    form_id: i32,
 }
