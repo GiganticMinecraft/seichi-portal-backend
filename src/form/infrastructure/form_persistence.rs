@@ -1,7 +1,7 @@
 use crate::database::connection::database_connection;
 use crate::form::controllers::raw_form_id::RawFormId;
 use crate::form::domain::Form;
-use diesel::sql_types::VarChar;
+use diesel::sql_types::{Integer, VarChar};
 use diesel::{sql_query, QueryResult, RunQueryDsl};
 
 /// formを生成する
@@ -13,4 +13,9 @@ pub fn create_form(_form: Form) -> QueryResult<usize> {
 }
 
 /// formを削除する
-pub fn delete_form(_form_id: RawFormId) {}
+pub fn delete_form(_form_id: RawFormId) -> QueryResult<usize> {
+    let mut connection = database_connection();
+    sql_query("DELETE FROM forms.forms id = ?")
+        .bind::<Integer, _>(_form_id.form_id())
+        .execute(&mut connection)
+}
