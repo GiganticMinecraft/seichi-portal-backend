@@ -12,6 +12,8 @@ services:
       - "3306:3306"
     networks:
       - seichi_portal
+    healthcheck:
+      test: mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD
     restart: always
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
@@ -43,8 +45,8 @@ services:
     networks:
      - seichi_portal
     depends_on:
-      - db
-      - phpmyadmin
+      db:
+        condition: service_healthy
     restart: always
 
 networks:
