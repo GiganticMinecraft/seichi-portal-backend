@@ -1,11 +1,11 @@
 use crate::database::connection::database_connection;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
-use diesel::sql_types::{Integer, VarChar};
+use diesel::sql_types::{Integer, Nullable, Text, VarChar};
 use diesel::{sql_query, MysqlConnection, QueryResult, RunQueryDsl};
 
 /// formを生成する
-pub fn create_form(_form: RawForm) -> QueryResult<usize> {
+pub fn create_form(_form: RawForm) -> bool {
     let connection: &mut MysqlConnection = &mut database_connection();
     let is_form_inserted = sql_query("INSERT INTO seichi_portal.forms (name) VALUES (?)")
         .bind::<VarChar, _>(_form.form_name())
@@ -18,7 +18,7 @@ pub fn create_form(_form: RawForm) -> QueryResult<usize> {
         .unwrap();
 
     // NOTE: ここのid埋め込みは自動生成の数字なのでそのまま埋め込んで良い
-    sql_query(format!(
+    let is_success_create_table = sql_query(format!(
         r"CREATE TABLE forms.{} (
             id INT AUTO_INCREMENT,
             title VARCHAR(100),
@@ -31,6 +31,24 @@ pub fn create_form(_form: RawForm) -> QueryResult<usize> {
         created_form_id.id()
     ))
     .execute(connection)
+    .is_ok();
+
+    let mut insert_state = _form.questions().iter().map(|question| {
+        let choices = question.choices().clone().map(|choices| choices.join(","));
+        sql_query(format!(
+            r"INSERT INTO forms.{} (title, description, type, choices)
+                VALUES (?, ?, ?, ?)
+            ",
+            created_form_id.id()
+        ))
+        .bind::<VarChar, _>(question.title())
+        .bind::<VarChar, _>(question.description())
+        .bind::<VarChar, _>(question.question_type().to_string())
+        .bind::<Nullable<Text>, _>(choices)
+        .execute(connection)
+        .is_ok()
+    });
+    is_form_inserted && is_success_create_table && insert_state.all(|rs| rs == true)
 }
 
 /// formを削除する

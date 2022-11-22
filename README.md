@@ -21,17 +21,17 @@ url: POST /api/form/create
 フォーム作成サンプル
 ```json
 {
-  "title": "お問い合わせフォーム",
+  "form_name": "お問い合わせフォーム",
   "questions": [
     {
       "title": "質問1",
       "description": "質問1の説明",
-      "type": "text"
+      "question_type": "TEXT"
     },
     {
       "title": "質問2",
       "description": "質問2の説明",
-      "type": "pulldown",
+      "question_type": "PULLDOWN",
       "choices": [
         "選択肢1",
         "選択肢2"
@@ -40,7 +40,7 @@ url: POST /api/form/create
     {
       "title": "質問3",
       "description": "質問3の説明",
-      "type": "checkbox",
+      "question_type": "CHECKBOX",
       "choices": [
         "選択肢1",
         "選択肢2"
