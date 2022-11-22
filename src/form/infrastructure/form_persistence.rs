@@ -1,6 +1,6 @@
 use crate::database::connection::database_connection;
-use crate::form::controllers::raw_form_id::RawFormId;
 use crate::form::domain::Form;
+use crate::form::infrastructure::domain_for_infra::raw_form_id::RawFormId;
 use diesel::sql_types::{Integer, VarChar};
 use diesel::{sql_query, QueryResult, RunQueryDsl};
 
