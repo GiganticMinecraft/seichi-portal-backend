@@ -1,6 +1,7 @@
+use derive_getters::Getters;
 use typed_builder::TypedBuilder;
 
-#[derive(TypedBuilder)]
-pub struct FormTitle {
-    title: String,
+#[derive(TypedBuilder, Getters)]
+pub struct FormName {
+    name: String,
 }

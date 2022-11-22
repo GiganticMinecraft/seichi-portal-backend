@@ -34,7 +34,7 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/api/form/create")
             .set_json(&RawForm {
-                form_titles: vec!["test1".to_owned()],
+                form_name: "test1".to_owned(),
                 form_id: 1,
             })
             .to_request();
