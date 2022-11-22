@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Getters)]
 pub struct RawForm {
     form_name: String,
-    form_id: i32,
 }
 
 impl From<RawForm> for Form {

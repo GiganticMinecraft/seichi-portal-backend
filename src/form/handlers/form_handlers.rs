@@ -6,8 +6,7 @@ use actix_web::{post, web::Json, HttpResponse, Responder};
 pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
     let form = info.0;
     println!("{:?}", form.form_name());
-    println!("{:?}", form.form_id());
-    create_form(form.into());
+    create_form(form);
     HttpResponse::Ok().body("Success")
 }
 
