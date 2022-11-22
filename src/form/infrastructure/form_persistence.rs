@@ -17,17 +17,19 @@ pub fn create_form(_form: RawForm) -> QueryResult<usize> {
         .get_result::<RawFormId>(connection)
         .unwrap();
 
-    sql_query(
-        r"CREATE TABLE forms.? (
+    // NOTE: ここのid埋め込みは自動生成の数字なのでそのまま埋め込んで良い
+    sql_query(format!(
+        r"CREATE TABLE forms.{} (
             id INT AUTO_INCREMENT,
             title VARCHAR(100),
             description VARCHAR(300),
             type VARCHAR(10),
-            choices TEXT
+            choices TEXT,
+            PRIMARY KEY(id)
         )
         ",
-    )
-    .bind::<Integer, _>(created_form_id.id())
+        created_form_id.id()
+    ))
     .execute(connection)
 }
 
