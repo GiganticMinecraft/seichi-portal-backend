@@ -12,7 +12,7 @@ pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
 
 #[post("/api/form/delete")]
 pub async fn delete_form_handler(info: Json<RawFormId>) -> impl Responder {
-    println!("{:?}", info.0.form_id());
+    println!("{:?}", info.0.id());
     delete_form(info.0);
     HttpResponse::Ok().body("Success")
 }

@@ -27,7 +27,7 @@ pub fn create_form(_form: RawForm) -> QueryResult<usize> {
         )
         ",
     )
-    .bind::<Integer, _>(created_form_id.form_id())
+    .bind::<Integer, _>(created_form_id.id())
     .execute(connection)
 }
 
@@ -35,6 +35,6 @@ pub fn create_form(_form: RawForm) -> QueryResult<usize> {
 pub fn delete_form(_form_id: RawFormId) -> QueryResult<usize> {
     let mut connection = database_connection();
     sql_query("DELETE FROM seichi_portal.forms WHERE id = ?")
-        .bind::<Integer, _>(_form_id.form_id())
+        .bind::<Integer, _>(_form_id.id())
         .execute(&mut connection)
 }
