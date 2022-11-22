@@ -6,5 +6,5 @@ use serde::Deserialize;
 #[derive(QueryableByName, Deserialize, Getters)]
 pub struct RawFormId {
     #[diesel(sql_type = Integer)]
-    form_id: i32,
+    id: i32,
 }
