@@ -15,7 +15,7 @@ pub fn create_form(_form: Form) -> QueryResult<usize> {
 /// formを削除する
 pub fn delete_form(_form_id: RawFormId) -> QueryResult<usize> {
     let mut connection = database_connection();
-    sql_query("DELETE FROM forms.forms id = ?")
+    sql_query("DELETE FROM forms.forms WHERE id = ?")
         .bind::<Integer, _>(_form_id.form_id())
         .execute(&mut connection)
 }
