@@ -62,7 +62,7 @@ pub fn create_form(form: RawForm) -> bool {
         }
     });
 
-    transaction,is_ok()
+    transaction.is_ok()
 }
 
 /// formを削除する
