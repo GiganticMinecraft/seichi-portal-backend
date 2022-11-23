@@ -24,9 +24,9 @@ pub fn create_form(_form: RawForm) -> bool {
         let is_success_create_table = sql_query(format!(
             r"CREATE TABLE forms.{} (
             id INT AUTO_INCREMENT,
-            title VARCHAR(100),
-            description VARCHAR(300),
-            type VARCHAR(10),
+            title VARCHAR(100) NOT NULL,
+            description VARCHAR(300) NOT NULL,
+            type VARCHAR(10) NOT NULL,
             choices TEXT,
             PRIMARY KEY(id)
         )
