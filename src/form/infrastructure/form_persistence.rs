@@ -9,18 +9,16 @@ use diesel::{sql_query, Connection, MysqlConnection, QueryResult, RunQueryDsl};
 pub fn create_form(form: RawForm) -> bool {
     let connection: &mut MysqlConnection = &mut database_connection();
 
-    let transaction = connection.transaction(|connection| {
-        let is_form_inserted = sql_query("INSERT INTO seichi_portal.forms (name) VALUES (?)")
+    let transaction: Result<(), Error> = connection.transaction(|connection| {
+        sql_query("INSERT INTO seichi_portal.forms (name) VALUES (?)")
             .bind::<VarChar, _>(form.form_name())
-            .execute(connection)
-            .is_ok();
+            .execute(connection)?;
 
-        let created_form_id = sql_query("SELECT LAST_INSERT_ID() AS id")
-            .get_result::<RawFormId>(connection)
-            .unwrap();
+        let created_form_id =
+            sql_query("SELECT LAST_INSERT_ID() AS id").get_result::<RawFormId>(connection)?;
 
         // NOTE: ここのid埋め込みは自動生成の数字なのでそのまま埋め込んで良い
-        let is_success_create_table = sql_query(format!(
+        sql_query(format!(
             r"CREATE TABLE forms.{} (
             id INT AUTO_INCREMENT,
             title VARCHAR(100) NOT NULL,
@@ -32,9 +30,9 @@ pub fn create_form(form: RawForm) -> bool {
         ",
             created_form_id.id()
         ))
-        .execute(connection);
+        .execute(connection)?;
 
-        let mut insert_state = form.questions().iter().map(|question| {
+        let mut insert_query = form.questions().iter().map(|question| {
             let choices = question.choices().clone().map(|choices| choices.join(","));
             sql_query(format!(
                 r"INSERT INTO forms.{} (title, description, type, choices)
@@ -50,11 +48,7 @@ pub fn create_form(form: RawForm) -> bool {
             .is_ok()
         });
 
-        let database_process_state = is_form_inserted
-            && is_success_create_table.is_ok()
-            && insert_state.all(|rs| rs == true);
-
-        if database_process_state {
+        if insert_query.all(|query| query == true) {
             Ok(())
         } else {
             Err(Error::RollbackTransaction)
