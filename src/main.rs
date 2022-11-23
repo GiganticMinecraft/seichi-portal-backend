@@ -3,6 +3,7 @@ use actix_web::{App, HttpServer};
 
 use form::handlers::create_form_handler;
 use form::handlers::delete_form_handler;
+use migration::MigratorTrait;
 
 mod database;
 mod form;
@@ -10,6 +11,7 @@ mod form;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let _connection = connection::database_connection();
+    migration::Migrator::up(_connection, None).await?;
     HttpServer::new(|| {
         App::new()
             .service(create_form_handler)
