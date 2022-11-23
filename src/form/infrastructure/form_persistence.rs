@@ -3,7 +3,7 @@ use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use diesel::result::Error;
 use diesel::sql_types::{Integer, Nullable, Text, VarChar};
-use diesel::{sql_query, Connection, MysqlConnection, QueryResult, RunQueryDsl};
+use diesel::{sql_query, Connection, MysqlConnection, RunQueryDsl};
 
 /// formを生成する
 pub fn create_form(form: RawForm) -> bool {
@@ -59,9 +59,16 @@ pub fn create_form(form: RawForm) -> bool {
 }
 
 /// formを削除する
-pub fn delete_form(_form_id: RawFormId) -> QueryResult<usize> {
-    let &mut connection = database_connection();
-    sql_query("DELETE FROM seichi_portal.forms WHERE id = ?")
-        .bind::<Integer, _>(_form_id.id())
-        .execute(connection)
+pub fn delete_form(_form_id: RawFormId) -> bool {
+    let connection = &mut database_connection();
+    let transaction: Result<(), Error> = connection.transaction(|connection| {
+        sql_query("DELETE FROM seichi_portal.forms WHERE id = ?")
+            .bind::<Integer, _>(_form_id.id())
+            .execute(connection)?;
+        sql_query(format!("DROP TABLE forms.{}", _form_id.id())).execute(connection)?;
+
+        Ok(())
+    });
+
+    transaction.is_ok()
 }
