@@ -15,8 +15,7 @@ pub fn create_form(form: RawForm) -> bool {
             .execute(connection)
             .is_ok();
 
-        let created_form_id = sql_query("SELECT id FROM seichi_portal.forms WHERE name = ?")
-            .bind::<VarChar, _>(form.form_name())
+        let created_form_id = sql_query("SELECT LAST_INSERT_ID() AS id")
             .get_result::<RawFormId>(connection)
             .unwrap();
 
@@ -33,8 +32,7 @@ pub fn create_form(form: RawForm) -> bool {
         ",
             created_form_id.id()
         ))
-        .execute(connection)
-        .is_ok();
+        .execute(connection);
 
         let mut insert_state = form.questions().iter().map(|question| {
             let choices = question.choices().clone().map(|choices| choices.join(","));
@@ -52,8 +50,9 @@ pub fn create_form(form: RawForm) -> bool {
             .is_ok()
         });
 
-        let database_process_state =
-            is_form_inserted && is_success_create_table && insert_state.all(|rs| rs == true);
+        let database_process_state = is_form_inserted
+            && is_success_create_table.is_ok()
+            && insert_state.all(|rs| rs == true);
 
         if database_process_state {
             Ok(())
