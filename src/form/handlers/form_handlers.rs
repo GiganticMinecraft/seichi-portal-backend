@@ -5,11 +5,13 @@ use actix_web::{post, web::Json, HttpResponse, Responder};
 #[post("/api/form/create")]
 pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
     let form = info.0;
-    if create_form(form) {
-        HttpResponse::Ok().body("Success")
-    } else {
-        HttpResponse::InternalServerError().body("Database process failed.")
-    }
+    create_form(form);
+    HttpResponse::Ok().body("Success")
+    // if create_form(form) {
+    //     HttpResponse::Ok().body("Success")
+    // } else {
+    //     HttpResponse::InternalServerError().body("Database process failed.")
+    // }
 }
 
 #[post("/api/form/delete")]

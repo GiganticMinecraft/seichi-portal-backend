@@ -10,8 +10,8 @@ mod form;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let _connection = connection::database_connection();
-    migration::Migrator::up(_connection, None).await?;
+    let _connection = connection::database_connection().await;
+    migration::Migrator::up(&_connection, None).await.unwrap();
     HttpServer::new(|| {
         App::new()
             .service(create_form_handler)

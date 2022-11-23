@@ -8,17 +8,17 @@ use std::pin::Pin;
 /// formを生成する
 pub async fn create_form(form: RawForm) {
     let connection = database_connection().await;
-    connection
-        .transaction::<_, (), DbErr>(|txn| {
-            Box::pin(async move {
-                txn.execute(Statement::from_sql_and_values(
-                    MySql,
-                    &*"INSERT INTO seichi_portal.forms (name) VALUES (?)".to_owned(),
-                    vec![form.form_name().to_owned().into()],
-                ))
-            })
+    connection.transaction::<_, (), DbErr>(|txn| {
+        Box::pin(async move {
+            txn.execute(Statement::from_sql_and_values(
+                MySql,
+                &*"INSERT INTO seichi_portal.forms (name) VALUES (?)".to_owned(),
+                vec![form.form_name().to_owned().into()],
+            ))
+            .await
+            .map(|_| ())
         })
-        .await?
+    });
 
     // let transaction: Result<(), Error> = connection.transaction(|connection| {
     //     sql_query("INSERT INTO seichi_portal.forms (name) VALUES (?)")
