@@ -60,8 +60,8 @@ pub fn create_form(form: RawForm) -> bool {
 
 /// formを削除する
 pub fn delete_form(_form_id: RawFormId) -> QueryResult<usize> {
-    let mut connection = database_connection();
+    let &mut connection = database_connection();
     sql_query("DELETE FROM seichi_portal.forms WHERE id = ?")
         .bind::<Integer, _>(_form_id.id())
-        .execute(&mut connection)
+        .execute(connection)
 }
