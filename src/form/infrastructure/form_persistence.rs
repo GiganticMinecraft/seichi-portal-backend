@@ -6,17 +6,17 @@ use diesel::sql_types::{Integer, Nullable, Text, VarChar};
 use diesel::{sql_query, Connection, MysqlConnection, QueryResult, RunQueryDsl};
 
 /// formを生成する
-pub fn create_form(_form: RawForm) -> bool {
+pub fn create_form(form: RawForm) -> bool {
     let connection: &mut MysqlConnection = &mut database_connection();
 
     let transaction = connection.transaction(|connection| {
         let is_form_inserted = sql_query("INSERT INTO seichi_portal.forms (name) VALUES (?)")
-            .bind::<VarChar, _>(_form.form_name())
+            .bind::<VarChar, _>(form.form_name())
             .execute(connection)
             .is_ok();
 
         let created_form_id = sql_query("SELECT id FROM seichi_portal.forms WHERE name = ?")
-            .bind::<VarChar, _>(_form.form_name())
+            .bind::<VarChar, _>(form.form_name())
             .get_result::<RawFormId>(connection)
             .unwrap();
 
@@ -36,7 +36,7 @@ pub fn create_form(_form: RawForm) -> bool {
         .execute(connection)
         .is_ok();
 
-        let mut insert_state = _form.questions().iter().map(|question| {
+        let mut insert_state = form.questions().iter().map(|question| {
             let choices = question.choices().clone().map(|choices| choices.join(","));
             sql_query(format!(
                 r"INSERT INTO forms.{} (title, description, type, choices)
