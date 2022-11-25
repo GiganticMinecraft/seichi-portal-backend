@@ -24,7 +24,7 @@ async fn main() -> std::io::Result<()> {
 
 // #[cfg(test)]
 // mod tests {
-//     use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
+//     use crate::forms::handlers::domain_for_user_input::raw_form::RawForm;
 //     use actix_web::{dev::Service, http, test, App};
 //
 //     use super::*;
@@ -34,7 +34,7 @@ async fn main() -> std::io::Result<()> {
 //         let app = test::init_service(App::new().service(create_form_handler)).await;
 //
 //         let req = test::TestRequest::post()
-//             .uri("/api/form/create")
+//             .uri("/api/forms/create")
 //             .set_json(&RawForm {
 //                 form_name: "test1".to_owned(),
 //                 form_id: 1,

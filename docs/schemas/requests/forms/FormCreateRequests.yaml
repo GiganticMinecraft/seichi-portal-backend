@@ -1,0 +1,6 @@
+type: object
+properties:
+  samples:
+    type: array
+    items:
+      $ref: ../../models/CreateFormModel.yaml

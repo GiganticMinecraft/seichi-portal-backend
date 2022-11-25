@@ -26,7 +26,7 @@ pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
             //     .execute(Statement::from_sql_and_values(
             //         MySql,
             //         &*"INSERT INTO seichi_portal.forms (name) VALUES (?)".to_owned(),
-            //         vec![form.form_name().to_owned().into()],
+            //         vec![forms.form_name().to_owned().into()],
             //     ))
             //     .await?;
             //
@@ -55,7 +55,7 @@ pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
             // ))
             // .await?;
             //
-            // let serialized_questions = form
+            // let serialized_questions = forms
             //     .questions()
             //     .iter()
             //     .map(|question| {

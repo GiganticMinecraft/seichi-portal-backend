@@ -1,0 +1,11 @@
+# docs/api.yaml
+openapi: "3.0.2"
+info:
+  title: Seichi Form Backend API
+  version: 1.0
+servers:
+  - url: https://localhost:9000
+    description: Seichi Form Backend API Server
+paths:
+  /create:
+    $ref: ./paths/create/index.yaml
