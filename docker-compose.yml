@@ -45,8 +45,7 @@ services:
     networks:
      - seichi_portal
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     restart: always
 
 networks:
