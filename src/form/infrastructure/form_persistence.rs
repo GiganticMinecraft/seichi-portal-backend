@@ -1,5 +1,5 @@
-use super::entities::forms::Entity as Forms;
 use crate::database::connection::database_connection;
+use crate::database::entities::forms::Entity as Forms;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use sea_orm::DatabaseBackend::MySql;
