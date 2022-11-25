@@ -2,13 +2,12 @@ use crate::database::connection::database_connection;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use sea_orm::DatabaseBackend::MySql;
-use sea_orm::{ConnectionTrait, DbErr, Statement, TransactionTrait, Value};
-use std::iter::Map;
+use sea_orm::{ConnectionTrait, DbErr, Statement, TransactionError, TransactionTrait, Value};
 
 /// formを生成する
-pub async fn create_form(form: RawForm) {
+pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
     let connection = database_connection().await;
-    connection.transaction::<_, (), DbErr>(|txn| {
+    let transaction = connection.transaction::<_, (), DbErr>(|txn| {
         Box::pin(async move {
             txn.execute(Statement::from_sql_and_values(
                 MySql,
@@ -17,14 +16,14 @@ pub async fn create_form(form: RawForm) {
             ))
             .await?;
 
-            let created_form_id: i32 = txn
+            let created_form_id = txn
                 .query_one(Statement::from_string(
                     MySql,
-                    "SELECT LAST_INSERT_ID() AS id".to_owned(),
+                    "SELECT CAST(LAST_INSERT_ID() AS SIGNED) AS id".to_owned(),
                 ))
                 .await?
                 .unwrap()
-                .try_get("", "id")?;
+                .try_get::<i32>("", "id")?;
 
             txn.execute(Statement::from_string(
                 MySql,
@@ -41,16 +40,6 @@ pub async fn create_form(form: RawForm) {
                 ),
             ))
             .await?;
-            // let selialized_form_data = form.questions().into_iter().map(|question| {
-            //     vec![
-            //         question.title(),
-            //         question.description(),
-            //         &question.question_type().to_owned().to_string(),
-            //         Value::String(Box::new(
-            //             question.choices().clone().map(|choices| choices.join(",")),
-            //         )),
-            //     ]
-            // });
 
             let serialized_questions = form
                 .questions()
@@ -71,21 +60,25 @@ pub async fn create_form(form: RawForm) {
                 })
                 .collect::<Vec<Vec<Value>>>();
 
-            serialized_questions.iter().for_each(|question| {
-                txn.execute(Statement::from_sql_and_values::<Vec<Value>>(
-                    MySql,
-                    &*format!(
-                        r"INSERT INTO forms.{} (title, description, type, choices)
-                    VALUES (?, ?, ?, ?)",
-                        created_form_id
-                    ),
-                    question.to_owned().into(),
-                ));
-            });
+            // serialized_questions.iter().for_each(|question| async {
+            //     txn.execute(Statement::from_sql_and_values::<Vec<Value>>(
+            //         MySql,
+            //         &*format!(
+            //             r"INSERT INTO forms.{} (title, description, type, choices)
+            //         VALUES (?, ?, ?, ?)",
+            //             created_form_id
+            //         ),
+            //         question.to_owned().into(),
+            //     ))
+            // });
 
             Ok(())
         })
     });
+
+    transaction.await?;
+
+    Ok(())
 
     // let transaction: Result<(), Error> = connection.transaction(|connection| {
     //     sql_query("INSERT INTO seichi_portal.forms (name) VALUES (?)")

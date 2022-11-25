@@ -5,8 +5,10 @@ use actix_web::{post, web::Json, HttpResponse, Responder};
 #[post("/api/form/create")]
 pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
     let form = info.0;
-    create_form(form);
-    HttpResponse::Ok().body("Success")
+    match create_form(form).await {
+        Err(err) => HttpResponse::InternalServerError().body(err.to_string()),
+        Ok(_) => HttpResponse::Ok().body("Success"),
+    }
     // if create_form(form) {
     //     HttpResponse::Ok().body("Success")
     // } else {
