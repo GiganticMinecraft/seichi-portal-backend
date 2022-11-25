@@ -10,7 +10,7 @@ servers:
   - url: 'http://localhost:9000'
     description: seichi_portal_backend
 paths:
-  /api/forms/create:
+  /api/form/create:
     post:
       summary: ''
       operationId: post-create
