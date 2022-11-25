@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: ./docker/seichi_portal/Dockerfile
-    command: bash -c "diesel migration run && cargo run"
+    command: bash -c "cargo run"
     ports:
       - "9000:9000"
     networks:
