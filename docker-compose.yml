@@ -55,9 +55,7 @@ services:
     networks:
       - seichi_portal
     volumes:
-      - ./docs/api.yaml:/openapi.yaml
-      - ./docs/schemas:/schemas
-      - ./docs/paths:/paths
+      - ./open-api/reference/seichi_portal_api.yaml:/openapi.yaml
     environment:
       SWAGGER_JSON: /openapi.yaml
     restart: always

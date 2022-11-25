@@ -1,5 +1,6 @@
 use crate::database::connection;
-use actix_web::{App, HttpServer};
+use actix_cors::Cors;
+use actix_web::{http, App, HttpServer};
 
 use form::handlers::create_form_handler;
 use form::handlers::delete_form_handler;
@@ -13,7 +14,13 @@ async fn main() -> std::io::Result<()> {
     let _connection = connection::database_connection().await;
     migration::Migrator::up(&_connection, None).await.unwrap();
     HttpServer::new(|| {
+        let cors = Cors::default()
+            .allowed_origin("http://localhost:8081")
+            .allowed_methods(vec!["POST"])
+            .allowed_header(http::header::CONTENT_TYPE);
+
         App::new()
+            .wrap(cors)
             .service(create_form_handler)
             .service(delete_form_handler)
     })

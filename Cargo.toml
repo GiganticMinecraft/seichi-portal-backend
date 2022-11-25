@@ -10,6 +10,7 @@ members = [".", "migration"]
 
 [dependencies]
 actix-web = "4.2.1"
+actix-cors = "0.6.4"
 derive-getters = "0.2.0"
 dotenvy = "0.15.6"
 reqwest = "0.11.13"
