@@ -45,18 +45,19 @@ pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
                 .questions()
                 .iter()
                 .map(|question| {
-                    let b = Value::String(Some(Box::from(question.title().to_owned())));
-                    let c = Value::String(Some(Box::from(question.description().to_owned())));
-                    let d = Value::String(Some(Box::from(
+                    let title = Value::String(Some(Box::from(question.title().to_owned())));
+                    let description =
+                        Value::String(Some(Box::from(question.description().to_owned())));
+                    let question_type = Value::String(Some(Box::from(
                         question.question_type().to_owned().to_string().to_owned(),
                     )));
-                    let f = question
+                    let choices_opt = question
                         .choices()
                         .clone()
                         .map(|choices| Box::from(choices.join(",")));
-                    let e = Value::String(f);
+                    let choices = Value::String(choices_opt);
 
-                    vec![b, c, d, e]
+                    vec![title, description, question_type, choices]
                 })
                 .collect::<Vec<Vec<Value>>>();
 
