@@ -47,18 +47,6 @@ services:
     depends_on:
       - db
     restart: always
-  swagger-ui:
-    image: swaggerapi/swagger-ui
-    container_name: swagger-ui
-    ports:
-      - "8081:8080"
-    networks:
-      - seichi_portal
-    volumes:
-      - ./open-api/reference/seichi_portal_api.yaml:/openapi.yaml
-    environment:
-      SWAGGER_JSON: /openapi.yaml
-    restart: always
 
 networks:
   seichi_portal:
