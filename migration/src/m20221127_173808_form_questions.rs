@@ -25,7 +25,11 @@ impl MigrationTrait for Migration {
                             .string()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(FormQuestions::Type).string().not_null())
+                    .col(
+                        ColumnDef::new(FormQuestions::AnswerType)
+                            .string()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(FormQuestions::Choices).string())
                     .to_owned(),
             )
@@ -46,6 +50,6 @@ enum FormQuestions {
     FormId,
     Title,
     Description,
-    Type,
+    AnswerType,
     Choices,
 }

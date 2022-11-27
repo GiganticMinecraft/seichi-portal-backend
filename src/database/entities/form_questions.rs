@@ -10,7 +10,7 @@ pub struct Model {
     pub form_id: i32,
     pub title: String,
     pub description: String,
-    pub r#type: String,
+    pub answer_type: String,
     pub choices: Option<String>,
 }
 

@@ -1,16 +1,16 @@
 use crate::database::connection::database_connection;
-use crate::database::entities::forms;
+use crate::database::entities::{form_questions, forms};
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, DbErr, TransactionError, TransactionTrait};
+use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, TransactionError, TransactionTrait};
 
 /// formを生成する
 pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
     let connection = database_connection().await;
     let transaction = connection.transaction::<_, (), DbErr>(|txn| {
         Box::pin(async move {
-            let id = forms::ActiveModel {
+            let form_id = forms::ActiveModel {
                 id: Default::default(),
                 name: Set(form.form_name().to_owned().into()),
             }
@@ -18,72 +18,22 @@ pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
             .await?
             .id;
 
-            // a.txn
-            //     .execute(Statement::from_sql_and_values(
-            //         MySql,
-            //         &*"INSERT INTO seichi_portal.forms (name) VALUES (?)".to_owned(),
-            //         vec![forms.form_name().to_owned().into()],
-            //     ))
-            //     .await?;
-            //
-            // let created_form_id = txn
-            //     .query_one(Statement::from_string(
-            //         MySql,
-            //         "SELECT CAST(LAST_INSERT_ID() AS SIGNED) AS id".to_owned(),
-            //     ))
-            //     .await?
-            //     .unwrap()
-            //     .try_get::<i32>("", "id")?;
-            //
-            // txn.execute(Statement::from_string(
-            //     MySql,
-            //     format!(
-            //         r"CREATE TABLE forms.{} (
-            //         id INT AUTO_INCREMENT,
-            //         title VARCHAR(100) NOT NULL,
-            //         description VARCHAR(300) NOT NULL,
-            //         type VARCHAR(10) NOT NULL,
-            //         choices TEXT,
-            //         PRIMARY KEY(id)
-            //         )",
-            //         created_form_id
-            //     ),
-            // ))
-            // .await?;
-            //
-            // let serialized_questions = forms
-            //     .questions()
-            //     .iter()
-            //     .map(|question| {
-            //         let title = Value::String(Some(Box::from(question.title().to_owned())));
-            //         let description =
-            //             Value::String(Some(Box::from(question.description().to_owned())));
-            //         let question_type = Value::String(Some(Box::from(
-            //             question.question_type().to_owned().to_string().to_owned(),
-            //         )));
-            //         let choices_opt = question
-            //             .choices()
-            //             .clone()
-            //             .map(|choices| Box::from(choices.join(",")));
-            //         let choices = Value::String(choices_opt);
-            //
-            //         vec![title, description, question_type, choices]
-            //     })
-            //     .collect::<Vec<Vec<Value>>>();
-            //
-            // serialized_questions.iter().for_each(|question| {
-            //     async {
-            //         txn.execute(Statement::from_sql_and_values::<Vec<Value>>(
-            //             MySql,
-            //             &*format!(
-            //                 r"INSERT INTO forms.{} (title, description, type, choices)
-            //         VALUES (?, ?, ?, ?)",
-            //                 created_form_id
-            //             ),
-            //             question.to_owned().into(),
-            //         ))
-            //     };
-            // });
+            let questions = form
+                .questions()
+                .iter()
+                .map(|question| form_questions::ActiveModel {
+                    question_id: Default::default(),
+                    form_id: Set(form_id),
+                    title: Set(question.title().to_owned()),
+                    description: Set(question.description().to_owned()),
+                    answer_type: Set(question.question_type().to_string()),
+                    choices: Set(question.choices().clone().map(|choices| choices.join(","))),
+                })
+                .collect::<Vec<form_questions::ActiveModel>>();
+
+            form_questions::Entity::insert_many(questions)
+                .exec(txn)
+                .await?;
 
             Ok(())
         })
