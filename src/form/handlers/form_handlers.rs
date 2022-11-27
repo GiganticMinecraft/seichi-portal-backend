@@ -6,8 +6,11 @@ use actix_web::{post, web::Json, HttpResponse, Responder};
 pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
     let form = info.0;
     match create_form(form).await {
-        Err(err) => HttpResponse::InternalServerError().body(err.to_string()),
-        Ok(_) => HttpResponse::Ok().body("Success"),
+        Err(err) => {
+            println!("データベースエラー:{}", err.to_string());
+            HttpResponse::InternalServerError().body("database process failed.")
+        }
+        Ok(_) => HttpResponse::Ok().body("success"),
     }
     // if create_form(forms) {
     //     HttpResponse::Ok().body("Success")
