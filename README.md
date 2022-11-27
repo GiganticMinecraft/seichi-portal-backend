@@ -15,44 +15,6 @@
 
  また、受け取る方式としてはJSONを利用する
 
-## フォームの作成
-url: POST /api/form/create
-
-フォーム作成サンプル
-```json
-{
-  "form_name": "お問い合わせフォーム",
-  "questions": [
-    {
-      "title": "質問1",
-      "description": "質問1の説明",
-      "question_type": "TEXT"
-    },
-    {
-      "title": "質問2",
-      "description": "質問2の説明",
-      "question_type": "PULLDOWN",
-      "choices": [
-        "選択肢1",
-        "選択肢2"
-      ]
-    },
-    {
-      "title": "質問3",
-      "description": "質問3の説明",
-      "question_type": "CHECKBOX",
-      "choices": [
-        "選択肢1",
-        "選択肢2"
-      ]
-    }
-  ]
-}
-```
-
-### 想定される返り値
-- Success (成功) StatusCode: 200
-
 ## フォームの削除
 url: POST /api/form/delete
 
