@@ -12,11 +12,6 @@ pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
         }
         Ok(_) => HttpResponse::Ok().body("success"),
     }
-    // if create_form(forms) {
-    //     HttpResponse::Ok().body("Success")
-    // } else {
-    //     HttpResponse::InternalServerError().body("Database process failed.")
-    // }
 }
 
 #[post("/api/form/delete")]
