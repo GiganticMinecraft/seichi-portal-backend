@@ -3,9 +3,7 @@ use crate::database::entities::forms;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DbErr, Statement, TransactionError, TransactionTrait, Value,
-};
+use sea_orm::{ActiveModelTrait, DbErr, TransactionError, TransactionTrait};
 
 /// formを生成する
 pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
@@ -19,8 +17,6 @@ pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
             .insert(txn)
             .await?
             .id;
-
-            println!("{}", id);
 
             // a.txn
             //     .execute(Statement::from_sql_and_values(
