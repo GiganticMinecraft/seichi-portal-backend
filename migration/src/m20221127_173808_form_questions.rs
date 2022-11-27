@@ -18,12 +18,7 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(
-                        ColumnDef::new(FormQuestions::FormId)
-                            .integer()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(FormQuestions::FormId).integer().not_null())
                     .col(ColumnDef::new(FormQuestions::Title).string().not_null())
                     .col(
                         ColumnDef::new(FormQuestions::Description)
