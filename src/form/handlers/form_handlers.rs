@@ -7,7 +7,7 @@ pub async fn create_form_handler(info: Json<RawForm>) -> impl Responder {
     let form = info.0;
     match create_form(form).await {
         Err(err) => HttpResponse::InternalServerError().body(err.to_string()),
-        Ok(_) => HttpResponse::Ok().body("Success"),
+        Ok(id) => HttpResponse::Ok().body(format!(r#"{{"id": {}}}"#, id.form_id())),
     }
     // if create_form(forms) {
     //     HttpResponse::Ok().body("Success")

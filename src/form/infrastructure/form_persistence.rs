@@ -1,14 +1,15 @@
 use crate::database::connection::database_connection;
 use crate::database::entities::{form_questions, forms};
+use crate::form::domain::FormId;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, TransactionError, TransactionTrait};
 
 /// formを生成する
-pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
+pub async fn create_form(form: RawForm) -> Result<FormId, TransactionError<DbErr>> {
     let connection = database_connection().await;
-    let transaction = connection.transaction::<_, (), DbErr>(|txn| {
+    let transaction = connection.transaction::<_, i32, DbErr>(|txn| {
         Box::pin(async move {
             let form_id = forms::ActiveModel {
                 id: Default::default(),
@@ -35,13 +36,14 @@ pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
                 .exec(txn)
                 .await?;
 
-            Ok(())
+            Ok(form_id)
         })
     });
 
-    transaction.await?;
+    let form_id = transaction.await?;
+    let form_id = FormId::builder().form_id(form_id).build();
 
-    Ok(())
+    Ok(form_id)
 }
 
 /// formを削除する
