@@ -8,38 +8,38 @@ use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, TransactionError, Transactio
 /// formを生成する
 pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
     let connection = database_connection().await;
-    let transaction = connection.transaction::<_, (), DbErr>(|txn| {
-        Box::pin(async move {
-            let form_id = forms::ActiveModel {
-                id: Default::default(),
-                name: Set(form.form_name().to_owned().into()),
-            }
-            .insert(txn)
-            .await?
-            .id;
+    connection
+        .transaction::<_, (), DbErr>(|txn| {
+            Box::pin(async move {
+                let form_id = forms::ActiveModel {
+                    id: Default::default(),
+                    name: Set(form.form_name().to_owned().into()),
+                }
+                .insert(txn)
+                .await?
+                .id;
 
-            let questions = form
-                .questions()
-                .iter()
-                .map(|question| form_questions::ActiveModel {
-                    question_id: Default::default(),
-                    form_id: Set(form_id),
-                    title: Set(question.title().to_owned()),
-                    description: Set(question.description().to_owned()),
-                    answer_type: Set(question.question_type().to_string()),
-                    choices: Set(question.choices().clone().map(|choices| choices.join(","))),
-                })
-                .collect::<Vec<form_questions::ActiveModel>>();
+                let questions = form
+                    .questions()
+                    .iter()
+                    .map(|question| form_questions::ActiveModel {
+                        question_id: Default::default(),
+                        form_id: Set(form_id),
+                        title: Set(question.title().to_owned()),
+                        description: Set(question.description().to_owned()),
+                        answer_type: Set(question.question_type().to_string()),
+                        choices: Set(question.choices().clone().map(|choices| choices.join(","))),
+                    })
+                    .collect::<Vec<form_questions::ActiveModel>>();
 
-            form_questions::Entity::insert_many(questions)
-                .exec(txn)
-                .await?;
+                form_questions::Entity::insert_many(questions)
+                    .exec(txn)
+                    .await?;
 
-            Ok(())
+                Ok(())
+            })
         })
-    });
-
-    transaction.await?;
+        .await?;
 
     Ok(())
 }

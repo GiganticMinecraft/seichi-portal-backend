@@ -9,8 +9,6 @@ members = [".", "migration"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = "4.2.1"
-actix-cors = "0.6.4"
 derive-getters = "0.2.0"
 dotenvy = "0.15.6"
 reqwest = "0.11.13"
@@ -25,3 +23,8 @@ strum = "0.24.1"
 strum_macros = "0.24.3"
 typed-builder = "0.11.0"
 migration = { path = "migration" }
+axum = "0.6.1"
+tokio = { version = "1.23.0", features = ["full"] }
+hyper = { version = "0.14.23", features = ["full"] }
+tower = "0.4.13"
+tower-http = { version = "0.3.5", features = ["cors"] }

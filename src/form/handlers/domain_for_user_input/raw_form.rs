@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Getters)]
 pub struct RawForm {
-    form_name: String,
-    questions: Vec<Question>,
+    pub form_name: String,
+    pub questions: Vec<Question>,
 }
 
 // impl From<RawForm> for Form {

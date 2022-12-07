@@ -1,32 +1,42 @@
 use crate::database::connection;
-use actix_cors::Cors;
-use actix_web::{http, App, HttpServer};
-
-use form::handlers::create_form_handler;
-use form::handlers::delete_form_handler;
+use crate::form::handlers::{create_form_handler, FormHandlers};
+use axum::handler::Handler;
+use axum::http::header::CONTENT_TYPE;
+use axum::http::Method;
+use axum::routing::post;
+use axum::{Router, ServiceExt};
 use migration::MigratorTrait;
+use serde::__private::de::IdentifierDeserializer;
+use std::borrow::Borrow;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use tower_http::cors::{Any, CorsLayer};
 
 mod database;
 mod form;
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() {
     let _connection = connection::database_connection().await;
     migration::Migrator::up(&_connection, None).await.unwrap();
-    HttpServer::new(|| {
-        let cors = Cors::default()
-            .allowed_origin("http://localhost:8081")
-            .allowed_methods(vec!["POST"])
-            .allowed_header(http::header::CONTENT_TYPE);
 
-        App::new()
-            .wrap(cors)
-            .service(create_form_handler)
-            .service(delete_form_handler)
-    })
-    .bind(("0.0.0.0", 9000))?
-    .run()
-    .await
+    let handlers = Arc::new(FormHandlers::builder().forms(Mutex::new(vec![])).build());
+
+    let router = Router::new()
+        .route("/api/form/create", post(create_form_handler))
+        .with_state(handlers)
+        .layer(
+            CorsLayer::new()
+                .allow_methods([Method::POST])
+                .allow_origin(Any)
+                .allow_headers([CONTENT_TYPE]),
+        );
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], 9000));
+    axum::Server::bind(&addr)
+        .serve(router.into_make_service())
+        .await
+        .unwrap();
 }
 
 // #[cfg(test)]
