@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 
 mod database;
+mod errors;
 mod form;
 
 #[tokio::main]
