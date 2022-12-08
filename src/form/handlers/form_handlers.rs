@@ -13,7 +13,6 @@ use typed_builder::TypedBuilder;
 pub struct FormHandlers {
     forms: Mutex<Vec<Form>>,
 }
-//forms自体をMutexにするといいかも
 
 pub async fn create_form_handler(
     State(forms): State<Arc<FormHandlers>>,

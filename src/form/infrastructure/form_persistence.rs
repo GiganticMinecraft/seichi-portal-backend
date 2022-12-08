@@ -44,14 +44,6 @@ pub async fn create_form(
                     .exec(txn)
                     .await?;
 
-                // let handler_value = handler.lock().unwrap();
-                // handler_value.forms().extend(vec![form.to_form(form_id)]);
-
-                // handler_value.forms().push(form.to_form(form_id));
-                //
-                // let mut latest_forms = handler_value.forms();
-
-                // vec![form.to_form(form_id)].extend();
                 let mut handler_value = handler.forms().lock().unwrap();
                 handler_value.push(form.to_form(form_id));
 
