@@ -5,20 +5,22 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
+use derive_getters::Getters;
 use std::sync::{Arc, Mutex};
 use typed_builder::TypedBuilder;
 
-#[derive(TypedBuilder)]
+#[derive(TypedBuilder, Getters)]
 pub struct FormHandlers {
     forms: Mutex<Vec<Form>>,
 }
+//forms自体をMutexにするといいかも
 
 pub async fn create_form_handler(
     State(forms): State<Arc<FormHandlers>>,
     Json(request_form): Json<RawForm>,
 ) -> impl IntoResponse {
     println!("create form handler.");
-    match create_form(request_form).await {
+    match create_form(request_form, forms).await {
         Ok(_) => (StatusCode::OK, "ok"),
         Err(err) => {
             println!("データベースエラー:{}", err.to_string());

@@ -1,12 +1,20 @@
 use crate::database::connection::database_connection;
 use crate::database::entities::{form_questions, forms};
+use crate::form::domain::Form;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
+use crate::form::handlers::FormHandlers;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, TransactionError, TransactionTrait};
+use std::borrow::Borrow;
+use std::mem;
+use std::sync::{Arc, Mutex};
 
 /// formを生成する
-pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
+pub async fn create_form(
+    form: RawForm,
+    handler: Arc<FormHandlers>,
+) -> Result<(), TransactionError<DbErr>> {
     let connection = database_connection().await;
     connection
         .transaction::<_, (), DbErr>(|txn| {
@@ -35,6 +43,19 @@ pub async fn create_form(form: RawForm) -> Result<(), TransactionError<DbErr>> {
                 form_questions::Entity::insert_many(questions)
                     .exec(txn)
                     .await?;
+
+                // let handler_value = handler.lock().unwrap();
+                // handler_value.forms().extend(vec![form.to_form(form_id)]);
+
+                // handler_value.forms().push(form.to_form(form_id));
+                //
+                // let mut latest_forms = handler_value.forms();
+
+                // vec![form.to_form(form_id)].extend();
+                let mut handler_value = handler.forms().lock().unwrap();
+                handler_value.push(form.to_form(form_id));
+
+                println!("{}", handler_value.first().unwrap().name().name());
 
                 Ok(())
             })

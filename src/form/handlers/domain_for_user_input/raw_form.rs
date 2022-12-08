@@ -1,18 +1,42 @@
-use crate::form::handlers::domain_for_user_input::raw_question::Question;
+use crate::form::domain::{Form, FormId, FormName, Question, QuestionType};
+use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
+use crate::form::handlers::domain_for_user_input::raw_question::RawQuestion;
+use crate::form::handlers::domain_for_user_input::raw_question_type::RawQuestionType;
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Getters)]
 pub struct RawForm {
     pub form_name: String,
-    pub questions: Vec<Question>,
+    pub questions: Vec<RawQuestion>,
 }
 
-// impl From<RawForm> for Form {
-//     fn from(f: RawForm) -> Self {
-//             Form::builder()
-//             .form_name(FormName::builder().name(f.form_name().to_string()).build())
-//             .form_id(FormId::builder().form_id(*f.form_id()).build())
-//             .build()
-//     }
-// }
+impl RawForm {
+    pub fn to_form(&self, form_id: i32) -> Form {
+        let questions = self
+            .questions
+            .iter()
+            .map(|question| {
+                let question_type = match question.question_type() {
+                    RawQuestionType::TEXT => QuestionType::TEXT,
+                    RawQuestionType::CHECKBOX => QuestionType::CHECKBOX,
+                    RawQuestionType::PULLDOWN => QuestionType::PULLDOWN,
+                };
+                Question::builder()
+                    .title(question.title().to_owned())
+                    .description(question.description().to_owned())
+                    .question_type(question_type)
+                    .choices(question.choices().to_owned())
+                    .build()
+            })
+            .collect::<Vec<Question>>();
+
+        Form::builder()
+            .id(FormId::builder()
+                .form_id(form_id.to_owned().to_owned())
+                .build())
+            .name(FormName::builder().name(self.form_name.to_owned()).build())
+            .questions(questions)
+            .build()
+    }
+}
