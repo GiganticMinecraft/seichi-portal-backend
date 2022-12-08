@@ -39,6 +39,7 @@ services:
     build:
       context: .
       dockerfile: ./docker/seichi_portal/Dockerfile
+    command: cargo run
     ports:
       - "9000:9000"
     networks:
