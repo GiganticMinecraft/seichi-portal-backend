@@ -1,12 +1,11 @@
 use crate::database::connection::database_connection;
 use crate::database::entities::{form_questions, forms};
 use crate::errors::error_definitions::Error;
-use crate::form::domain::FormId;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use crate::form::handlers::FormHandlers;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, TransactionError, TransactionTrait};
+use sea_orm::{ActiveModelTrait, EntityTrait, TransactionTrait};
 use std::borrow::Borrow;
 use std::sync::Arc;
 
@@ -66,6 +65,18 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
     })?;
 
     Ok(RawFormId::builder().id(form_id).build())
+}
+
+/// 作成されているformの読み込み
+pub async fn load_form() {
+    // let connection = database_connection().await;
+    //
+    // let txn = connection.begin().await.map_err(|err| {
+    //     println!("{}", err);
+    //     Error::DbTransactionConstructionError
+    // })?;
+    //
+    // forms::Entity::find().find_also_related()
 }
 
 /// formを削除する

@@ -1,3 +1,5 @@
+use crate::m20220101_000001_create_table::FormsTable;
+use crate::SchemaStatement::ForeignKeyStatement;
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
@@ -31,6 +33,12 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(FormQuestions::Choices).string())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-form_key")
+                            .from(FormQuestions::FormQuestions, FormQuestions::FormId)
+                            .to(FormsTable::Forms, FormsTable::Id),
+                    )
                     .to_owned(),
             )
             .await
