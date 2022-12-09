@@ -52,19 +52,12 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
             Error::SqlExecutionError
         })?;
 
-    // let mut forms = handler.forms.lock().map_err(|err| {
-    //     println!("{}", err);
-    //     Error::MutexCanNotUnlock
-    // })?;
-    //
-    // forms.push(form.to_form(form_id));
-
     match handler.forms.lock() {
         Err(err) => {
             println!("{}", err);
             return Err(Error::MutexCanNotUnlock);
         }
-        Ok(mut value) => value.push(form.to_form(form_id)),
+        Ok(mut forms) => forms.push(form.to_form(form_id)),
     }
 
     txn.commit().await.map_err(|err| {
