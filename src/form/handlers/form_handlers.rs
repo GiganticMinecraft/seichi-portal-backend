@@ -5,13 +5,13 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use derive_getters::Getters;
+use serde_json::json;
 use std::sync::{Arc, Mutex};
 use typed_builder::TypedBuilder;
 
-#[derive(TypedBuilder, Getters)]
+#[derive(TypedBuilder)]
 pub struct FormHandlers {
-    forms: Mutex<Vec<Form>>,
+    pub forms: Mutex<Vec<Form>>,
 }
 
 pub async fn create_form_handler(
@@ -20,10 +20,10 @@ pub async fn create_form_handler(
 ) -> impl IntoResponse {
     println!("create form handler.");
     match create_form(request_form, forms).await {
-        Ok(_) => (StatusCode::OK, "ok"),
+        Ok(form_id) => (StatusCode::CREATED, json!(form_id).to_string()),
         Err(err) => {
-            println!("データベースエラー:{}", err.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR, "db error")
+            println!("{}", err.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR, "db error".to_owned())
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::database::connection::database_connection;
 use crate::database::entities::{form_questions, forms};
 use crate::errors::error_definitions::Error;
+use crate::form::domain::FormId;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use crate::form::handlers::FormHandlers;
@@ -10,11 +11,11 @@ use std::borrow::Borrow;
 use std::sync::Arc;
 
 /// formを生成する
-pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<(), Error> {
+pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<RawFormId, Error> {
     let connection = database_connection().await;
 
     let txn = connection.begin().await.map_err(|err| {
-        println("{}", err);
+        println!("{}", err);
         Error::DbTransactionConstructionError
     })?;
 
@@ -51,19 +52,27 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<()
             Error::SqlExecutionError
         })?;
 
-    let mut forms = handler.forms().lock().map_err(|err| {
-        println!("{}", err);
-        return Err(Error::MutexCanNotUnlock);
-    })?;
+    // let mut forms = handler.forms.lock().map_err(|err| {
+    //     println!("{}", err);
+    //     Error::MutexCanNotUnlock
+    // })?;
+    //
+    // forms.push(form.to_form(form_id));
 
-    forms.push(form.to_form(form_id));
+    match handler.forms.lock() {
+        Err(err) => {
+            println!("{}", err);
+            return Err(Error::MutexCanNotUnlock);
+        }
+        Ok(mut value) => value.push(form.to_form(form_id)),
+    }
 
     txn.commit().await.map_err(|err| {
         println!("{}", err);
         Error::DbTransactionConstructionError
     })?;
 
-    Ok(())
+    Ok(RawFormId::builder().id(form_id).build())
 }
 
 /// formを削除する
