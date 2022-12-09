@@ -24,7 +24,7 @@ async fn main() {
     let handlers = Arc::new(FormHandlers::builder().forms(Mutex::new(vec![])).build());
 
     let router = Router::new()
-        .route("/api/form/create", post(create_form_handler))
+        .route("/api/form", post(create_form_handler))
         .with_state(handlers)
         .layer(
             CorsLayer::new()
