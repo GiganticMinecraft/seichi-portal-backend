@@ -13,27 +13,22 @@ use std::sync::Arc;
 pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<(), Error> {
     let connection = database_connection().await;
 
-    let txn = match connection.begin().await {
-        Err(err) => {
-            println!("{}", err);
-            return Err(Error::DbTransactionConstructionError);
-        }
-        Ok(transaction) => transaction,
-    };
+    let txn = connection.begin().await.map_err(|err| {
+        println("{}", err);
+        Error::DbTransactionConstructionError
+    })?;
 
-    let form_id_rs = forms::ActiveModel {
+    let form_id = forms::ActiveModel {
         id: Default::default(),
         name: Set(form.form_name().to_owned().into()),
     }
-    .insert(&txn);
-
-    let form_id = match form_id_rs.await {
-        Err(err) => {
-            println!("{}", err);
-            return Err(Error::SqlExecutionError);
-        }
-        Ok(id) => id.id,
-    };
+    .insert(&txn)
+    .await
+    .map_err(|err| {
+        println!("{}", err);
+        Error::SqlExecutionError
+    })?
+    .id;
 
     let questions = form
         .questions()
@@ -48,32 +43,27 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<()
         })
         .collect::<Vec<form_questions::ActiveModel>>();
 
-    match form_questions::Entity::insert_many(questions)
+    form_questions::Entity::insert_many(questions)
         .exec(&txn)
         .await
-    {
-        Err(err) => {
+        .map_err(|err| {
             println!("{}", err);
-            return Err(Error::SqlExecutionError);
-        }
-        Ok(_) => (),
-    }
+            Error::SqlExecutionError
+        })?;
 
-    match handler.forms().lock() {
-        Err(err) => {
-            println!("{}", err);
-            return Err(Error::MutexCanNotUnlock);
-        }
-        Ok(mut value) => value.push(form.to_form(form_id)),
-    }
+    let mut forms = handler.forms().lock().map_err(|err| {
+        println!("{}", err);
+        return Err(Error::MutexCanNotUnlock);
+    })?;
 
-    match txn.commit().await {
-        Err(err) => {
-            println!("{}", err);
-            Err(Error::DbTransactionConstructionError)
-        }
-        Ok(_) => Ok(()),
-    }
+    forms.push(form.to_form(form_id));
+
+    txn.commit().await.map_err(|err| {
+        println!("{}", err);
+        Error::DbTransactionConstructionError
+    })?;
+
+    Ok(())
 }
 
 /// formを削除する
