@@ -69,14 +69,14 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
 
 /// 作成されているformの読み込み
 pub async fn load_form() {
-    // let connection = database_connection().await;
-    //
-    // let txn = connection.begin().await.map_err(|err| {
-    //     println!("{}", err);
-    //     Error::DbTransactionConstructionError
-    // })?;
-    //
-    // forms::Entity::find().find_also_related()
+    let connection = database_connection().await;
+
+    let txn = connection.begin().await.map_err(|err| {
+        println!("{}", err);
+        Error::DbTransactionConstructionError
+    })?;
+
+    forms::Entity::find().find_also_related()
 }
 
 /// formを削除する
