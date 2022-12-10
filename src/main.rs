@@ -1,5 +1,6 @@
 use crate::database::connection;
 use crate::form::handlers::{create_form_handler, FormHandlers};
+use crate::form::infrastructure::load_form;
 use axum::handler::Handler;
 use axum::http::header::CONTENT_TYPE;
 use axum::http::Method;
@@ -23,8 +24,10 @@ async fn main() {
 
     let handlers = Arc::new(FormHandlers::builder().forms(Mutex::new(vec![])).build());
 
+    load_form().await;
+
     let router = Router::new()
-        .route("/api/form", post(create_form_handler))
+        .route("/api/forms", post(create_form_handler))
         .with_state(handlers)
         .layer(
             CorsLayer::new()

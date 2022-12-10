@@ -4,8 +4,12 @@ use crate::errors::error_definitions::Error;
 use crate::form::handlers::domain_for_user_input::raw_form::RawForm;
 use crate::form::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use crate::form::handlers::FormHandlers;
+use sea_orm::sea_query::{Expr, IntoCondition};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, EntityTrait, TransactionTrait};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
+    RelationTrait, TransactionTrait,
+};
 use std::borrow::Borrow;
 use std::sync::Arc;
 
@@ -71,12 +75,21 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
 pub async fn load_form() {
     let connection = database_connection().await;
 
-    let txn = connection.begin().await.map_err(|err| {
-        println!("{}", err);
-        Error::DbTransactionConstructionError
-    })?;
+    // let txn = connection.begin().await.map_err(|err| {
+    //     println!("{}", err);
+    //     Error::DbTransactionConstructionError
+    // })?;
 
-    forms::Entity::find().find_also_related()
+    let forms_statement = forms::Entity::find()
+        .column(form_questions::Column::QuestionId)
+        .column(form_questions::Column::Title)
+        .column(form_questions::Column::Description)
+        .column(form_questions::Column::AnswerType)
+        .column(form_questions::Column::Choices)
+        .join_rev(JoinType::RightJoin, form_questions::Relation::Forms.def())
+        .build(DbBackend::MySql);
+
+    println!("{}", forms_statement.to_string())
 }
 
 /// formを削除する
