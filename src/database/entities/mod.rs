@@ -2,5 +2,6 @@
 
 pub mod prelude;
 
+pub mod answer_types;
 pub mod form_questions;
 pub mod forms;
