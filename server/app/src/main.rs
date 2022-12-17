@@ -1,21 +1,16 @@
-use crate::database::connection;
-use crate::form::handlers::{create_form_handler, FormHandlers};
-use crate::form::infrastructure::load_form;
 use axum::handler::Handler;
 use axum::http::header::CONTENT_TYPE;
 use axum::http::Method;
 use axum::routing::post;
 use axum::{Router, ServiceExt};
+use database::connection;
+use form::handlers::{create_form_handler, FormHandlers};
+use form::infrastructure::load_form;
 use migration::MigratorTrait;
-use serde::__private::de::IdentifierDeserializer;
 use std::borrow::Borrow;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tower_http::cors::{Any, CorsLayer};
-
-mod database;
-mod errors;
-mod form;
 
 #[tokio::main]
 async fn main() {

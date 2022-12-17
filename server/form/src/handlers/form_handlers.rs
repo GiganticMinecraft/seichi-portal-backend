@@ -1,6 +1,7 @@
-use crate::form::domain::Form;
-use crate::form::handlers::domain_for_user_input::{raw_form::RawForm, raw_form_id::RawFormId};
-use crate::form::infrastructure::create_form;
+use crate::domain::Form;
+use crate::handlers::domain_for_user_input::raw_form::RawForm;
+use crate::handlers::domain_for_user_input::raw_form_id::RawFormId;
+use crate::infrastructure::create_form;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;

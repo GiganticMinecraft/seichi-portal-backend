@@ -1,4 +1,4 @@
-use crate::form::domain::{FormId, FormName, Question};
+use crate::domain::{FormId, FormName, Question};
 use derive_getters::Getters;
 use typed_builder::TypedBuilder;
 

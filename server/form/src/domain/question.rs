@@ -1,4 +1,4 @@
-use crate::form::domain::question_type::QuestionType;
+use crate::domain::QuestionType;
 use typed_builder::TypedBuilder;
 
 #[derive(TypedBuilder)]
