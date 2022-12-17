@@ -6,10 +6,10 @@ use database::entities::{form_questions, forms};
 use errors::error_definitions::Error;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
+    ActiveModelTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
     RelationTrait, TransactionTrait,
 };
-use std::borrow::Borrow;
+
 use std::sync::Arc;
 
 /// formを生成する
@@ -72,7 +72,7 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
 
 /// 作成されているformの読み込み
 pub async fn load_form() {
-    let connection = database_connection().await;
+    let _connection = database_connection().await;
 
     // let txn = connection.begin().await.map_err(|err| {
     //     println!("{}", err);

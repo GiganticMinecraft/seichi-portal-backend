@@ -7,7 +7,7 @@ use database::connection;
 use form::handlers::{create_form_handler, FormHandlers};
 use form::infrastructure::load_form;
 use migration::MigratorTrait;
-use std::borrow::Borrow;
+
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tower_http::cors::{Any, CorsLayer};

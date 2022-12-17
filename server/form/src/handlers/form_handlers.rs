@@ -29,7 +29,7 @@ pub async fn create_form_handler(
     }
 }
 
-pub async fn delete_form_handler(info: RawFormId) {
+pub async fn delete_form_handler(_info: RawFormId) {
     // println!("{:?}", info.id());
     // delete_form(info);
     // HttpResponse::Ok().body("Success")

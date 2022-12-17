@@ -1,5 +1,5 @@
 use crate::m20220101_000001_create_table::FormsTable;
-use crate::SchemaStatement::ForeignKeyStatement;
+
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
