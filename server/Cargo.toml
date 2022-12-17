@@ -1,2 +1,2 @@
 [workspace]
-members = ["app", "database", "entity", "errors", "form", "migration"]
+members = ["app", "database", "errors", "form", "migration"]

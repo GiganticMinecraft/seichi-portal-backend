@@ -1,3 +1,6 @@
+use crate::sea_orm::ActiveValue::Set;
+use crate::sea_orm::EntityTrait;
+use database::entities::answer_types;
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
@@ -21,7 +24,23 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(AnswerTypes::AnswerTypes).string().not_null())
                     .to_owned(),
             )
-            .await
+            .await?;
+
+        let connection = manager.get_connection();
+
+        let models = vec!["TEXT", "CHECKBOX", "PULLDOWN"]
+            .iter()
+            .map(|answer_type| answer_types::ActiveModel {
+                id: Default::default(),
+                answer_types: Set(answer_type.clone().to_owned()),
+            })
+            .collect::<Vec<answer_types::ActiveModel>>();
+
+        answer_types::Entity::insert_many(models)
+            .exec(connection)
+            .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
