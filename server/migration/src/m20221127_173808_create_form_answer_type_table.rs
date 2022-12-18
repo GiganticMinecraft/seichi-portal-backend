@@ -18,6 +18,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(AnswerTypes::AnswerType)
                             .string()
                             .not_null()
+                            .unique_key()
                             .primary_key(),
                     )
                     .to_owned(),
