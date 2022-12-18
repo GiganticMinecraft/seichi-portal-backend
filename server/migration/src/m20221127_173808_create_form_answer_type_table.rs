@@ -15,13 +15,11 @@ impl MigrationTrait for Migration {
                     .table(AnswerTypes::AnswerTypes)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(AnswerTypes::Id)
-                            .integer()
+                        ColumnDef::new(AnswerTypes::AnswerType)
+                            .string()
                             .not_null()
-                            .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(AnswerTypes::AnswerTypes).string().not_null())
                     .to_owned(),
             )
             .await?;
@@ -31,8 +29,7 @@ impl MigrationTrait for Migration {
         let models = vec!["TEXT", "CHECKBOX", "PULLDOWN"]
             .iter()
             .map(|answer_type| answer_types::ActiveModel {
-                id: Default::default(),
-                answer_types: Set(answer_type.clone().to_owned()),
+                answer_type: Set(answer_type.clone().to_owned()),
             })
             .collect::<Vec<answer_types::ActiveModel>>();
 
@@ -52,8 +49,7 @@ impl MigrationTrait for Migration {
 
 /// Learn more at https://docs.rs/sea-query#iden
 #[derive(Iden)]
-enum AnswerTypes {
+pub enum AnswerTypes {
     AnswerTypes,
-    Id,
     AnswerType,
 }

@@ -6,8 +6,7 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "answer_types")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: i32,
-    pub answer_types: String,
+    pub answer_type: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

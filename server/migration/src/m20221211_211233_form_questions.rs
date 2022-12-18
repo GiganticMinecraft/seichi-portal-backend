@@ -1,5 +1,6 @@
 use crate::m20220101_000001_create_table::FormsTable;
 
+use crate::m20221127_173808_create_form_answer_type_table::AnswerTypes;
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
@@ -31,6 +32,12 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(FormQuestions::AnswerType)
                             .string()
                             .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-answer_type")
+                            .from(FormQuestions::FormQuestions, FormQuestions::AnswerType)
+                            .to(AnswerTypes::AnswerTypes, AnswerTypes::AnswerType),
                     )
                     .col(ColumnDef::new(FormQuestions::Choices).string())
                     .foreign_key(
