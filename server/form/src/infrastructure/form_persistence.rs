@@ -6,7 +6,7 @@ use database::entities::{form_questions, forms};
 use errors::error_definitions::Error;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ActiveModelTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
+    ActiveModelTrait, ConnectionTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
     RelationTrait, TransactionTrait,
 };
 
@@ -74,10 +74,10 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
 pub async fn load_form() {
     let _connection = database_connection().await;
 
-    // let txn = connection.begin().await.map_err(|err| {
-    //     println!("{}", err);
-    //     Error::DbTransactionConstructionError
-    // })?;
+    let txn = _connection.begin().await.map_err(|err| {
+        println!("{}", err);
+        Error::DbTransactionConstructionError
+    })?;
 
     let forms_statement = forms::Entity::find()
         .column(form_questions::Column::QuestionId)
@@ -87,6 +87,13 @@ pub async fn load_form() {
         .column(form_questions::Column::Choices)
         .join_rev(JoinType::RightJoin, form_questions::Relation::Forms.def())
         .build(DbBackend::MySql);
+
+    let form_results = txn.query_all(forms_statement).await.map_err(|err| {
+        println!("{}", err);
+        Error::SqlExecutionError
+    })?;
+
+    form_results.iter().for_each(|result| )
 
     println!("{}", forms_statement.to_string())
 }

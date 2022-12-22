@@ -5,11 +5,20 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "answer_types")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub answer_type: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::form_questions::Entity")]
+    FormQuestions,
+}
+
+impl Related<super::form_questions::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::FormQuestions.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}
