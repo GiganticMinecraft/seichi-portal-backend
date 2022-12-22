@@ -1,6 +1,5 @@
 use crate::domain::{Form, FormId, FormName, Question, QuestionType};
 use crate::handlers::domain_for_user_input::raw_question::RawQuestion;
-use crate::handlers::domain_for_user_input::raw_question_type::RawQuestionType;
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -17,11 +16,7 @@ impl RawForm {
             .questions
             .iter()
             .map(|question| {
-                let question_type = match question.question_type() {
-                    RawQuestionType::TEXT => QuestionType::TEXT,
-                    RawQuestionType::CHECKBOX => QuestionType::CHECKBOX,
-                    RawQuestionType::PULLDOWN => QuestionType::PULLDOWN,
-                };
+                let question_type = question.question_type.to_question_type();
                 Question::builder()
                     .title(question.title().to_owned())
                     .description(question.description().to_owned())

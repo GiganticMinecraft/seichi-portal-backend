@@ -7,10 +7,12 @@ use errors::error_definitions::Error;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
     ActiveModelTrait, ConnectionTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
-    RelationTrait, TransactionTrait,
+    Related, RelationTrait, TransactionTrait,
 };
 
+use crate::domain::{FormId, FormName, Question, QuestionType};
 use std::sync::Arc;
+use crate::handlers::domain_for_user_input::raw_question::RawQuestion;
 
 /// formを生成する
 pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<RawFormId, Error> {
@@ -71,7 +73,7 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
 }
 
 /// 作成されているformの読み込み
-pub async fn load_form() {
+pub async fn load_form() -> Result<(), Error> {
     let _connection = database_connection().await;
 
     let txn = _connection.begin().await.map_err(|err| {
@@ -79,23 +81,34 @@ pub async fn load_form() {
         Error::DbTransactionConstructionError
     })?;
 
-    let forms_statement = forms::Entity::find()
-        .column(form_questions::Column::QuestionId)
-        .column(form_questions::Column::Title)
-        .column(form_questions::Column::Description)
-        .column(form_questions::Column::AnswerType)
-        .column(form_questions::Column::Choices)
-        .join_rev(JoinType::RightJoin, form_questions::Relation::Forms.def())
-        .build(DbBackend::MySql);
+    let forms = forms::Entity::find()
+        .find_with_related(form_questions::Entity)
+        .all(&txn)
+        .await
+        .map_err(|_| Error::SqlExecutionError)?
+        .iter()
+        .map(|models| {
+            let form_info = models.clone().0;
+            // RawForm {
+            //     form_name: form_info.name,
+            //     questions: RawQuestion {
+            //         title:
+            //     }
+            // }
 
-    let form_results = txn.query_all(forms_statement).await.map_err(|err| {
-        println!("{}", err);
-        Error::SqlExecutionError
-    })?;
+            let form_name = FormName::builder().name(form_info.name).build();
+            let form_id = FormId::builder().form_id(form_info.id).build();
+            let questions = models.clone().1.iter().map(|question| {
+                let question_info = question.clone();
+                Question::builder()
+                    .title(question_info.title)
+                    .description(question_info.description)
+                    .question_type(question_info.answer_type.)
+                    .choices()
+            })
+        });
 
-    form_results.iter().for_each(|result| )
-
-    println!("{}", forms_statement.to_string())
+    Ok(())
 }
 
 /// formを削除する

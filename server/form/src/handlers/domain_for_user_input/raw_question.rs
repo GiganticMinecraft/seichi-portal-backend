@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Getters)]
 pub struct RawQuestion {
-    title: String,
-    description: String,
-    question_type: RawQuestionType,
-    choices: Option<Vec<String>>,
+    pub title: String,
+    pub description: String,
+    pub question_type: RawQuestionType,
+    pub choices: Option<Vec<String>>,
 }
