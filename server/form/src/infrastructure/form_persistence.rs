@@ -10,9 +10,8 @@ use sea_orm::{
     Related, RelationTrait, TransactionTrait,
 };
 
-use crate::domain::{FormId, FormName, Question, QuestionType};
+use crate::domain::{from_string, Form, FormId, FormName, Question, QuestionType};
 use std::sync::Arc;
-use crate::handlers::domain_for_user_input::raw_question::RawQuestion;
 
 /// formを生成する
 pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<RawFormId, Error> {
@@ -73,7 +72,7 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
 }
 
 /// 作成されているformの読み込み
-pub async fn load_form() -> Result<(), Error> {
+pub async fn load_form() -> Result<Vec<Form>, Error> {
     let _connection = database_connection().await;
 
     let txn = _connection.begin().await.map_err(|err| {
@@ -89,26 +88,38 @@ pub async fn load_form() -> Result<(), Error> {
         .iter()
         .map(|models| {
             let form_info = models.clone().0;
-            // RawForm {
-            //     form_name: form_info.name,
-            //     questions: RawQuestion {
-            //         title:
-            //     }
-            // }
-
             let form_name = FormName::builder().name(form_info.name).build();
             let form_id = FormId::builder().form_id(form_info.id).build();
-            let questions = models.clone().1.iter().map(|question| {
-                let question_info = question.clone();
-                Question::builder()
-                    .title(question_info.title)
-                    .description(question_info.description)
-                    .question_type(question_info.answer_type.)
-                    .choices()
-            })
-        });
+            let questions = models
+                .clone()
+                .1
+                .iter()
+                .map(|question| {
+                    let question_info = question.clone();
+                    match from_string("question_info.answer_type") {
+                        Some(question_type) => Question::builder()
+                            .title(question_info.title)
+                            .description(question_info.description)
+                            .question_type(question_type)
+                            .choices({
+                                question_info.choices.map(|choice| {
+                                    choice.split(",").map(|s| s.to_string()).collect()
+                                })
+                            })
+                            .build(),
+                        None => return,
+                    }
+                })
+                .collect::<Vec<Question>>();
+            Form::builder()
+                .name(form_name)
+                .id(form_id)
+                .questions(questions)
+                .build()
+        })
+        .collect::<Vec<Form>>();
 
-    Ok(())
+    Ok(forms)
 }
 
 /// formを削除する
