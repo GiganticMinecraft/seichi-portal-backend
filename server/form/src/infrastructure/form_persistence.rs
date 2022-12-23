@@ -106,7 +106,7 @@ pub async fn load_form() -> Result<Vec<Form>, Error> {
                                     choice.split(",").map(|s| s.to_string()).collect()
                                 }))
                                 .build(),
-                            None => panic!("question"),
+                            None => panic!("question_typeのデシリアライズに失敗しました"),
                         }
                     })
                     .collect::<Vec<Question>>();
