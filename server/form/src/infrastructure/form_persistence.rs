@@ -5,11 +5,10 @@ use database::connection::database_connection;
 use database::entities::{form_questions, forms};
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
-    Related, RelationTrait, TransactionTrait,
+    ActiveModelTrait, EntityTrait, QuerySelect, QueryTrait, TransactionTrait,
 };
 
-use crate::domain::{from_string, Form, FormId, FormName, Question, QuestionType};
+use crate::domain::{from_string, Form, FormId, FormName, Question};
 use errors::error_definitions::Error;
 use std::sync::Arc;
 
@@ -24,7 +23,7 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
 
     let form_id = forms::ActiveModel {
         id: Default::default(),
-        name: Set(form.form_name().to_owned().into()),
+        name: Set(form.form_name().to_owned()),
     }
     .insert(&txn)
     .await
@@ -103,7 +102,7 @@ pub async fn load_form() -> Result<Vec<Form>, Error> {
                                 .description(question_info.description)
                                 .question_type(question_type)
                                 .choices(question_info.choices.map(|choice| {
-                                    choice.split(",").map(|s| s.to_string()).collect()
+                                    choice.split(',').map(|s| s.to_string()).collect()
                                 }))
                                 .build(),
                             None => panic!("question_typeのデシリアライズに失敗しました"),

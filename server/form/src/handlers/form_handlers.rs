@@ -23,7 +23,7 @@ pub async fn create_form_handler(
     match create_form(request_form, forms).await {
         Ok(form_id) => (StatusCode::CREATED, json!(form_id).to_string()),
         Err(err) => {
-            println!("{}", err.to_string());
+            println!("{}", err);
             (StatusCode::INTERNAL_SERVER_ERROR, "db error".to_owned())
         }
     }

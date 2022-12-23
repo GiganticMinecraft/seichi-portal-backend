@@ -1,4 +1,4 @@
-use crate::domain::{Form, FormId, FormName, Question, QuestionType};
+use crate::domain::{Form, FormId, FormName, Question};
 use crate::handlers::domain_for_user_input::raw_question::RawQuestion;
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
