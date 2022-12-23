@@ -3,7 +3,6 @@ use crate::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use crate::handlers::FormHandlers;
 use database::connection::database_connection;
 use database::entities::{form_questions, forms};
-use errors::error_definitions::Error;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
     ActiveModelTrait, ConnectionTrait, DbBackend, EntityTrait, JoinType, QuerySelect, QueryTrait,
@@ -11,6 +10,7 @@ use sea_orm::{
 };
 
 use crate::domain::{from_string, Form, FormId, FormName, Question, QuestionType};
+use errors::error_definitions::Error;
 use std::sync::Arc;
 
 /// formを生成する
@@ -90,27 +90,26 @@ pub async fn load_form() -> Result<Vec<Form>, Error> {
             let form_info = models.clone().0;
             let form_name = FormName::builder().name(form_info.name).build();
             let form_id = FormId::builder().form_id(form_info.id).build();
-            let questions = models
-                .clone()
-                .1
-                .iter()
-                .map(|question| {
-                    let question_info = question.clone();
-                    match from_string("question_info.answer_type") {
-                        Some(question_type) => Question::builder()
-                            .title(question_info.title)
-                            .description(question_info.description)
-                            .question_type(question_type)
-                            .choices({
-                                question_info.choices.map(|choice| {
+            let questions =
+                models
+                    .clone()
+                    .1
+                    .iter()
+                    .map(|question| {
+                        let question_info = question.clone();
+                        match from_string(question_info.answer_type) {
+                            Some(question_type) => Question::builder()
+                                .title(question_info.title)
+                                .description(question_info.description)
+                                .question_type(question_type)
+                                .choices(question_info.choices.map(|choice| {
                                     choice.split(",").map(|s| s.to_string()).collect()
-                                })
-                            })
-                            .build(),
-                        None => return,
-                    }
-                })
-                .collect::<Vec<Question>>();
+                                }))
+                                .build(),
+                            None => panic!("question"),
+                        }
+                    })
+                    .collect::<Vec<Question>>();
             Form::builder()
                 .name(form_name)
                 .id(form_id)

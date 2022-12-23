@@ -4,7 +4,7 @@ pub enum QuestionType {
     CHECKBOX,
 }
 
-pub fn from_string(value: &str) -> Option<QuestionType> {
+pub fn from_string(value: String) -> Option<QuestionType> {
     match value.to_lowercase().as_str() {
         "text" => Some(QuestionType::TEXT),
         "checkbox" => Some(QuestionType::CHECKBOX),
