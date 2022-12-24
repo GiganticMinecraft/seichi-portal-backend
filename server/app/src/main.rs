@@ -17,9 +17,11 @@ async fn main() {
     let _connection = connection::database_connection().await;
     migration::Migrator::up(&_connection, None).await.unwrap();
 
-    let handlers = Arc::new(FormHandlers::builder().forms(Mutex::new(vec![])).build());
-
-    fetch_forms().await;
+    let handlers = Arc::new(
+        FormHandlers::builder()
+            .forms(Mutex::new(fetch_forms().await))
+            .build(),
+    );
 
     let router = Router::new()
         .route("/api/forms", post(create_form_handler))
