@@ -4,9 +4,7 @@ use crate::handlers::FormHandlers;
 use database::connection::database_connection;
 use database::entities::{form_questions, forms};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{
-    ActiveModelTrait, EntityTrait, QuerySelect, QueryTrait, TransactionTrait,
-};
+use sea_orm::{ActiveModelTrait, EntityTrait, QuerySelect, QueryTrait, TransactionTrait};
 
 use crate::domain::{from_string, Form, FormId, FormName, Question};
 use errors::error_definitions::Error;
@@ -85,14 +83,11 @@ pub async fn load_form() -> Result<Vec<Form>, Error> {
         .await
         .map_err(|_| Error::SqlExecutionError)?
         .iter()
-        .map(|models| {
-            let form_info = models.clone().0;
-            let form_name = FormName::builder().name(form_info.name).build();
+        .map(|(form_info, questions)| {
+            let form_name = FormName::builder().name(form_info.clone().name).build();
             let form_id = FormId::builder().form_id(form_info.id).build();
             let questions =
-                models
-                    .clone()
-                    .1
+                questions
                     .iter()
                     .map(|question| {
                         let question_info = question.clone();
