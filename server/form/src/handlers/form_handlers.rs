@@ -19,7 +19,6 @@ pub async fn create_form_handler(
     State(forms): State<Arc<FormHandlers>>,
     Json(request_form): Json<RawForm>,
 ) -> impl IntoResponse {
-    println!("create form handler.");
     match create_form(request_form, forms).await {
         Ok(form_id) => (StatusCode::CREATED, json!(form_id).to_string()),
         Err(err) => {

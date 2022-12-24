@@ -5,6 +5,7 @@ use database::connection::database_connection;
 use database::entities::{form_questions, forms};
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, EntityTrait, QuerySelect, QueryTrait, TransactionTrait};
+use std::borrow::Borrow;
 
 use crate::domain::{from_string, Form, FormId, FormName, Question};
 use errors::error_definitions::Error;
@@ -57,7 +58,12 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
             println!("{}", err);
             return Err(Error::MutexCanNotUnlock);
         }
-        Ok(mut forms) => forms.push(form.to_form(form_id)),
+        Ok(mut forms) => {
+            forms.push(form.to_form(form_id));
+            forms
+                .iter()
+                .for_each(|form| println!("{}", form.name().name()))
+        }
     }
 
     txn.commit().await.map_err(|err| {
