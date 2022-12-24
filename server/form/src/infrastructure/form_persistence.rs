@@ -68,20 +68,21 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<Ra
     Ok(RawFormId::builder().id(form_id).build())
 }
 
-/// 作成されているformの読み込み
-pub async fn load_form() -> Result<Vec<Form>, Error> {
+/// 作成されているフォームの取得
+/// 取得に失敗した場合はpanicします
+pub async fn fetch_forms() -> Vec<Form> {
     let _connection = database_connection().await;
 
-    let txn = _connection.begin().await.map_err(|err| {
-        println!("{}", err);
-        Error::DbTransactionConstructionError
-    })?;
+    let txn = _connection
+        .begin()
+        .await
+        .unwrap_or_else(|_| panic!("データベースのトランザクション確立に失敗しました。"));
 
-    let forms = forms::Entity::find()
+    forms::Entity::find()
         .find_with_related(form_questions::Entity)
         .all(&txn)
         .await
-        .map_err(|_| Error::SqlExecutionError)?
+        .unwrap_or_else(|_| panic!("フォーム情報の取得に失敗しました"))
         .iter()
         .map(|(form_info, questions)| {
             let form_name = FormName::builder().name(form_info.clone().name).build();
@@ -110,9 +111,7 @@ pub async fn load_form() -> Result<Vec<Form>, Error> {
                 .questions(questions)
                 .build()
         })
-        .collect::<Vec<Form>>();
-
-    Ok(forms)
+        .collect::<Vec<Form>>()
 }
 
 /// formを削除する

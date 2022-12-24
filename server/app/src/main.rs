@@ -5,7 +5,7 @@ use axum::routing::post;
 use axum::{Router, ServiceExt};
 use database::connection;
 use form::handlers::{create_form_handler, FormHandlers};
-use form::infrastructure::load_form;
+use form::infrastructure::fetch_forms;
 use migration::MigratorTrait;
 
 use std::net::SocketAddr;
@@ -19,7 +19,7 @@ async fn main() {
 
     let handlers = Arc::new(FormHandlers::builder().forms(Mutex::new(vec![])).build());
 
-    load_form().await;
+    fetch_forms().await;
 
     let router = Router::new()
         .route("/api/forms", post(create_form_handler))
