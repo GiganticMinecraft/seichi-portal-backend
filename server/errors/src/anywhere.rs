@@ -1,11 +1,18 @@
-use anyhow;
+use std::sync::PoisonError;
+use anyhow::anyhow;
+use strum_macros::Display;
 use tracing;
 
 use thiserror::{Error};
+use crate::error_definitions::FormInfraError;
 
 #[derive(Error, Debug)]
 #[error(transparent)]
-struct Source(#[from] anyhow::Error);
+enum Source {
+    Any(#[from] anyhow::Error),
+    Db(#[from] sea_orm::DbErr),
+    FormInfra(#[from] FormInfraError)
+}
 
 #[derive(Debug)]
 pub struct Error {

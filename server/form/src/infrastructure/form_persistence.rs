@@ -5,32 +5,24 @@ use database::connection::database_connection;
 use database::entities::{form_questions, forms};
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, EntityTrait, QuerySelect, QueryTrait, TransactionTrait};
-use std::borrow::Borrow;
 
 use crate::domain::{from_string, Form, FormId, FormName, Question};
-use errors::error_definitions::Error;
 use std::sync::Arc;
 use errors::anywhere;
+use errors::error_definitions::FormInfraError;
 
 /// formを生成する
 pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere::Result<RawFormId> {
     let connection = database_connection().await;
 
-    let txn = connection.begin().await.map_err(|err| {
-        println!("{}", err);
-        Error::DbTransactionConstructionError
-    })?;
+    let txn = connection.begin().await?;
 
     let form_id = forms::ActiveModel {
         id: Default::default(),
         name: Set(form.form_name().to_owned()),
     }
     .insert(&txn)
-    .await
-    .map_err(|err| {
-        println!("{}", err);
-        Error::SqlExecutionError
-    })?
+    .await?
     .id;
 
     let questions = form
@@ -48,29 +40,17 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere:
 
     form_questions::Entity::insert_many(questions)
         .exec(&txn)
-        .await
-        .map_err(|err| {
-            println!("{}", err);
-            Error::SqlExecutionError
-        })?;
+        .await?;
+    {
+        let mut forms = handler.forms.lock().map_err(|_| FormInfraError::MutexLockFailed)?;
 
-    match handler.forms.lock() {
-        Err(err) => {
-            println!("{}", err);
-            return Err(Error::MutexCanNotUnlock);
-        }
-        Ok(mut forms) => {
-            forms.push(form.to_form(form_id));
-            forms
-                .iter()
-                .for_each(|form| println!("{}", form.name().name()))
-        }
+        forms.push(form.to_form(form_id));
+        forms
+            .iter()
+            .for_each(|form| println!("{}", form.name().name()));
     }
 
-    txn.commit().await.map_err(|err| {
-        println!("{}", err);
-        Error::DbTransactionConstructionError
-    })?;
+    txn.commit().await?;
 
     Ok(RawFormId::builder().id(form_id).build())
 }

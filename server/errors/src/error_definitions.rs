@@ -1,16 +1,7 @@
-use strum_macros::Display;
 use thiserror::Error;
 
-#[derive(Display)]
-pub enum Error {
-    DbTransactionConstructionError,
-    SqlExecutionError,
-    MutexCanNotUnlock,
+#[derive(Error, Debug)]
+pub enum FormInfraError {
+    #[error("aa")]
+    MutexLockFailed
 }
-
-// #[derive(Error)]
-// pub enum DataBaseError {
-//     TransactionBeginFailed
-// }
-//
-// impl From<DbErr>

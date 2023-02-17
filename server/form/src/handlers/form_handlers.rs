@@ -17,7 +17,7 @@ pub struct FormHandlers {
 
 pub async fn create_form_handler(
     State(forms): State<Arc<FormHandlers>>,
-    Json(request_form): Json<RawForm>,
+    Json(request_form): Json<RawForm>
 ) -> impl IntoResponse {
     match create_form(request_form, forms).await {
         Ok(form_id) => (StatusCode::CREATED, json!(form_id).to_string()),
