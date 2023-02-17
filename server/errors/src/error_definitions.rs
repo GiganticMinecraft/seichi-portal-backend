@@ -2,6 +2,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum FormInfraError {
-    #[error("aa")]
+    #[error("[FormInfra] Began Mutex lock failed.")]
     MutexLockFailed
 }
