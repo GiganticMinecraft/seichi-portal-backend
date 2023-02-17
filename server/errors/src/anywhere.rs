@@ -1,8 +1,8 @@
-use anyhow; // 1.0.69
-use tracing; // 0.1.37
+use anyhow;
+use tracing;
 
 mod anywhere {
-    use thiserror::{Error}; // 1.0.38
+    use thiserror::{Error};
 
     #[derive(Error, Debug)]
     #[error(transparent)]
