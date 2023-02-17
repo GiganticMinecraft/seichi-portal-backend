@@ -10,9 +10,10 @@ use std::borrow::Borrow;
 use crate::domain::{from_string, Form, FormId, FormName, Question};
 use errors::error_definitions::Error;
 use std::sync::Arc;
+use errors::anywhere;
 
 /// formを生成する
-pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> Result<RawFormId, Error> {
+pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere::Result<RawFormId> {
     let connection = database_connection().await;
 
     let txn = connection.begin().await.map_err(|err| {

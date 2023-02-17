@@ -650,6 +650,7 @@ dependencies = [
  "serde",
  "strum_macros",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -691,6 +692,7 @@ dependencies = [
  "tokio",
  "tower",
  "tower-http",
+ "tracing",
  "typed-builder",
 ]
 
