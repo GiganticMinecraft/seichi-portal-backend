@@ -8,8 +8,9 @@ pub enum Error {
     MutexCanNotUnlock,
 }
 
-#[derive(Error)]
-enum DataBaseError {
-    #[error("line {}: Transaction begin failed.", .linenum)]
-    TransactionBeginFailed
-}
+// #[derive(Error)]
+// pub enum DataBaseError {
+//     TransactionBeginFailed
+// }
+//
+// impl From<DbErr>
