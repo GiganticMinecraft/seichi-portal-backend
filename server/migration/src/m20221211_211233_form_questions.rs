@@ -22,6 +22,12 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     .col(ColumnDef::new(FormQuestions::FormId).integer().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-form_key")
+                            .from(FormQuestions::FormQuestions, FormQuestions::FormId)
+                            .to(FormsTable::Forms, FormsTable::Id),
+                    )
                     .col(ColumnDef::new(FormQuestions::Title).string().not_null())
                     .col(
                         ColumnDef::new(FormQuestions::Description)
@@ -38,13 +44,6 @@ impl MigrationTrait for Migration {
                             .name("fk-answer_type")
                             .from(FormQuestions::FormQuestions, FormQuestions::AnswerType)
                             .to(AnswerTypes::AnswerTypes, AnswerTypes::AnswerType),
-                    )
-                    .col(ColumnDef::new(FormQuestions::Choices).string())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk-form_key")
-                            .from(FormQuestions::FormQuestions, FormQuestions::FormId)
-                            .to(FormsTable::Forms, FormsTable::Id),
                     )
                     .to_owned(),
             )
@@ -66,5 +65,4 @@ pub enum FormQuestions {
     Title,
     Description,
     AnswerType,
-    Choices,
 }
