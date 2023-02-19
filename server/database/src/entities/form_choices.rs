@@ -3,15 +3,23 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "answer_types")]
+#[sea_orm(table_name = "form_choices")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false, unique)]
-    pub answer_type: String,
+    #[sea_orm(primary_key)]
+    pub id: i32,
+    pub question_id: i32,
+    pub choice: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::form_questions::Entity")]
+    #[sea_orm(
+        belongs_to = "super::form_questions::Entity",
+        from = "Column::QuestionId",
+        to = "super::form_questions::Column::QuestionId",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
     FormQuestions,
 }
 
