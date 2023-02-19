@@ -1,3 +1,8 @@
-REM see https://www.sea-ql.org/SeaORM/docs/next/generate-entity/sea-orm-cli/
+@echo off
+CALL cd /d %~dp0
 
-call "sea-orm-cli generate entity -o ./server/database/src/entities/"
+ECHO Please enter a migration file name.
+SET FILE_NAME =
+SET /P FILE_NAME=
+
+CALL sea-orm-cli migrate generate %FILE_NAME% -d ../server/migration/
