@@ -59,7 +59,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(Iden)]
-enum FormQuestions {
+pub enum FormQuestions {
     FormQuestions,
     QuestionId,
     FormId,
