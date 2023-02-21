@@ -727,6 +727,7 @@ dependencies = [
  "derive-getters",
  "errors",
  "hyper",
+ "itertools",
  "sea-orm",
  "serde",
  "serde_json",

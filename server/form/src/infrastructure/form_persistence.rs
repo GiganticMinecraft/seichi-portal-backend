@@ -4,17 +4,13 @@ use crate::handlers::FormHandlers;
 use database::connection::database_connection;
 use database::entities::{form_choices, form_questions, forms};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{
-    ActiveModelTrait, ActiveValue, EntityTrait, InsertResult, QuerySelect, QueryTrait,
-    TransactionTrait,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, TransactionTrait};
 
-use crate::domain::{from_string, Form, FormId, FormName, Question};
+use crate::domain::Form;
 use errors::anywhere;
 use errors::error_definitions::FormInfraError;
 use itertools::Itertools;
-use sea_orm::sea_query::ColumnSpec::Default;
-use sea_orm::TryGetError::DbErr;
+
 use std::sync::Arc;
 
 /// formを生成する
@@ -60,7 +56,7 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere:
 
     let form_questions = questions
         .iter()
-        .map(|(question, _)| question.clone().to_owned())
+        .map(|(question, _)| question.clone())
         .collect_vec();
 
     form_questions::Entity::insert_many(form_questions)
@@ -69,15 +65,9 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere:
 
     let form_choices = questions
         .iter()
-        .map(|(_, choices)| choices.clone().to_owned())
+        .map(|(_, choices)| choices.clone())
         .collect::<Option<Vec<_>>>()
-        .map(|choices| {
-            choices
-                .iter()
-                .flatten()
-                .map(|choices| choices.clone().to_owned())
-                .collect_vec()
-        });
+        .map(|choices| choices.iter().flatten().cloned().collect_vec());
 
     if form_choices.is_some() {
         form_choices::Entity::insert_many(form_choices.unwrap())

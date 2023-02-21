@@ -9,5 +9,5 @@ pub async fn database_connection() -> DatabaseConnection {
         env::var("DATABASE_URL").expect("データべースのURLを.envファイルに設定してください。");
     Database::connect(&database_url)
         .await
-        .unwrap_or_else(|_| panic!("{} に接続できませんでした。", database_url))
+        .unwrap_or_else(|_| panic!("{database_url} に接続できませんでした。"))
 }
