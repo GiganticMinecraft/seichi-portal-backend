@@ -1,17 +1,14 @@
-
-
-
 use tracing;
 
-use thiserror::{Error};
 use crate::error_definitions::FormInfraError;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 #[error(transparent)]
 enum Source {
     Any(#[from] anyhow::Error),
     Db(#[from] sea_orm::DbErr),
-    FormInfra(#[from] FormInfraError)
+    FormInfra(#[from] FormInfraError),
 }
 
 #[derive(Debug)]
@@ -32,8 +29,8 @@ impl std::fmt::Display for Error {
 }
 
 impl<E: std::fmt::Debug> From<E> for Error
-    where
-        Source: From<E>,
+where
+    Source: From<E>,
 {
     fn from(source: E) -> Self {
         let source: Source = source.into();

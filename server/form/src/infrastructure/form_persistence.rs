@@ -1,5 +1,3 @@
-use crate::handlers::domain_for_user_input::raw_form::RawForm;
-use crate::handlers::domain_for_user_input::raw_form_id::RawFormId;
 use crate::handlers::FormHandlers;
 use database::connection::database_connection;
 use database::entities::{form_choices, form_questions, forms};
@@ -11,6 +9,7 @@ use errors::anywhere;
 use errors::error_definitions::FormInfraError;
 use itertools::Itertools;
 
+use crate::handlers::models::{RawForm, RawFormId};
 use std::sync::Arc;
 
 /// formを生成する
@@ -82,9 +81,6 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere:
             .map_err(|_| FormInfraError::MutexLockFailed)?;
 
         forms.push(form.to_form(form_id));
-        forms
-            .iter()
-            .for_each(|form| println!("{}", form.name().name()));
     }
 
     txn.commit().await?;
@@ -100,36 +96,41 @@ pub async fn fetch_forms() -> Vec<Form> {
     //
     // let txn = _connection
     //     .begin()
-    //     .await
-    //     .unwrap_or_else(|_| panic!("データベースのトランザクション確立に失敗しました。"));
+    //     .await?;
+    //
+    // forms::Entity::find().join(
+    //     JoinType::InnerJoin,
+    //     forms::Relation::def()
+    // ).join(
+    //     JoinType::InnerJoin,
+    //     form_questions::Relation::def()
+    // ).into_model::<>()
     //
     // forms::Entity::find()
-    //     .find_with_related(form_questions::Entity)
+    //     .find_with_related([form_questions::Entity, form_choices::Entity])
     //     .all(&txn)
-    //     .await
-    //     .unwrap_or_else(|_| panic!("フォーム情報の取得に失敗しました"))
+    //     .await?
     //     .iter()
     //     .map(|(form_info, questions)| {
     //         let form_name = FormName::builder().name(form_info.clone().name).build();
     //         let form_id = FormId::builder().form_id(form_info.id).build();
-    //         let questions =
-    //             questions
-    //                 .iter()
-    //                 .map(|question| {
-    //                     let question_info = question.clone();
-    //                     match from_string(question_info.answer_type) {
-    //                         Some(question_type) => Question::builder()
-    //                             .title(question_info.title)
-    //                             .description(question_info.description)
-    //                             .question_type(question_type)
-    //                             .choices(question_info.choices.map(|choice| {
-    //                                 // choice.split(',').map(|s| s.to_string()).collect()
-    //                             }))
-    //                             .build(),
-    //                         None => panic!("question_typeのデシリアライズに失敗しました"),
-    //                     }
-    //                 })
-    //                 .collect::<Vec<Question>>();
+    //         let questions = questions
+    //             .iter()
+    //             .map(|question| {
+    //                 let question_info = question.clone();
+    //                 match from_string(question_info.answer_type) {
+    //                     Some(question_type) => Question::builder()
+    //                         .title(question_info.title)
+    //                         .description(question_info.description)
+    //                         .question_type(question_type)
+    //                         .choices(question_info.choices.map(|choice| {
+    //                             // choice.split(',').map(|s| s.to_string()).collect()
+    //                         }))
+    //                         .build(),
+    //                     None => panic!("question_typeのデシリアライズに失敗しました"),
+    //                 }
+    //             })
+    //             .collect::<Vec<Question>>();
     //         Form::builder()
     //             .name(form_name)
     //             .id(form_id)

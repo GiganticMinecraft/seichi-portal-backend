@@ -1,4 +1,4 @@
-pub mod domain_for_user_input;
 mod form_handlers;
+pub mod models;
 
 pub use form_handlers::*;
