@@ -1,13 +1,14 @@
 use crate::handlers::FormHandlers;
 use database::connection::database_connection;
-use database::entities::forms;
+use database::entities::{form_choices, form_questions, forms};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, ActiveValue, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, TransactionTrait};
 
-use crate::domain::{Form, FormId, FormName};
+use crate::domain::{question_type_from_string, Form, FormId, FormName, Question};
 use errors::anywhere;
 use errors::error_definitions::FormInfraError;
 
+use itertools::Itertools;
 use std::sync::Arc;
 
 /// formを作成する
@@ -22,7 +23,7 @@ pub async fn create_form(
     let form_id = FormId(
         forms::ActiveModel {
             id: ActiveValue::NotSet,
-            name: Set(form_name.clone().0),
+            name: Set(form_name.clone().name().to_owned()),
         }
         .insert(&txn)
         .await?
@@ -51,52 +52,62 @@ pub async fn create_form(
 
 /// 作成されているフォームの取得
 /// 取得に失敗した場合はpanicします
-pub async fn fetch_forms() -> Vec<Form> {
-    todo!()
-    // let _connection = database_connection().await;
-    //
-    // let txn = _connection
-    //     .begin()
-    //     .await?;
-    //
-    // forms::Entity::find().join(
-    //     JoinType::InnerJoin,
-    //     forms::Relation::def()
-    // ).join(
-    //     JoinType::InnerJoin,
-    //     form_questions::Relation::def()
-    // ).into_model::<>()
-    //
-    // forms::Entity::find()
-    //     .find_with_related([form_questions::Entity, form_choices::Entity])
-    //     .all(&txn)
-    //     .await?
-    //     .iter()
-    //     .map(|(form_info, questions)| {
-    //         let form_name = FormName::builder().name(form_info.clone().name).build();
-    //         let form_id = FormId::builder().form_id(form_info.id).build();
-    //         let questions = questions
-    //             .iter()
-    //             .map(|question| {
-    //                 let question_info = question.clone();
-    //                 match from_string(question_info.answer_type) {
-    //                     Some(question_type) => Question::builder()
-    //                         .title(question_info.title)
-    //                         .description(question_info.description)
-    //                         .question_type(question_type)
-    //                         .choices(question_info.choices.map(|choice| {
-    //                             // choice.split(',').map(|s| s.to_string()).collect()
-    //                         }))
-    //                         .build(),
-    //                     None => panic!("question_typeのデシリアライズに失敗しました"),
-    //                 }
-    //             })
-    //             .collect::<Vec<Question>>();
-    //         Form::builder()
-    //             .name(form_name)
-    //             .id(form_id)
-    //             .questions(questions)
-    //             .build()
-    //     })
-    //     .collect::<Vec<Form>>()
+pub async fn fetch_forms() -> anywhere::Result<Vec<Form>> {
+    let connection = database_connection().await;
+
+    let txn = connection.begin().await?;
+
+    let persisted_forms = forms::Entity::find().all(&txn).await?;
+    let persisted_questions = form_questions::Entity::find().all(&txn).await?;
+    let persisted_choices = form_choices::Entity::find().all(&txn).await?;
+
+    let forms = persisted_forms
+        .iter()
+        .map(|form| {
+            let target_question = persisted_questions
+                .clone()
+                .iter()
+                .filter_map(|question| {
+                    if question.form_id == form.clone().id {
+                        let question_type = question_type_from_string(question.clone().answer_type);
+                        let choices = persisted_choices
+                            .clone()
+                            .iter()
+                            .filter_map(|choice| {
+                                if choice.clone().question_id == question.question_id {
+                                    Some(choice.clone().choice)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect_vec();
+
+                        if question_type.is_some() {
+                            let _question = Question::builder()
+                                .title(question.clone().title)
+                                .description(question.clone().description)
+                                .question_type(question_type.unwrap())
+                                .choices(choices)
+                                .build();
+                            Some(_question)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec();
+
+            Form::builder()
+                .name(FormName::builder().name(form.clone().name).build())
+                .id(FormId(form.clone().id))
+                .questions(target_question)
+                .build()
+        })
+        .collect_vec();
+
+    println!("{:?}", forms);
+
+    Ok(forms)
 }
