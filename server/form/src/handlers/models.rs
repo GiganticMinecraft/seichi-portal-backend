@@ -6,8 +6,8 @@ use typed_builder::TypedBuilder;
 
 #[derive(Serialize, Deserialize, Getters)]
 pub struct RawForm {
-    pub form_name: String,
-    pub questions: Vec<RawQuestion>,
+    form_name: String,
+    questions: Vec<RawQuestion>,
 }
 
 impl RawForm {
@@ -41,10 +41,10 @@ pub struct RawFormId {
 
 #[derive(Serialize, Deserialize, Getters)]
 pub struct RawQuestion {
-    pub title: String,
-    pub description: String,
-    pub question_type: RawQuestionType,
-    pub choices: Option<Vec<String>>,
+    title: String,
+    description: String,
+    question_type: RawQuestionType,
+    choices: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Display)]

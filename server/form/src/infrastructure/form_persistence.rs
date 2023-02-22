@@ -38,7 +38,7 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere:
                 answer_type: Set(question.question_type().to_string()),
             };
 
-            let form_choices = question.choices.clone().map(|choices| {
+            let form_choices = question.choices().clone().map(|choices| {
                 choices
                     .iter()
                     .map(|choice| form_choices::ActiveModel {
