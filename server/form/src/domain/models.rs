@@ -1,5 +1,12 @@
 use derive_getters::Getters;
+use serde::Deserialize;
 use typed_builder::TypedBuilder;
+
+#[derive(Clone)]
+pub struct FormId(pub i32);
+
+#[derive(Deserialize, Clone)]
+pub struct FormName(pub String);
 
 #[derive(TypedBuilder, Getters)]
 pub struct Form {
@@ -7,10 +14,6 @@ pub struct Form {
     name: FormName,
     questions: Vec<Question>,
 }
-
-pub struct FormId(pub i32);
-
-pub struct FormName(pub String);
 
 #[derive(TypedBuilder)]
 pub struct Question {

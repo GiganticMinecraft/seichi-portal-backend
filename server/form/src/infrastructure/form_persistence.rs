@@ -1,78 +1,39 @@
 use crate::handlers::FormHandlers;
 use database::connection::database_connection;
-use database::entities::{form_choices, form_questions, forms};
+use database::entities::forms;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue, TransactionTrait};
 
-use crate::domain::Form;
+use crate::domain::{Form, FormId, FormName};
 use errors::anywhere;
 use errors::error_definitions::FormInfraError;
-use itertools::Itertools;
 
-use crate::handlers::models::{RawForm, RawFormId};
 use std::sync::Arc;
 
-/// formを生成する
-pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere::Result<RawFormId> {
+/// formを作成する
+pub async fn create_form(
+    form_name: FormName,
+    handler: Arc<FormHandlers>,
+) -> anywhere::Result<FormId> {
     let connection = database_connection().await;
 
     let txn = connection.begin().await?;
 
-    let form_id = forms::ActiveModel {
-        id: ActiveValue::NotSet,
-        name: Set(form.form_name().to_owned()),
-    }
-    .insert(&txn)
-    .await?
-    .id;
+    let form_id = FormId(
+        forms::ActiveModel {
+            id: ActiveValue::NotSet,
+            name: Set(form_name.clone().0),
+        }
+        .insert(&txn)
+        .await?
+        .id,
+    );
 
-    let questions = form
-        .questions()
-        .iter()
-        .map(|question| {
-            let form_questions = form_questions::ActiveModel {
-                question_id: ActiveValue::NotSet,
-                form_id: Set(form_id),
-                title: Set(question.title().to_owned()),
-                description: Set(question.description().to_owned()),
-                answer_type: Set(question.question_type().to_string()),
-            };
-
-            let form_choices = question.choices().clone().map(|choices| {
-                choices
-                    .iter()
-                    .map(|choice| form_choices::ActiveModel {
-                        id: ActiveValue::NotSet,
-                        question_id: form_questions.question_id.clone(),
-                        choice: Set(choice.to_string()),
-                    })
-                    .collect_vec()
-            });
-
-            (form_questions, form_choices)
-        })
-        .collect_vec();
-
-    let form_questions = questions
-        .iter()
-        .map(|(question, _)| question.clone())
-        .collect_vec();
-
-    form_questions::Entity::insert_many(form_questions)
-        .exec(&txn)
-        .await?;
-
-    let form_choices = questions
-        .iter()
-        .map(|(_, choices)| choices.clone())
-        .collect::<Option<Vec<_>>>()
-        .map(|choices| choices.iter().flatten().cloned().collect_vec());
-
-    if form_choices.is_some() {
-        form_choices::Entity::insert_many(form_choices.unwrap())
-            .exec(&txn)
-            .await?;
-    }
+    let form = Form::builder()
+        .id(form_id.clone())
+        .name(form_name.clone())
+        .questions(vec![])
+        .build();
 
     {
         let mut forms = handler
@@ -80,12 +41,12 @@ pub async fn create_form(form: RawForm, handler: Arc<FormHandlers>) -> anywhere:
             .lock()
             .map_err(|_| FormInfraError::MutexLockFailed)?;
 
-        forms.push(form.to_form(form_id));
+        forms.push(form);
     }
 
     txn.commit().await?;
 
-    Ok(RawFormId::builder().id(form_id).build())
+    Ok(form_id.clone())
 }
 
 /// 作成されているフォームの取得
@@ -138,20 +99,4 @@ pub async fn fetch_forms() -> Vec<Form> {
     //             .build()
     //     })
     //     .collect::<Vec<Form>>()
-}
-
-/// formを削除する
-pub fn delete_form(_form_id: RawFormId) -> bool {
-    todo!()
-    // let connection = &mut database_connection();
-    // let transaction: Result<(), Error> = connection.transaction(|connection| {
-    //     sql_query("DELETE FROM seichi_portal.forms WHERE id = ?")
-    //         .bind::<Integer, _>(_form_id.id())
-    //         .execute(connection)?;
-    //     sql_query(format!("DROP TABLE forms.{}", _form_id.id())).execute(connection)?;
-    //
-    //     Ok(())
-    // });
-    //
-    // transaction.is_ok()
 }
