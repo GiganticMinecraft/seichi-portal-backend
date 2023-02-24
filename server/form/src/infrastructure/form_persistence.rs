@@ -62,46 +62,38 @@ pub async fn fetch_forms() -> anywhere::Result<Vec<Form>> {
     let persisted_choices = form_choices::Entity::find().all(&txn).await?;
 
     let forms = persisted_forms
-        .iter()
+        .into_iter()
         .map(|form| {
             let target_question = persisted_questions
                 .clone()
-                .iter()
+                .into_iter()
                 .filter_map(|question| {
-                    if question.form_id == form.clone().id {
-                        let question_type = question_type_from_string(question.clone().answer_type);
-                        let choices = persisted_choices
-                            .clone()
-                            .iter()
-                            .filter_map(|choice| {
-                                if choice.clone().question_id == question.question_id {
-                                    Some(choice.clone().choice)
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect_vec();
+                    question_type_from_string(question.answer_type)
+                        .filter(|_| question.form_id == form.id)
+                        .map(|question_type| {
+                            let choices = persisted_choices
+                                .clone()
+                                .iter()
+                                .filter_map(|choice| {
+                                    let is_same_question =
+                                        choice.question_id == question.question_id;
+                                    is_same_question.then(|| choice.choice.clone())
+                                })
+                                .collect_vec();
 
-                        if question_type.is_some() {
-                            let _question = Question::builder()
-                                .title(question.clone().title)
-                                .description(question.clone().description)
-                                .question_type(question_type.unwrap())
+                            Question::builder()
+                                .title(question.title)
+                                .description(question.description)
+                                .question_type(question_type)
                                 .choices(choices)
-                                .build();
-                            Some(_question)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
+                                .build()
+                        })
                 })
                 .collect_vec();
 
             Form::builder()
-                .name(FormName::builder().name(form.clone().name).build())
-                .id(FormId(form.clone().id))
+                .name(FormName::builder().name(form.name).build())
+                .id(FormId(form.id))
                 .questions(target_question)
                 .build()
         })
