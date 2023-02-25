@@ -1,0 +1,12 @@
+[package]
+name = "database"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sea-orm = { version = "^0", features = [
+    "sqlx-mysql",
+    "runtime-actix-rustls",
+    "macros",
+], default-features = false }
+dotenvy = "0.15.6"

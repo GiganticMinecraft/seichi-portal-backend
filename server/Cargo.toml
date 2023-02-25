@@ -1,0 +1,2 @@
+[workspace]
+members = ["app", "database", "errors", "form", "migration"]
