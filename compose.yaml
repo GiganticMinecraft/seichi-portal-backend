@@ -29,13 +29,12 @@ services:
       - seichi_portal
     volumes:
       - ./docker/db/data:/var/lib/mysql
-    configs:
-      - source: mysql_config
-        target: /etc/mysql/conf.d
+      - ./docker/db/my.cnf:/etc/mysql/conf.d/my.cnf
     depends_on:
       - db
     restart: always
   seichi_portal_backend:
+    container_name: seichi-portal-backend
     build:
       context: .
       dockerfile: ./docker/seichi_portal/Dockerfile
@@ -48,7 +47,5 @@ services:
     restart: always
 networks:
   seichi_portal:
+    name: seichi-portal-backend-network
     external: false
-configs:
-  mysql_config:
-    file: ./docker/db/my.cnf
