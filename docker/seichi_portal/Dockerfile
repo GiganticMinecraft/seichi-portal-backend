@@ -11,4 +11,5 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY ../../server /work
 RUN cargo build --release
 
-
+ENTRYPOINT ["cargo"]
+CMD ["run", "-p", "app"]
