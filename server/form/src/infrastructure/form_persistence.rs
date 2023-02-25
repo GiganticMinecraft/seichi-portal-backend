@@ -98,7 +98,5 @@ pub async fn fetch_forms() -> anywhere::Result<Vec<Form>> {
         })
         .collect_vec();
 
-    println!("{:?}", forms);
-
     Ok(forms)
 }

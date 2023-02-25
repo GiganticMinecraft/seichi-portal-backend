@@ -1,5 +1,5 @@
+use crate::m20221211_211233_form_questions::FormQuestionsTable;
 use sea_orm_migration::prelude::*;
-use crate::m20221211_211233_form_questions::FormQuestions;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -10,23 +10,30 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(FormChoices::FormChoices)
+                    .table(FormChoicesTable::FormChoices)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(FormChoices::Id)
+                        ColumnDef::new(FormChoicesTable::Id)
                             .integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(FormChoices::QuestionId).integer().not_null())
+                    .col(
+                        ColumnDef::new(FormChoicesTable::QuestionId)
+                            .integer()
+                            .not_null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-question_id")
-                            .from(FormChoices::FormChoices, FormChoices::QuestionId)
-                            .to(FormQuestions::FormQuestions, FormQuestions::QuestionId)
+                            .from(FormChoicesTable::FormChoices, FormChoicesTable::QuestionId)
+                            .to(
+                                FormQuestionsTable::FormQuestions,
+                                FormQuestionsTable::QuestionId,
+                            ),
                     )
-                    .col(ColumnDef::new(FormChoices::Choice).string().not_null())
+                    .col(ColumnDef::new(FormChoicesTable::Choice).string().not_null())
                     .to_owned(),
             )
             .await
@@ -34,14 +41,18 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(FormChoices::FormChoices).to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(FormChoicesTable::FormChoices)
+                    .to_owned(),
+            )
             .await
     }
 }
 
 /// Learn more at https://docs.rs/sea-query#iden
 #[derive(Iden)]
-enum FormChoices {
+enum FormChoicesTable {
     FormChoices,
     Id,
     QuestionId,
