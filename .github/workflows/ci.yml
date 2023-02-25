@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1.0.7
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: clippy
@@ -21,17 +21,11 @@ jobs:
       - name: cache dependencies
         uses: Swatinem/rust-cache@v2.2.0
       - name: clippy check
-        uses: actions-rs/clippy-check@v1.0.7
+        uses: LoliGothick/clippy-check@v0.2.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features --manifest-path ./server/Cargo.toml
+          options: --all-features --manifest-path ./server/Cargo.toml
       - name: compile for unit test
-        uses: actions-rs/cargo@v1.0.3
-        with:
-          command: test
-          args: --no-run --locked --manifest-path ./server/Cargo.toml
+        run: cargo test --no-run --locked --manifest-path ./server/Cargo.toml
       - name: unit test
-        uses: actions-rs/cargo@v1.0.3
-        with:
-          command: test
-          args: --manifest-path ./server/Cargo.toml
+        run: cargo test --manifest-path ./server/Cargo.toml
