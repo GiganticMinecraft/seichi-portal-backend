@@ -72,7 +72,6 @@ pub async fn fetch_forms() -> anywhere::Result<Vec<Form>> {
                         .filter(|_| question.form_id == form.id)
                         .map(|question_type| {
                             let choices = persisted_choices
-                                .clone()
                                 .iter()
                                 .filter_map(|choice| {
                                     let is_same_question =
