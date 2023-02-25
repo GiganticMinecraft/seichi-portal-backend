@@ -21,7 +21,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.2.1
       - name: Clippy check
-        uses: LoliGothick/clippy-check@v0.2.3
+        uses: LoliGothick/clippy-check@v0.2.4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           options: --all-features --manifest-path ./server/Cargo.toml
