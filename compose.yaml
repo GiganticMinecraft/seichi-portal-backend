@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   db:
     image: mysql:8.0
@@ -31,7 +29,9 @@ services:
       - seichi_portal
     volumes:
       - ./docker/db/data:/var/lib/mysql
-      - ./docker/db/my.cnf:/etc/mysql/conf.d/my.cnf
+    configs:
+      - source: mysql_config
+        target: /etc/mysql/conf.d
     depends_on:
       - db
     restart: always
@@ -39,7 +39,6 @@ services:
     build:
       context: .
       dockerfile: ./docker/seichi_portal/Dockerfile
-    command: cargo run -p app
     ports:
       - "9000:9000"
     networks:
@@ -47,7 +46,9 @@ services:
     depends_on:
       - db
     restart: always
-
 networks:
   seichi_portal:
     external: false
+configs:
+  mysql_config:
+    file: ./docker/db/my.cnf
