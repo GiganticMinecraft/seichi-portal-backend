@@ -29,9 +29,7 @@ services:
       - seichi_portal
     volumes:
       - ./docker/db/data:/var/lib/mysql
-    configs:
-      - source: mysql_config
-        target: /etc/mysql/conf.d
+      - ./docker/db/my.cnf:/etc/mysql/conf.d/my.cnf
     depends_on:
       - db
     restart: always
@@ -49,6 +47,3 @@ services:
 networks:
   seichi_portal:
     external: false
-configs:
-  mysql_config:
-    file: ./docker/db/my.cnf
