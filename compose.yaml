@@ -46,11 +46,9 @@ services:
     depends_on:
       - db
     restart: always
-
 networks:
   seichi_portal:
     external: false
-
 configs:
   mysql_config:
     file: ./docker/db/my.cnf
