@@ -12,37 +12,51 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(FormQuestions::FormQuestions)
+                    .table(FormQuestionsTable::FormQuestions)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(FormQuestions::QuestionId)
+                        ColumnDef::new(FormQuestionsTable::QuestionId)
                             .integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(FormQuestions::FormId).integer().not_null())
+                    .col(
+                        ColumnDef::new(FormQuestionsTable::FormId)
+                            .integer()
+                            .not_null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-form_key")
-                            .from(FormQuestions::FormQuestions, FormQuestions::FormId)
+                            .from(
+                                FormQuestionsTable::FormQuestions,
+                                FormQuestionsTable::FormId,
+                            )
                             .to(FormsTable::Forms, FormsTable::Id),
                     )
-                    .col(ColumnDef::new(FormQuestions::Title).string().not_null())
                     .col(
-                        ColumnDef::new(FormQuestions::Description)
+                        ColumnDef::new(FormQuestionsTable::Title)
                             .string()
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(FormQuestions::AnswerType)
+                        ColumnDef::new(FormQuestionsTable::Description)
+                            .string()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(FormQuestionsTable::AnswerType)
                             .string()
                             .not_null(),
                     )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-answer_type")
-                            .from(FormQuestions::FormQuestions, FormQuestions::AnswerType)
+                            .from(
+                                FormQuestionsTable::FormQuestions,
+                                FormQuestionsTable::AnswerType,
+                            )
                             .to(AnswerTypes::AnswerTypes, AnswerTypes::AnswerType),
                     )
                     .to_owned(),
@@ -52,13 +66,17 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(FormQuestions::FormQuestions).to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(FormQuestionsTable::FormQuestions)
+                    .to_owned(),
+            )
             .await
     }
 }
 
 #[derive(Iden)]
-pub enum FormQuestions {
+pub enum FormQuestionsTable {
     FormQuestions,
     QuestionId,
     FormId,

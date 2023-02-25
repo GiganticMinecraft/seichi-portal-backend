@@ -28,9 +28,9 @@ impl MigrationTrait for Migration {
         let connection = manager.get_connection();
 
         let models = vec!["TEXT", "CHECKBOX", "PULLDOWN"]
-            .iter()
+            .into_iter()
             .map(|answer_type| answer_types::ActiveModel {
-                answer_type: Set(answer_type.clone().to_owned()),
+                answer_type: Set(answer_type.to_owned()),
             })
             .collect::<Vec<answer_types::ActiveModel>>();
 
