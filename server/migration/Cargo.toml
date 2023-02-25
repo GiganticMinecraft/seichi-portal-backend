@@ -21,3 +21,8 @@ features = [
   # "runtime-tokio-rustls",  # `ASYNC_RUNTIME` feature
   # "sqlx-postgres",         # `DATABASE_DRIVER` feature
 ]
+
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false # Disable features which are enabled by default
+features = ["user-hooks"]
