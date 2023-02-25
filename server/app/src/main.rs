@@ -28,7 +28,7 @@ async fn main() {
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::POST])
-                .allow_origin(Any)
+                .allow_origin(Any) // todo: allow_originを制限する
                 .allow_headers([CONTENT_TYPE]),
         );
 
