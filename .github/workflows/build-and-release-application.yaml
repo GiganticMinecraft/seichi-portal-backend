@@ -24,9 +24,9 @@ jobs:
       # > selecting a toolchain either by action or manual `rustup` calls should happen
       # > before the plugin, as it uses the current rustc version as its cache key
       # https://github.com/Swatinem/rust-cache/tree/cb2cf0cc7c5198d3364b9630e2c3d457f160790c#example-usage
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.2.1
         with:
-          working-directory: server/
+          workspaces: "./server -> target"
 
       # buf CLIがビルドに必要
       - uses: bufbuild/buf-setup-action@v1
