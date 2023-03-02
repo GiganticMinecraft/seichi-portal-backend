@@ -1,14 +1,10 @@
 # seichi-portal-backend
 
-<<<<<<< HEAD
 整地鯖の運営でこれまで使っていたGoogle Formを一元化するためのバックエンド実装です。
 
 フォームの種類が多く管理が煩雑になってきたことや、フォーム自体の場所の管理が追いつかなくなってきたという背景から内製化をすることになりました。
 
 [フロントエンド (seichi-portal-frontend)](https://github.com/GiganticMinecraft/seichi-portal-frontend)
-=======
-整地鯖が公開しているフォームなどを内製化するために作成したリポジトリです。
->>>>>>> 3de4677cd0e3217fe0943ebcf32052b99bf428dd
 
 ## 機能について
 
@@ -30,15 +26,6 @@ seichi-portal-backendではREST APIを用いて通信を行います。REST API�
 
 ![image](./docs/overhead-view.drawio.svg)
 
-<<<<<<< HEAD
-=======
-## フロントエンド
-
-フロントエンドは外部リポジトリになります。
-
-[リポジトリ (seichi-portal-frontend)](https://github.com/GiganticMinecraft/seichi-portal-frontend)
-
->>>>>>> 3de4677cd0e3217fe0943ebcf32052b99bf428dd
 ## ライセンス
 
 [Apache Licence 2.0](https://github.com/GiganticMinecraft/seichi-portal-backend/blob/master/LICENSE)
