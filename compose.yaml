@@ -12,8 +12,8 @@ services:
   seichi_portal_backend:
     container_name: seichi-portal-backend
     build:
-      context: .
-      dockerfile: ./docker/seichi_portal/Dockerfile
+      context: ./server
+      dockerfile: ./Dockerfile
     ports:
       - "9000:9000"
     networks:
