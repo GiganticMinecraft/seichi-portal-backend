@@ -1,0 +1,103 @@
+name: CI
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+
+env:
+  image_name: ghcr.io/giganticminecraft/seichi-poral-backend
+
+jobs:
+  lint-and-test:
+    name: Lint and test server
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # reads toolchain info from /rust-toolchain.toml
+      # we are using a fork of actions-rs/toolchain for rust-toolchain.toml support
+      # (see https://github.com/actions-rs/toolchain/pull/209) for details.
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # > selecting a toolchain either by action or manual `rustup` calls should happen
+      # > before the plugin, as it uses the current rustc version as its cache key
+      # https://github.com/Swatinem/rust-cache/tree/cb2cf0cc7c5198d3364b9630e2c3d457f160790c#example-usage
+      - uses: Swatinem/rust-cache@v2.2.1
+        with:
+          workspaces: "./server -> target"
+
+      # buf CLIがビルドに必要
+      - uses: bufbuild/buf-setup-action@v1
+
+      # GitHubのUIにエラー/警告を表示してくれるので actions-rs/cargo を利用している
+
+      - name: Cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path server/Cargo.toml --all -- --check
+
+      - name: Cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path server/Cargo.toml
+
+      - name: Cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --manifest-path server/Cargo.toml
+
+      - name: Cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path server/Cargo.toml --all-features
+
+  build-image:
+    name: Build server docker image (and publish on master)
+    needs: [ lint-and-test ]
+    runs-on: ubuntu-20.04
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    concurrency:
+      group: ${{ github.ref }}-docker-build
+      cancel-in-progress: true
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.image_name }}
+          tags: |
+            type=sha,prefix=sha-,suffix=,format=short
+      - name: Build (and push if on master)
+        id: docker_build
+        uses: docker/build-push-action@v4
+        with:
+          context: ./server
+          file: ./Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
+          push: ${{ github.ref == 'refs/heads/master' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          # すべてのビルドステージのすべてのレイヤーをキャッシュして欲しいのでmode=max
+          cache-to: type=gha,mode=max
