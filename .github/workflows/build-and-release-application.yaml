@@ -19,7 +19,7 @@ jobs:
       # we are using a fork of actions-rs/toolchain for rust-toolchain.toml support
       # (see https://github.com/actions-rs/toolchain/pull/209) for details.
       - name: Setup Rust toolchain
-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        uses: dtolnay/rust-toolchain@stable
 
       # > selecting a toolchain either by action or manual `rustup` calls should happen
       # > before the plugin, as it uses the current rustc version as its cache key
