@@ -35,6 +35,7 @@ seichi-portal-backendではREST APIを用いて通信を行います。REST API�
 [APIドキュメント](https://github.com/GiganticMinecraft/seichi-api-schema)
 
 ## プロジェクト俯瞰図
+
 ![image](./docs/overhead-view.drawio.svg)
 
 ## フロントエンド
