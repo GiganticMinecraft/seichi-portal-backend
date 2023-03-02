@@ -12,6 +12,9 @@ seichi-portal-backendではRestAPIを用いて通信を行います。
 
 [APIドキュメント](https://github.com/GiganticMinecraft/seichi-api-schema)
 
+## プロジェクト俯瞰図
+![image](./docs/overhead-view.drawio.svg)
+
 ## フロントエンド
 フロントエンドは外部リポジトリになります。
 
