@@ -34,4 +34,4 @@ API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/se
 
 ## ライセンス
 
-[Apache Licence 2.0](https://github.com/GiganticMinecraft/seichi-portal-backend/blob/master/LICENSE)
+[Apache Licence 2.0](https://github.com/GiganticMinecraft/seichi-portal-backend/blob/main/LICENSE)
