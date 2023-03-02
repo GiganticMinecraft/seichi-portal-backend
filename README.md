@@ -15,7 +15,8 @@
 
 seichi-portal-backendではREST APIを用いて通信を行います。REST APIの定義は[OpenAPI v3.0.0](https://spec.openapis.org/oas/v3.0.0)を利用したものになっています。
 
-[OpenAPI定義（APIドキュメント）](https://github.com/GiganticMinecraft/seichi-api-schema)
+- [OpenAPI定義（APIドキュメント）](https://giganticminecraft.github.io/seichi-api-schema/)
+- [リポジトリ](https://github.com/GiganticMinecraft/seichi-api-schema)
 
 ## プロジェクト俯瞰図
 
