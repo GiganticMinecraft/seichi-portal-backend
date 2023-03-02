@@ -68,24 +68,22 @@ pub async fn fetch_forms() -> anywhere::Result<Vec<Form>> {
                 .iter()
                 .filter(|question| question.form_id == form.id)
                 .filter_map(|question| {
-                    question_type_from_string(&question.answer_type)
-                        .map(|question_type| {
-                            let choices = persisted_choices
-                                .iter()
-                                .filter_map(|choice| {
-                                    let is_same_question =
-                                        choice.question_id == question.question_id;
-                                    is_same_question.then(|| choice.choice.to_owned())
-                                })
-                                .collect_vec();
+                    question_type_from_string(&question.answer_type).map(|question_type| {
+                        let choices = persisted_choices
+                            .iter()
+                            .filter_map(|choice| {
+                                let is_same_question = choice.question_id == question.question_id;
+                                is_same_question.then(|| choice.choice.to_owned())
+                            })
+                            .collect_vec();
 
-                            Question::builder()
-                                .title(question.title.to_owned())
-                                .description(question.description.to_owned())
-                                .question_type(question_type)
-                                .choices(choices)
-                                .build()
-                        })
+                        Question::builder()
+                            .title(question.title.to_owned())
+                            .description(question.description.to_owned())
+                            .question_type(question_type)
+                            .choices(choices)
+                            .build()
+                    })
                 })
                 .collect_vec();
 
