@@ -1,26 +1,32 @@
-# seichi-portal-backend
+# Seichi Portal
 
-整地鯖の運営でこれまで使っていたGoogle Formを一元化するためのバックエンド実装です。
+Seichi Portal は、整地鯖の運営でこれまで使っていた Google Form を一元化するためのアプリケーションです。このリポジトリでは、そのバックエンド実装を管理しています。
 
-フォームの種類が多く管理が煩雑になってきたことや、フォーム自体の場所の管理が追いつかなくなってきたという背景から内製化をすることになりました。
+フロントエンド実装については[こちらのリポジトリ](https://github.com/GiganticMinecraft/seichi-portal-frontend)を参照してください。
 
-[フロントエンド (seichi-portal-frontend)](https://github.com/GiganticMinecraft/seichi-portal-frontend)
+## プロジェクトの目的
 
-## 機能について
+これまで整地鯖の運営では Google Form を用いてユーザーからの要望等を管理してきました。しかし、フォームの種類が増えるにつれ管理が煩雑になってきたことから、内製化の機運が高まりました。
+
+## 主な機能
 
 | 機能名         | 詳細                                                                                                                                       | 
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| フォーム機能   | 整地鯖が提供する各種フォームを一元管理するシステム                                                                                         | 
-| メッセージ機能 | フォーム等で回答した内容に対して連絡が必要な場合に利用できるシステム。<br><br>一般プレイヤー同士での連絡用に使用することは想定していない。 | 
-| 情報確認機能   | 以下の情報が確認できる。<br>- フォーム回答履歴<br>- 処罰履歴<br>- お知らせ                                                                 |
+| フォーム機能   | 整地鯖が提供する各種フォームを一元管理する                     | 
+| メッセージ機能 | ユーザーから送られてきたフォームのリクエストに対して運営からメッセージを送信できる      | 
+| 情報確認機能   | フォーム回答履歴、処罰履歴、お知らせ情報が確認できる                   |
 
+## API定義
 
-## APIについて
+Seichi Portal ではフロントエンドとバックエンド間の通信に REST API を使っており、API のスキーマは [OpenAPI v3.0.0](https://spec.openapis.org/oas/v3.0.0) ベースの[スキーマ管理用リポジトリ](https://github.com/GiganticMinecraft/seichi-api-schema)に配置し、管理しています。
 
-seichi-portal-backendではREST APIを用いて通信を行います。REST APIの定義は[OpenAPI v3.0.0](https://spec.openapis.org/oas/v3.0.0)を利用したものになっています。
+API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/seichi-api-schema/)しており、すぐに試せるようになっています。
 
-- [OpenAPI定義（APIドキュメント）](https://giganticminecraft.github.io/seichi-api-schema/)
-- [リポジトリ](https://github.com/GiganticMinecraft/seichi-api-schema)
+## 開発環境とミドルウェア
+
+バックエンド言語には Rust を採用しており、MySQL にフォームなどの必要な情報が永続化されます。開発環境では Docker Compose を使うため、必要であれば別途導入が必要です。
+
+<!--りとさんが環境変数周りの内容を追記する-->
 
 ## プロジェクト俯瞰図
 
@@ -28,4 +34,4 @@ seichi-portal-backendではREST APIを用いて通信を行います。REST API�
 
 ## ライセンス
 
-[Apache Licence 2.0](https://github.com/GiganticMinecraft/seichi-portal-backend/blob/master/LICENSE)
+[Apache Licence 2.0](https://github.com/GiganticMinecraft/seichi-portal-backend/blob/main/LICENSE)
