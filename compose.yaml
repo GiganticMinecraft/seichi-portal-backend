@@ -2,36 +2,12 @@ services:
   db:
     image: mysql:8.0
     container_name: mysql
-    environment:
-      - TZ=Asia/Tokyo
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=seichi_portal
+    env_file:
+      - ./server/.env
     ports:
       - "3306:3306"
     networks:
       - seichi_portal
-    healthcheck:
-      test: mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD
-    restart: always
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: phpmyadmin
-    environment:
-      - TZ=Asia/Tokyo
-      - PMA_ARBITRARY=1
-      - PMA_HOST=db
-      - PMA_PORT=3306
-      - PMA_USER=root
-      - PMA_PASSWORD=root
-    ports:
-      - "8080:80"
-    networks:
-      - seichi_portal
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./docker/db/my.cnf:/etc/mysql/conf.d/my.cnf
-    depends_on:
-      - db
     restart: always
   seichi_portal_backend:
     container_name: seichi-portal-backend
