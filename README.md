@@ -39,6 +39,7 @@ seichi-portal-backendではREST APIを用いて通信を行います。REST API�
 ![image](./docs/overhead-view.drawio.svg)
 
 ## フロントエンド
+
 フロントエンドは外部リポジトリになります。
 
 [リポジトリ (seichi-portal-frontend)](https://github.com/GiganticMinecraft/seichi-portal-frontend)
