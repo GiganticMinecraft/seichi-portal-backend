@@ -45,4 +45,5 @@ seichi-portal-backendではREST APIを用いて通信を行います。REST API�
 [リポジトリ (seichi-portal-frontend)](https://github.com/GiganticMinecraft/seichi-portal-frontend)
 
 ## ライセンス
+
 [Apache Licence 2.0](https://github.com/GiganticMinecraft/seichi-portal-backend/blob/master/LICENSE)
