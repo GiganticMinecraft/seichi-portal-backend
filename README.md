@@ -26,7 +26,12 @@ API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/se
 
 バックエンド言語には Rust を採用しており、MySQL にフォームなどの必要な情報が永続化されます。開発環境では Docker Compose を使うため、必要であれば別途導入が必要です。
 
-<!--りとさんが環境変数周りの内容を追記する-->
+データベース周りの接続情報は [.env.example](./server/.env.example) にまとまっており、 DB を起動するためには `.env` ファイルが必要なため、以下のようにファイルをコピーします
+
+```bash
+cp server/.env{.example,}
+```
+
 
 ## プロジェクト俯瞰図
 

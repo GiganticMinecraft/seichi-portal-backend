@@ -6,6 +6,7 @@ use database::connection;
 use form::handlers::{create_form_handler, FormHandlers};
 use form::infrastructure::fetch_forms;
 use migration::MigratorTrait;
+use std::env;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -32,7 +33,9 @@ async fn main() {
                 .allow_headers([CONTENT_TYPE]),
         );
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 9000));
+    let http_port = env::var("HTTP_PORT").expect("HTTP_PORTを指定してください。");
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], http_port.parse().unwrap()));
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
         .await
