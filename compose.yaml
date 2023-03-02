@@ -9,18 +9,6 @@ services:
     networks:
       - seichi_portal
     restart: always
-  seichi_portal_backend:
-    container_name: seichi-portal-backend
-    build:
-      context: ./server
-      dockerfile: ./Dockerfile
-    ports:
-      - "9000:9000"
-    networks:
-     - seichi_portal
-    depends_on:
-      - db
-    restart: always
 networks:
   seichi_portal:
     name: seichi-portal-backend-network
