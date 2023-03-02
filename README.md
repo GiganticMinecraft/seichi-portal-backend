@@ -29,7 +29,8 @@
 - rustup 1.25.2
 
 ## APIについて
-seichi-portal-backendではRestAPIを用いて通信を行います。
+
+seichi-portal-backendではREST APIを用いて通信を行います。REST APIの定義は[OpenAPI v3.0.0](https://spec.openapis.org/oas/v3.0.0)を利用したものになっています。
 
 [APIドキュメント](https://github.com/GiganticMinecraft/seichi-api-schema)
 
