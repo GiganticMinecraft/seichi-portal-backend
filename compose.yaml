@@ -28,7 +28,7 @@ services:
     networks:
       - seichi_portal
     volumes:
-      - ./docker/db/data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
       - ./docker/db/my.cnf:/etc/mysql/conf.d/my.cnf
     depends_on:
       - db
@@ -49,3 +49,5 @@ networks:
   seichi_portal:
     name: seichi-portal-backend-network
     external: false
+volumes:
+  mysql_data:
