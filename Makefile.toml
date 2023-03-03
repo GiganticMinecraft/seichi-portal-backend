@@ -1,0 +1,20 @@
+[config]
+skip_core_tasks = true
+default_to_workspace = false
+
+[tasks.up-db]
+command = "docker"
+args = [
+    "compose",
+    "up",
+    "-d"
+]
+
+[tasks.run-server]
+script_runner = "@shell"
+script = """
+cd server && cargo run
+"""
+
+[tasks.up]
+dependencies = ["up-db", "run-server"]
