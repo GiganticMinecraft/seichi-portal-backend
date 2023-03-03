@@ -36,31 +36,20 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      # GitHubのUIにエラー/警告を表示してくれるので actions-rs/cargo を利用している
-
       - name: Cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --manifest-path server/Cargo.toml --all -- --check
+        run: cargo fmt --all -- --check
+        working-directory: ./server
 
       - name: Cargo build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path server/Cargo.toml
+        run: cargo build
+        working-directory: ./server
 
       - name: Cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --manifest-path server/Cargo.toml
+        run: cargo clippy
 
       - name: Cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path server/Cargo.toml --all-features
+        run: cargo test --all-features
+        working-directory: ./server
 
   build-image:
     name: Build server docker image (and publish on main)
