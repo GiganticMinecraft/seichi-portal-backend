@@ -14,7 +14,7 @@ args = [
 [tasks.generate-entity]
 extend = "generate-entity-private-task"
 env_files = [
-    "..//.env"
+    "../.env"
 ]
 
 [tasks.generate-entity.windows]
