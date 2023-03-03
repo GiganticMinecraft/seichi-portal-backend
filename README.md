@@ -1,10 +1,8 @@
 # Seichi Portal
 
-Seichi Portal は、整地鯖の運営でこれまで使っていた Google Form を一元化するためのアプリケーションです。このリポジトリでは、そのバックエンド実装を管理しています。
+このリポジトリは、Seichi Portalのバックエンド実装です。
 
-プロジェクトの目的や関連リポジトリについては[こちらのリポジトリ](https://github.com/GiganticMinecraft/seichi-portal)を参照してください。
-
-フロントエンド実装については[こちらのリポジトリ](https://github.com/GiganticMinecraft/seichi-portal-frontend)を参照してください。
+プロジェクトの目的やフロントエンドなどの関連リポジトリについては、[こちらのリポジトリ](https://github.com/GiganticMinecraft/seichi-portal)を参照してください。
 
 ## 主な機能
 
