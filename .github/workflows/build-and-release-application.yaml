@@ -1,8 +1,6 @@
 name: Build and release application
 on:
   push:
-    paths-ignore:
-      - '**.md'
 
 env:
   image_name: ghcr.io/giganticminecraft/seichi-poral-backend
