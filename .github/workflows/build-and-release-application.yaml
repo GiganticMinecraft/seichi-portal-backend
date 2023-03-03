@@ -1,4 +1,4 @@
-name: CI
+name: Build and release application
 on:
   push:
     paths-ignore:
