@@ -1,9 +1,6 @@
 extend = "../Makefile.common.toml"
 
-[tasks.generate-entity-for-windows]
-env_files = [
-    "..\\.env"
-]
+[tasks.generate-entity-private-task]
 command = "sea-orm-cli"
 args = [
     "generate",
@@ -14,16 +11,24 @@ args = [
     "src/entities/"
 ]
 
-[tasks.generate-entity-for-others]
+[tasks.generate-entity]
+extend = "generate-entity-private-task"
 env_files = [
     "..//.env"
 ]
+
+[tasks.generate-entity.windows]
+extend = "generate-entity-private-task"
+env_files = [
+    "..\\.env"
+]
+
+[tasks.generate-migration-file]
 command = "sea-orm-cli"
 args = [
+    "migrate",
     "generate",
-    "entity",
-    "--database-url",
-    "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}",
-    "-o",
-    "src/entities/"
+    "please_change_this_name",
+    "-d",
+    "../migration/"
 ]
