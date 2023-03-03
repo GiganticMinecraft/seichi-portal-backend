@@ -1,8 +1,11 @@
-name: CI
+name: Build and release application
 on:
   push:
-    paths-ignore:
-      - '**.md'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 env:
   image_name: ghcr.io/giganticminecraft/seichi-poral-backend
@@ -60,9 +63,9 @@ jobs:
           args: --manifest-path server/Cargo.toml --all-features
 
   build-image:
-    name: Build server docker image (and publish on master)
+    name: Build server docker image (and publish on main)
     needs: [ lint-and-test ]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
     concurrency:
@@ -90,14 +93,14 @@ jobs:
           images: ${{ env.image_name }}
           tags: |
             type=sha,prefix=sha-,suffix=,format=short
-      - name: Build (and push if on master)
+      - name: Build (and push if on main)
         id: docker_build
         uses: docker/build-push-action@v4
         with:
           context: ./server
           file: ./Dockerfile
           builder: ${{ steps.buildx.outputs.name }}
-          push: ${{ github.ref == 'refs/heads/master' }}
+          push: ${{ github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
