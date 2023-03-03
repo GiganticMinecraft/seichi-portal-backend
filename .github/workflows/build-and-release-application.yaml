@@ -44,8 +44,11 @@ jobs:
         run: cargo build
         working-directory: ./server
 
-      - name: Cargo clippy
-        run: cargo clippy
+      - name: Clippy check
+        uses: LoliGothick/clippy-check@v0.2.4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          options: --all-features --manifest-path ./server/Cargo.toml
 
       - name: Cargo test
         run: cargo test --all-features
