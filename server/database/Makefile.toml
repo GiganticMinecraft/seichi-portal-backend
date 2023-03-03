@@ -1,1 +1,16 @@
 extend = "../Makefile.common.toml"
+
+[tasks.generate-entity]
+env_files = [
+    "..\\.env",
+    "..//.env"
+]
+command = "sea-orm-cli"
+args = [
+    "generate",
+    "entity",
+    "--database-url",
+    "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}",
+    "-o",
+    "src/entities/"
+]
