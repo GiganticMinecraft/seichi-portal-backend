@@ -55,13 +55,18 @@ checksum = "224afbd727c3d6e4b90103ece64b8d1b67fbb1973b1046c2281eed3f3803f800"
 name = "app"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
  "cargo-husky",
  "database",
+ "dotenvy",
+ "envy",
  "errors",
  "form",
  "hyper",
  "migration",
+ "once_cell",
+ "serde",
  "tokio",
  "tower",
  "tower-http",
@@ -645,7 +650,10 @@ version = "0.1.0"
 dependencies = [
  "cargo-husky",
  "dotenvy",
+ "envy",
+ "once_cell",
  "sea-orm",
+ "serde",
 ]
 
 [[package]]
@@ -691,6 +699,15 @@ name = "either"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
+
+[[package]]
+name = "envy"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f47e0157f2cb54f5ae1bd371b30a2ae4311e1c028f575cd4e81de7353215965"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "errors"
