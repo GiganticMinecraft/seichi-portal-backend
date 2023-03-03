@@ -33,34 +33,26 @@ jobs:
 
       # buf CLIがビルドに必要
       - uses: bufbuild/buf-setup-action@v1
-        with: 
+        with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      # GitHubのUIにエラー/警告を表示してくれるので actions-rs/cargo を利用している
-
       - name: Cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --manifest-path server/Cargo.toml --all -- --check
+        run: cargo fmt --all -- --check
+        working-directory: ./server
 
       - name: Cargo build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path server/Cargo.toml
+        run: cargo build
+        working-directory: ./server
 
-      - name: Cargo clippy
-        uses: actions-rs/cargo@v1
+      - name: Clippy check
+        uses: LoliGothick/clippy-check@v0.2.4
         with:
-          command: clippy
-          args: --manifest-path server/Cargo.toml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          options: --all-features --manifest-path ./server/Cargo.toml
 
       - name: Cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path server/Cargo.toml --all-features
+        run: cargo test --all-features
+        working-directory: ./server
 
   build-image:
     name: Build server docker image (and publish on main)
