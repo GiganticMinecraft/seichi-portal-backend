@@ -1,11 +1,6 @@
 name: Build and release application
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
 
 env:
   image_name: ghcr.io/giganticminecraft/seichi-poral-backend
