@@ -1,0 +1,23 @@
+[config]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+skip_core_tasks = true
+
+[tasks.fix]
+command = "cargo"
+args = [ "clippy", "--fix", "--allow-dirty", "--allow-staged" ]
+
+[tasks.test]
+install_crate = { crate_name = "cargo-nextst" }
+command = "cargo"
+args = [ "nextest", "run" ]
+
+[tasks.lint]
+command = "cargo"
+args = [ "clippy", "--", "-D", "warnings" ]
+
+[tasks.format]
+command = "cargo"
+args = [ "fmt", "--", "--emit=files" ]
+
+[tasks.pretty]
+dependencies = ["fix", "test", "lint", "format"]
