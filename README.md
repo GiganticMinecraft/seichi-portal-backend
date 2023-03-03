@@ -1,6 +1,6 @@
 # Seichi Portal
 
-このリポジトリは、Seichi Portalのバックエンド実装です。
+このリポジトリは Seichi Portal のバックエンド実装です。
 
 プロジェクトの目的やフロントエンドなどの関連リポジトリについては、[こちらのリポジトリ](https://github.com/GiganticMinecraft/seichi-portal)を参照してください。
 
