@@ -33,7 +33,7 @@ jobs:
 
       # buf CLIがビルドに必要
       - uses: bufbuild/buf-setup-action@v1
-        with: 
+        with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       # GitHubのUIにエラー/警告を表示してくれるので actions-rs/cargo を利用している
