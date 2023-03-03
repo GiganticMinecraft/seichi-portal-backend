@@ -1,3 +1,5 @@
 #!/bin/sh
 
-cd server && cargo clippy -- -D warnings
+cd server &&
+  cargo fmt -- --check &&
+  cargo clippy -- -D warnings
