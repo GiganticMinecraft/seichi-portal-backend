@@ -28,7 +28,6 @@ API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/se
 cp server/.env{.example,}
 ```
 
-
 ## プロジェクト俯瞰図
 
 ![image](./docs/overhead-view.drawio.svg)
