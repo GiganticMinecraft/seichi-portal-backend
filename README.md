@@ -1,4 +1,4 @@
-# Seichi Portal
+# seichi-portal-backend
 
 このリポジトリは Seichi Portal のバックエンド実装です。
 
