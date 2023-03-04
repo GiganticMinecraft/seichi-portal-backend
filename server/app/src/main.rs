@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let conn = ConnectionPool::new().await;
-    //migration::Migrator::up(&connection, None).await?; //todo: ConnectionPoolに実装する
+    conn.migrate().await?;
 
     let shared_repository = Repository::new(conn).into_shared();
 

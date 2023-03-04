@@ -1733,6 +1733,7 @@ dependencies = [
  "dotenvy",
  "entities",
  "envy",
+ "migration",
  "mockall",
  "once_cell",
  "sea-orm",

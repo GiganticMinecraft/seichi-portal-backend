@@ -1,6 +1,7 @@
 use crate::database::components::DatabaseComponents;
 use crate::database::config::{MySQL, MYSQL};
 use async_trait::async_trait;
+use migration::MigratorTrait;
 use sea_orm::{Database, DatabaseConnection, DatabaseTransaction, TransactionTrait};
 
 #[derive(Clone)]
@@ -26,6 +27,12 @@ impl ConnectionPool {
                 .await
                 .unwrap_or_else(|_| panic!("Cannot establish connect to {database_url}.")),
         }
+    }
+
+    pub async fn migrate(&self) -> anyhow::Result<()> {
+        migration::Migrator::up(&self.pool, None).await?;
+
+        Ok(())
     }
 }
 
