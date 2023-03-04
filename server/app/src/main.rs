@@ -2,32 +2,32 @@ use axum::http::header::CONTENT_TYPE;
 use axum::http::Method;
 use axum::routing::post;
 use axum::Router;
-use database::connection;
-use form::handlers::{create_form_handler, FormHandlers};
-use form::infrastructure::fetch_forms;
-use migration::MigratorTrait;
 
 use crate::config::HTTP;
+
+use presentation::form_handler::create_form_handler;
+use resource::database::connection::ConnectionPool;
+use resource::repository::Repository;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+
 use tower_http::cors::{Any, CorsLayer};
 
 mod config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let _connection = connection::database_connection().await;
-    migration::Migrator::up(&_connection, None).await?;
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
-    let handlers = Arc::new(
-        FormHandlers::builder()
-            .forms(Mutex::new(fetch_forms().await?))
-            .build(),
-    );
+    let conn = ConnectionPool::new().await;
+    conn.migrate().await?;
+
+    let shared_repository = Repository::new(conn).into_shared();
 
     let router = Router::new()
         .route("/forms", post(create_form_handler))
-        .with_state(handlers)
+        .with_state(shared_repository)
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::POST])

@@ -1,0 +1,8 @@
+[package]
+name = "usecase"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+domain = { path = "../domain" }
+anyhow = { workspace = true }

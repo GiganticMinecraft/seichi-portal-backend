@@ -1,0 +1,17 @@
+[package]
+name = "entities"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "entities"
+path = "src/mod.rs"
+
+[dependencies]
+sea-orm = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false # Disable features which are enabled by default
+features = ["user-hooks"]
