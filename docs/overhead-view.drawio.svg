@@ -109,13 +109,13 @@
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe flex-start; width: 130px; height: 1px; padding-top: 435px; margin-left: 227px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: left; max-height: 26px; overflow: hidden;">
                             <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: normal; overflow-wrap: normal;">
-                                FormAPI
+                                フォーム機能
                             </div>
                         </div>
                     </div>
                 </foreignObject>
                 <text x="227" y="439" fill="rgb(0, 0, 0)" font-family="Helvetica" font-size="12px">
-                    FormAPI
+                    フォーム機能
                 </text>
             </switch>
         </g>
@@ -125,13 +125,13 @@
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe flex-start; width: 130px; height: 1px; padding-top: 465px; margin-left: 227px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: left; max-height: 26px; overflow: hidden;">
                             <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: normal; overflow-wrap: normal;">
-                                MessageAPI
+                                メッセージ機能
                             </div>
                         </div>
                     </div>
                 </foreignObject>
                 <text x="227" y="469" fill="rgb(0, 0, 0)" font-family="Helvetica" font-size="12px">
-                    MessageAPI
+                    メッセージ機能
                 </text>
             </switch>
         </g>
@@ -141,13 +141,13 @@
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe flex-start; width: 130px; height: 1px; padding-top: 495px; margin-left: 227px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: left; max-height: 26px; overflow: hidden;">
                             <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: normal; overflow-wrap: normal;">
-                                InformationAPI
+                                情報確認機能
                             </div>
                         </div>
                     </div>
                 </foreignObject>
                 <text x="227" y="499" fill="rgb(0, 0, 0)" font-family="Helvetica" font-size="12px">
-                    InformationAPI
+                    情報確認機能
                 </text>
             </switch>
         </g>
