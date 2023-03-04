@@ -710,6 +710,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "error_hook"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94c86e983b1a9c86eb46db8f9eb402390127ebf85b1486674bca8607f13cd305"
+dependencies = [
+ "anyhow",
+ "error_hook_attr",
+ "thiserror",
+]
+
+[[package]]
+name = "error_hook_attr"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "121378a3ab764990056ade403fb7c01edf5f3828245095e3f23f18fe019dd015"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "errors"
 version = "0.1.0"
 dependencies = [
@@ -752,6 +775,7 @@ dependencies = [
  "cargo-husky",
  "database",
  "derive-getters",
+ "error_hook",
  "errors",
  "hyper",
  "itertools",
@@ -2212,9 +2236,9 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
 name = "syn"
-version = "1.0.107"
+version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f4064b5b16e03ae50984a5a8ed5d4f8803e6bc1fd170a3cda91a1be4b18e3f5"
+checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
  "proc-macro2",
  "quote",
