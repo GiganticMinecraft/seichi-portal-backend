@@ -1,5 +1,7 @@
-use domain::form::models::{FormId, FormName};
-use domain::repository::form_repository::FormRepository;
+use domain::{
+    form::models::{FormId, FormName},
+    repository::form_repository::FormRepository,
+};
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
     pub ctx: &'a FormRepo,

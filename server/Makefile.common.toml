@@ -1,6 +1,9 @@
 [config]
-CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 skip_core_tasks = true
+
+[env]
+__CARGO_FIX_YOLO=1
+REPOSITORY_ROOT = { script = ["git rev-parse --show-superproject-working-tree --show-toplevel"] }
 
 [tasks.fix]
 command = "cargo"
@@ -16,8 +19,9 @@ command = "cargo"
 args = [ "clippy", "--", "-D", "warnings" ]
 
 [tasks.format]
+toolchain = "nightly"
 command = "cargo"
-args = [ "fmt", "--", "--emit=files" ]
+args = [ "fmt", "--", "--config-path=${REPOSITORY_ROOT}/.cargo-husky/hooks/rustfmt.toml", "--emit=files" ]
 
 [tasks.pretty]
 dependencies = ["fix", "test", "lint", "format"]

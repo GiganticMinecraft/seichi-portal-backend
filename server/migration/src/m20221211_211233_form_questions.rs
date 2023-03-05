@@ -1,7 +1,9 @@
-use crate::m20220101_000001_create_table::FormsTable;
-
-use crate::m20221127_173808_create_form_answer_type_table::AnswerTypes;
 use sea_orm_migration::prelude::*;
+
+use crate::{
+    m20220101_000001_create_table::FormsTable,
+    m20221127_173808_create_form_answer_type_table::AnswerTypes,
+};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
