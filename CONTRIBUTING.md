@@ -65,7 +65,7 @@ SeaORM によって生成されたクレートです。
 ### migration
 
 マイグレーション定義を置くクレートです。
-詳しくは SeaORM のドキュメントを参照してください。
+詳しくは [SeaORM のドキュメント](https://www.sea-ql.org/SeaORM/docs/next/migration/setting-up-migration/)を参照してください。
 
 ### presentation
 
