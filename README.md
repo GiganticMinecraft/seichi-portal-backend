@@ -24,8 +24,8 @@ API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/se
 
 データベース周りの接続情報は [.env.example](./server/.env.example) にまとまっており、 DB を起動するためには `.env` ファイルが必要なため、以下のようにファイルをコピーします
 
-```bash
-cp server/.env{.example,}
+```shell
+cp server/.env.example .env
 ```
 
 ## プロジェクト俯瞰図
