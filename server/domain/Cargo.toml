@@ -9,4 +9,4 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 mockall = { workspace = true }
 derive-getters = "0.2.0"
-typed-builder = "0.12.0"
+typed-builder = "0.13.0"
