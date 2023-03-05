@@ -2,13 +2,13 @@
 
 ### ツール類のインストール
 
-- `rustup` で Rust ツールチェインをインストールする
+- `rustup` で Rust ツールチェインをインストールします
 
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-- `cargo-make`と `sea-orm-cli` を `cargo` でインストールする
+- `cargo-make`と `sea-orm-cli` を `cargo` でインストールします
 
 ```shell
 cargo install cargo-make sea-orm-cli
@@ -24,6 +24,71 @@ cargo install cargo-make sea-orm-cli
 ```shell
 seichi-portal-backend> makers up
 ```
+
+## アーキテクチャ
+
+クリーンアーキテクチャを採用しています。
+
+- クレート構成
+
+```text
+server
+├── app
+├── domain
+├── infra
+│  ├── entities
+│  └── resource
+├── migration
+├── presentation
+└── usecase
+```
+
+### app
+
+サーバーの初期化に必要な操作とサーバーの設定・起動を行うサーバーのエンドポイントです。
+
+### domain
+
+ドメイン（seichi-portal）を表現するのに必要な構造体およびドメイン固有ロジック（構造体の impl）を置くクレートです。
+リポジトリのトレイトの定義もここに置きます（リポジトリはドメイン固有型を返す必要があることに注意してください）。
+
+### infra/entities
+
+SeaORM によって生成されたクレートです。
+マイグレーションをした場合は、データベースを起動し `makers generate-entity` をすると更新できます。
+
+### infra/resource
+
+外部リソースを扱うクレートです。
+主にデータベースのコネクションを持つ `ConnectionPool` にリポジトリトレイトを実装します。
+
+### migration
+
+マイグレーション定義を置くクレートです。
+詳しくは SeaORM のドキュメントを参照してください。
+
+### presentation
+
+axum とユースケースをつなぐハンドラーを実装するクレートです。
+
+### usecase
+
+ユースケースを実装するクレートです。
+
+## 新しい API を作る場合の流れ
+
+実装はドメインが先で、その後はデータの流れの逆順に（データベースから）行うのがおすすめです。
+
+![データの流れ](docs/dataflow.dwario.svg)
+
+1. ドメイン固有型を作る (domain crate)
+2. リポジトリトレイトを追加する (domain crate)
+3. 必要ならマイグレーションモジュールを作成する (migration crate)
+4. マイグレーションを実行して entities を更新する (entities crate)
+5. ユースケース層が必要なリポジトリを実装する (resource crate)
+6. ハンドラが呼び出すユースケースをユースケース層に作る (usecase crate)
+7. axnum のルートにわたすハンドラをプレゼンテーション層に作る (presentation crate)
+8. axnum にルートを追加する (app crate)
 
 ## 付録 A: cargo make のタスク一覧
 
