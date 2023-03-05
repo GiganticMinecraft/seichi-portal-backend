@@ -31,7 +31,7 @@ seichi-portal-backend> makers up
 
 - クレート構成
 
-```text
+```tree
 server
 ├── app
 ├── domain
