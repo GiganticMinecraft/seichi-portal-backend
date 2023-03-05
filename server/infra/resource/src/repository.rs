@@ -1,9 +1,10 @@
 pub mod form_repository_impl;
 
-use crate::database::components::DatabaseComponents;
-use crate::database::connection::ConnectionPool;
-use domain::repository::Repositories;
 use std::sync::Arc;
+
+use domain::repository::Repositories;
+
+use crate::database::{components::DatabaseComponents, connection::ConnectionPool};
 
 pub type RealInfrastructureRepository = SharedRepository<ConnectionPool>;
 

@@ -1,9 +1,8 @@
-use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::Json;
-use domain::form::models::{FormId, FormName};
-use domain::repository::Repositories;
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use domain::{
+    form::models::{FormId, FormName},
+    repository::Repositories,
+};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::create_form::FormUseCase;

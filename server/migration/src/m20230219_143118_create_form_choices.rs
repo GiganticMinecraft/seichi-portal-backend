@@ -1,5 +1,6 @@
-use crate::m20221211_211233_form_questions::FormQuestionsTable;
 use sea_orm_migration::prelude::*;
+
+use crate::m20221211_211233_form_questions::FormQuestionsTable;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

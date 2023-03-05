@@ -1,10 +1,9 @@
-use crate::database::components::FormDatabase;
-use crate::database::connection::ConnectionPool;
 use async_trait::async_trait;
 use domain::form::models::{FormId, FormName};
 use entities::forms;
-use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, ActiveValue};
+use sea_orm::{ActiveModelTrait, ActiveValue, ActiveValue::Set};
+
+use crate::database::{components::FormDatabase, connection::ConnectionPool};
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {

@@ -1,8 +1,11 @@
-use crate::database::components::DatabaseComponents;
-use crate::database::config::{MySQL, MYSQL};
 use async_trait::async_trait;
 use migration::MigratorTrait;
 use sea_orm::{Database, DatabaseConnection, DatabaseTransaction, TransactionTrait};
+
+use crate::database::{
+    components::DatabaseComponents,
+    config::{MySQL, MYSQL},
+};
 
 #[derive(Clone)]
 pub struct ConnectionPool {

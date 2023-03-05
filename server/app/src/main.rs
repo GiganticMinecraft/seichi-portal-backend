@@ -1,16 +1,15 @@
-use axum::http::header::CONTENT_TYPE;
-use axum::http::Method;
-use axum::routing::post;
-use axum::Router;
-
-use crate::config::HTTP;
-
-use presentation::form_handler::create_form_handler;
-use resource::database::connection::ConnectionPool;
-use resource::repository::Repository;
 use std::net::SocketAddr;
 
+use axum::{
+    http::{header::CONTENT_TYPE, Method},
+    routing::post,
+    Router,
+};
+use presentation::form_handler::create_form_handler;
+use resource::{database::connection::ConnectionPool, repository::Repository};
 use tower_http::cors::{Any, CorsLayer};
+
+use crate::config::HTTP;
 
 mod config;
 
