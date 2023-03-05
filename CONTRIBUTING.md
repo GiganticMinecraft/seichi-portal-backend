@@ -87,8 +87,8 @@ axum とユースケースをつなぐハンドラーを実装するクレート
 4. マイグレーションを実行して entities を更新する (entities crate)
 5. ユースケース層が必要なリポジトリを実装する (resource crate)
 6. ハンドラが呼び出すユースケースをユースケース層に作る (usecase crate)
-7. axnum のルートにわたすハンドラをプレゼンテーション層に作る (presentation crate)
-8. axnum にルートを追加する (app crate)
+7. axum のルートにわたすハンドラをプレゼンテーション層に作る (presentation crate)
+8. axum にルートを追加する (app crate)
 
 ## 付録 A: cargo make のタスク一覧
 
