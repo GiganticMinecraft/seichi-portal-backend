@@ -20,3 +20,4 @@ deriving_via = "0.1.2"
 test-case = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
+serde_json = { workspace = true }

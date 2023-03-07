@@ -4,20 +4,14 @@ use derive_getters::Getters;
 use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serializer};
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, Clone, Copy, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into)]
+#[deriving(From, Into, Serialize(via = i32))]
 pub struct FormId(i32);
-
-impl Serialize for FormId {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.serialize(serializer)
-    }
-}
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Deserialize, Clone, Getters, Debug, PartialOrd, PartialEq)]
@@ -67,6 +61,7 @@ impl TryFrom<String> for QuestionType {
 #[cfg(test)]
 mod test {
     use proptest::{prop_assert_eq, proptest};
+    use serde_json::json;
     use test_case::test_case;
 
     use super::*;
@@ -86,6 +81,14 @@ mod test {
         fn string_into_from_name(name: String) {
             let form_name: FormName = name.to_owned().into();
             prop_assert_eq!(form_name, FormName::builder().name(name).build());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn serialize_from_id(id: i32) {
+            let form_id: FormId = id.into();
+            prop_assert_eq!(json!({"id":form_id}).to_string(), format!(r#"{{"id":{id}}}"#));
         }
     }
 }
