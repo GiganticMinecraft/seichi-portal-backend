@@ -14,9 +14,9 @@
 
 ## API定義
 
-Seichi Portal ではフロントエンドとバックエンド間の通信に REST API を使っており、API のスキーマは [OpenAPI v3.0.0](https://spec.openapis.org/oas/v3.0.0) ベースの[スキーマ管理用リポジトリ](https://github.com/GiganticMinecraft/seichi-api-schema)に配置し、管理しています。
+Seichi Portal ではフロントエンドとバックエンド間の通信に REST API を使っており、API のスキーマは [OpenAPI v3.0.0](https://spec.openapis.org/oas/v3.0.0) ベースの[スキーマ管理用リポジトリ](https://github.com/GiganticMinecraft/seichi-portal-api-schema)に配置し、管理しています。
 
-API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/seichi-api-schema/)しており、すぐに試せるようになっています。
+API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/seichi-portal-api-schema/)しており、すぐに試せるようになっています。
 
 ## 開発環境とミドルウェア
 
