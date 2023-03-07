@@ -16,6 +16,6 @@ impl FormDatabase for ConnectionPool {
         .await?
         .id;
 
-        Ok(FormId(form_id))
+        Ok(form_id.into())
     }
 }

@@ -4,9 +4,20 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+common = { path = "../common" }
+errors = { path = "../errors" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 mockall = { workspace = true }
 derive-getters = "0.2.0"
 typed-builder = "0.13.0"
+strum = { workspace = true }
+strum_macros = "0.24.3"
+deriving_via = "0.1.2"
+
+[dev-dependencies]
+test-case = { workspace = true }
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
+serde_json = { workspace = true }
