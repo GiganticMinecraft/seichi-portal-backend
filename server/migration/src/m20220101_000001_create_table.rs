@@ -20,6 +20,8 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(FormsTable::Name).string().not_null())
                     .col(ColumnDef::new(FormsTable::Description).string())
+                    .col(ColumnDef::new(FormsTable::CreatedAt).timestamp().not_null())
+                    .col(ColumnDef::new(FormsTable::UpdatedAt).timestamp().not_null())
                     .to_owned(),
             )
             .await
@@ -39,4 +41,6 @@ pub enum FormsTable {
     Id,
     Name,
     Description,
+    CreatedAt,
+    UpdatedAt,
 }
