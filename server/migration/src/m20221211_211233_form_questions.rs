@@ -2,7 +2,7 @@ use sea_orm_migration::prelude::*;
 
 use crate::{
     m20220101_000001_create_table::FormsTable,
-    m20221127_173808_create_form_answer_type_table::AnswerTypes,
+    m20221127_173808_create_form_question_type_enum_table::QuestionTypeEnumTable,
 };
 
 #[derive(DeriveMigrationName)]
@@ -59,7 +59,10 @@ impl MigrationTrait for Migration {
                                 FormQuestionsTable::FormQuestions,
                                 FormQuestionsTable::AnswerType,
                             )
-                            .to(AnswerTypes::AnswerTypes, AnswerTypes::AnswerType),
+                            .to(
+                                QuestionTypeEnumTable::QuestionTypes,
+                                QuestionTypeEnumTable::AnswerType,
+                            ),
                     )
                     .to_owned(),
             )

@@ -12,10 +12,10 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(AnswerTypes::AnswerTypes)
+                    .table(QuestionTypeEnumTable::QuestionTypes)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(AnswerTypes::AnswerType)
+                        ColumnDef::new(QuestionTypeEnumTable::AnswerType)
                             .string()
                             .not_null()
                             .unique_key()
@@ -43,14 +43,18 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(AnswerTypes::AnswerTypes).to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(QuestionTypeEnumTable::QuestionTypes)
+                    .to_owned(),
+            )
             .await
     }
 }
 
 /// Learn more at https://docs.rs/sea-query#iden
 #[derive(Iden)]
-pub enum AnswerTypes {
-    AnswerTypes,
+pub enum QuestionTypeEnumTable {
+    QuestionTypes,
     AnswerType,
 }
