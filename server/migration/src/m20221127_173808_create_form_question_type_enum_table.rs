@@ -19,7 +19,7 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new(QuestionTypeEnumTable::AnswerType)
+                        ColumnDef::new(QuestionTypeEnumTable::QuestionType)
                             .string()
                             .not_null()
                             .unique_key(),
@@ -60,5 +60,5 @@ impl MigrationTrait for Migration {
 pub enum QuestionTypeEnumTable {
     QuestionTypes,
     Id,
-    AnswerType,
+    QuestionType,
 }
