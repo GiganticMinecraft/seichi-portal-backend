@@ -1,6 +1,5 @@
 .git
-./server/target
+server/target
 .vscode
-./scripts
 .cargo-husky
-./server/.idea
+server/.idea

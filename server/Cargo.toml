@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "app",
+    "entrypoint",
     "common",
     "domain",
     "infra/resource",

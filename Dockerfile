@@ -28,5 +28,5 @@ RUN cargo build --release
 
 FROM gcr.io/distroless/cc
 LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
-COPY --from=build-env --link /app/target/release/app /seichi-portal-backend
+COPY --from=build-env --link /app/target/release/entrypoint /seichi-portal-backend
 CMD ["/seichi-portal-backend"]

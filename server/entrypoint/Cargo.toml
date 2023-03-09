@@ -1,8 +1,8 @@
 [package]
-name = "app"
+name = "entrypoint"
 version = "0.1.0"
 edition = "2021"
-default-run = "app"
+default-run = "entrypoint"
 
 [dependencies]
 resource = { path = "../infra/resource" }
