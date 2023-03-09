@@ -37,6 +37,7 @@ impl MigrationTrait for Migration {
 /// Learn more at https://docs.rs/sea-query#iden
 #[derive(Iden)]
 pub enum FormsTable {
+    // todo: Formsという名前だと、抽象的すぎて何でもカラムが追加されそうなので具体的な名前にしたい
     Forms,
     Id,
     Name,

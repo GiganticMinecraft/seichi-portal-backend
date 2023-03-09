@@ -28,6 +28,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // todo: seeding dataを別マイグレーションに分けたい
         // let connection = manager.get_connection();
         //
         // let models = vec!["TEXT", "CHECKBOX", "PULLDOWN"]
