@@ -48,8 +48,8 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(FormQuestionsTable::AnswerType)
-                            .string()
+                        ColumnDef::new(FormQuestionsTable::AnswerTypeId)
+                            .integer()
                             .not_null(),
                     )
                     .foreign_key(
@@ -57,11 +57,11 @@ impl MigrationTrait for Migration {
                             .name("fk-answer_type")
                             .from(
                                 FormQuestionsTable::FormQuestions,
-                                FormQuestionsTable::AnswerType,
+                                FormQuestionsTable::AnswerTypeId,
                             )
                             .to(
                                 QuestionTypeEnumTable::QuestionTypes,
-                                QuestionTypeEnumTable::AnswerType,
+                                QuestionTypeEnumTable::Id,
                             ),
                     )
                     .to_owned(),
@@ -87,5 +87,5 @@ pub enum FormQuestionsTable {
     FormId,
     Title,
     Description,
-    AnswerType,
+    AnswerTypeId,
 }

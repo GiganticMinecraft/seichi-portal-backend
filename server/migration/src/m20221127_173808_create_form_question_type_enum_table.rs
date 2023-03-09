@@ -1,7 +1,4 @@
-use entities::answer_types;
-use sea_orm_migration::{prelude::*, sea_orm::EntityTrait};
-
-use crate::sea_orm::ActiveValue::Set;
+use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -15,28 +12,34 @@ impl MigrationTrait for Migration {
                     .table(QuestionTypeEnumTable::QuestionTypes)
                     .if_not_exists()
                     .col(
+                        ColumnDef::new(QuestionTypeEnumTable::Id)
+                            .integer()
+                            .auto_increment()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
                         ColumnDef::new(QuestionTypeEnumTable::AnswerType)
                             .string()
                             .not_null()
-                            .unique_key()
-                            .primary_key(),
+                            .unique_key(),
                     )
                     .to_owned(),
             )
             .await?;
 
-        let connection = manager.get_connection();
-
-        let models = vec!["TEXT", "CHECKBOX", "PULLDOWN"]
-            .into_iter()
-            .map(|answer_type| answer_types::ActiveModel {
-                answer_type: Set(answer_type.to_owned()),
-            })
-            .collect::<Vec<answer_types::ActiveModel>>();
-
-        answer_types::Entity::insert_many(models)
-            .exec(connection)
-            .await?;
+        // let connection = manager.get_connection();
+        //
+        // let models = vec!["TEXT", "CHECKBOX", "PULLDOWN"]
+        //     .into_iter()
+        //     .map(|answer_type| answer_types::ActiveModel {
+        //         answer_type: Set(answer_type.to_owned()),
+        //     })
+        //     .collect::<Vec<answer_types::ActiveModel>>();
+        //
+        // answer_types::Entity::insert_many(models)
+        //     .exec(connection)
+        //     .await?;
 
         Ok(())
     }
@@ -56,5 +59,6 @@ impl MigrationTrait for Migration {
 #[derive(Iden)]
 pub enum QuestionTypeEnumTable {
     QuestionTypes,
+    Id,
     AnswerType,
 }
