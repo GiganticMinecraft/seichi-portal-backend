@@ -23,12 +23,14 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(FormMetaDataTable::CreatedAt)
                             .timestamp()
-                            .not_null(),
+                            .not_null()
+                            .extra("DEFAULT CURRENT_TIMESTAMP".to_string()),
                     )
                     .col(
                         ColumnDef::new(FormMetaDataTable::UpdatedAt)
                             .timestamp()
-                            .not_null(),
+                            .not_null()
+                            .extra("DEFAULT CURRENT_TIMESTAMP".to_string()),
                     )
                     .to_owned(),
             )
