@@ -1,9 +1,8 @@
+use std::borrow::BorrowMut;
+
 use sea_orm_migration::prelude::*;
 
-use crate::{
-    m20220101_000001_create_table::FormMetaDataTable,
-    m20221127_173808_create_form_question_type_enum_table::QuestionTypeEnumTable,
-};
+use crate::{m20220101_000001_create_table::FormMetaDataTable, ColumnType::Enum};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -44,21 +43,19 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(FormQuestionsTable::Description).string())
                     .col(
-                        ColumnDef::new(FormQuestionsTable::QuestionTypeId)
-                            .integer()
-                            .not_null(),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk-answer_type")
-                            .from(
-                                FormQuestionsTable::FormQuestions,
-                                FormQuestionsTable::QuestionTypeId,
-                            )
-                            .to(
-                                QuestionTypeEnumTable::QuestionTypes,
-                                QuestionTypeEnumTable::Id,
-                            ),
+                        ColumnDef::new_with_type(
+                            FormQuestionsTable::QuestionType.into_iden(),
+                            Enum {
+                                name: FormQuestionsTable::QuestionType.into_iden(),
+                                variants: vec![
+                                    QuestionType::Text.into_iden(),
+                                    QuestionType::CheckBox.into_iden(),
+                                    QuestionType::PullDown.into_iden(),
+                                ],
+                            },
+                        )
+                        .not_null()
+                        .borrow_mut(),
                     )
                     .to_owned(),
             )
@@ -83,5 +80,12 @@ pub enum FormQuestionsTable {
     FormId,
     Title,
     Description,
-    QuestionTypeId,
+    QuestionType,
+}
+
+#[derive(Iden)]
+enum QuestionType {
+    Text,
+    PullDown,
+    CheckBox,
 }
