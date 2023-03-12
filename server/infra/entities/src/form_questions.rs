@@ -9,7 +9,7 @@ pub struct Model {
     pub question_id: i32,
     pub form_id: i32,
     pub title: String,
-    pub description: String,
+    pub description: Option<String>,
     pub question_type_id: i32,
 }
 

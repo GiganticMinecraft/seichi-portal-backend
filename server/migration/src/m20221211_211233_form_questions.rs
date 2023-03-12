@@ -42,11 +42,7 @@ impl MigrationTrait for Migration {
                             .string()
                             .not_null(),
                     )
-                    .col(
-                        ColumnDef::new(FormQuestionsTable::Description)
-                            .string()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(FormQuestionsTable::Description).string())
                     .col(
                         ColumnDef::new(FormQuestionsTable::QuestionTypeId)
                             .integer()
