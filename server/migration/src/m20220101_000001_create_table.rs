@@ -9,19 +9,27 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(FormsTable::Forms)
+                    .table(FormMetaDataTable::FormMetaData)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(FormsTable::Id)
+                        ColumnDef::new(FormMetaDataTable::Id)
                             .integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(FormsTable::Name).string().not_null())
-                    .col(ColumnDef::new(FormsTable::Description).string())
-                    .col(ColumnDef::new(FormsTable::CreatedAt).timestamp().not_null())
-                    .col(ColumnDef::new(FormsTable::UpdatedAt).timestamp().not_null())
+                    .col(ColumnDef::new(FormMetaDataTable::Name).string().not_null())
+                    .col(ColumnDef::new(FormMetaDataTable::Description).string())
+                    .col(
+                        ColumnDef::new(FormMetaDataTable::CreatedAt)
+                            .timestamp()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(FormMetaDataTable::UpdatedAt)
+                            .timestamp()
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await
@@ -29,16 +37,18 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(FormsTable::Forms).to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(FormMetaDataTable::FormMetaData)
+                    .to_owned(),
+            )
             .await
     }
 }
 
-/// Learn more at https://docs.rs/sea-query#iden
 #[derive(Iden)]
-pub enum FormsTable {
-    // todo: Formsという名前だと、抽象的すぎて何でもカラムが追加されそうなので具体的な名前にしたい
-    Forms,
+pub enum FormMetaDataTable {
+    FormMetaData,
     Id,
     Name,
     Description,

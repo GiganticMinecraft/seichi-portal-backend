@@ -1,7 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 use crate::{
-    m20220101_000001_create_table::FormsTable,
+    m20220101_000001_create_table::FormMetaDataTable,
     m20221127_173808_create_form_question_type_enum_table::QuestionTypeEnumTable,
 };
 
@@ -35,7 +35,7 @@ impl MigrationTrait for Migration {
                                 FormQuestionsTable::FormQuestions,
                                 FormQuestionsTable::FormId,
                             )
-                            .to(FormsTable::Forms, FormsTable::Id),
+                            .to(FormMetaDataTable::FormMetaData, FormMetaDataTable::Id),
                     )
                     .col(
                         ColumnDef::new(FormQuestionsTable::Title)
