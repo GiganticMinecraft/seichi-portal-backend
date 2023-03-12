@@ -10,35 +10,29 @@ pub struct Model {
     pub form_id: i32,
     pub title: String,
     pub description: String,
-    pub answer_type: String,
+    pub answer_type_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::answer_types::Entity",
-        from = "Column::AnswerType",
-        to = "super::answer_types::Column::AnswerType",
-        on_update = "NoAction",
-        on_delete = "NoAction"
-    )]
-    AnswerTypes,
     #[sea_orm(has_many = "super::form_choices::Entity")]
     FormChoices,
     #[sea_orm(
-        belongs_to = "super::forms::Entity",
+        belongs_to = "super::form_meta_data::Entity",
         from = "Column::FormId",
-        to = "super::forms::Column::Id",
+        to = "super::form_meta_data::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    Forms,
-}
-
-impl Related<super::answer_types::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::AnswerTypes.def()
-    }
+    FormMetaData,
+    #[sea_orm(
+        belongs_to = "super::question_types::Entity",
+        from = "Column::AnswerTypeId",
+        to = "super::question_types::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    QuestionTypes,
 }
 
 impl Related<super::form_choices::Entity> for Entity {
@@ -47,9 +41,15 @@ impl Related<super::form_choices::Entity> for Entity {
     }
 }
 
-impl Related<super::forms::Entity> for Entity {
+impl Related<super::form_meta_data::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Forms.def()
+        Relation::FormMetaData.def()
+    }
+}
+
+impl Related<super::question_types::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::QuestionTypes.def()
     }
 }
 
