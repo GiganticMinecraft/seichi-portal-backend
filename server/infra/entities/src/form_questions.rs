@@ -10,7 +10,7 @@ pub struct Model {
     pub form_id: i32,
     pub title: String,
     pub description: String,
-    pub answer_type_id: i32,
+    pub question_type_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -27,7 +27,7 @@ pub enum Relation {
     FormMetaData,
     #[sea_orm(
         belongs_to = "super::question_types::Entity",
-        from = "Column::AnswerTypeId",
+        from = "Column::QuestionTypeId",
         to = "super::question_types::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
