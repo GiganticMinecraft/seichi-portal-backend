@@ -28,20 +28,6 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // todo: seeding dataを別マイグレーションに分けたい
-        // let connection = manager.get_connection();
-        //
-        // let models = vec!["TEXT", "CHECKBOX", "PULLDOWN"]
-        //     .into_iter()
-        //     .map(|answer_type| answer_types::ActiveModel {
-        //         answer_type: Set(answer_type.to_owned()),
-        //     })
-        //     .collect::<Vec<answer_types::ActiveModel>>();
-        //
-        // answer_types::Entity::insert_many(models)
-        //     .exec(connection)
-        //     .await?;
-
         Ok(())
     }
 
@@ -56,7 +42,6 @@ impl MigrationTrait for Migration {
     }
 }
 
-/// Learn more at https://docs.rs/sea-query#iden
 #[derive(Iden)]
 pub enum QuestionTypeEnumTable {
     QuestionTypes,
