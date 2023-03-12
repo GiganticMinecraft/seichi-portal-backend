@@ -4,13 +4,13 @@ use derive_getters::Getters;
 use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serializer};
+use serde::Deserialize;
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, Clone, Copy, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, Serialize(via = i32))]
+#[deriving(From, Into, Serialize(via: i32))]
 pub struct FormId(i32);
 
 #[cfg_attr(test, derive(Arbitrary))]
