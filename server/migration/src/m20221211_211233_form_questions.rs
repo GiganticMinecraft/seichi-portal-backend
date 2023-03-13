@@ -1,9 +1,8 @@
+use std::borrow::BorrowMut;
+
 use sea_orm_migration::prelude::*;
 
-use crate::{
-    m20220101_000001_create_table::FormsTable,
-    m20221127_173808_create_form_answer_type_table::AnswerTypes,
-};
+use crate::{m20220101_000001_create_table::FormMetaDataTable, ColumnType::Enum};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -35,31 +34,28 @@ impl MigrationTrait for Migration {
                                 FormQuestionsTable::FormQuestions,
                                 FormQuestionsTable::FormId,
                             )
-                            .to(FormsTable::Forms, FormsTable::Id),
+                            .to(FormMetaDataTable::FormMetaData, FormMetaDataTable::Id),
                     )
                     .col(
                         ColumnDef::new(FormQuestionsTable::Title)
                             .string()
                             .not_null(),
                     )
+                    .col(ColumnDef::new(FormQuestionsTable::Description).string())
                     .col(
-                        ColumnDef::new(FormQuestionsTable::Description)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(FormQuestionsTable::AnswerType)
-                            .string()
-                            .not_null(),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk-answer_type")
-                            .from(
-                                FormQuestionsTable::FormQuestions,
-                                FormQuestionsTable::AnswerType,
-                            )
-                            .to(AnswerTypes::AnswerTypes, AnswerTypes::AnswerType),
+                        ColumnDef::new_with_type(
+                            FormQuestionsTable::QuestionType.into_iden(),
+                            Enum {
+                                name: FormQuestionsTable::QuestionType.into_iden(),
+                                variants: vec![
+                                    QuestionType::Text.into_iden(),
+                                    QuestionType::CheckBox.into_iden(),
+                                    QuestionType::PullDown.into_iden(),
+                                ],
+                            },
+                        )
+                        .not_null()
+                        .borrow_mut(),
                     )
                     .to_owned(),
             )
@@ -84,5 +80,12 @@ pub enum FormQuestionsTable {
     FormId,
     Title,
     Description,
-    AnswerType,
+    QuestionType,
+}
+
+#[derive(Iden)]
+enum QuestionType {
+    Text,
+    PullDown,
+    CheckBox,
 }
