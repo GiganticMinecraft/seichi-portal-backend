@@ -7,6 +7,7 @@ use axum::{
 };
 use presentation::form_handler::create_form_handler;
 use resource::{database::connection::ConnectionPool, repository::Repository};
+use tokio::signal;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::HTTP;
@@ -38,8 +39,23 @@ async fn main() -> anyhow::Result<()> {
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("Fail to serve.");
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler.")
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {
+            //todo: シャットダウン時にしなければいけない処理を記述する
+        }
+    }
 }
