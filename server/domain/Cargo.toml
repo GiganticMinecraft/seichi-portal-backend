@@ -14,7 +14,7 @@ derive-getters = "0.2.0"
 typed-builder = "0.14.0"
 strum = { workspace = true }
 strum_macros = "0.24.3"
-deriving_via = "1.1.1"
+deriving_via = "1.1.2"
 
 [dev-dependencies]
 test-case = { workspace = true }
