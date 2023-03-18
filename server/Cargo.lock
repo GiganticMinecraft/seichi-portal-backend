@@ -678,9 +678,9 @@ dependencies = [
 
 [[package]]
 name = "deriving_via"
-version = "1.1.1"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d05d88e77c7fda45a5357f24e3481336075e731cf395bfb492d22550fa717a81"
+checksum = "81dd7741aee9de15f29f96347337b3578801c7ebc62def668159ab4bd458068f"
 dependencies = [
  "itertools",
  "proc-macro-error",
@@ -688,7 +688,7 @@ dependencies = [
  "quote 1.0.26",
  "strum",
  "strum_macros",
- "syn 1.0.109",
+ "syn 2.0.0",
  "typed-builder",
 ]
 
