@@ -8,7 +8,7 @@ use axum::{
 use presentation::form_handler::create_form_handler;
 use resource::{database::connection::ConnectionPool, repository::Repository};
 #[cfg(unix)]
-use tokio::signal::unix::SignalKind;
+use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::HTTP;
