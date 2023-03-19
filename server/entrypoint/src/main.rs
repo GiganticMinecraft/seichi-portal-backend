@@ -7,7 +7,8 @@ use axum::{
 };
 use presentation::form_handler::create_form_handler;
 use resource::{database::connection::ConnectionPool, repository::Repository};
-use tokio::signal;
+#[cfg(unix)]
+use tokio::signal::unix::SignalKind;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::HTTP;
@@ -47,15 +48,14 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler.")
-    };
+    #[cfg(unix)]
+    {
+        let ctrl_c = signal(SignalKind::terminate()).unwarp();
 
-    tokio::select! {
-        _ = ctrl_c => {
-            //todo: シャットダウン時にしなければいけない処理を記述する
+        tokio::select! {
+            _ = ctrl_c.recv() => {
+                //todo: シャットダウン時にしなければいけない処理を記述する
+            }
         }
     }
 }
