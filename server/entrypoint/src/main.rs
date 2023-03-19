@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
 async fn shutdown_signal() {
     #[cfg(unix)]
     {
-        let ctrl_c = signal(SignalKind::terminate()).unwarp();
+        let ctrl_c = signal(SignalKind::terminate()).unwrap();
 
         tokio::select! {
             _ = ctrl_c.recv() => {
