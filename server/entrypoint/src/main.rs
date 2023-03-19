@@ -50,10 +50,10 @@ async fn main() -> anyhow::Result<()> {
 async fn shutdown_signal() {
     #[cfg(unix)]
     {
-        let ctrl_c = signal(SignalKind::terminate()).unwrap();
+        let mut terminate_signal = signal(SignalKind::terminate()).unwrap();
 
         tokio::select! {
-            _ = ctrl_c.recv() => {
+            _ = terminate_signal.recv() => {
                 //todo: シャットダウン時にしなければいけない処理を記述する
             }
         }
