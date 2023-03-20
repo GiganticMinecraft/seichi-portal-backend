@@ -7,7 +7,6 @@ use axum::{
 };
 use presentation::form_handler::create_form_handler;
 use resource::{database::connection::ConnectionPool, repository::Repository};
-#[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -48,14 +47,11 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn shutdown_signal() {
-    #[cfg(unix)]
-    {
-        let mut terminate_signal = signal(SignalKind::terminate()).unwrap();
+    let mut terminate_signal = signal(SignalKind::terminate()).unwrap();
 
-        tokio::select! {
-            _ = terminate_signal.recv() => {
-                //todo: シャットダウン時にしなければいけない処理を記述する
-            }
+    tokio::select! {
+        _ = terminate_signal.recv() => {
+            //todo: シャットダウン時にしなければいけない処理を記述する
         }
     }
 }
