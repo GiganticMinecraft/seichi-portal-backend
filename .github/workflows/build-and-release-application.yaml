@@ -39,6 +39,9 @@ jobs:
         run: cargo fmt --all -- --check
         working-directory: ./server
 
+      - name: Install Deps
+        run: sudo apt install -y musl-tools build-essential
+
       - name: Cargo build
         run: cargo build
         working-directory: ./server
