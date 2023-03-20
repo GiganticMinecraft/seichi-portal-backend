@@ -39,18 +39,18 @@ async fn main() -> anyhow::Result<()> {
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(graceful_handler())
         .await
         .expect("Fail to serve.");
 
     Ok(())
 }
 
-async fn shutdown_signal() {
-    let mut terminate_signal = signal(SignalKind::terminate()).unwrap();
+async fn graceful_handler() {
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
 
     tokio::select! {
-        _ = terminate_signal.recv() => {
+        _ = sigterm.recv() => {
             //todo: シャットダウン時にしなければいけない処理を記述する
         }
     }
