@@ -11,8 +11,6 @@ RUN --mount=target=. \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
     cargo fetch --manifest-path Cargo.toml
 
-WORKDIR /app/server
-
 # TODO: cargo build の --out-dir オプションが stable に落ちてきたらコメントの内容に置き換える
 # RUN --mount=type=cache,target=/usr/local/cargo/git/db \
 #     --mount=type=cache,target=/usr/local/cargo/registry/cache \
@@ -23,9 +21,9 @@ WORKDIR /app/server
 RUN --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/cache \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
-    --mount=type=cache,target=/app/server/target \
+    --mount=type=cache,target=target \
     cargo build --release && \
-    cp /app/server/target/release/entrypoint /seichi-portal-backend
+    cp target/release/entrypoint /seichi-portal-backend
 
 FROM gcr.io/distroless/cc
 LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
