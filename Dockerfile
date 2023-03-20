@@ -5,13 +5,11 @@ WORKDIR /app
 
 COPY --link . .
 
-RUN ls -la
-
 RUN --mount=target=. \
     --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/cache \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
-    cargo fetch --manifest-path /app/server/Cargo.toml
+    cargo fetch --manifest-path server/Cargo.toml
 
 WORKDIR /app/server
 
