@@ -3,6 +3,8 @@ FROM rust:1.68-slim AS build-env
 
 WORKDIR /app
 
+RUN ls -la
+
 RUN --mount=target=. \
     --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/cache \
