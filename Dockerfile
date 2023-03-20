@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM rust:1.68-slim AS build-env
+FROM ghcr.io/caddijp/rust-musl-builder/rust-musl-builder:1.68.0-llvm-cov AS build-env
 
 WORKDIR /app
 
