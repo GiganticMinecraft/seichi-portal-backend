@@ -1,6 +1,11 @@
 ## 開発環境のセットアップ方法
 
+本クレートのターゲットは `x86_64-unknown-linux-musl` です。
+Windowsで開発する場合はWSL2を利用してください。
+
 ### ツール類のインストール
+
+以下 Ubuntu/Debian を仮定します。
 
 - `rustup` で Rust ツールチェインをインストールします
 
@@ -8,11 +13,26 @@
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+- ビルド依存パッケージをインストールします
+- pkg-config, libssl-dev は OS によって異なるパッケージです、[ここ](https://docs.rs/openssl/latest/openssl/) を参照してください。
+
+```shell
+sudo apt install pkg-config libssl-dev build-essential musl-tools
+```
+
 - `cargo-make`と `sea-orm-cli` を `cargo` でインストールします
 
 ```shell
 cargo install cargo-make sea-orm-cli
 ```
+
+- ツールチェインのインストール
+
+```shell
+rustup target add x86_64-unknown-linux-musl
+```
+
+- 最後に `server` ディレクトリで `cargo make pretty` が実行できることを確認してください。
 
 ### ローカルで起動する
 
