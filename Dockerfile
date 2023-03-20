@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM ghcr.io/caddijp/rust-musl-builder/rust-musl-builder:1.68.0-llvm-cov AS build-env
+FROM rust:1.68-slim AS build-env
 
 WORKDIR /app
 
@@ -10,6 +10,9 @@ RUN --mount=target=. \
     --mount=type=cache,target=/usr/local/cargo/registry/cache \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
     cargo fetch --manifest-path Cargo.toml
+
+RUN rustup target add x86_64-unknown-linux-musl && \
+    apt update && apt-get install -y musl-tools build-essential
 
 # TODO: cargo build の --out-dir オプションが stable に落ちてきたらコメントの内容に置き換える
 # RUN --mount=type=cache,target=/usr/local/cargo/git/db \
