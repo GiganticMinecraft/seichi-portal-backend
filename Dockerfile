@@ -11,6 +11,9 @@ RUN --mount=target=. \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
     cargo fetch --manifest-path Cargo.toml
 
+RUN rustup target add x86_64-unknown-linux-musl && \
+    apt update && apt-get install -y musl-tools build-essential
+
 # TODO: cargo build の --out-dir オプションが stable に落ちてきたらコメントの内容に置き換える
 # RUN --mount=type=cache,target=/usr/local/cargo/git/db \
 #     --mount=type=cache,target=/usr/local/cargo/registry/cache \
@@ -23,7 +26,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
     --mount=type=cache,target=target \
     cargo build --release && \
-    cp target/release/entrypoint /seichi-portal-backend
+    cp target/x86_64-unknown-linux-musl/release/entrypoint /seichi-portal-backend
 
 FROM gcr.io/distroless/cc
 LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend

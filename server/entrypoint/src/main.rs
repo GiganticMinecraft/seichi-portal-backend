@@ -7,6 +7,7 @@ use axum::{
 };
 use presentation::form_handler::create_form_handler;
 use resource::{database::connection::ConnectionPool, repository::Repository};
+use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::HTTP;
@@ -38,8 +39,19 @@ async fn main() -> anyhow::Result<()> {
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
+        .with_graceful_shutdown(graceful_handler())
         .await
         .expect("Fail to serve.");
 
     Ok(())
+}
+
+async fn graceful_handler() {
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+
+    tokio::select! {
+        _ = sigterm.recv() => {
+            //todo: シャットダウン時にしなければいけない処理を記述する
+        }
+    }
 }
