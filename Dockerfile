@@ -3,6 +3,8 @@ FROM rust:1.68-slim AS build-env
 
 WORKDIR /app
 
+COPY --link . .
+
 RUN ls -la
 
 RUN --mount=target=. \
@@ -10,8 +12,6 @@ RUN --mount=target=. \
     --mount=type=cache,target=/usr/local/cargo/registry/cache \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
     cargo fetch --manifest-path /app/server/Cargo.toml
-
-COPY --link . .
 
 WORKDIR /app/server
 
