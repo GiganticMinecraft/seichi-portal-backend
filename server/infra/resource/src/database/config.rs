@@ -1,4 +1,3 @@
-use dotenvy::dotenv;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
@@ -12,7 +11,4 @@ pub struct MySQL {
     pub port: String,
 }
 
-pub static MYSQL: Lazy<MySQL> = Lazy::new(|| {
-    dotenv().expect("Cannot find `.env` file.");
-    envy::prefixed("MYSQL_").from_env::<MySQL>().unwrap()
-});
+pub static MYSQL: Lazy<MySQL> = Lazy::new(|| envy::prefixed("MYSQL_").from_env::<MySQL>().unwrap());
