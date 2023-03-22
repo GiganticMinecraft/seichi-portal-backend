@@ -36,20 +36,8 @@ rustup target add x86_64-unknown-linux-musl
 
 ### ローカルで起動する
 
-データベース周りの接続情報は環境変数から読み取られるため、 DB を起動するためには環境変数を設定してください。(開発環境では direnv などを利用すると便利)
-
-以下は設定例です。状況に応じて書き換えてください。
-```
-export MYSQL_DATABASE=seichi_portal # seichi-portal-backendで利用する DB 名
-export MYSQL_USER=user # DB 接続ユーザー名
-export MYSQL_PASSWORD=password # DB 接続パスワード
-export MYSQL_HOST=localhost # DB の接続先
-export MYSQL_PORT=3306 # DB の接続ポート
-
-export HTTP_PORT=9000 # REST API で利用するポート
-```
-
-
+データベース周りの接続情報は [.env.example](./server/.env.example) にまとまっており、 DB を起動するためには `.env` ファイルが必要なため、ファイルをコピーします。
+必要に応じて値を書きかえてください。
 
 データーベースとサーバーを起動するにはリポジトリのディレクトリトップで `up` タスクを実行します。
 
