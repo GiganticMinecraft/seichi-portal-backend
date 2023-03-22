@@ -3,7 +3,6 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct MySQL {
-    pub root_password: String,
     pub database: String,
     pub user: String,
     pub password: String,
