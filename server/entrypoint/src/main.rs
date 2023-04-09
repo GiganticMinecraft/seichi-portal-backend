@@ -2,10 +2,10 @@ use std::net::SocketAddr;
 
 use axum::{
     http::{header::CONTENT_TYPE, Method},
-    routing::post,
+    routing::{get, post},
     Router,
 };
-use presentation::form_handler::create_form_handler;
+use presentation::{form_handler::create_form_handler, health_check_handler::health_check};
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
@@ -28,6 +28,7 @@ async fn main() -> anyhow::Result<()> {
     let router = Router::new()
         .route("/forms", post(create_form_handler))
         .with_state(shared_repository)
+        .route("/health", get(health_check))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::POST])
