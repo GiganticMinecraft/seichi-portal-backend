@@ -3,7 +3,7 @@ name: Release docker images
 on:
   push:
     branches:
-      - feature/cross
+      - master
 
 jobs:
   build:
