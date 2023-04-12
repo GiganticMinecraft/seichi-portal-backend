@@ -69,6 +69,9 @@ jobs:
           command: install
           args: --version=${{ env.SCCACHE_VERSION }} --force sccache
 
+      - name: Install Deps
+        run: sudo apt install -y musl-tools build-essential
+
       - name: Start sccache server
         run: sccache --start-server
 
