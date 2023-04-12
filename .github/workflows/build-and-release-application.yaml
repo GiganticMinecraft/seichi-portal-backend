@@ -47,7 +47,7 @@ jobs:
         working-directory: ./server
 
       - name: Clippy check
-        uses: LoliGothick/clippy-check@v0.2.10
+        uses: LoliGothick/clippy-check@v0.2.11
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           options: --all-features --manifest-path ./server/Cargo.toml
