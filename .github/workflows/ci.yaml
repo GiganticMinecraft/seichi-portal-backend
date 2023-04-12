@@ -1,0 +1,95 @@
+name: Checking
+on:
+  push:
+
+env:
+  image_name: ghcr.io/giganticminecraft/seichi-poral-backend
+  RUST_BACKTRACE: full
+  SCCACHE_CACHE_SIZE: 2G
+  SCCACHE_VERSION: 0.3.3
+  # SCCACHE_RECACHE: 1 # Uncomment this to clear cache, then comment it back out
+
+jobs:
+  rustfmt:
+    name: rustfmt check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          components: rustfmt
+          override: true
+      - uses: LoliGothick/rustfmt-check@v0.3.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          flags: --all
+          args: --config-path=./.cargo-husky/hooks/rustfmt.toml
+          working-directory: ./server
+
+  lint-and-test:
+    needs: [ rustfmt ]
+    name: Lint and test server
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # reads toolchain info from /rust-toolchain.toml
+      # we are using a fork of actions-rs/toolchain for rust-toolchain.toml support
+      # (see https://github.com/actions-rs/toolchain/pull/209) for details.
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.68.2
+          target: x86_64-unknown-linux-musl
+          components: clippy, rustfmt
+
+      # buf CLIがビルドに必要
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Save sccache
+        id: restore-sccache
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            /home/runner/.cache/sccache
+            ~/.cargo/bin/sccache
+          key: sccache-${{ env.SCCACHE_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            sccache-${{ env.SCCACHE_VERSION }}-
+
+      - if: ${{ steps.restore-sccache.outputs.cache-hit == false }}
+        name: Install sccache
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: --version=${{ env.SCCACHE_VERSION }} --force sccache
+
+      - name: Install Deps
+        run: sudo apt install -y musl-tools build-essential
+
+      - name: Start sccache server
+        run: sccache --start-server
+
+      - name: Cargo build
+        run: cargo build
+        working-directory: ./server
+
+      - uses: LoliGothick/clippy-check@v0.2.11
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          deny: warnings
+          working-directory: ./server
+
+      - name: Cargo test
+        run: cargo test --all-features
+        working-directory: ./server
+
+      - name: Print sccache stats
+        run: sccache --show-stats
+      - name: Stop sccache server
+        run: sccache --stop-server || true
