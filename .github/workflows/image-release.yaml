@@ -39,7 +39,7 @@ jobs:
           args: --manifest-path server/Cargo.toml --target ${{ matrix.cross-target }} --release
       -
         name: Upload artifact to collect in next job
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.cross-target }}
           path: server/target/${{ matrix.cross-target }}/release/entrypoint
