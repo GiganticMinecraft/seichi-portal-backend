@@ -10,7 +10,7 @@ use resource::{database::connection::ConnectionPool, repository::Repository};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::config::HTTP;
+use crate::config::{ENV, HTTP};
 
 mod config;
 
@@ -20,16 +20,19 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let _guard = sentry::init((
-        "https://d1ea6a96248343c8a5dc9375d25363f0@sentry.onp.admin.seichi.click/7",
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            traces_sample_rate: 0.25,
-            ..Default::default()
-        },
-    ));
+    if ENV.name != "local" {
+        let _guard = sentry::init((
+            "https://d1ea6a96248343c8a5dc9375d25363f0@sentry.onp.admin.seichi.click/7",
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                traces_sample_rate: 0.25,
+                environment: Some(ENV.name.to_owned().into()),
+                ..Default::default()
+            },
+        ));
 
-    sentry::configure_scope(|scope| scope.set_level(Some(sentry::Level::Warning)));
+        sentry::configure_scope(|scope| scope.set_level(Some(sentry::Level::Warning)));
+    }
 
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
