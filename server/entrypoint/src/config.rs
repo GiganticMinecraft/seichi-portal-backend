@@ -12,5 +12,5 @@ pub struct Environment {
     pub name: String,
 }
 
-pub static NAME: Lazy<Environment> =
+pub static ENVIRONMENT: Lazy<Environment> =
     Lazy::new(|| envy::prefixed("ENV_").from_env::<Environment>().unwrap());

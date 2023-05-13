@@ -10,7 +10,7 @@ use resource::{database::connection::ConnectionPool, repository::Repository};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::config::{HTTP, NAME};
+use crate::config::{ENVIRONMENT, HTTP};
 
 mod config;
 
@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
         sentry::ClientOptions {
             release: sentry::release_name!(),
             traces_sample_rate: 0.25,
-            environment: Some(NAME.name.to_owned().into()),
+            environment: Some(ENVIRONMENT.name.to_owned().into()),
             ..Default::default()
         },
     ));
