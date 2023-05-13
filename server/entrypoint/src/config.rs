@@ -8,12 +8,9 @@ pub struct Http {
 pub static HTTP: Lazy<Http> = Lazy::new(|| envy::prefixed("HTTP_").from_env::<Http>().unwrap());
 
 #[derive(serde::Deserialize, Debug)]
-pub struct ServerEnvironment {
+pub struct Environment {
     pub name: String,
 }
 
-pub static NAME: Lazy<ServerEnvironment> = Lazy::new(|| {
-    envy::prefixed("SRV_ENV_")
-        .from_env::<ServerEnvironment>()
-        .unwrap()
-});
+pub static NAME: Lazy<Environment> =
+    Lazy::new(|| envy::prefixed("ENV_").from_env::<Environment>().unwrap());
