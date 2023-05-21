@@ -2,8 +2,14 @@ services:
   db:
     image: mysql:8.0
     container_name: mysql
-    env_file:
-      - ./server/.env
+    environment:
+      - TZ=Asia/Tokyo
+      - MYSQL_DATABASE=seichi_portal
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
     ports:
       - "3306:3306"
     networks:
