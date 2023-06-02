@@ -7,8 +7,8 @@ use sea_orm::entity::prelude::*;
 pub enum QuestionType {
     #[sea_orm(string_value = "text")]
     Text,
-    #[sea_orm(string_value = "check_box")]
-    CheckBox,
-    #[sea_orm(string_value = "pull_down")]
-    PullDown,
+    #[sea_orm(string_value = "multiple")]
+    Multiple,
+    #[sea_orm(string_value = "single")]
+    Single,
 }
