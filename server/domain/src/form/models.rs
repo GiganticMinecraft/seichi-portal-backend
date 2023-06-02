@@ -16,16 +16,16 @@ pub struct FormId(i32);
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Deserialize, Clone, Getters, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into)]
-pub struct FormName {
+pub struct FormTitle {
     #[builder(setter(into))]
-    name: String,
+    title: String,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(TypedBuilder, Getters, Debug, PartialEq)]
 pub struct Form {
     id: FormId,
-    name: FormName,
+    title: FormTitle,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
     questions: Vec<Question>,
 }
@@ -78,9 +78,9 @@ mod test {
 
     proptest! {
         #[test]
-        fn string_into_from_name(name: String) {
-            let form_name: FormName = name.to_owned().into();
-            prop_assert_eq!(form_name, FormName::builder().name(name).build());
+        fn string_into_from_title(title: String) {
+            let form_title: FormTitle = title.to_owned().into();
+            prop_assert_eq!(form_title, FormTitle::builder().title(title).build());
         }
     }
 
