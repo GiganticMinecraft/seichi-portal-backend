@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use domain::form::models::{FormId, FormName};
+use domain::form::models::{FormId, FormTitle};
 use mockall::automock;
 
 #[async_trait]
@@ -14,5 +14,5 @@ pub trait DatabaseComponents: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormDatabase: Send + Sync {
-    async fn create(&self, name: FormName) -> anyhow::Result<FormId>;
+    async fn create(&self, title: FormTitle) -> anyhow::Result<FormId>;
 }
