@@ -45,8 +45,8 @@ pub struct Question {
 #[strum(ascii_case_insensitive)]
 pub enum QuestionType {
     TEXT,
-    PULLDOWN,
-    CHECKBOX,
+    SINGLE,
+    MULTIPLE,
 }
 
 impl TryFrom<String> for QuestionType {
@@ -68,10 +68,10 @@ mod test {
 
     #[test_case("TEXT"     => Ok(QuestionType::TEXT); "upper: TEXT")]
     #[test_case("text"     => Ok(QuestionType::TEXT); "lower: text")]
-    #[test_case("PULLDOWN" => Ok(QuestionType::PULLDOWN); "upper: PULLDOWN")]
-    #[test_case("pulldown" => Ok(QuestionType::PULLDOWN); "lower: pulldown")]
-    #[test_case("CHECKBOX" => Ok(QuestionType::CHECKBOX); "upper: CHECKBOX")]
-    #[test_case("checkbox" => Ok(QuestionType::CHECKBOX); "lower: checkbox")]
+    #[test_case("SINGLE" => Ok(QuestionType::SINGLE); "upper: SINGLE")]
+    #[test_case("single" => Ok(QuestionType::SINGLE); "lower: single")]
+    #[test_case("MULTIPLE" => Ok(QuestionType::MULTIPLE); "upper: MULTIPLE")]
+    #[test_case("multiple" => Ok(QuestionType::MULTIPLE); "lower: multiple")]
     fn string_to_question_type(input: &str) -> Result<QuestionType, errors::domain::DomainError> {
         input.to_owned().try_into()
     }

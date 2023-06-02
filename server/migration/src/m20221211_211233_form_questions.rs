@@ -49,8 +49,8 @@ impl MigrationTrait for Migration {
                                 name: FormQuestionsTable::QuestionType.into_iden(),
                                 variants: vec![
                                     QuestionType::Text.into_iden(),
-                                    QuestionType::CheckBox.into_iden(),
-                                    QuestionType::PullDown.into_iden(),
+                                    QuestionType::Multiple.into_iden(),
+                                    QuestionType::Single.into_iden(),
                                 ],
                             },
                         )
@@ -86,6 +86,6 @@ pub enum FormQuestionsTable {
 #[derive(Iden)]
 enum QuestionType {
     Text,
-    PullDown,
-    CheckBox,
+    Single,
+    Multiple,
 }
