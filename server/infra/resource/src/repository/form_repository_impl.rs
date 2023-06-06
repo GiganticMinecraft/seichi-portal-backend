@@ -3,6 +3,7 @@ use domain::{
     form::models::{FormId, FormTitle},
     repository::form_repository::FormRepository,
 };
+use domain::form::models::Form;
 
 use crate::{
     database::components::{DatabaseComponents, FormDatabase},
@@ -13,5 +14,9 @@ use crate::{
 impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client> {
     async fn create(&self, title: FormTitle) -> anyhow::Result<FormId> {
         self.client.form().create(title).await
+    }
+
+    async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
+        self.client.form().list(offset, limit).await
     }
 }

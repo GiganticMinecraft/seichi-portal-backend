@@ -1,7 +1,12 @@
 use async_trait::async_trait;
-use domain::form::models::{FormId, FormTitle};
-use entities::form_meta_data;
-use sea_orm::{ActiveModelTrait, ActiveValue, ActiveValue::Set};
+use domain::form::models::{Form, FormId, FormTitle, Question};
+use entities::prelude::{FormChoices, FormMetaData, FormQuestions};
+use entities::{form_choices, form_meta_data, form_questions};
+use sea_orm::sea_query::Expr;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect,
+};
 
 use crate::database::{components::FormDatabase, connection::ConnectionPool};
 
@@ -20,5 +25,58 @@ impl FormDatabase for ConnectionPool {
         .id;
 
         Ok(form_id.into())
+    }
+
+    async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
+        let forms = FormMetaData::find()
+            .order_by_desc(form_meta_data::Column::Id)
+            .offset(offset)
+            .limit(limit)
+            .all(&self.pool)
+            .await?;
+
+        let form_ids = forms.iter().map(|form| form.id).collect_vec();
+
+        let all_questions = FormQuestions::find()
+            .filter(Expr::col(form_questions::Column::FormId).is_in(form_ids))
+            .all(&self.pool)
+            .await?;
+
+        let question_ids = all_questions
+            .iter()
+            .map(|question| question.question_id)
+            .collect_vec();
+
+        let all_choices = FormChoices::find()
+            .filter(Expr::col(form_choices::Column::QuestionId).is_in(question_ids))
+            .all(&self.pool)
+            .await?;
+
+        forms.into_iter().map(|form| {
+            let questions = all_questions
+                .into_iter()
+                .filter(|question| question.form_id == form.id)
+                .map(|question| {
+                    let choices = all_choices
+                        .iter()
+                        .filter(|choice| choice.question_id == question.question_id)
+                        .map(|choice| choice.choice)
+                        .collect_vec();
+
+                    Question::builder()
+                        .title(question.title)
+                        .description(question.description)
+                        .question_type(question.question_type)
+                        .choices(choices)
+                        .build()
+                })
+                .collect_vec();
+
+            Form::builder()
+                .id(FormId(form.id))
+                .title(FormTitle::builder().title(form.title).build())
+                .questions(questions)
+                .build()
+        })
     }
 }
