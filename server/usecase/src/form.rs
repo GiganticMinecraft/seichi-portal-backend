@@ -12,7 +12,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.ctx.create(title).await
     }
 
-    pub async fn form_list(&self, offset: i64, limit: i64) -> anyhow::Result<Vec<Form>> {
+    pub async fn form_list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
         self.ctx.list(offset, limit).await
     }
 }

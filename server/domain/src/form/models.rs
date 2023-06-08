@@ -15,8 +15,8 @@ pub struct FormId(pub i32);
 
 #[derive(Deserialize)]
 pub struct OffsetAndLimit {
-    pub offset: i64,
-    pub limit: i64,
+    pub offset: i32,
+    pub limit: i32,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]

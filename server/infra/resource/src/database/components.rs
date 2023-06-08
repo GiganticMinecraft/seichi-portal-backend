@@ -15,5 +15,5 @@ pub trait DatabaseComponents: Send + Sync {
 #[async_trait]
 pub trait FormDatabase: Send + Sync {
     async fn create(&self, title: FormTitle) -> anyhow::Result<FormId>;
-    async fn list(&self, offset: i64, limit: i64) -> anyhow::Result<Vec<Form>>;
+    async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>>;
 }
