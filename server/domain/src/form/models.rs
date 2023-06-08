@@ -11,7 +11,13 @@ use typed_builder::TypedBuilder;
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, Clone, Copy, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into, Serialize(via: i32))]
-pub struct FormId(i32);
+pub struct FormId(pub i32);
+
+#[derive(Deserialize)]
+pub struct OffsetAndLimit {
+    pub offset: i64,
+    pub limit: i64,
+}
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(

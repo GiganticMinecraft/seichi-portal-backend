@@ -1,6 +1,13 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use axum::extract::Query;
-use domain::{form::models::FormTitle, repository::Repositories};
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
+use domain::{
+    form::models::{FormTitle, OffsetAndLimit},
+    repository::Repositories,
+};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
@@ -23,14 +30,16 @@ pub async fn create_form_handler(
 
 pub async fn form_list_handler(
     State(repository): State<RealInfrastructureRepository>,
-    Query(offset): Query<i32>,
-    Query(limit): Query<i32>,
+    Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         ctx: repository.form_repository(),
     };
 
-    match form_use_case.form_list(offset, limit).await {
+    match form_use_case
+        .form_list(offset_and_limit.offset, offset_and_limit.limit)
+        .await
+    {
         Ok(forms) => (StatusCode::OK, json!(forms).to_string()),
         Err(err) => {
             tracing::error!("{}", err);
