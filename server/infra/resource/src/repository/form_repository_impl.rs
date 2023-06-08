@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{FormId, FormTitle},
+    form::models::{Form, FormId, FormTitle},
     repository::form_repository::FormRepository,
 };
-use domain::form::models::Form;
 
 use crate::{
     database::components::{DatabaseComponents, FormDatabase},

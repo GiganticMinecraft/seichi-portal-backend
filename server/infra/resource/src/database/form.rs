@@ -1,11 +1,13 @@
 use async_trait::async_trait;
 use domain::form::models::{Form, FormId, FormTitle, Question};
-use entities::prelude::{FormChoices, FormMetaData, FormQuestions};
-use entities::{form_choices, form_meta_data, form_questions};
-use sea_orm::sea_query::Expr;
+use entities::{
+    form_choices, form_meta_data, form_questions,
+    prelude::{FormChoices, FormMetaData, FormQuestions},
+};
+use iter_tools::Itertools;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect,
+    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter,
+    QueryOrder, QuerySelect,
 };
 
 use crate::database::{components::FormDatabase, connection::ConnectionPool};
@@ -30,8 +32,8 @@ impl FormDatabase for ConnectionPool {
     async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
         let forms = FormMetaData::find()
             .order_by_desc(form_meta_data::Column::Id)
-            .offset(offset)
-            .limit(limit)
+            .offset(offset as u64)
+            .limit(limit as u64)
             .all(&self.pool)
             .await?;
 
@@ -52,31 +54,39 @@ impl FormDatabase for ConnectionPool {
             .all(&self.pool)
             .await?;
 
-        forms.into_iter().map(|form| {
-            let questions = all_questions
-                .into_iter()
-                .filter(|question| question.form_id == form.id)
-                .map(|question| {
-                    let choices = all_choices
-                        .iter()
-                        .filter(|choice| choice.question_id == question.question_id)
-                        .map(|choice| choice.choice)
-                        .collect_vec();
+        forms
+            .into_iter()
+            .map(|form| {
+                let questions = all_questions
+                    .iter()
+                    .filter(|question| question.form_id == form.id)
+                    .map(|question| {
+                        let choices = all_choices
+                            .iter()
+                            .filter(|choice| choice.question_id == question.question_id)
+                            .cloned()
+                            .map(|choice| choice.choice)
+                            .collect_vec();
 
-                    Question::builder()
-                        .title(question.title)
-                        .description(question.description)
-                        .question_type(question.question_type)
-                        .choices(choices)
-                        .build()
-                })
-                .collect_vec();
+                        anyhow::Ok(
+                            Question::builder()
+                                .title(question.title.to_owned())
+                                .description(question.description.to_owned())
+                                .question_type(question.question_type.to_string().try_into()?)
+                                .choices(choices)
+                                .build(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            Form::builder()
-                .id(FormId(form.id))
-                .title(FormTitle::builder().title(form.title).build())
-                .questions(questions)
-                .build()
-        })
+                anyhow::Ok(
+                    Form::builder()
+                        .id(FormId(form.id))
+                        .title(FormTitle::builder().title(form.title).build())
+                        .questions(questions)
+                        .build(),
+                )
+            })
+            .collect()
     }
 }
