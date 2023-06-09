@@ -18,7 +18,7 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(FormMetaDataTable::Name).string().not_null())
+                    .col(ColumnDef::new(FormMetaDataTable::Title).string().not_null())
                     .col(ColumnDef::new(FormMetaDataTable::Description).string())
                     .col(
                         ColumnDef::new(FormMetaDataTable::CreatedAt)
@@ -52,7 +52,7 @@ impl MigrationTrait for Migration {
 pub enum FormMetaDataTable {
     FormMetaData,
     Id,
-    Name,
+    Title,
     Description,
     CreatedAt,
     UpdatedAt,

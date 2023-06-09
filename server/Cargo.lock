@@ -2158,6 +2158,7 @@ dependencies = [
  "domain",
  "entities",
  "envy",
+ "itertools",
  "migration",
  "mockall",
  "once_cell",

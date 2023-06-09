@@ -4,17 +4,25 @@ use derive_getters::Getters;
 use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, Clone, Copy, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into, Serialize(via: i32))]
-pub struct FormId(i32);
+pub struct FormId(pub i32);
+
+#[derive(Deserialize)]
+pub struct OffsetAndLimit {
+    pub offset: i32,
+    pub limit: i32,
+}
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, TypedBuilder, Deserialize, Clone, Getters, Debug, PartialOrd, PartialEq)]
+#[derive(
+    DerivingVia, TypedBuilder, Serialize, Deserialize, Clone, Getters, Debug, PartialOrd, PartialEq,
+)]
 #[deriving(From, Into)]
 pub struct FormTitle {
     #[builder(setter(into))]
@@ -22,7 +30,7 @@ pub struct FormTitle {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Getters, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Getters, Debug, PartialEq)]
 pub struct Form {
     id: FormId,
     title: FormTitle,
@@ -31,17 +39,17 @@ pub struct Form {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Getters, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Getters, Debug, PartialEq)]
 pub struct Question {
     title: String,
-    description: String,
+    description: Option<String>,
     question_type: QuestionType,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
     choices: Vec<String>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Debug, EnumString, PartialOrd, PartialEq)]
+#[derive(Debug, Serialize, EnumString, PartialOrd, PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum QuestionType {
     TEXT,

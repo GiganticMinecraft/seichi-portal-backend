@@ -5,7 +5,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use presentation::{form_handler::create_form_handler, health_check_handler::health_check};
+use presentation::{
+    form_handler::{create_form_handler, form_list_handler},
+    health_check_handler::health_check,
+};
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
@@ -40,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
     let shared_repository = Repository::new(conn).into_shared();
 
     let router = Router::new()
-        .route("/forms", post(create_form_handler))
+        .route("/forms", post(create_form_handler).get(form_list_handler))
         .with_state(shared_repository)
         .route("/health", get(health_check))
         .layer(

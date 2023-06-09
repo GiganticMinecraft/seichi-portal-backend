@@ -14,3 +14,4 @@ serde = { workspace = true }
 mockall = { workspace = true }
 envy = { workspace = true }
 once_cell = { workspace = true }
+itertools = { workspace = true }
