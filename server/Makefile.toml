@@ -8,7 +8,7 @@ REPOSITORY_ROOT = { script = ["git rev-parse --show-superproject-working-tree --
 
 [tasks.generate_entity]
 command = "sea-orm-cli"
-args = [ "generate", "entity", "--database-url", "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}/${MYSQL_DATABASE}", "-o", "infra/entities/" ]
+args = [ "generate", "entity", "--database-url", "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}/${MYSQL_DATABASE}", "-o", "infra/entities/src" ]
 
 [tasks.fix]
 toolchain = "nightly"
