@@ -4,7 +4,7 @@ use entities::{
     form_choices, form_meta_data, form_questions,
     prelude::{FormChoices, FormMetaData, FormQuestions},
 };
-use iter_tools::Itertools;
+use itertools::Itertools;
 use sea_orm::{
     sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect,
