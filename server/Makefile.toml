@@ -10,6 +10,10 @@ REPOSITORY_ROOT = { script = ["git rev-parse --show-superproject-working-tree --
 command = "sea-orm-cli"
 args = [ "generate", "entity", "--database-url", "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}/${MYSQL_DATABASE}", "-o", "infra/entities/src" ]
 
+[tasks.generate-migrate-file]
+command = "sea-orm-cli"
+args = [ "migrate", "generate", "${@}" ]
+
 [tasks.fix]
 toolchain = "nightly"
 command = "cargo"
