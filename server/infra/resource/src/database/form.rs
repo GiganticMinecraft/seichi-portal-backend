@@ -31,7 +31,7 @@ impl FormDatabase for ConnectionPool {
 
     async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
         let forms = FormMetaData::find()
-            .order_by_desc(form_meta_data::Column::Id)
+            .order_by_asc(form_meta_data::Column::Id)
             .offset(offset as u64)
             .limit(limit as u64)
             .all(&self.pool)
