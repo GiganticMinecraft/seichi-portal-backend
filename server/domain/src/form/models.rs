@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 #[cfg(test)]
 use common::test_utils::arbitrary_with_size;
 use derive_getters::Getters;
@@ -5,6 +6,7 @@ use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
+
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
@@ -29,13 +31,15 @@ pub struct FormTitle {
     title: String,
 }
 
-#[cfg_attr(test, derive(Arbitrary))]
+// #[cfg_attr(test, derive(Arbitrary))]
 #[derive(TypedBuilder, Serialize, Getters, Debug, PartialEq)]
 pub struct Form {
     id: FormId,
     title: FormTitle,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
+    // #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
     questions: Vec<Question>,
+    metadata: FormMeta,
+    settings: FormSettings,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -66,8 +70,27 @@ impl TryFrom<String> for QuestionType {
     }
 }
 
+#[derive(Serialize, Debug, PartialEq)]
+pub struct FormMeta {
+    start_at: DateTime<Local>,
+    end_at: DateTime<Local>,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct FormSettings {
+    response_period: ResponsePeriod,
+}
+
+#[derive(TypedBuilder, Serialize, Debug, PartialEq)]
+pub struct ResponsePeriod {
+    created_at: DateTime<Local>,
+    end_at: DateTime<Local>,
+}
+
 #[cfg(test)]
 mod test {
+    
+    
     use proptest::{prop_assert_eq, proptest};
     use serde_json::json;
     use test_case::test_case;
