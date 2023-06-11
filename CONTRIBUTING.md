@@ -134,3 +134,5 @@ cargo ワークスペースで共通のタスクはワークスペースのト�
 |   lint   |           cargo clippy -- -D warnings           | clippy によるコードチェックを行います                          |
 |  format  |                    cargo fmt                    | rustfmt によるコード整形を行います                             |
 |  pretty  | fix -> test -> lint -> format の順に実行します  | 上記 4 つをすべて実行します、push の前に行うことが推奨されます |
+|  generate-entity  | sea-orm-cli generate entity --database-url (DB接続リンク) -o infra/entities/src  |  sea-orm-cliによるエンティティファイルの生成を行います  |
+|  generate-migrate-file <ファイル名>  |  sea-orm-cli migrate generate <ファイル名>  |  sea-orm-cliによるデータベースマイグレーションファイルを生成します。  |   
