@@ -1,6 +1,6 @@
-use crate::m20220101_000001_create_table::FormMetaDataTable;
-use sea_orm_migration::prelude::ColumnType::Enum;
 use sea_orm_migration::prelude::*;
+
+use crate::m20220101_000001_create_table::FormMetaDataTable;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -27,7 +27,7 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk-form_key")
+                            .name("fk-form_key_from_response_period")
                             .from(
                                 FormResponsePeriodTable::ResponsePeriod,
                                 FormResponsePeriodTable::FormId,

@@ -6,7 +6,6 @@ use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
@@ -82,7 +81,7 @@ pub struct FormMeta {
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Debug, PartialEq, TypedBuilder)]
 pub struct FormSettings {
-    response_period: ResponsePeriod,
+    response_period: Option<ResponsePeriod>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]

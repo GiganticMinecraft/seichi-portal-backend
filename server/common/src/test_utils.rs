@@ -1,6 +1,5 @@
 use chrono::Utc;
-use proptest::prelude::Just;
-use proptest::{arbitrary::Arbitrary, collection::SizeRange, strategy::Strategy};
+use proptest::{arbitrary::Arbitrary, collection::SizeRange, prelude::Just, strategy::Strategy};
 
 pub fn arbitrary_with_size<A: Arbitrary>(
     size_range: impl Into<SizeRange>,
