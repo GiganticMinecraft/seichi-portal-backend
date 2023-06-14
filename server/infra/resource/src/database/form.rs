@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use domain::form::models::{Form, FormId, FormMeta, FormSettings, FormTitle, Question};
+use domain::form::models::{
+    Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
+};
 use entities::{
     form_choices, form_meta_data, form_questions,
     prelude::{FormChoices, FormMetaData, FormQuestions},
@@ -99,6 +101,11 @@ impl FormDatabase for ConnectionPool {
                     Form::builder()
                         .id(FormId(form.id))
                         .title(FormTitle::builder().title(form.title).build())
+                        .description(
+                            FormDescription::builder()
+                                .description(form.description)
+                                .build(),
+                        )
                         .questions(questions)
                         .metadata(
                             FormMeta::builder()
