@@ -71,12 +71,12 @@ impl TryFrom<String> for QuestionType {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, TypedBuilder, Debug, PartialEq)]
 pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    start_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    end_at: DateTime<Utc>,
+    update_at: DateTime<Utc>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -89,9 +89,9 @@ pub struct FormSettings {
 #[derive(TypedBuilder, Serialize, Debug, PartialEq)]
 pub struct ResponsePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    created_at: DateTime<Utc>,
+    start_at: DateTime<Utc>,
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    updated_at: DateTime<Utc>,
+    end_at: DateTime<Utc>,
 }
 
 #[cfg(test)]
