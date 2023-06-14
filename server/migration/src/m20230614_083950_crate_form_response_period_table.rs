@@ -1,3 +1,4 @@
+use crate::m20220101_000001_create_table::FormMetaDataTable;
 use sea_orm_migration::prelude::ColumnType::Enum;
 use sea_orm_migration::prelude::*;
 
@@ -20,20 +21,26 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new_with_type(
-                            FormResponsePeriodTable::PeriodName.into_iden(),
-                            Enum {
-                                name: FormResponsePeriodTable::PeriodName.into_iden(),
-                                variants: vec![
-                                    PeriodNames::StartAt.into_iden(),
-                                    PeriodNames::EndAt.into_iden(),
-                                ],
-                            },
-                        )
-                        .not_null(),
+                        ColumnDef::new(FormResponsePeriodTable::FormId)
+                            .integer()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-form_key")
+                            .from(
+                                FormResponsePeriodTable::ResponsePeriod,
+                                FormResponsePeriodTable::FormId,
+                            )
+                            .to(FormMetaDataTable::FormMetaData, FormMetaDataTable::Id),
                     )
                     .col(
-                        ColumnDef::new(FormResponsePeriodTable::Time)
+                        ColumnDef::new(FormResponsePeriodTable::StartAt)
+                            .date_time()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(FormResponsePeriodTable::EndAt)
                             .date_time()
                             .not_null(),
                     )
@@ -58,12 +65,7 @@ impl MigrationTrait for Migration {
 enum FormResponsePeriodTable {
     ResponsePeriod,
     Id,
-    PeriodName,
-    Time,
-}
-
-#[derive(Iden)]
-enum PeriodNames {
+    FormId,
     StartAt,
     EndAt,
 }
