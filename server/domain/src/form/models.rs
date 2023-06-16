@@ -21,8 +21,8 @@ pub struct OffsetAndLimit {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, TypedBuilder, Serialize, Clone, Getters, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, Deserialize(via: String))]
+#[derive(DerivingVia, TypedBuilder, Clone, Getters, Debug, PartialOrd, PartialEq)]
+#[deriving(From, Into, Serialize(via: String), Deserialize(via: String))]
 pub struct FormTitle {
     #[builder(setter(into))]
     title: String,
