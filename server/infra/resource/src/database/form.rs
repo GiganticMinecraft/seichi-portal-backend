@@ -128,7 +128,7 @@ impl FormDatabase for ConnectionPool {
 
     async fn get(&self, form_id: FormId) -> anyhow::Result<Form> {
         let target_form = FormMetaData::find()
-            .filter(Expr::col(form_meta_data::Column::Id).is(form_id.0))
+            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.0))
             .all(&self.pool)
             .await?
             .first()
@@ -137,14 +137,14 @@ impl FormDatabase for ConnectionPool {
 
         let form_questions = stream::iter(
             FormQuestions::find()
-                .filter(Expr::col(form_questions::Column::FormId).is(form_id.0))
+                .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
                 .all(&self.pool)
                 .await?,
         )
         .then(|question| async {
             let choices = FormChoices::find()
                 .filter(
-                    Expr::col(form_choices::Column::QuestionId).is(question.to_owned().question_id),
+                    Expr::col(form_choices::Column::QuestionId).eq(question.to_owned().question_id),
                 )
                 .all(&self.pool)
                 .await?
@@ -164,22 +164,21 @@ impl FormDatabase for ConnectionPool {
         .into_iter()
         .collect::<anyhow::Result<Vec<Question>>>()?;
 
-        let form_settings = entities::response_period::Entity::find()
-            .filter(Expr::col(entities::response_period::Column::FormId).is(target_form.id))
+        let response_period = entities::response_period::Entity::find()
+            .filter(Expr::col(entities::response_period::Column::FormId).eq(target_form.id))
             .all(&self.pool)
             .await?
             .first()
             .map(|period| {
-                FormSettings::builder()
-                    .response_period(Some(
-                        domain::form::models::ResponsePeriod::builder()
-                            .start_at(period.start_at.to_owned().and_utc())
-                            .end_at(period.end_at.to_owned().and_utc())
-                            .build(),
-                    ))
+                domain::form::models::ResponsePeriod::builder()
+                    .start_at(period.start_at.to_owned().and_utc())
+                    .end_at(period.end_at.to_owned().and_utc())
                     .build()
-            })
-            .ok_or(anyhow!("Form settings not found"))?;
+            });
+
+        let form_settings = FormSettings::builder()
+            .response_period(response_period)
+            .build();
 
         Ok(Form::builder()
             .id(FormId(target_form.id.to_owned()))
