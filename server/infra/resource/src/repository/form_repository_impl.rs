@@ -18,4 +18,8 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
         self.client.form().list(offset, limit).await
     }
+
+    async fn get(&self, form_id: FormId) -> anyhow::Result<Form> {
+        self.client.form().get(form_id).await
+    }
 }

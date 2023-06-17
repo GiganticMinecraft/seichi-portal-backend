@@ -15,4 +15,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn form_list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
         self.ctx.list(offset, limit).await
     }
+
+    pub async fn get_form(&self, form_id: FormId) -> anyhow::Result<Form> {
+        self.ctx.get(form_id).await
+    }
 }
