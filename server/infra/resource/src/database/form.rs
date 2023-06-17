@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use domain::form::models::{Form, FormId, FormTitle, Question};
+use domain::form::models::{
+    Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
+};
 use entities::{
     form_choices, form_meta_data, form_questions,
     prelude::{FormChoices, FormMetaData, FormQuestions},
@@ -40,7 +42,7 @@ impl FormDatabase for ConnectionPool {
         let form_ids = forms.iter().map(|form| form.id).collect_vec();
 
         let all_questions = FormQuestions::find()
-            .filter(Expr::col(form_questions::Column::FormId).is_in(form_ids))
+            .filter(Expr::col(form_questions::Column::FormId).is_in(form_ids.to_owned()))
             .all(&self.pool)
             .await?;
 
@@ -51,6 +53,11 @@ impl FormDatabase for ConnectionPool {
 
         let all_choices = FormChoices::find()
             .filter(Expr::col(form_choices::Column::QuestionId).is_in(question_ids))
+            .all(&self.pool)
+            .await?;
+
+        let all_periods = entities::response_period::Entity::find()
+            .filter(Expr::col(entities::response_period::Column::FormId).is_in(form_ids.to_owned()))
             .all(&self.pool)
             .await?;
 
@@ -79,11 +86,38 @@ impl FormDatabase for ConnectionPool {
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
+                let response_period = all_periods
+                    .iter()
+                    .filter(|period| period.form_id == form.id)
+                    .map(|period| {
+                        domain::form::models::ResponsePeriod::builder()
+                            .start_at(period.start_at.and_utc())
+                            .end_at(period.end_at.and_utc())
+                            .build()
+                    })
+                    .next();
+
                 anyhow::Ok(
                     Form::builder()
                         .id(FormId(form.id))
                         .title(FormTitle::builder().title(form.title).build())
+                        .description(
+                            FormDescription::builder()
+                                .description(form.description)
+                                .build(),
+                        )
                         .questions(questions)
+                        .metadata(
+                            FormMeta::builder()
+                                .created_at(form.created_at)
+                                .update_at(form.updated_at)
+                                .build(),
+                        )
+                        .settings(
+                            FormSettings::builder()
+                                .response_period(response_period)
+                                .build(),
+                        )
                         .build(),
                 )
             })

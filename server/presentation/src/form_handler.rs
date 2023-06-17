@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use domain::{
-    form::models::{FormTitle, OffsetAndLimit},
+    form::models::{Form, OffsetAndLimit},
     repository::Repositories,
 };
 use resource::repository::RealInfrastructureRepository;
@@ -14,12 +14,12 @@ use usecase::form::FormUseCase;
 
 pub async fn create_form_handler(
     State(repository): State<RealInfrastructureRepository>,
-    Json(form_title): Json<FormTitle>,
+    Json(form): Json<Form>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         ctx: repository.form_repository(),
     };
-    match form_use_case.create_form(form_title).await {
+    match form_use_case.create_form(form.title().to_owned()).await {
         Ok(id) => (StatusCode::CREATED, json!({ "id": id }).to_string()),
         Err(err) => {
             tracing::error!("{}", err);

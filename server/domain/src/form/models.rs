@@ -1,5 +1,6 @@
+use chrono::{DateTime, Utc};
 #[cfg(test)]
-use common::test_utils::arbitrary_with_size;
+use common::test_utils::{arbitrary_date_time, arbitrary_with_size};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 #[cfg(test)]
@@ -10,7 +11,7 @@ use typed_builder::TypedBuilder;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, Clone, Copy, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, Serialize(via: i32))]
+#[deriving(From, Into, Default, Serialize(via: i32), Deserialize(via: i32))]
 pub struct FormId(pub i32);
 
 #[derive(Deserialize)]
@@ -20,26 +21,38 @@ pub struct OffsetAndLimit {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(
-    DerivingVia, TypedBuilder, Serialize, Deserialize, Clone, Getters, Debug, PartialOrd, PartialEq,
-)]
-#[deriving(From, Into)]
+#[derive(DerivingVia, TypedBuilder, Clone, Getters, Debug, PartialOrd, PartialEq)]
+#[deriving(From, Into, Serialize(via: String), Deserialize(via: String))]
 pub struct FormTitle {
     #[builder(setter(into))]
     title: String,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Getters, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct Form {
+    #[serde(default)]
     id: FormId,
     title: FormTitle,
+    description: FormDescription,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
+    #[serde(default)]
     questions: Vec<Question>,
+    #[serde(default)]
+    metadata: FormMeta,
+    #[serde(default)]
+    settings: FormSettings,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Getters, Debug, PartialEq)]
+#[derive(DerivingVia, TypedBuilder, Serialize, Getters, Debug, PartialEq)]
+#[deriving(From, Into, Deserialize(via: Option::<String>))]
+pub struct FormDescription {
+    description: Option<String>,
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct Question {
     title: String,
     description: Option<String>,
@@ -49,7 +62,7 @@ pub struct Question {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Debug, Serialize, EnumString, PartialOrd, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, EnumString, PartialOrd, PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum QuestionType {
     TEXT,
@@ -66,8 +79,36 @@ impl TryFrom<String> for QuestionType {
     }
 }
 
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Default, TypedBuilder, Debug, PartialEq)]
+pub struct FormMeta {
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    #[serde(default = "chrono::Utc::now")]
+    created_at: DateTime<Utc>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    #[serde(default = "chrono::Utc::now")]
+    update_at: DateTime<Utc>,
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq, TypedBuilder)]
+pub struct FormSettings {
+    #[serde(default)]
+    response_period: Option<ResponsePeriod>,
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(TypedBuilder, Serialize, Deserialize, Debug, PartialEq)]
+pub struct ResponsePeriod {
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    start_at: DateTime<Utc>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    end_at: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod test {
+
     use proptest::{prop_assert_eq, proptest};
     use serde_json::json;
     use test_case::test_case;

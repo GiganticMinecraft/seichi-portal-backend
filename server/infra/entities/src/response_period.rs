@@ -2,23 +2,18 @@
 
 use sea_orm::entity::prelude::*;
 
-use super::sea_orm_active_enums::QuestionType;
-
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "form_questions")]
+#[sea_orm(table_name = "response_period")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub question_id: i32,
+    pub id: i32,
     pub form_id: i32,
-    pub title: String,
-    pub description: Option<String>,
-    pub question_type: QuestionType,
+    pub start_at: DateTime,
+    pub end_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::form_choices::Entity")]
-    FormChoices,
     #[sea_orm(
         belongs_to = "super::form_meta_data::Entity",
         from = "Column::FormId",
@@ -27,12 +22,6 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     FormMetaData,
-}
-
-impl Related<super::form_choices::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::FormChoices.def()
-    }
 }
 
 impl Related<super::form_meta_data::Entity> for Entity {
