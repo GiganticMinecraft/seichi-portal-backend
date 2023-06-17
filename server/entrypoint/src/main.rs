@@ -5,9 +5,8 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use presentation::form_handler::{get_form, get_form_handler};
 use presentation::{
-    form_handler::{create_form_handler, form_list_handler},
+    form_handler::{create_form_handler, form_list_handler, get_form_handler},
     health_check_handler::health_check,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};

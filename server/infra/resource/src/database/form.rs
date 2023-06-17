@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use async_trait::async_trait;
 use domain::form::models::{
     Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
@@ -6,6 +7,7 @@ use entities::{
     form_choices, form_meta_data, form_questions,
     prelude::{FormChoices, FormMetaData, FormQuestions},
 };
+use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
     sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter,
@@ -125,6 +127,80 @@ impl FormDatabase for ConnectionPool {
     }
 
     async fn get(&self, form_id: FormId) -> anyhow::Result<Form> {
-        todo!()
+        let target_form = FormMetaData::find()
+            .filter(Expr::col(form_meta_data::Column::Id).is(form_id.0))
+            .all(&self.pool)
+            .await?
+            .first()
+            .ok_or(anyhow!("Form not found"))?
+            .to_owned();
+
+        let form_questions = stream::iter(
+            FormQuestions::find()
+                .filter(Expr::col(form_questions::Column::FormId).is(form_id.0))
+                .all(&self.pool)
+                .await?,
+        )
+        .then(|question| async {
+            let choices = FormChoices::find()
+                .filter(
+                    Expr::col(form_choices::Column::QuestionId).is(question.to_owned().question_id),
+                )
+                .all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|choice| choice.choice)
+                .collect_vec();
+
+            Ok(Question::builder()
+                .title(question.title)
+                .description(question.description)
+                .question_type(question.question_type.to_string().try_into()?)
+                .choices(choices)
+                .build())
+        })
+        .collect::<Vec<anyhow::Result<Question>>>()
+        .await
+        .into_iter()
+        .collect::<anyhow::Result<Vec<Question>>>()?;
+
+        let form_settings = entities::response_period::Entity::find()
+            .filter(Expr::col(entities::response_period::Column::FormId).is(target_form.id))
+            .all(&self.pool)
+            .await?
+            .first()
+            .map(|period| {
+                FormSettings::builder()
+                    .response_period(Some(
+                        domain::form::models::ResponsePeriod::builder()
+                            .start_at(period.start_at.to_owned().and_utc())
+                            .end_at(period.end_at.to_owned().and_utc())
+                            .build(),
+                    ))
+                    .build()
+            })
+            .ok_or(anyhow!("Form settings not found"))?;
+
+        Ok(Form::builder()
+            .id(FormId(target_form.id.to_owned()))
+            .title(
+                FormTitle::builder()
+                    .title(target_form.title.to_owned())
+                    .build(),
+            )
+            .description(
+                FormDescription::builder()
+                    .description(target_form.description.to_owned())
+                    .build(),
+            )
+            .questions(form_questions)
+            .metadata(
+                FormMeta::builder()
+                    .created_at(target_form.created_at)
+                    .update_at(target_form.updated_at)
+                    .build(),
+            )
+            .settings(form_settings)
+            .build())
     }
 }

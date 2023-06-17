@@ -15,3 +15,4 @@ mockall = { workspace = true }
 envy = { workspace = true }
 once_cell = { workspace = true }
 itertools = { workspace = true }
+futures = "0.3.28"
