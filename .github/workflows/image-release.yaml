@@ -32,7 +32,7 @@ jobs:
           override: true
       -
         name: Install Dependencies
-        run: apt install libssl-dev -y
+        run: sudo apt-get install libssl-dev -y
       -
         name: Build binary using cross
         uses: actions-rs/cargo@v1
