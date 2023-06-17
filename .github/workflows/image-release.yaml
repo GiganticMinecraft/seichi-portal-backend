@@ -31,9 +31,6 @@ jobs:
           target: ${{ matrix.cross-target }}
           override: true
       -
-        name: Install Dependencies
-        run: sudo apt-get install pkg-config libssl-dev -y
-      -
         name: Build binary using cross
         uses: actions-rs/cargo@v1
         with:

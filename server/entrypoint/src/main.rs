@@ -23,19 +23,23 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    if ENV.name != "local" {
+    let _guard = if ENV.name != "local" {
         let _guard = sentry::init((
             "https://d1ea6a96248343c8a5dc9375d25363f0@sentry.onp.admin.seichi.click/7",
             sentry::ClientOptions {
                 release: sentry::release_name!(),
-                traces_sample_rate: 0.25,
+                traces_sample_rate: 1.0,
+                enable_profiling: true,
+                profiles_sample_rate: 1.0,
                 environment: Some(ENV.name.to_owned().into()),
                 ..Default::default()
             },
         ));
-
         sentry::configure_scope(|scope| scope.set_level(Some(sentry::Level::Warning)));
-    }
+        Some(_guard)
+    } else {
+        None
+    };
 
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
