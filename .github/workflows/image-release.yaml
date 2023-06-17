@@ -31,7 +31,7 @@ jobs:
           target: ${{ matrix.cross-target }}
           override: true
       -
-        name: Install libssl-dev
+        name: Install Dependencies
         run: apt install libssl-dev -y
       -
         name: Build binary using cross
