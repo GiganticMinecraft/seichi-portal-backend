@@ -4,15 +4,19 @@ use domain::{
 };
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
-    pub ctx: &'a FormRepo,
+    pub repository: &'a FormRepo,
 }
 
 impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn create_form(&self, title: FormTitle) -> anyhow::Result<FormId> {
-        self.ctx.create(title).await
+        self.repository.create(title).await
     }
 
     pub async fn form_list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
-        self.ctx.list(offset, limit).await
+        self.repository.list(offset, limit).await
+    }
+
+    pub async fn get_form(&self, form_id: FormId) -> anyhow::Result<Form> {
+        self.repository.get(form_id).await
     }
 }

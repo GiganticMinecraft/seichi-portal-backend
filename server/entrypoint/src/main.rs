@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use presentation::{
-    form_handler::{create_form_handler, form_list_handler},
+    form_handler::{create_form_handler, form_list_handler, get_form_handler},
     health_check_handler::health_check,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
@@ -48,7 +48,9 @@ async fn main() -> anyhow::Result<()> {
 
     let router = Router::new()
         .route("/forms", post(create_form_handler).get(form_list_handler))
-        .with_state(shared_repository)
+        .with_state(shared_repository.to_owned())
+        .route("/forms/:id", get(get_form_handler))
+        .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(
             CorsLayer::new()

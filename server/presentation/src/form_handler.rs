@@ -1,11 +1,11 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use domain::{
-    form::models::{Form, OffsetAndLimit},
+    form::models::{Form, FormId, OffsetAndLimit},
     repository::Repositories,
 };
 use resource::repository::RealInfrastructureRepository;
@@ -17,7 +17,7 @@ pub async fn create_form_handler(
     Json(form): Json<Form>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        ctx: repository.form_repository(),
+        repository: repository.form_repository(),
     };
     match form_use_case.create_form(form.title().to_owned()).await {
         Ok(id) => (StatusCode::CREATED, json!({ "id": id }).to_string()),
@@ -33,7 +33,7 @@ pub async fn form_list_handler(
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        ctx: repository.form_repository(),
+        repository: repository.form_repository(),
     };
 
     match form_use_case
@@ -41,6 +41,23 @@ pub async fn form_list_handler(
         .await
     {
         Ok(forms) => (StatusCode::OK, json!(forms).to_string()),
+        Err(err) => {
+            tracing::error!("{}", err);
+            (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
+        }
+    }
+}
+
+pub async fn get_form_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(form_id): Path<FormId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_form(form_id).await {
+        Ok(form) => (StatusCode::OK, json!(form).to_string()),
         Err(err) => {
             tracing::error!("{}", err);
             (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
