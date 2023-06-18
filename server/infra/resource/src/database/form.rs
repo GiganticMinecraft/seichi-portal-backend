@@ -11,8 +11,8 @@ use entities::{
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
-    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect,
+    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, ModelTrait,
+    QueryFilter, QueryOrder, QuerySelect,
 };
 
 use crate::database::{components::FormDatabase, connection::ConnectionPool};
@@ -205,6 +205,13 @@ impl FormDatabase for ConnectionPool {
     }
 
     async fn delete(&self, form_id: FormId) -> anyhow::Result<FormId> {
+        let target_form = FormMetaData::find_by_id(form_id.0)
+            .all(&self.pool)
+            .await?
+            .first()
+            .ok_or(anyhow!("Form not found"))?
+            .to_owned();
+
         let question_ids = FormQuestions::find()
             .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
             .all(&self.pool)
@@ -228,10 +235,7 @@ impl FormDatabase for ConnectionPool {
             .exec(&self.pool)
             .await?;
 
-        FormMetaData::delete_many()
-            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.0))
-            .exec(&self.pool)
-            .await?;
+        target_form.delete(&self.pool).await?;
 
         Ok(form_id)
     }
