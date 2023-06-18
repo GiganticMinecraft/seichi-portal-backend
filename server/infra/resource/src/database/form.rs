@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use domain::form::models::{
     Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
 };
-use entities::form_meta_data::Relation::ResponsePeriod;
 use entities::{
     form_choices, form_meta_data, form_questions,
     prelude::{FormChoices, FormMetaData, FormQuestions},
@@ -12,8 +11,8 @@ use entities::{
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
-    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, ModelTrait,
-    QueryFilter, QueryOrder, QuerySelect,
+    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter,
+    QueryOrder, QuerySelect,
 };
 
 use crate::database::{components::FormDatabase, connection::ConnectionPool};

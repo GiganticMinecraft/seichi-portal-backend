@@ -24,6 +24,6 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     async fn delete(&self, id: FormId) -> anyhow::Result<FormId> {
-        self.client.form().delete(id)
+        self.client.form().delete(id).await
     }
 }

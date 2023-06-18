@@ -5,9 +5,8 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use presentation::form_handler::delete_form_handler;
 use presentation::{
-    form_handler::{create_form_handler, form_list_handler, get_form_handler},
+    form_handler::{create_form_handler, delete_form_handler, form_list_handler, get_form_handler},
     health_check_handler::health_check,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
@@ -58,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health_check))
         .layer(
             CorsLayer::new()
-                .allow_methods([Method::POST])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE])
                 .allow_origin(Any) // todo: allow_originを制限する
                 .allow_headers([CONTENT_TYPE]),
         );

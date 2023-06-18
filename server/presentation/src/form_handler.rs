@@ -74,7 +74,7 @@ pub async fn delete_form_handler(
     };
 
     match form_use_case.delete_form(form_id).await {
-        Ok(form_id) => (StatusCode::OK, json!(form_id).to_string()),
+        Ok(form_id) => (StatusCode::OK, json!({ "id": form_id }).to_string()),
         Err(err) => {
             tracing::error!("{}", err);
             (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
