@@ -19,4 +19,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn get_form(&self, form_id: FormId) -> anyhow::Result<Form> {
         self.repository.get(form_id).await
     }
+
+    pub async fn delete_form(&self, form_id: FormId) -> anyhow::Result<FormId> {
+        self.repository.delete(form_id).await
+    }
 }

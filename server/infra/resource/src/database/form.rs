@@ -3,15 +3,17 @@ use async_trait::async_trait;
 use domain::form::models::{
     Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
 };
+use entities::form_meta_data::Relation::ResponsePeriod;
 use entities::{
     form_choices, form_meta_data, form_questions,
     prelude::{FormChoices, FormMetaData, FormQuestions},
+    response_period,
 };
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
-    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect,
+    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, ModelTrait,
+    QueryFilter, QueryOrder, QuerySelect,
 };
 
 use crate::database::{components::FormDatabase, connection::ConnectionPool};
@@ -201,5 +203,37 @@ impl FormDatabase for ConnectionPool {
             )
             .settings(form_settings)
             .build())
+    }
+
+    async fn delete(&self, form_id: FormId) -> anyhow::Result<FormId> {
+        let question_ids = FormQuestions::find()
+            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+            .all(&self.pool)
+            .await?
+            .iter()
+            .map(|question| question.question_id)
+            .collect_vec();
+
+        FormChoices::delete_many()
+            .filter(Expr::col(form_choices::Column::QuestionId).is_in(question_ids))
+            .exec(&self.pool)
+            .await?;
+
+        response_period::Entity::delete_many()
+            .filter(Expr::col(response_period::Column::FormId).eq(form_id.0))
+            .exec(&self.pool)
+            .await?;
+
+        FormQuestions::delete_many()
+            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+            .exec(&self.pool)
+            .await?;
+
+        FormMetaData::delete_many()
+            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.0))
+            .exec(&self.pool)
+            .await?;
+
+        Ok(form_id)
     }
 }
