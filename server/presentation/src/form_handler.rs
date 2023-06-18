@@ -8,6 +8,7 @@ use domain::{
     form::models::{Form, FormId, OffsetAndLimit},
     repository::Repositories,
 };
+use errors::presentation::PresentationError::FormNotFound;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
@@ -75,9 +76,12 @@ pub async fn delete_form_handler(
 
     match form_use_case.delete_form(form_id).await {
         Ok(form_id) => (StatusCode::OK, json!({ "id": form_id }).to_string()),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
-        }
+        Err(err) => match err.downcast_ref() {
+            Some(FormNotFound) => (StatusCode::NOT_FOUND, "Form not found.".to_owned()),
+            _ => {
+                tracing::error!("{}", err);
+                (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
+            }
+        },
     }
 }

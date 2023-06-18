@@ -8,6 +8,7 @@ use entities::{
     prelude::{FormChoices, FormMetaData, FormQuestions},
     response_period,
 };
+use errors::presentation::PresentationError::FormNotFound;
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
@@ -209,7 +210,7 @@ impl FormDatabase for ConnectionPool {
             .all(&self.pool)
             .await?
             .first()
-            .ok_or(anyhow!("Form not found"))?
+            .ok_or(FormNotFound)?
             .to_owned();
 
         let question_ids = FormQuestions::find()
