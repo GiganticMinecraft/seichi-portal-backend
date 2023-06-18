@@ -17,7 +17,7 @@ pub async fn create_form_handler(
     Json(form): Json<Form>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        ctx: repository.form_repository(),
+        repository: repository.form_repository(),
     };
     match form_use_case.create_form(form.title().to_owned()).await {
         Ok(id) => (StatusCode::CREATED, json!({ "id": id }).to_string()),
@@ -33,7 +33,7 @@ pub async fn form_list_handler(
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        ctx: repository.form_repository(),
+        repository: repository.form_repository(),
     };
 
     match form_use_case
@@ -53,7 +53,7 @@ pub async fn get_form_handler(
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        ctx: repository.form_repository(),
+        repository: repository.form_repository(),
     };
 
     match form_use_case.get_form(form_id).await {
