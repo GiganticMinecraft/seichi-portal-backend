@@ -7,6 +7,7 @@ edition = "2021"
 domain = { path = "../../domain" }
 entities =  { path = "../entities" }
 migration = { path = "../../migration" }
+errors = { path = "../../errors" }
 sea-orm = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }

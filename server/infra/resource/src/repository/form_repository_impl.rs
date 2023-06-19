@@ -19,7 +19,11 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         self.client.form().list(offset, limit).await
     }
 
-    async fn get(&self, form_id: FormId) -> anyhow::Result<Form> {
-        self.client.form().get(form_id).await
+    async fn get(&self, id: FormId) -> anyhow::Result<Form> {
+        self.client.form().get(id).await
+    }
+
+    async fn delete(&self, id: FormId) -> anyhow::Result<FormId> {
+        self.client.form().delete(id).await
     }
 }
