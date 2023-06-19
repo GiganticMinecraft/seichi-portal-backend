@@ -13,7 +13,7 @@ mockall = { workspace = true }
 derive-getters = "0.3.0"
 typed-builder = "0.14.0"
 strum = { workspace = true }
-strum_macros = "0.24.3"
+strum_macros = "0.25.0"
 deriving_via = "1.3.0"
 chrono = { workspace = true }
 
