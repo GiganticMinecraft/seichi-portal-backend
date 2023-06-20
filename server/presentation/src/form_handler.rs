@@ -21,10 +21,14 @@ pub async fn create_form_handler(
         repository: repository.form_repository(),
     };
     match form_use_case.create_form(form.title().to_owned()).await {
-        Ok(id) => (StatusCode::CREATED, json!({ "id": id }).to_string()),
+        Ok(id) => (StatusCode::CREATED, Json(json!({ "id": id }))).into_response(),
         Err(err) => {
             tracing::error!("{}", err);
-            (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "reason": "unknown error" })),
+            )
+                .into_response()
         }
     }
 }
@@ -41,10 +45,14 @@ pub async fn form_list_handler(
         .form_list(offset_and_limit.offset, offset_and_limit.limit)
         .await
     {
-        Ok(forms) => (StatusCode::OK, json!(forms).to_string()),
+        Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
         Err(err) => {
             tracing::error!("{}", err);
-            (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "reason": "unknown error" })),
+            )
+                .into_response()
         }
     }
 }
@@ -58,10 +66,14 @@ pub async fn get_form_handler(
     };
 
     match form_use_case.get_form(form_id).await {
-        Ok(form) => (StatusCode::OK, json!(form).to_string()),
+        Ok(form) => (StatusCode::OK, Json(form)).into_response(),
         Err(err) => {
             tracing::error!("{}", err);
-            (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "reason": "unknown error" })),
+            )
+                .into_response()
         }
     }
 }
@@ -75,12 +87,20 @@ pub async fn delete_form_handler(
     };
 
     match form_use_case.delete_form(form_id).await {
-        Ok(form_id) => (StatusCode::OK, json!({ "id": form_id }).to_string()),
+        Ok(form_id) => (StatusCode::OK, Json(json!({ "id": form_id }))).into_response(),
         Err(err) => match err.downcast_ref() {
-            Some(FormNotFound) => (StatusCode::NOT_FOUND, "Form not found.".to_owned()),
+            Some(FormNotFound) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "reason": "FORM NOT FOUND" })),
+            )
+                .into_response(),
             _ => {
                 tracing::error!("{}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "".to_owned())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "reason": "unknown error" })),
+                )
+                    .into_response()
             }
         },
     }
