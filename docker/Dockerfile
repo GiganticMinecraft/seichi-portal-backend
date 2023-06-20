@@ -12,7 +12,11 @@ RUN case "$(uname -m)" in \
         ;; \
 esac
 
-RUN adduser -D ubuntu && chown -R ubuntu /seichi-portal-backend
-USER ubuntu
+ARG USERNAME=ubuntu
+ARG GROUPNAME=ubuntu
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g $GID $GROUPNAME && \
+    useradd -m -s /bin/bash -u $UID -g $GID $USERNAME
 
 ENTRYPOINT ["/seichi-portal-backend"]
