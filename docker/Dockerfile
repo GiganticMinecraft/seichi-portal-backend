@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM ubuntu:22.04
-LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
+FROM ubuntu:22.04 as init
 
 COPY --link / /work/
 
@@ -11,6 +10,13 @@ RUN case "$(uname -m)" in \
       * ) exit 1 \
         ;; \
 esac
+
+RUN chmod +x /seichi-portal-backend
+
+FROM ubuntu:22.04
+LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
+
+COPY --from=init /seichi-portal-backend /seichi-portal-backend
 
 ARG USERNAME=ubuntu
 ARG GROUPNAME=ubuntu
