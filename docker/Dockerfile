@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.4
-FROM debian:latest as shell
+FROM ubuntu:22.04
+LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
 
 COPY --link / /work/
 
@@ -11,9 +12,7 @@ RUN case "$(uname -m)" in \
         ;; \
 esac
 
-FROM gcr.io/distroless/cc
-LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
+RUN adduser -D ubuntu && chown -R ubuntu /seichi-portal-backend
+USER ubuntu
 
-COPY --from=shell --link /seichi-portal-backend /usr/local/bin/seichi-portal-backend
-
-ENTRYPOINT ["/usr/local/bin/seichi-portal-backend"]
+ENTRYPOINT ["/seichi-portal-backend"]
