@@ -16,7 +16,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20221211_211233_form_questions::Migration),
             Box::new(m20230219_143118_create_form_choices::Migration),
             Box::new(m20230614_083950_crate_form_response_period_table::Migration),
-            Box::new(m20230622_053919_form_webhook::Migration),
+            Box::new(m20230622_053919_create_form_webhook::Migration),
         ]
     }
 }
