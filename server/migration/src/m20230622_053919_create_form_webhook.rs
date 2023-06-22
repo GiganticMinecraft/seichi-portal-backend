@@ -13,6 +13,13 @@ impl MigrationTrait for Migration {
                     .table(FormWebhookTable::FormWebhooks)
                     .if_not_exists()
                     .col(
+                        ColumnDef::new(FormWebhookTable::Id)
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(
                         ColumnDef::new(FormWebhookTable::FormId)
                             .integer()
                             .not_null(),
@@ -23,7 +30,7 @@ impl MigrationTrait for Migration {
                             .from(FormWebhookTable::FormWebhooks, FormWebhookTable::FormId)
                             .to(FormMetaDataTable::FormMetaData, FormMetaDataTable::Id),
                     )
-                    .col(ColumnDef::new(FormWebhookTable::URL).string().not_null())
+                    .col(ColumnDef::new(FormWebhookTable::Url).string().not_null())
                     .to_owned(),
             )
             .await
@@ -44,6 +51,7 @@ impl MigrationTrait for Migration {
 #[derive(Iden)]
 enum FormWebhookTable {
     FormWebhooks,
+    Id,
     FormId,
-    URL,
+    Url,
 }

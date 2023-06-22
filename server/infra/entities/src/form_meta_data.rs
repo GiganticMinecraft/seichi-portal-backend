@@ -17,6 +17,8 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::form_questions::Entity")]
     FormQuestions,
+    #[sea_orm(has_many = "super::form_webhooks::Entity")]
+    FormWebhooks,
     #[sea_orm(has_many = "super::response_period::Entity")]
     ResponsePeriod,
 }
@@ -24,6 +26,12 @@ pub enum Relation {
 impl Related<super::form_questions::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::FormQuestions.def()
+    }
+}
+
+impl Related<super::form_webhooks::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::FormWebhooks.def()
     }
 }
 

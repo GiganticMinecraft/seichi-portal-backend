@@ -95,6 +95,8 @@ pub struct FormMeta {
 pub struct FormSettings {
     #[serde(default)]
     response_period: Option<ResponsePeriod>,
+    #[serde(default)]
+    webhook_url: Option<String>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
