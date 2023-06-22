@@ -15,8 +15,7 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(FormWebhookTable::FormId)
                             .integer()
-                            .not_null()
-                            .primary_key(),
+                            .not_null(),
                     )
                     .foreign_key(
                         ForeignKey::create()
