@@ -20,14 +20,32 @@ async fn create(form: Form) -> anyhow::Result<()> {
                             )
                     })
                 })
-                .await?;
+                .await?
         }
-        _ => {}
+        _ => (),
     }
 
     Ok(())
 }
 
 async fn delete(form: Form) -> anyhow::Result<()> {
-    todo!()
+    match form.settings().webhook_url() {
+        Some(url) => {
+            let client = WebhookClient::new(url);
+            client
+                .send(|message| {
+                    message.username("seichi-portal-backend").embed(|embed| {
+                        embed.title("フォームが削除されました。").field(
+                            "フォーム名",
+                            form.title().title(),
+                            false,
+                        )
+                    })
+                })
+                .await?
+        }
+        _ => (),
+    }
+
+    Ok(())
 }
