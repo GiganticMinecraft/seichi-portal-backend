@@ -5,6 +5,7 @@ members = [
     "domain",
     "infra/resource",
     "infra/entities",
+    "infra/outgoing",
     "migration",
     "presentation",
     "usecase",
