@@ -4,8 +4,8 @@ use domain::form::models::{
     Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
 };
 use entities::{
-    form_choices, form_meta_data, form_questions,
-    prelude::{FormChoices, FormMetaData, FormQuestions},
+    form_choices, form_meta_data, form_questions, form_webhooks,
+    prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks},
     response_period,
 };
 use errors::presentation::PresentationError::FormNotFound;
@@ -69,6 +69,11 @@ impl FormDatabase for ConnectionPool {
             .all(&self.pool)
             .await?;
 
+        let all_webhook_urls = FormWebhooks::find()
+            .filter(Expr::col(form_webhooks::Column::FormId).is_in(form_ids.to_owned()))
+            .all(&self.pool)
+            .await?;
+
         forms
             .into_iter()
             .map(|form| {
@@ -105,6 +110,12 @@ impl FormDatabase for ConnectionPool {
                     })
                     .next();
 
+                let webhook_url = all_webhook_urls
+                    .iter()
+                    .filter(|webhook_url| webhook_url.form_id == form.id)
+                    .map(|webhook_url| webhook_url.url.to_owned())
+                    .next();
+
                 anyhow::Ok(
                     Form::builder()
                         .id(FormId(form.id))
@@ -124,6 +135,7 @@ impl FormDatabase for ConnectionPool {
                         .settings(
                             FormSettings::builder()
                                 .response_period(response_period)
+                                .webhook_url(webhook_url)
                                 .build(),
                         )
                         .build(),
@@ -182,8 +194,16 @@ impl FormDatabase for ConnectionPool {
                     .build()
             });
 
+        let form_webhook_url = FormWebhooks::find()
+            .filter(Expr::col(form_webhooks::Column::FormId).eq(target_form.id))
+            .all(&self.pool)
+            .await?
+            .first()
+            .map(|webhook_url_model| webhook_url_model.url.to_owned());
+
         let form_settings = FormSettings::builder()
             .response_period(response_period)
+            .webhook_url(form_webhook_url)
             .build();
 
         Ok(Form::builder()

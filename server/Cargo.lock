@@ -1684,6 +1684,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "outgoing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "domain",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2167,6 +2178,7 @@ dependencies = [
  "migration",
  "mockall",
  "once_cell",
+ "outgoing",
  "sea-orm",
  "serde",
 ]

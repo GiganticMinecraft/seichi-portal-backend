@@ -2,5 +2,6 @@
 
 pub use super::{
     form_choices::Entity as FormChoices, form_meta_data::Entity as FormMetaData,
-    form_questions::Entity as FormQuestions, response_period::Entity as ResponsePeriod,
+    form_questions::Entity as FormQuestions, form_webhooks::Entity as FormWebhooks,
+    response_period::Entity as ResponsePeriod,
 };
