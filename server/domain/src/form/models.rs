@@ -91,7 +91,7 @@ pub struct FormMeta {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq, TypedBuilder)]
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq, TypedBuilder, Getters)]
 pub struct FormSettings {
     #[serde(default)]
     response_period: Option<ResponsePeriod>,

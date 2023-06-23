@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use domain::form::models::Form;
 use webhook::client::WebhookClient;
 
-async fn create(form: Form) -> anyhow::Result<()> {
+pub async fn create(form: Form) -> anyhow::Result<()> {
     if let Some(url) = form.settings().webhook_url() {
         let client = WebhookClient::new(url);
         client
@@ -29,7 +29,7 @@ async fn create(form: Form) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn delete(form: Form) -> anyhow::Result<()> {
+pub async fn delete(form: Form) -> anyhow::Result<()> {
     if let Some(url) = form.settings().webhook_url() {
         let client = WebhookClient::new(url);
         client
