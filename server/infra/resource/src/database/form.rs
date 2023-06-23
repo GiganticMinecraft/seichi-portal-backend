@@ -3,10 +3,9 @@ use async_trait::async_trait;
 use domain::form::models::{
     Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
 };
-use entities::prelude::FormWebhooks;
 use entities::{
     form_choices, form_meta_data, form_questions, form_webhooks,
-    prelude::{FormChoices, FormMetaData, FormQuestions},
+    prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks},
     response_period,
 };
 use errors::presentation::PresentationError::FormNotFound;
