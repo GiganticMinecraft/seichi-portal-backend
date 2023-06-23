@@ -15,14 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - run: echo "date=$(date -d '1 month ago' +'%Y-%m-%d')" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
+          toolchain: nightly-${{ env.date }}
           components: rustfmt
-          override: true
-      - uses: LoliGothick/rustfmt-check@v0.3.2
+      - uses: LoliGothick/rustfmt-check@v0.4.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          toolchain: nightly-${{ env.date }}
           flags: --all
           args: --config-path=./.cargo-husky/hooks/rustfmt.toml
           working-directory: ./server
