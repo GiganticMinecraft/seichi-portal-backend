@@ -65,7 +65,7 @@ jobs:
 
       - if: ${{ steps.restore-sccache.outputs.cache-hit == false }}
         name: Install sccache
-        uses: actions-rs/cargo@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           command: install
           args: --version=${{ env.SCCACHE_VERSION }} --force sccache
