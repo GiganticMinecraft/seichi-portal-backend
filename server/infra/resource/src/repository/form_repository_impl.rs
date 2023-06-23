@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Form, FormId, FormTitle},
+    form::models::{Form, FormDescription, FormId, FormTitle},
     repository::form_repository::FormRepository,
 };
 
@@ -11,8 +11,12 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client> {
-    async fn create(&self, title: FormTitle) -> anyhow::Result<FormId> {
-        self.client.form().create(title).await
+    async fn create(
+        &self,
+        title: FormTitle,
+        description: FormDescription,
+    ) -> anyhow::Result<FormId> {
+        self.client.form().create(title, description).await
     }
 
     async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {

@@ -20,7 +20,11 @@ pub async fn create_form_handler(
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
-    match form_use_case.create_form(form.title().to_owned()).await {
+
+    match form_use_case
+        .create_form(form.title, form.description)
+        .await
+    {
         Ok(id) => (StatusCode::CREATED, Json(json!({ "id": id }))).into_response(),
         Err(err) => {
             tracing::error!("{}", err);
