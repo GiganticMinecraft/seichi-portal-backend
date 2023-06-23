@@ -1,34 +1,70 @@
-use std::collections::HashMap;
+use serde::Serialize;
+use serde_json::json;
 
 pub struct Webhook {
     target_url: String,
-    request_body: HashMap<String, String>,
+    title: String,
+    fields: Vec<Field>,
+}
+
+#[derive(Serialize)]
+struct SendContents {
+    username: String,
+    embeds: Vec<Embeds>,
+}
+
+#[derive(Serialize)]
+struct Embeds {
+    title: String,
+    fields: Vec<Field>,
+}
+
+#[derive(Clone, Serialize)]
+struct Field {
+    name: String,
+    value: String,
+    inline: bool,
 }
 
 impl Webhook {
-    pub fn new(url: String) -> Self {
+    pub fn new(url: String, title: String) -> Self {
         Self {
             target_url: url,
-            request_body: HashMap::new(),
+            title,
+            fields: vec![],
         }
     }
 
-    pub fn username(&self, name: String) -> Self {
-        let mut body = self.request_body.to_owned();
-        body.insert("username".to_string(), name);
-        body.insert("content".to_string(), "test".to_string());
+    pub fn field(&self, name: String, value: String, inline: bool) -> Self {
+        let field = Field {
+            name,
+            value,
+            inline,
+        };
 
         Self {
             target_url: self.target_url.to_owned(),
-            request_body: body,
+            title: self.title.to_owned(),
+            fields: vec![self.fields.to_vec(), vec![field]]
+                .into_iter()
+                .flatten()
+                .collect(),
         }
     }
 
     pub async fn send(&self) -> anyhow::Result<()> {
+        let contents = SendContents {
+            username: "seichi-portal-backend".to_string(),
+            embeds: vec![Embeds {
+                title: self.title.to_owned(),
+                fields: self.fields.to_vec(),
+            }],
+        };
+
         let client = reqwest::Client::new();
         client
             .post(self.target_url.to_owned())
-            .json(&self.request_body)
+            .json(&json!(contents))
             .send()
             .await?;
         Ok(())

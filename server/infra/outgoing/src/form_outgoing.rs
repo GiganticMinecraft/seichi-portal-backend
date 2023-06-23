@@ -1,54 +1,41 @@
-use crate::webhook;
-use crate::webhook::Webhook;
 use domain::form::models::Form;
 
-pub async fn create(_form: Form) -> anyhow::Result<()> {
-    Webhook::new("".to_string())
-        .username("seichi-portal-backend".to_string())
-        .send()
-        .await?;
-    // if let Some(url) = form.settings().webhook_url() {
-    //     let client = WebhookClient::new(url);
-    //     client
-    //         .send(|message| {
-    //             message.username("seichi-portal-backend").embed(|embed| {
-    //                 embed
-    //                     .title("フォームが作成されました")
-    //                     .field("フォーム名", form.title().title(), false)
-    //                     .field(
-    //                         "フォーム説明",
-    //                         &form
-    //                             .description()
-    //                             .description()
-    //                             .to_owned()
-    //                             .unwrap_or("フォームの説明は設定されていません。".to_string()),
-    //                         false,
-    //                     )
-    //             })
-    //         })
-    //         .await
-    //         .map_err(|_| anyhow!("Failed to notify form creation via webhook."))?;
-    // }
+use crate::webhook::Webhook;
+
+pub async fn create(form: Form) -> anyhow::Result<()> {
+    if let Some(url) = form.settings.webhook_url() {
+        Webhook::new(url.to_string(), "フォームが作成されました".to_string())
+            .field(
+                "フォーム名".to_string(),
+                form.title.title().to_owned(),
+                false,
+            )
+            .field(
+                "フォーム説明".to_owned(),
+                form.description
+                    .description()
+                    .to_owned()
+                    .unwrap_or("フォームの説明は設定されていません。".to_string()),
+                false,
+            )
+            .send()
+            .await?;
+    }
 
     Ok(())
 }
 
-pub async fn delete(_form: Form) -> anyhow::Result<()> {
-    // if let Some(url) = form.settings().webhook_url() {
-    //     let client = WebhookClient::new(url);
-    //     client
-    //         .send(|message| {
-    //             message.username("seichi-portal-backend").embed(|embed| {
-    //                 embed.title("フォームが削除されました。").field(
-    //                     "フォーム名",
-    //                     form.title().title(),
-    //                     false,
-    //                 )
-    //             })
-    //         })
-    //         .await
-    //         .map_err(|_| anyhow!("Failed to notify form deletion via webhook."))?;
-    // }
+pub async fn delete(form: Form) -> anyhow::Result<()> {
+    if let Some(url) = form.settings.webhook_url() {
+        Webhook::new(url.to_string(), "フォームが削除されました".to_string())
+            .field(
+                "フォーム名".to_string(),
+                form.title.title().to_owned(),
+                false,
+            )
+            .send()
+            .await?;
+    }
 
     Ok(())
 }
