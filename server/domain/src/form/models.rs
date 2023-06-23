@@ -29,19 +29,19 @@ pub struct FormTitle {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Deserialize, Debug, PartialEq)]
 pub struct Form {
     #[serde(default)]
-    id: FormId,
-    title: FormTitle,
-    description: FormDescription,
+    pub id: FormId,
+    pub title: FormTitle,
+    pub description: FormDescription,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
     #[serde(default)]
-    questions: Vec<Question>,
+    pub questions: Vec<Question>,
     #[serde(default)]
-    metadata: FormMeta,
+    pub metadata: FormMeta,
     #[serde(default)]
-    settings: FormSettings,
+    pub settings: FormSettings,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]

@@ -20,11 +20,15 @@ use crate::database::{components::FormDatabase, connection::ConnectionPool};
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
-    async fn create(&self, title: FormTitle) -> anyhow::Result<FormId> {
+    async fn create(
+        &self,
+        title: FormTitle,
+        description: FormDescription,
+    ) -> anyhow::Result<FormId> {
         let form_id = form_meta_data::ActiveModel {
             id: ActiveValue::NotSet,
             title: Set(title.title().to_owned()),
-            description: Set(None),
+            description: Set(description.to_owned()),
             created_at: Default::default(),
             updated_at: Default::default(),
         }

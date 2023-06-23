@@ -1,5 +1,5 @@
 use domain::{
-    form::models::{Form, FormId, FormTitle},
+    form::models::{Form, FormDescription, FormId, FormTitle},
     repository::form_repository::FormRepository,
 };
 
@@ -8,8 +8,12 @@ pub struct FormUseCase<'a, FormRepo: FormRepository> {
 }
 
 impl<R: FormRepository> FormUseCase<'_, R> {
-    pub async fn create_form(&self, title: FormTitle) -> anyhow::Result<FormId> {
-        self.repository.create(title).await
+    pub async fn create_form(
+        &self,
+        title: FormTitle,
+        description: FormDescription,
+    ) -> anyhow::Result<FormId> {
+        self.repository.create(title, description).await
     }
 
     pub async fn form_list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
