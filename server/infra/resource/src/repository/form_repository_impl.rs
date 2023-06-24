@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use async_trait::async_trait;
 use domain::{
-    form::models::{Form, FormDescription, FormId, FormTitle},
+    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets},
     repository::form_repository::FormRepository,
 };
 use outgoing::form_outgoing;
@@ -45,5 +45,16 @@ impl<Client: DatabaseComponents + Debug + 'static> FormRepository for Repository
         form_outgoing::delete(form).await?;
 
         self.client.form().delete(id).await
+    }
+
+    async fn update(
+        &self,
+        form_id: FormId,
+        form_update_targets: FormUpdateTargets,
+    ) -> anyhow::Result<Form> {
+        self.client
+            .form()
+            .update(form_id, form_update_targets)
+            .await
     }
 }
