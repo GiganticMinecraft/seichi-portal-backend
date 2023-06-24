@@ -20,7 +20,7 @@ jobs:
         with:
           toolchain: nightly-${{ env.date }}
           components: rustfmt
-      - uses: LoliGothick/rustfmt-check@v0.4.0
+      - uses: LoliGothick/rustfmt-check@v0.4.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           toolchain: nightly-${{ env.date }}
