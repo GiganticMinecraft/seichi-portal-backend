@@ -10,6 +10,7 @@ use presentation::{
     health_check_handler::health_check,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
+use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -41,6 +42,10 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    let layer = tower::ServiceBuilder::new()
+        .layer(NewSentryLayer::new_from_top())
+        .layer(SentryHttpLayer::with_transaction());
+
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
 
@@ -55,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
+        .layer(layer)
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::DELETE])
