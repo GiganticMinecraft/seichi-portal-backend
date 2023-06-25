@@ -20,7 +20,7 @@ pub struct OffsetAndLimit {
     pub limit: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct FormUpdateTargets {
     #[serde(default)]
     pub title: Option<FormTitle>,

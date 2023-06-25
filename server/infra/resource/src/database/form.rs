@@ -284,6 +284,8 @@ impl FormDatabase for ConnectionPool {
     ) -> anyhow::Result<Form> {
         let current_form = self.get(form_id).await?;
 
+        println!("{:?}", form_update_targets);
+
         FormMetaData::update_many()
             .filter(form_meta_data::Column::Id.eq(form_id.0))
             .col_expr(
