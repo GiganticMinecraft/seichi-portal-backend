@@ -10,7 +10,9 @@ use presentation::{
     health_check_handler::health_check,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
+use sentry_tower::{NewSentryLayer, SentryHttpLayer};
 use tokio::signal::unix::{signal, SignalKind};
+use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::{ENV, HTTP};
@@ -19,11 +21,19 @@ mod config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .init();
 
     let _guard = if ENV.name != "local" {
+        tracing_subscriber::fmt()
+            .with(sentry::integrations::tracing::layer())
+            .with_max_level(tracing::Level::INFO)
+            .init();
+
+        let layer = ServiceBuilder::new()
+            // continue trace from incoming request
+            .layer(SentryHttpLayer::with_transaction())
+            // bind a new hub for each request
+            .layer(NewSentryLayer::new_from_top());
+
         let _guard = sentry::init((
             "https://d1ea6a96248343c8a5dc9375d25363f0@sentry.onp.admin.seichi.click/7",
             sentry::ClientOptions {
