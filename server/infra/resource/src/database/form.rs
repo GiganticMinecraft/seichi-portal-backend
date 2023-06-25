@@ -330,14 +330,26 @@ impl FormDatabase for ConnectionPool {
                 .await?;
         }
 
-        FormWebhooks::update_many()
-            .filter(form_webhooks::Column::FormId.eq(form_id.0))
-            .col_expr(
-                form_webhooks::Column::Url,
-                Expr::value(form_update_targets.webhook.and_then(|url| url.webhook_url)),
-            )
-            .exec(&self.pool)
-            .await?;
+        if current_form.settings.webhook_url.webhook_url.is_some() {
+            FormWebhooks::update_many()
+                .filter(form_webhooks::Column::FormId.eq(form_id.0))
+                .col_expr(
+                    form_webhooks::Column::Url,
+                    Expr::value(form_update_targets.webhook.and_then(|url| url.webhook_url)),
+                )
+                .exec(&self.pool)
+                .await?;
+        } else {
+            if let Some(webhook_url) = form_update_targets.webhook.and_then(|url| url.webhook_url) {
+                form_webhooks::ActiveModel {
+                    id: ActiveValue::NotSet,
+                    form_id: Set(form_id.0),
+                    url: Set(webhook_url),
+                }
+                .insert(&self.pool)
+                .await?;
+            }
+        }
 
         let updated_form = self.get(form_id).await?;
 

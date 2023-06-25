@@ -112,8 +112,8 @@ pub struct FormSettings {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, Serialize, Deserialize, Default, Debug, PartialEq)]
-#[deriving(Into)]
+#[derive(DerivingVia, Serialize, Default, Debug, PartialEq)]
+#[deriving(From, Into, Deserialize(via: Option::<String>))]
 pub struct WebhookUrl {
     #[serde(default)]
     pub webhook_url: Option<String>,
