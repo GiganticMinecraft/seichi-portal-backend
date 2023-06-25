@@ -12,8 +12,10 @@ use errors::presentation::PresentationError::FormNotFound;
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
-    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, ModelTrait,
-    QueryFilter, QueryOrder, QuerySelect,
+    sea_query::{Expr, SimpleExpr},
+    ActiveModelTrait, ActiveValue,
+    ActiveValue::Set,
+    ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 
 use crate::database::{components::FormDatabase, connection::ConnectionPool};
@@ -282,28 +284,60 @@ impl FormDatabase for ConnectionPool {
     ) -> anyhow::Result<Form> {
         let current_form = self.get(form_id).await?;
 
-        let updated_form = Form {
-            id: form_id,
-            title: match form_update_targets.title {
-                Some(title) => title,
-                None => current_form.title,
-            },
-            description: match form_update_targets.description {
-                Some(description) => description,
-                None => current_form.description,
-            },
-            settings: FormSettings {
-                response_period: match form_update_targets.response_period {
-                    Some(response_period) => response_period,
-                    None => current_form.settings.response_period,
-                },
-                webhook_url: match form_update_targets.webhook {
-                    Some(webhook_url) => webhook_url,
-                    None => current_form.settings.webhook_url,
-                },
-            },
-            ..current_form
-        };
+        FormMetaData::update_many()
+            .filter(form_meta_data::Column::Id.eq(form_id.0))
+            .col_expr(
+                form_meta_data::Column::Title,
+                Expr::value(
+                    form_update_targets
+                        .title
+                        .unwrap_or(current_form.title)
+                        .title()
+                        .to_string(),
+                ),
+            )
+            .col_expr(
+                form_meta_data::Column::Description,
+                Expr::value(
+                    form_update_targets
+                        .description
+                        .unwrap_or(current_form.description)
+                        .description()
+                        .to_owned(),
+                ),
+            )
+            .col_expr(
+                form_meta_data::Column::UpdatedAt,
+                SimpleExpr::from(Expr::current_timestamp()),
+            )
+            .exec(&self.pool)
+            .await?;
+
+        if let Some(response_period) = form_update_targets.response_period {
+            response_period::Entity::update_many()
+                .filter(response_period::Column::FormId.eq(form_id.0))
+                .col_expr(
+                    response_period::Column::StartAt,
+                    Expr::value(response_period.start_at),
+                )
+                .col_expr(
+                    response_period::Column::EndAt,
+                    Expr::value(response_period.end_at),
+                )
+                .exec(&self.pool)
+                .await?;
+        }
+
+        FormWebhooks::update_many()
+            .filter(form_webhooks::Column::FormId.eq(form_id.0))
+            .col_expr(
+                form_webhooks::Column::Url,
+                Expr::value(form_update_targets.webhook.and_then(|url| url.webhook_url)),
+            )
+            .exec(&self.pool)
+            .await?;
+
+        let updated_form = self.get(form_id).await?;
 
         Ok(updated_form)
     }

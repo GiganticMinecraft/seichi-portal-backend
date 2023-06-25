@@ -123,9 +123,9 @@ pub struct WebhookUrl {
 #[derive(TypedBuilder, Serialize, Deserialize, Default, Debug, PartialEq)]
 pub struct ResponsePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    start_at: Option<DateTime<Utc>>,
+    pub start_at: Option<DateTime<Utc>>,
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    end_at: Option<DateTime<Utc>>,
+    pub end_at: Option<DateTime<Utc>>,
 }
 
 impl ResponsePeriod {
