@@ -7,7 +7,7 @@ use crate::database::{
     config::{MySQL, MYSQL},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConnectionPool {
     pub(crate) pool: DatabaseConnection,
 }

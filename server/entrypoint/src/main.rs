@@ -13,6 +13,7 @@ use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use crate::config::{ENV, HTTP};
 
@@ -20,8 +21,13 @@ mod config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+    tracing_subscriber::registry()
+        .with(sentry::integrations::tracing::layer())
+        .with(
+            tracing_subscriber::fmt::layer().with_filter(tracing_subscriber::EnvFilter::new(
+                std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+            )),
+        )
         .init();
 
     let _guard = if ENV.name != "local" {

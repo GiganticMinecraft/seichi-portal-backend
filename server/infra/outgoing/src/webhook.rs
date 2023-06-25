@@ -1,25 +1,26 @@
 use serde::Serialize;
 use serde_json::json;
 
+#[derive(Debug)]
 pub struct Webhook {
     target_url: String,
     title: String,
     fields: Vec<Field>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct SendContents {
     username: String,
     embeds: Vec<Embeds>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct Embeds {
     title: String,
     fields: Vec<Field>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct Field {
     name: String,
     value: String,
@@ -27,6 +28,7 @@ struct Field {
 }
 
 impl Webhook {
+    #[tracing::instrument]
     pub fn new(url: String, title: String) -> Self {
         Self {
             target_url: url,
@@ -35,6 +37,7 @@ impl Webhook {
         }
     }
 
+    #[tracing::instrument]
     pub fn field(&self, name: String, value: String, inline: bool) -> Self {
         let field = Field {
             name,
@@ -52,6 +55,7 @@ impl Webhook {
         }
     }
 
+    #[tracing::instrument]
     pub async fn send(&self) -> anyhow::Result<()> {
         let contents = SendContents {
             username: "seichi-portal-backend".to_string(),

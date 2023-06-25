@@ -2,6 +2,7 @@ use domain::form::models::Form;
 
 use crate::webhook::Webhook;
 
+#[tracing::instrument]
 pub async fn create(form: Form) -> anyhow::Result<()> {
     if let Some(url) = form.settings.webhook_url() {
         Webhook::new(url.to_string(), "フォームが作成されました".to_string())
@@ -25,6 +26,7 @@ pub async fn create(form: Form) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tracing::instrument]
 pub async fn delete(form: Form) -> anyhow::Result<()> {
     if let Some(url) = form.settings.webhook_url() {
         Webhook::new(url.to_string(), "フォームが削除されました".to_string())

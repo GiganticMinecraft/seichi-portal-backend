@@ -20,6 +20,7 @@ use crate::database::{components::FormDatabase, connection::ConnectionPool};
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
+    #[tracing::instrument]
     async fn create(
         &self,
         title: FormTitle,
@@ -39,6 +40,7 @@ impl FormDatabase for ConnectionPool {
         Ok(form_id.into())
     }
 
+    #[tracing::instrument]
     async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
         let forms = FormMetaData::find()
             .order_by_asc(form_meta_data::Column::Id)
@@ -144,6 +146,7 @@ impl FormDatabase for ConnectionPool {
             .collect()
     }
 
+    #[tracing::instrument]
     async fn get(&self, form_id: FormId) -> anyhow::Result<Form> {
         let target_form = FormMetaData::find()
             .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.0))
@@ -229,6 +232,7 @@ impl FormDatabase for ConnectionPool {
             .build())
     }
 
+    #[tracing::instrument]
     async fn delete(&self, form_id: FormId) -> anyhow::Result<FormId> {
         let target_form = FormMetaData::find_by_id(form_id.0)
             .all(&self.pool)

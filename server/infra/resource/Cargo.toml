@@ -18,3 +18,4 @@ envy = { workspace = true }
 once_cell = { workspace = true }
 itertools = { workspace = true }
 futures = { workspace = true }
+tracing = { workspace = true }
