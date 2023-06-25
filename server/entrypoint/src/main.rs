@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use presentation::form_handler::update_form_handler;
 use presentation::{
     form_handler::{create_form_handler, delete_form_handler, form_list_handler, get_form_handler},
     health_check_handler::health_check,
@@ -63,14 +64,16 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/:id",
-            get(get_form_handler).delete(delete_form_handler),
+            get(get_form_handler)
+                .delete(delete_form_handler)
+                .patch(update_form_handler),
         )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(layer)
         .layer(
             CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST, Method::DELETE])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])
                 .allow_origin(Any) // todo: allow_originを制限する
                 .allow_headers([CONTENT_TYPE]),
         );
