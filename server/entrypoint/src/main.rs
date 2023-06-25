@@ -13,6 +13,7 @@ use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
+use tracing::log;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use crate::config::{ENV, HTTP};
@@ -75,6 +76,8 @@ async fn main() -> anyhow::Result<()> {
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], HTTP.port.parse().unwrap()));
+
+    log::info!("listening on {}", HTTP.port);
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
