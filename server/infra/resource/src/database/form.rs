@@ -113,7 +113,7 @@ impl FormDatabase for ConnectionPool {
                         )))
                     })
                     .next()
-                    .ok_or(FormNotFound)?;
+                    .unwrap_or(ResponsePeriod::default());
 
                 let webhook_url = all_webhook_urls
                     .iter()
@@ -122,7 +122,7 @@ impl FormDatabase for ConnectionPool {
                         webhook_url: Some(webhook_url.url.to_owned()),
                     })
                     .next()
-                    .ok_or(FormNotFound)?;
+                    .unwrap_or(WebhookUrl::default());
 
                 anyhow::Ok(
                     Form::builder()
