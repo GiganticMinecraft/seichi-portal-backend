@@ -200,7 +200,7 @@ impl FormDatabase for ConnectionPool {
                     period.end_at.to_owned().and_utc(),
                 )))
             })
-            .ok_or(FormNotFound)?;
+            .unwrap_or(ResponsePeriod::default());
 
         let webhook_url = FormWebhooks::find()
             .filter(Expr::col(form_webhooks::Column::FormId).eq(target_form.id))
@@ -210,7 +210,7 @@ impl FormDatabase for ConnectionPool {
             .map(|webhook_url_model| WebhookUrl {
                 webhook_url: Some(webhook_url_model.url.to_owned()),
             })
-            .ok_or(FormNotFound)?;
+            .unwrap_or(WebhookUrl::default());
 
         let form_settings = FormSettings {
             response_period,
