@@ -23,10 +23,10 @@ mod config;
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(sentry::integrations::tracing::layer())
-        .init();
-
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with(tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG")
+                .unwrap_or_else(|_| "example_tracing_aka_logging=debug,tower_http=debug".into()),
+        ))
         .init();
 
     let _guard = if ENV.name != "local" {
