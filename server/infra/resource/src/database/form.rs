@@ -339,16 +339,16 @@ impl FormDatabase for ConnectionPool {
                 )
                 .exec(&self.pool)
                 .await?;
-        } else {
-            if let Some(webhook_url) = form_update_targets.webhook.and_then(|url| url.webhook_url) {
-                form_webhooks::ActiveModel {
-                    id: ActiveValue::NotSet,
-                    form_id: Set(form_id.0),
-                    url: Set(webhook_url),
-                }
-                .insert(&self.pool)
-                .await?;
+        } else if let Some(webhook_url) =
+            form_update_targets.webhook.and_then(|url| url.webhook_url)
+        {
+            form_webhooks::ActiveModel {
+                id: ActiveValue::NotSet,
+                form_id: Set(form_id.0),
+                url: Set(webhook_url),
             }
+            .insert(&self.pool)
+            .await?;
         }
 
         let updated_form = self.get(form_id).await?;
