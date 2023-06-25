@@ -13,6 +13,7 @@ use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::{ENV, HTTP};
 
@@ -20,6 +21,10 @@ mod config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::registry()
+        .with(sentry::integrations::tracing::layer())
+        .init();
+
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();

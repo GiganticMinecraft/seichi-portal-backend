@@ -1,6 +1,6 @@
 pub mod form_repository_impl;
 
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use domain::repository::Repositories;
 
@@ -8,14 +8,15 @@ use crate::database::{components::DatabaseComponents, connection::ConnectionPool
 
 pub type RealInfrastructureRepository = SharedRepository<ConnectionPool>;
 
-#[derive(Clone)]
-pub struct SharedRepository<Client: DatabaseComponents + 'static>(Arc<Repository<Client>>);
+#[derive(Debug, Clone)]
+pub struct SharedRepository<Client: DatabaseComponents + Debug + 'static>(Arc<Repository<Client>>);
 
-pub struct Repository<Client: DatabaseComponents + 'static> {
+#[derive(Debug)]
+pub struct Repository<Client: DatabaseComponents + Debug + 'static> {
     pub(crate) client: Client,
 }
 
-impl<Client: DatabaseComponents + 'static> Repository<Client> {
+impl<Client: DatabaseComponents + Debug + 'static> Repository<Client> {
     pub fn new(client: Client) -> Self {
         Self { client }
     }
@@ -25,7 +26,7 @@ impl<Client: DatabaseComponents + 'static> Repository<Client> {
     }
 }
 
-impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Client> {
+impl<Client: DatabaseComponents + Debug + 'static> Repositories for SharedRepository<Client> {
     type ConcreteFormRepository = Repository<Client>;
 
     fn form_repository(&self) -> &Self::ConcreteFormRepository {
