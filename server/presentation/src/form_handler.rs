@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use domain::{
     form::models::{Form, FormId, FormUpdateTargets, OffsetAndLimit},
@@ -12,6 +12,8 @@ use errors::presentation::PresentationError::FormNotFound;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
+
+use crate::auth::User;
 
 pub async fn create_form_handler(
     State(repository): State<RealInfrastructureRepository>,
@@ -38,12 +40,15 @@ pub async fn create_form_handler(
 }
 
 pub async fn form_list_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
+
+    println!("{:?}", user);
 
     match form_use_case
         .form_list(offset_and_limit.offset, offset_and_limit.limit)

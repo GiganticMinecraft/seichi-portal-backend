@@ -8,6 +8,7 @@ resource = { path = "../infra/resource" }
 domain = { path = "../domain" }
 usecase = { path = "../usecase" }
 errors = { path = "../errors" }
+common = { path = "../common" }
 axum = { workspace = true }
 tracing = { workspace = true }
 serde_json = { workspace = true }

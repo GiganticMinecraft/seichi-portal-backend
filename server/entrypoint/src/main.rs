@@ -6,6 +6,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use common::config::{ENV, HTTP};
 use hyper::header::AUTHORIZATION;
 use presentation::auth::auth;
 use presentation::{
@@ -21,10 +22,6 @@ use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::log;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
-
-use crate::config::{ENV, HTTP};
-
-mod config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -76,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(layer)
-        .layer(middleware::from_fn(auth))
+        .route_layer(middleware::from_fn(auth))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])

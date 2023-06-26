@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 proptest = { workspace = true }
 chrono = { workspace = true }
+once_cell = { workspace = true }
+serde = { workspace = true }
+envy = { workspace = true }

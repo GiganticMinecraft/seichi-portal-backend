@@ -634,7 +634,10 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "envy",
+ "once_cell",
  "proptest",
+ "serde",
 ]
 
 [[package]]
@@ -868,16 +871,13 @@ dependencies = [
  "anyhow",
  "axum",
  "cargo-husky",
- "envy",
+ "common",
  "hyper",
  "migration",
- "once_cell",
  "presentation",
  "resource",
  "sentry",
- "serde",
  "tokio",
- "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",
@@ -2078,6 +2078,7 @@ name = "presentation"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "common",
  "domain",
  "errors",
  "resource",
