@@ -2,9 +2,12 @@ use std::net::SocketAddr;
 
 use axum::{
     http::{header::CONTENT_TYPE, Method},
+    middleware,
     routing::{get, post},
     Router,
 };
+use hyper::header::AUTHORIZATION;
+use presentation::auth::auth;
 use presentation::{
     form_handler::{
         create_form_handler, delete_form_handler, form_list_handler, get_form_handler,
@@ -73,11 +76,12 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(layer)
+        .layer(middleware::from_fn(auth))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])
                 .allow_origin(Any) // todo: allow_originを制限する
-                .allow_headers([CONTENT_TYPE]),
+                .allow_headers([CONTENT_TYPE, AUTHORIZATION]),
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], HTTP.port.parse().unwrap()));
