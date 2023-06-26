@@ -120,7 +120,7 @@ pub async fn update_form_handler(
     };
 
     match form_use_case.update_form(form_id, targets).await {
-        Ok(form) => (StatusCode::OK, Json(json!(form))).into_response(),
+        Ok(form) => (StatusCode::OK, Json(form)).into_response(),
         Err(err) => match err.downcast_ref() {
             Some(FormNotFound) => (
                 StatusCode::NOT_FOUND,
