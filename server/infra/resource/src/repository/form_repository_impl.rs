@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use async_trait::async_trait;
 use domain::{
     form::models::{Form, FormDescription, FormId, FormTitle},
@@ -13,8 +11,8 @@ use crate::{
 };
 
 #[async_trait]
-impl<Client: DatabaseComponents + Debug + 'static> FormRepository for Repository<Client> {
-    #[tracing::instrument]
+impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client> {
+    #[tracing::instrument(skip(self))]
     async fn create(
         &self,
         title: FormTitle,
@@ -28,17 +26,17 @@ impl<Client: DatabaseComponents + Debug + 'static> FormRepository for Repository
         Ok(form_id)
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
         self.client.form().list(offset, limit).await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get(&self, id: FormId) -> anyhow::Result<Form> {
         self.client.form().get(id).await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn delete(&self, id: FormId) -> anyhow::Result<FormId> {
         let form = self.client.form().get(id).await?;
 
