@@ -17,6 +17,7 @@ pub async fn auth<B>(
     mut request: Request<B>,
     next: Next<B>,
 ) -> Result<Response, StatusCode> {
+    //todo: フロントエンド側から何が返ってくるかがわかったらユーザー認証を実装する
     if ENV.name == "local" && auth.token() == "debug_user" {
         let user = User {
             name: "test_user".to_string(),
