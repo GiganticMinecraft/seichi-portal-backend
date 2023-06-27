@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Extension, Json,
+    Json,
 };
 use domain::{
     form::models::{Form, FormId, FormUpdateTargets, OffsetAndLimit},
@@ -12,8 +12,6 @@ use errors::presentation::PresentationError::FormNotFound;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
-
-use crate::auth::User;
 
 pub async fn create_form_handler(
     State(repository): State<RealInfrastructureRepository>,
