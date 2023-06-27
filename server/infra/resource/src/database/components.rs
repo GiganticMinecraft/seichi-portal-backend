@@ -5,10 +5,12 @@ use mockall::automock;
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
+    type ConcreteHealthCheckDatabase: HealthCheckDataBase;
     type TransactionAcrossComponents: Send + Sync;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
+    fn health_check(&self) -> &Self::ConcreteHealthCheckDatabase;
 }
 
 #[automock]
@@ -27,4 +29,10 @@ pub trait FormDatabase: Send + Sync {
         form_id: FormId,
         form_update_targets: FormUpdateTargets,
     ) -> anyhow::Result<Form>;
+}
+
+#[automock]
+#[async_trait]
+pub trait HealthCheckDataBase: Send + Sync {
+    async fn health_check(&self) -> bool;
 }

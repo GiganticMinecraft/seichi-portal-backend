@@ -1,4 +1,5 @@
 pub mod form_repository_impl;
+pub mod health_check_repository_impl;
 
 use std::sync::Arc;
 
@@ -27,8 +28,12 @@ impl<Client: DatabaseComponents + 'static> Repository<Client> {
 
 impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Client> {
     type ConcreteFormRepository = Repository<Client>;
+    type ConcreteHealthCheckRepository = Repository<Client>;
 
     fn form_repository(&self) -> &Self::ConcreteFormRepository {
+        &self.0
+    }
+    fn health_check_repository(&self) -> &Self::ConcreteHealthCheckRepository {
         &self.0
     }
 }
