@@ -72,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
+        .with_state(shared_repository.to_owned())
         .layer(layer)
         .route_layer(middleware::from_fn(auth))
         .layer(

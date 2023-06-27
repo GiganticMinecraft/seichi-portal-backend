@@ -33,6 +33,7 @@ impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Cli
     fn form_repository(&self) -> &Self::ConcreteFormRepository {
         &self.0
     }
+
     fn health_check_repository(&self) -> &Self::ConcreteHealthCheckRepository {
         &self.0
     }
