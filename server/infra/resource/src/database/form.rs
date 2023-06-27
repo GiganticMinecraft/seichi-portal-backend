@@ -1,7 +1,7 @@
-use anyhow::anyhow;
 use async_trait::async_trait;
 use domain::form::models::{
-    Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
+    Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, FormUpdateTargets, Question,
+    ResponsePeriod, WebhookUrl,
 };
 use entities::{
     form_choices, form_meta_data, form_questions, form_webhooks,
@@ -12,8 +12,10 @@ use errors::presentation::PresentationError::FormNotFound;
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
-    sea_query::Expr, ActiveModelTrait, ActiveValue, ActiveValue::Set, EntityTrait, ModelTrait,
-    QueryFilter, QueryOrder, QuerySelect,
+    sea_query::{Expr, SimpleExpr},
+    ActiveModelTrait, ActiveValue,
+    ActiveValue::Set,
+    ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 
 use crate::database::{components::FormDatabase, connection::ConnectionPool};
@@ -67,7 +69,7 @@ impl FormDatabase for ConnectionPool {
             .await?;
 
         let all_periods = entities::response_period::Entity::find()
-            .filter(Expr::col(entities::response_period::Column::FormId).is_in(form_ids.to_owned()))
+            .filter(Expr::col(response_period::Column::FormId).is_in(form_ids.to_owned()))
             .all(&self.pool)
             .await?;
 
@@ -105,18 +107,22 @@ impl FormDatabase for ConnectionPool {
                     .iter()
                     .filter(|period| period.form_id == form.id)
                     .map(|period| {
-                        domain::form::models::ResponsePeriod::builder()
-                            .start_at(period.start_at.and_utc())
-                            .end_at(period.end_at.and_utc())
-                            .build()
+                        ResponsePeriod::new(Some((
+                            period.start_at.to_owned().and_utc(),
+                            period.end_at.to_owned().and_utc(),
+                        )))
                     })
-                    .next();
+                    .next()
+                    .unwrap_or(ResponsePeriod::default());
 
                 let webhook_url = all_webhook_urls
                     .iter()
                     .filter(|webhook_url| webhook_url.form_id == form.id)
-                    .map(|webhook_url| webhook_url.url.to_owned())
-                    .next();
+                    .map(|webhook_url| WebhookUrl {
+                        webhook_url: Some(webhook_url.url.to_owned()),
+                    })
+                    .next()
+                    .unwrap_or(WebhookUrl::default());
 
                 anyhow::Ok(
                     Form::builder()
@@ -134,12 +140,10 @@ impl FormDatabase for ConnectionPool {
                                 .update_at(form.updated_at)
                                 .build(),
                         )
-                        .settings(
-                            FormSettings::builder()
-                                .response_period(response_period)
-                                .webhook_url(webhook_url)
-                                .build(),
-                        )
+                        .settings(FormSettings {
+                            response_period,
+                            webhook_url,
+                        })
                         .build(),
                 )
             })
@@ -153,7 +157,7 @@ impl FormDatabase for ConnectionPool {
             .all(&self.pool)
             .await?
             .first()
-            .ok_or(anyhow!("Form not found"))?
+            .ok_or(FormNotFound)?
             .to_owned();
 
         let form_questions = stream::iter(
@@ -186,28 +190,32 @@ impl FormDatabase for ConnectionPool {
         .collect::<anyhow::Result<Vec<Question>>>()?;
 
         let response_period = entities::response_period::Entity::find()
-            .filter(Expr::col(entities::response_period::Column::FormId).eq(target_form.id))
+            .filter(Expr::col(response_period::Column::FormId).eq(target_form.id))
             .all(&self.pool)
             .await?
             .first()
             .map(|period| {
-                domain::form::models::ResponsePeriod::builder()
-                    .start_at(period.start_at.to_owned().and_utc())
-                    .end_at(period.end_at.to_owned().and_utc())
-                    .build()
-            });
+                ResponsePeriod::new(Some((
+                    period.start_at.to_owned().and_utc(),
+                    period.end_at.to_owned().and_utc(),
+                )))
+            })
+            .unwrap_or(ResponsePeriod::default());
 
-        let form_webhook_url = FormWebhooks::find()
+        let webhook_url = FormWebhooks::find()
             .filter(Expr::col(form_webhooks::Column::FormId).eq(target_form.id))
             .all(&self.pool)
             .await?
             .first()
-            .map(|webhook_url_model| webhook_url_model.url.to_owned());
+            .map(|webhook_url_model| WebhookUrl {
+                webhook_url: Some(webhook_url_model.url.to_owned()),
+            })
+            .unwrap_or(WebhookUrl::default());
 
-        let form_settings = FormSettings::builder()
-            .response_period(response_period)
-            .webhook_url(form_webhook_url)
-            .build();
+        let form_settings = FormSettings {
+            response_period,
+            webhook_url,
+        };
 
         Ok(Form::builder()
             .id(FormId(target_form.id.to_owned()))
@@ -267,5 +275,82 @@ impl FormDatabase for ConnectionPool {
         target_form.delete(&self.pool).await?;
 
         Ok(form_id)
+    }
+
+    async fn update(
+        &self,
+        form_id: FormId,
+        form_update_targets: FormUpdateTargets,
+    ) -> anyhow::Result<Form> {
+        let current_form = self.get(form_id).await?;
+
+        FormMetaData::update_many()
+            .filter(form_meta_data::Column::Id.eq(form_id.0))
+            .col_expr(
+                form_meta_data::Column::Title,
+                Expr::value(
+                    form_update_targets
+                        .title
+                        .unwrap_or(current_form.title)
+                        .title()
+                        .to_string(),
+                ),
+            )
+            .col_expr(
+                form_meta_data::Column::Description,
+                Expr::value(
+                    form_update_targets
+                        .description
+                        .unwrap_or(current_form.description)
+                        .description()
+                        .to_owned(),
+                ),
+            )
+            .col_expr(
+                form_meta_data::Column::UpdatedAt,
+                SimpleExpr::from(Expr::current_timestamp()),
+            )
+            .exec(&self.pool)
+            .await?;
+
+        if let Some(response_period) = form_update_targets.response_period {
+            response_period::Entity::update_many()
+                .filter(response_period::Column::FormId.eq(form_id.0))
+                .col_expr(
+                    response_period::Column::StartAt,
+                    Expr::value(response_period.start_at),
+                )
+                .col_expr(
+                    response_period::Column::EndAt,
+                    Expr::value(response_period.end_at),
+                )
+                .exec(&self.pool)
+                .await?;
+        }
+
+        if current_form.settings.webhook_url.webhook_url.is_some() {
+            FormWebhooks::update_many()
+                .filter(form_webhooks::Column::FormId.eq(form_id.0))
+                .col_expr(
+                    form_webhooks::Column::Url,
+                    Expr::value(form_update_targets.webhook.and_then(|url| url.webhook_url)),
+                )
+                .exec(&self.pool)
+                .await?;
+        } else if let Some(webhook_url) =
+            form_update_targets.webhook.and_then(|url| url.webhook_url)
+        {
+            form_webhooks::ActiveModel {
+                id: ActiveValue::NotSet,
+                form_id: Set(form_id.0),
+                url: Set(webhook_url),
+            }
+            .insert(&self.pool)
+            .await?;
+        }
+
+        let updated_form = self.get(form_id).await?;
+
+        Ok(updated_form)
     }
 }

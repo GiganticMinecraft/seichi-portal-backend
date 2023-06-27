@@ -10,3 +10,7 @@ pub fn arbitrary_with_size<A: Arbitrary>(
 pub fn arbitrary_date_time() -> impl Strategy<Value = chrono::DateTime<Utc>> {
     Just(Utc::now())
 }
+
+pub fn arbitrary_opt_date_time() -> impl Strategy<Value = Option<chrono::DateTime<Utc>>> {
+    Just(Some(Utc::now()))
+}

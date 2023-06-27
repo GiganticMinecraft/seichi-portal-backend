@@ -1,5 +1,5 @@
 use domain::{
-    form::models::{Form, FormDescription, FormId, FormTitle},
+    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets},
     repository::form_repository::FormRepository,
 };
 
@@ -26,5 +26,13 @@ impl<R: FormRepository> FormUseCase<'_, R> {
 
     pub async fn delete_form(&self, form_id: FormId) -> anyhow::Result<FormId> {
         self.repository.delete(form_id).await
+    }
+
+    pub async fn update_form(
+        &self,
+        form_id: FormId,
+        form_update_targets: FormUpdateTargets,
+    ) -> anyhow::Result<Form> {
+        self.repository.update(form_id, form_update_targets).await
     }
 }

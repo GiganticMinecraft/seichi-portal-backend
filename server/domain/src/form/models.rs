@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 #[cfg(test)]
-use common::test_utils::{arbitrary_date_time, arbitrary_with_size};
+use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 #[cfg(test)]
@@ -18,6 +18,18 @@ pub struct FormId(pub i32);
 pub struct OffsetAndLimit {
     pub offset: i32,
     pub limit: i32,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormUpdateTargets {
+    #[serde(default)]
+    pub title: Option<FormTitle>,
+    #[serde(default)]
+    pub description: Option<FormDescription>,
+    #[serde(default)]
+    pub response_period: Option<ResponsePeriod>,
+    #[serde(default)]
+    pub webhook: Option<WebhookUrl>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -91,21 +103,40 @@ pub struct FormMeta {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq, TypedBuilder, Getters)]
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
 pub struct FormSettings {
     #[serde(default)]
-    response_period: Option<ResponsePeriod>,
+    pub response_period: ResponsePeriod,
     #[serde(default)]
-    webhook_url: Option<String>,
+    pub webhook_url: WebhookUrl,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(DerivingVia, Serialize, Default, Debug, PartialEq)]
+#[deriving(From, Into, Deserialize(via: Option::<String>))]
+pub struct WebhookUrl {
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(TypedBuilder, Serialize, Deserialize, Default, Debug, PartialEq)]
 pub struct ResponsePeriod {
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    start_at: DateTime<Utc>,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    end_at: DateTime<Utc>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    pub start_at: Option<DateTime<Utc>>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    pub end_at: Option<DateTime<Utc>>,
+}
+
+impl ResponsePeriod {
+    pub fn new(periods: Option<(DateTime<Utc>, DateTime<Utc>)>) -> Self {
+        periods.map_or_else(ResponsePeriod::default, |(start_at, end_at)| {
+            ResponsePeriod {
+                start_at: Some(start_at),
+                end_at: Some(end_at),
+            }
+        })
+    }
 }
 
 #[cfg(test)]
