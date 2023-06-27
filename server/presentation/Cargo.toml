@@ -12,3 +12,4 @@ common = { path = "../common" }
 axum = { workspace = true }
 tracing = { workspace = true }
 serde_json = { workspace = true }
+uuid = { workspace = true }

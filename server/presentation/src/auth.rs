@@ -6,10 +6,12 @@ use axum::{
     response::Response,
 };
 use common::config::ENV;
+use uuid::{uuid, Uuid};
 
 #[derive(Debug, Clone)]
 pub struct User {
     pub name: String,
+    pub uuid: Uuid,
 }
 
 pub async fn auth<B>(
@@ -21,6 +23,7 @@ pub async fn auth<B>(
     if ENV.name == "local" && auth.token() == "debug_user" {
         let user = User {
             name: "test_user".to_string(),
+            uuid: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
         };
         request.extensions_mut().insert(user);
         let response = next.run(request).await;
