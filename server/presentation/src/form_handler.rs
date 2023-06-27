@@ -40,15 +40,12 @@ pub async fn create_form_handler(
 }
 
 pub async fn form_list_handler(
-    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
-
-    println!("{:?}", user);
 
     match form_use_case
         .form_list(offset_and_limit.offset, offset_and_limit.limit)
