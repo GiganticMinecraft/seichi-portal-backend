@@ -2,10 +2,14 @@ use std::net::SocketAddr;
 
 use axum::{
     http::{header::CONTENT_TYPE, Method},
+    middleware,
     routing::{get, post},
     Router,
 };
+use common::config::{ENV, HTTP};
+use hyper::header::AUTHORIZATION;
 use presentation::{
+    auth::auth,
     form_handler::{
         create_form_handler, delete_form_handler, form_list_handler, get_form_handler,
         update_form_handler,
@@ -18,10 +22,6 @@ use tokio::signal::unix::{signal, SignalKind};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::log;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
-
-use crate::config::{ENV, HTTP};
-
-mod config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -73,11 +73,12 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(layer)
+        .route_layer(middleware::from_fn(auth))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])
                 .allow_origin(Any) // todo: allow_originを制限する
-                .allow_headers([CONTENT_TYPE]),
+                .allow_headers([CONTENT_TYPE, AUTHORIZATION]),
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], HTTP.port.parse().unwrap()));
