@@ -19,7 +19,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         description: FormDescription,
     ) -> anyhow::Result<FormId> {
         let form_id = self.client.form().create(title, description).await?;
-        let form = self.client.form().get(form_id).await?;
+        let form = self.client.form().get(form_id.to_owned().into()).await?;
 
         form_outgoing::create(form).await?;
 
@@ -38,7 +38,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
 
     #[tracing::instrument(skip(self))]
     async fn delete(&self, id: FormId) -> anyhow::Result<FormId> {
-        let form = self.client.form().get(id).await?;
+        let form = self.client.form().get(id.to_owned().into()).await?;
 
         form_outgoing::delete(form).await?;
 

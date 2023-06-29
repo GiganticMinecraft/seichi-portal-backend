@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 errors = { path = "../errors" }
+types = { path = "../types" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
@@ -14,7 +15,7 @@ derive-getters = "0.3.0"
 typed-builder = "0.14.0"
 strum = { workspace = true }
 strum_macros = "0.25.0"
-deriving_via = "1.4.2"
+deriving_via = { workspace = true }
 chrono = { workspace = true }
 
 [dev-dependencies]
@@ -23,3 +24,4 @@ proptest = { workspace = true }
 proptest-derive = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true, features = ["arbitrary"] }
+types = { path = "../types", features = ["arbitrary"] }

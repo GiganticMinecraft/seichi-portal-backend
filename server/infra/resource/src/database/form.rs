@@ -126,8 +126,8 @@ impl FormDatabase for ConnectionPool {
 
                 anyhow::Ok(
                     Form::builder()
-                        .id(FormId(form.id))
-                        .title(FormTitle::builder().title(form.title).build())
+                        .id(form.id)
+                        .title(form.title)
                         .description(
                             FormDescription::builder()
                                 .description(form.description)
@@ -153,7 +153,7 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn get(&self, form_id: FormId) -> anyhow::Result<Form> {
         let target_form = FormMetaData::find()
-            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.0))
+            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.to_owned()))
             .all(&self.pool)
             .await?
             .first()
@@ -162,7 +162,7 @@ impl FormDatabase for ConnectionPool {
 
         let form_questions = stream::iter(
             FormQuestions::find()
-                .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+                .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
                 .all(&self.pool)
                 .await?,
         )
@@ -218,12 +218,8 @@ impl FormDatabase for ConnectionPool {
         };
 
         Ok(Form::builder()
-            .id(FormId(target_form.id.to_owned()))
-            .title(
-                FormTitle::builder()
-                    .title(target_form.title.to_owned())
-                    .build(),
-            )
+            .id(target_form.id)
+            .title(target_form.title.to_owned())
             .description(
                 FormDescription::builder()
                     .description(target_form.description.to_owned())
@@ -242,7 +238,7 @@ impl FormDatabase for ConnectionPool {
 
     #[tracing::instrument]
     async fn delete(&self, form_id: FormId) -> anyhow::Result<FormId> {
-        let target_form = FormMetaData::find_by_id(form_id.0)
+        let target_form = FormMetaData::find_by_id(form_id.to_owned())
             .all(&self.pool)
             .await?
             .first()
@@ -250,7 +246,7 @@ impl FormDatabase for ConnectionPool {
             .to_owned();
 
         let question_ids = FormQuestions::find()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
             .all(&self.pool)
             .await?
             .iter()
@@ -263,12 +259,12 @@ impl FormDatabase for ConnectionPool {
             .await?;
 
         response_period::Entity::delete_many()
-            .filter(Expr::col(response_period::Column::FormId).eq(form_id.0))
+            .filter(Expr::col(response_period::Column::FormId).eq(form_id.to_owned()))
             .exec(&self.pool)
             .await?;
 
         FormQuestions::delete_many()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
             .exec(&self.pool)
             .await?;
 
@@ -282,10 +278,10 @@ impl FormDatabase for ConnectionPool {
         form_id: FormId,
         form_update_targets: FormUpdateTargets,
     ) -> anyhow::Result<Form> {
-        let current_form = self.get(form_id).await?;
+        let current_form = self.get(form_id.to_owned().into()).await?;
 
         FormMetaData::update_many()
-            .filter(form_meta_data::Column::Id.eq(form_id.0))
+            .filter(form_meta_data::Column::Id.eq(form_id.to_owned()))
             .col_expr(
                 form_meta_data::Column::Title,
                 Expr::value(
@@ -315,7 +311,7 @@ impl FormDatabase for ConnectionPool {
 
         if let Some(response_period) = form_update_targets.response_period {
             response_period::Entity::update_many()
-                .filter(response_period::Column::FormId.eq(form_id.0))
+                .filter(response_period::Column::FormId.eq(form_id.to_owned()))
                 .col_expr(
                     response_period::Column::StartAt,
                     Expr::value(response_period.start_at),
@@ -330,7 +326,7 @@ impl FormDatabase for ConnectionPool {
 
         if current_form.settings.webhook_url.webhook_url.is_some() {
             FormWebhooks::update_many()
-                .filter(form_webhooks::Column::FormId.eq(form_id.0))
+                .filter(form_webhooks::Column::FormId.eq(form_id.to_owned()))
                 .col_expr(
                     form_webhooks::Column::Url,
                     Expr::value(form_update_targets.webhook.and_then(|url| url.webhook_url)),
@@ -342,7 +338,7 @@ impl FormDatabase for ConnectionPool {
         {
             form_webhooks::ActiveModel {
                 id: ActiveValue::NotSet,
-                form_id: Set(form_id.0),
+                form_id: Set(form_id.to_owned()),
                 url: Set(webhook_url),
             }
             .insert(&self.pool)

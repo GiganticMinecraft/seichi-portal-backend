@@ -9,10 +9,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, Clone, Copy, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, Default, Serialize(via: i32), Deserialize(via: i32))]
-pub struct FormId(pub i32);
+pub type FormId = types::Id<Form>;
 
 #[derive(Deserialize)]
 pub struct OffsetAndLimit {
@@ -44,8 +41,11 @@ pub struct FormTitle {
 #[derive(TypedBuilder, Serialize, Deserialize, Debug, PartialEq)]
 pub struct Form {
     #[serde(default)]
+    #[builder(setter(into))]
     pub id: FormId,
+    #[builder(setter(into))]
     pub title: FormTitle,
+    #[builder(setter(into))]
     pub description: FormDescription,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
     #[serde(default)]
