@@ -267,7 +267,12 @@ impl FormDatabase for ConnectionPool {
     async fn update(
         &self,
         form_id: FormId,
-        form_update_targets: FormUpdateTargets,
+        FormUpdateTargets {
+            title,
+            description,
+            response_period,
+            webhook,
+        }: FormUpdateTargets,
     ) -> anyhow::Result<Form> {
         let current_form = self.get(form_id.to_owned().into()).await?;
 
@@ -275,19 +280,12 @@ impl FormDatabase for ConnectionPool {
             .filter(form_meta_data::Column::Id.eq(form_id.to_owned()))
             .col_expr(
                 form_meta_data::Column::Title,
-                Expr::value(
-                    form_update_targets
-                        .title
-                        .unwrap_or(current_form.title)
-                        .title()
-                        .to_string(),
-                ),
+                Expr::value(title.unwrap_or(current_form.title).into_inner()),
             )
             .col_expr(
                 form_meta_data::Column::Description,
                 Expr::value(
-                    form_update_targets
-                        .description
+                    description
                         .unwrap_or(current_form.description)
                         .description()
                         .to_owned(),
@@ -300,7 +298,7 @@ impl FormDatabase for ConnectionPool {
             .exec(&self.pool)
             .await?;
 
-        if let Some(response_period) = form_update_targets.response_period {
+        if let Some(response_period) = response_period {
             response_period::Entity::update_many()
                 .filter(response_period::Column::FormId.eq(form_id.to_owned()))
                 .col_expr(
@@ -320,13 +318,11 @@ impl FormDatabase for ConnectionPool {
                 .filter(form_webhooks::Column::FormId.eq(form_id.to_owned()))
                 .col_expr(
                     form_webhooks::Column::Url,
-                    Expr::value(form_update_targets.webhook.and_then(|url| url.webhook_url)),
+                    Expr::value(webhook.and_then(|url| url.webhook_url)),
                 )
                 .exec(&self.pool)
                 .await?;
-        } else if let Some(webhook_url) =
-            form_update_targets.webhook.and_then(|url| url.webhook_url)
-        {
+        } else if let Some(webhook_url) = webhook.and_then(|url| url.webhook_url) {
             form_webhooks::ActiveModel {
                 id: ActiveValue::NotSet,
                 form_id: Set(form_id.to_owned()),

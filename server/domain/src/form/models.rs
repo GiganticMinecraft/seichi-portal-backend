@@ -31,7 +31,7 @@ pub struct FormUpdateTargets {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Clone, Getters, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, Serialize(via: String), Deserialize(via: String))]
+#[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]
 pub struct FormTitle {
     #[builder(setter(into))]
     title: String,
