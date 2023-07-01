@@ -220,18 +220,9 @@ impl FormDatabase for ConnectionPool {
         Ok(Form::builder()
             .id(target_form.id)
             .title(target_form.title.to_owned())
-            .description(
-                FormDescription::builder()
-                    .description(target_form.description.to_owned())
-                    .build(),
-            )
+            .description(target_form.description.to_owned())
             .questions(form_questions)
-            .metadata(
-                FormMeta::builder()
-                    .created_at(target_form.created_at)
-                    .update_at(target_form.updated_at)
-                    .build(),
-            )
+            .metadata((target_form.created_at, target_form.updated_at))
             .settings(form_settings)
             .build())
     }

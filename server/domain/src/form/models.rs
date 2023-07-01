@@ -51,6 +51,7 @@ pub struct Form {
     #[serde(default)]
     pub questions: Vec<Question>,
     #[serde(default)]
+    #[builder(setter(into))]
     pub metadata: FormMeta,
     #[serde(default)]
     pub settings: FormSettings,
@@ -100,6 +101,15 @@ pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     #[serde(default = "chrono::Utc::now")]
     update_at: DateTime<Utc>,
+}
+
+impl From<(DateTime<Utc>, DateTime<Utc>)> for FormMeta {
+    fn from((created_at, update_at): (DateTime<Utc>, DateTime<Utc>)) -> Self {
+        Self {
+            created_at,
+            update_at,
+        }
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
