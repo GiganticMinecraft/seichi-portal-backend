@@ -19,7 +19,7 @@ publish = false
 
 [workspace.dependencies]
 axum = { version = "0.6.18", features = ["headers"] }
-serde = { version = "1.0.164", features = ["derive"] }
+serde = { version = "1.0.165", features = ["derive"] }
 anyhow = "1.0.71"
 async-trait = "0.1.69"
 sea-orm = { version = "0.11.3", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
