@@ -11,6 +11,9 @@ path = "src/mod.rs"
 sea-orm = { workspace = true }
 serde = { workspace = true }
 
+[package.metadata.cargo-udeps.ignore]
+development = ["cargo-husky"]
+
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false # Disable features which are enabled by default

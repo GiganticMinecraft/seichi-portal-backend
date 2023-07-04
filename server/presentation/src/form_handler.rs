@@ -8,7 +8,7 @@ use domain::{
     form::models::{Form, FormId, FormUpdateTargets, OffsetAndLimit},
     repository::Repositories,
 };
-use errors::presentation::PresentationError::FormNotFound;
+use errors::{infra::InfraError, Error};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
@@ -92,21 +92,7 @@ pub async fn delete_form_handler(
 
     match form_use_case.delete_form(form_id).await {
         Ok(form_id) => (StatusCode::OK, Json(json!({ "id": form_id }))).into_response(),
-        Err(err) => match err.downcast_ref() {
-            Some(FormNotFound) => (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "reason": "FORM NOT FOUND" })),
-            )
-                .into_response(),
-            _ => {
-                tracing::error!("{}", err);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "reason": "unknown error" })),
-                )
-                    .into_response()
-            }
-        },
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -121,20 +107,24 @@ pub async fn update_form_handler(
 
     match form_use_case.update_form(form_id, targets).await {
         Ok(form) => (StatusCode::OK, Json(form)).into_response(),
-        Err(err) => match err.downcast_ref() {
-            Some(FormNotFound) => (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "reason": "FORM NOT FOUND" })),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub fn handle_error(err: Error) -> impl IntoResponse {
+    match err {
+        Error::Infra {
+            source: InfraError::FormNotFound { .. },
+        } => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "reason": "FORM NOT FOUND" })),
+        ),
+        _ => {
+            tracing::error!("{}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "reason": "unknown error" })),
             )
-                .into_response(),
-            _ => {
-                tracing::error!("{}", err);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "reason": "unknown error" })),
-                )
-                    .into_response()
-            }
-        },
+        }
     }
 }

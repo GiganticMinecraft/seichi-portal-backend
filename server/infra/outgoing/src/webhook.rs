@@ -1,3 +1,4 @@
+use errors::infra::InfraError;
 use serde::Serialize;
 use serde_json::json;
 
@@ -56,7 +57,7 @@ impl Webhook {
     }
 
     #[tracing::instrument]
-    pub async fn send(&self) -> anyhow::Result<()> {
+    pub async fn send(&self) -> Result<(), InfraError> {
         let contents = SendContents {
             username: "seichi-portal-backend".to_string(),
             embeds: vec![Embeds {
@@ -70,7 +71,10 @@ impl Webhook {
             .post(self.target_url.to_owned())
             .json(&json!(contents))
             .send()
-            .await?;
+            .await
+            .map_err(|cause| InfraError::Outgoing {
+                cause: cause.to_string(),
+            })?;
         Ok(())
     }
 }

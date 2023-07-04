@@ -2,6 +2,7 @@ use domain::{
     form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets},
     repository::form_repository::FormRepository,
 };
+use errors::Error;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
     pub repository: &'a FormRepo,
@@ -12,19 +13,19 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         &self,
         title: FormTitle,
         description: FormDescription,
-    ) -> anyhow::Result<FormId> {
+    ) -> Result<FormId, Error> {
         self.repository.create(title, description).await
     }
 
-    pub async fn form_list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
+    pub async fn form_list(&self, offset: i32, limit: i32) -> Result<Vec<Form>, Error> {
         self.repository.list(offset, limit).await
     }
 
-    pub async fn get_form(&self, form_id: FormId) -> anyhow::Result<Form> {
+    pub async fn get_form(&self, form_id: FormId) -> Result<Form, Error> {
         self.repository.get(form_id).await
     }
 
-    pub async fn delete_form(&self, form_id: FormId) -> anyhow::Result<FormId> {
+    pub async fn delete_form(&self, form_id: FormId) -> Result<FormId, Error> {
         self.repository.delete(form_id).await
     }
 
@@ -32,7 +33,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         &self,
         form_id: FormId,
         form_update_targets: FormUpdateTargets,
-    ) -> anyhow::Result<Form> {
+    ) -> Result<(), Error> {
         self.repository.update(form_id, form_update_targets).await
     }
 }

@@ -22,6 +22,10 @@ features = [
   # "sqlx-postgres",         # `DATABASE_DRIVER` feature
 ]
 
+[package.metadata.cargo-udeps.ignore]
+normal = ["entities"]
+development = ["cargo-husky"]
+
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false # Disable features which are enabled by default

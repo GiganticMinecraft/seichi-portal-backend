@@ -810,7 +810,6 @@ dependencies = [
 name = "domain"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "common",
@@ -919,6 +918,7 @@ dependencies = [
 name = "errors"
 version = "0.1.0"
 dependencies = [
+ "sea-orm",
  "strum",
  "thiserror",
 ]
@@ -1834,8 +1834,8 @@ dependencies = [
 name = "outgoing"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "domain",
+ "errors",
  "reqwest",
  "serde",
  "serde_json",
@@ -2368,6 +2368,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "domain",
  "entities",
  "envy",
@@ -3775,8 +3776,8 @@ dependencies = [
 name = "usecase"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "domain",
+ "errors",
 ]
 
 [[package]]

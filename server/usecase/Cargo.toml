@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 domain = { path = "../domain" }
-anyhow = { workspace = true }
+errors = { path = "../errors" }

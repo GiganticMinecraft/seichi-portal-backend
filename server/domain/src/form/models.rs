@@ -59,7 +59,7 @@ pub struct Form {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Serialize, Getters, Debug, PartialEq)]
-#[deriving(From, Into, Deserialize(via: Option::<String>))]
+#[deriving(From, Into, IntoInner, Deserialize(via: Option::<String>))]
 pub struct FormDescription {
     description: Option<String>,
 }

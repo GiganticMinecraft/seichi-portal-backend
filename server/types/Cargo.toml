@@ -9,6 +9,6 @@ arbitrary = ["proptest", "proptest-derive"]
 
 [dependencies]
 deriving_via = { workspace = true }
-serde = { workspace = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
+serde = { workspace = true }

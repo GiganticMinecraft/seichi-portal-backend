@@ -1,16 +1,16 @@
 [workspace]
 members = [
-    "entrypoint",
     "common",
     "domain",
-    "infra/resource",
+    "entrypoint",
+    "errors",
     "infra/entities",
     "infra/outgoing",
+    "infra/resource",
     "migration",
     "presentation",
-    "usecase",
-    "errors",
     "types",
+    "usecase",
 ]
 
 [workspace.package]
@@ -38,3 +38,4 @@ chrono = { version = "0.4.26" }
 futures = "0.3.28"
 uuid = "1.4.0"
 deriving_via = "1.4.1"
+reqwest = { version = "0.11.18", default-features = false, features = ["rustls"] }

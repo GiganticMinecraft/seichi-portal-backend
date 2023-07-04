@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-resource = { path = "../infra/resource" }
-domain = { path = "../domain" }
-usecase = { path = "../usecase" }
-errors = { path = "../errors" }
-common = { path = "../common" }
 axum = { workspace = true }
-tracing = { workspace = true }
+common = { path = "../common" }
+domain = { path = "../domain" }
+errors = { path = "../errors" }
+resource = { path = "../infra/resource" }
 serde_json = { workspace = true }
+tracing = { workspace = true }
+usecase = { path = "../usecase" }
 uuid = { workspace = true }
