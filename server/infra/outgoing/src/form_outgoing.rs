@@ -1,9 +1,10 @@
 use domain::form::models::Form;
+use errors::infra::InfraError;
 
 use crate::webhook::Webhook;
 
 #[tracing::instrument]
-pub async fn create(form: Form) -> anyhow::Result<()> {
+pub async fn create(form: Form) -> Result<(), InfraError> {
     if let Some(url) = form.settings.webhook_url.into() {
         Webhook::new(url, "フォームが作成されました".to_string())
             .field(
@@ -27,7 +28,7 @@ pub async fn create(form: Form) -> anyhow::Result<()> {
 }
 
 #[tracing::instrument]
-pub async fn delete(form: Form) -> anyhow::Result<()> {
+pub async fn delete(form: Form) -> Result<(), InfraError> {
     if let Some(url) = form.settings.webhook_url.into() {
         Webhook::new(url, "フォームが削除されました".to_string())
             .field(

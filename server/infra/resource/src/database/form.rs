@@ -1,14 +1,11 @@
 use async_trait::async_trait;
-use domain::form::models::{
-    Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle, FormUpdateTargets, Question,
-    ResponsePeriod, WebhookUrl,
-};
+use domain::form::models::{FormDescription, FormId, FormTitle, FormUpdateTargets};
 use entities::{
     form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks},
     response_period,
 };
-use errors::presentation::PresentationError::FormNotFound;
+use errors::infra::{InfraError, InfraError::FormNotFound};
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use sea_orm::{
@@ -18,7 +15,10 @@ use sea_orm::{
     ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 
-use crate::database::{components::FormDatabase, connection::ConnectionPool};
+use crate::{
+    database::{components::FormDatabase, connection::ConnectionPool},
+    dto::{FormDto, QuestionDto},
+};
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
@@ -27,7 +27,7 @@ impl FormDatabase for ConnectionPool {
         &self,
         title: FormTitle,
         description: FormDescription,
-    ) -> anyhow::Result<FormId> {
+    ) -> Result<FormId, InfraError> {
         let form_id = form_meta_data::ActiveModel {
             id: ActiveValue::NotSet,
             title: Set(title.title().to_owned()),
@@ -43,7 +43,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>> {
+    async fn list(&self, offset: i32, limit: i32) -> Result<Vec<FormDto>, InfraError> {
         let forms = FormMetaData::find()
             .order_by_asc(form_meta_data::Column::Id)
             .offset(offset as u64)
@@ -78,7 +78,7 @@ impl FormDatabase for ConnectionPool {
             .all(&self.pool)
             .await?;
 
-        forms
+        Ok(forms
             .into_iter()
             .map(|form| {
                 let questions = all_questions
@@ -92,102 +92,85 @@ impl FormDatabase for ConnectionPool {
                             .map(|choice| choice.choice)
                             .collect_vec();
 
-                        anyhow::Ok(
-                            Question::builder()
-                                .title(question.title.to_owned())
-                                .description(question.description.to_owned())
-                                .question_type(question.question_type.to_string().try_into()?)
-                                .choices(choices)
-                                .build(),
-                        )
+                        QuestionDto {
+                            title: question.title.to_owned(),
+                            description: question.description.to_owned(),
+                            question_type: question.question_type.to_string(),
+                            choices,
+                        }
                     })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Vec<_>>();
 
                 let response_period = all_periods
                     .iter()
                     .filter(|period| period.form_id == form.id)
                     .map(|period| {
-                        ResponsePeriod::new(Some((
+                        Some((
                             period.start_at.to_owned().and_utc(),
                             period.end_at.to_owned().and_utc(),
-                        )))
+                        ))
                     })
                     .next()
-                    .unwrap_or(ResponsePeriod::default());
+                    .unwrap_or_default();
 
                 let webhook_url = all_webhook_urls
                     .iter()
                     .filter(|webhook_url| webhook_url.form_id == form.id)
-                    .map(|webhook_url| WebhookUrl {
-                        webhook_url: Some(webhook_url.url.to_owned()),
-                    })
+                    .map(|webhook_url| Some(webhook_url.url.to_owned()))
                     .next()
-                    .unwrap_or(WebhookUrl::default());
+                    .unwrap_or_default();
 
-                anyhow::Ok(
-                    Form::builder()
-                        .id(FormId(form.id))
-                        .title(FormTitle::builder().title(form.title).build())
-                        .description(
-                            FormDescription::builder()
-                                .description(form.description)
-                                .build(),
-                        )
-                        .questions(questions)
-                        .metadata(
-                            FormMeta::builder()
-                                .created_at(form.created_at)
-                                .update_at(form.updated_at)
-                                .build(),
-                        )
-                        .settings(FormSettings {
-                            response_period,
-                            webhook_url,
-                        })
-                        .build(),
-                )
+                FormDto {
+                    id: form.id,
+                    title: form.title,
+                    description: form.description,
+                    questions,
+                    metadata: (form.created_at, form.updated_at),
+                    response_period,
+                    webhook_url,
+                }
             })
-            .collect()
+            .collect())
     }
 
     #[tracing::instrument]
-    async fn get(&self, form_id: FormId) -> anyhow::Result<Form> {
+    async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError> {
         let target_form = FormMetaData::find()
-            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.0))
+            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.to_owned()))
             .all(&self.pool)
             .await?
             .first()
-            .ok_or(FormNotFound)?
+            .ok_or(FormNotFound {
+                id: form_id.to_owned(),
+            })?
             .to_owned();
 
         let form_questions = stream::iter(
             FormQuestions::find()
-                .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+                .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
                 .all(&self.pool)
                 .await?,
         )
-        .then(|question| async {
+        .then(move |question| async move {
             let choices = FormChoices::find()
-                .filter(
-                    Expr::col(form_choices::Column::QuestionId).eq(question.to_owned().question_id),
-                )
+                .filter(Expr::col(form_choices::Column::QuestionId).eq(question.question_id))
                 .all(&self.pool)
                 .await?
                 .into_iter()
                 .map(|choice| choice.choice)
                 .collect_vec();
 
-            Ok(Question::builder()
-                .title(question.title)
-                .description(question.description)
-                .question_type(question.question_type.to_string().try_into()?)
-                .choices(choices)
-                .build())
+            Ok::<QuestionDto, InfraError>(QuestionDto {
+                title: question.title.to_owned(),
+                description: question.description.to_owned(),
+                question_type: question.question_type.to_string(),
+                choices,
+            })
         })
-        .collect::<Vec<anyhow::Result<Question>>>()
+        .collect::<Vec<Result<QuestionDto, _>>>()
         .await
         .into_iter()
-        .collect::<anyhow::Result<Vec<Question>>>()?;
+        .collect::<Result<Vec<QuestionDto>, _>>()?;
 
         let response_period = entities::response_period::Entity::find()
             .filter(Expr::col(response_period::Column::FormId).eq(target_form.id))
@@ -195,62 +178,45 @@ impl FormDatabase for ConnectionPool {
             .await?
             .first()
             .map(|period| {
-                ResponsePeriod::new(Some((
+                Some((
                     period.start_at.to_owned().and_utc(),
                     period.end_at.to_owned().and_utc(),
-                )))
+                ))
             })
-            .unwrap_or(ResponsePeriod::default());
+            .unwrap_or_default();
 
         let webhook_url = FormWebhooks::find()
             .filter(Expr::col(form_webhooks::Column::FormId).eq(target_form.id))
             .all(&self.pool)
             .await?
             .first()
-            .map(|webhook_url_model| WebhookUrl {
-                webhook_url: Some(webhook_url_model.url.to_owned()),
-            })
-            .unwrap_or(WebhookUrl::default());
+            .map(|webhook_url_model| Some(webhook_url_model.url.to_owned()))
+            .unwrap_or_default();
 
-        let form_settings = FormSettings {
+        Ok(FormDto {
+            id: target_form.id,
+            title: target_form.title,
+            description: target_form.description,
+            questions: form_questions,
+            metadata: (target_form.created_at, target_form.updated_at),
             response_period,
             webhook_url,
-        };
-
-        Ok(Form::builder()
-            .id(FormId(target_form.id.to_owned()))
-            .title(
-                FormTitle::builder()
-                    .title(target_form.title.to_owned())
-                    .build(),
-            )
-            .description(
-                FormDescription::builder()
-                    .description(target_form.description.to_owned())
-                    .build(),
-            )
-            .questions(form_questions)
-            .metadata(
-                FormMeta::builder()
-                    .created_at(target_form.created_at)
-                    .update_at(target_form.updated_at)
-                    .build(),
-            )
-            .settings(form_settings)
-            .build())
+        })
     }
 
     #[tracing::instrument]
-    async fn delete(&self, form_id: FormId) -> anyhow::Result<FormId> {
-        let target_form = FormMetaData::find_by_id(form_id.0)
+    async fn delete(&self, form_id: FormId) -> Result<FormId, InfraError> {
+        let target_form = FormMetaData::find_by_id(form_id.to_owned())
             .all(&self.pool)
             .await?
             .first()
-            .ok_or(FormNotFound)?
+            .ok_or(FormNotFound {
+                id: form_id.to_owned(),
+            })?
             .to_owned();
 
         let question_ids = FormQuestions::find()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
             .all(&self.pool)
             .await?
             .iter()
@@ -263,12 +229,12 @@ impl FormDatabase for ConnectionPool {
             .await?;
 
         response_period::Entity::delete_many()
-            .filter(Expr::col(response_period::Column::FormId).eq(form_id.0))
+            .filter(Expr::col(response_period::Column::FormId).eq(form_id.to_owned()))
             .exec(&self.pool)
             .await?;
 
         FormQuestions::delete_many()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.0))
+            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
             .exec(&self.pool)
             .await?;
 
@@ -280,30 +246,31 @@ impl FormDatabase for ConnectionPool {
     async fn update(
         &self,
         form_id: FormId,
-        form_update_targets: FormUpdateTargets,
-    ) -> anyhow::Result<Form> {
-        let current_form = self.get(form_id).await?;
+        FormUpdateTargets {
+            title,
+            description,
+            response_period,
+            webhook,
+        }: FormUpdateTargets,
+    ) -> Result<(), InfraError> {
+        let current_form = self.get(form_id.to_owned().into()).await?;
 
         FormMetaData::update_many()
-            .filter(form_meta_data::Column::Id.eq(form_id.0))
+            .filter(form_meta_data::Column::Id.eq(form_id.to_owned()))
             .col_expr(
                 form_meta_data::Column::Title,
                 Expr::value(
-                    form_update_targets
-                        .title
-                        .unwrap_or(current_form.title)
-                        .title()
-                        .to_string(),
+                    title
+                        .map(|title| title.into_inner())
+                        .unwrap_or(current_form.title),
                 ),
             )
             .col_expr(
                 form_meta_data::Column::Description,
                 Expr::value(
-                    form_update_targets
-                        .description
-                        .unwrap_or(current_form.description)
-                        .description()
-                        .to_owned(),
+                    description
+                        .map(|description| description.into_inner())
+                        .unwrap_or(current_form.description),
                 ),
             )
             .col_expr(
@@ -313,9 +280,9 @@ impl FormDatabase for ConnectionPool {
             .exec(&self.pool)
             .await?;
 
-        if let Some(response_period) = form_update_targets.response_period {
+        if let Some(response_period) = response_period {
             response_period::Entity::update_many()
-                .filter(response_period::Column::FormId.eq(form_id.0))
+                .filter(response_period::Column::FormId.eq(form_id.to_owned()))
                 .col_expr(
                     response_period::Column::StartAt,
                     Expr::value(response_period.start_at),
@@ -328,29 +295,25 @@ impl FormDatabase for ConnectionPool {
                 .await?;
         }
 
-        if current_form.settings.webhook_url.webhook_url.is_some() {
+        if current_form.webhook_url.is_some() {
             FormWebhooks::update_many()
-                .filter(form_webhooks::Column::FormId.eq(form_id.0))
+                .filter(form_webhooks::Column::FormId.eq(form_id.to_owned()))
                 .col_expr(
                     form_webhooks::Column::Url,
-                    Expr::value(form_update_targets.webhook.and_then(|url| url.webhook_url)),
+                    Expr::value(webhook.and_then(|url| url.webhook_url)),
                 )
                 .exec(&self.pool)
                 .await?;
-        } else if let Some(webhook_url) =
-            form_update_targets.webhook.and_then(|url| url.webhook_url)
-        {
+        } else if let Some(webhook_url) = webhook.and_then(|url| url.webhook_url) {
             form_webhooks::ActiveModel {
                 id: ActiveValue::NotSet,
-                form_id: Set(form_id.0),
+                form_id: Set(form_id.to_owned()),
                 url: Set(webhook_url),
             }
             .insert(&self.pool)
             .await?;
         }
 
-        let updated_form = self.get(form_id).await?;
-
-        Ok(updated_form)
+        Ok(())
     }
 }

@@ -4,22 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-common = { path = "../common" }
-errors = { path = "../errors" }
 async-trait = { workspace = true }
-anyhow = { workspace = true }
-serde = { workspace = true }
-mockall = { workspace = true }
+chrono = { workspace = true }
+common = { path = "../common" }
 derive-getters = "0.3.0"
-typed-builder = "0.14.0"
+deriving_via = { workspace = true }
+errors = { path = "../errors" }
+mockall = { workspace = true }
+serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = "0.25.0"
-deriving_via = "1.4.2"
-chrono = { workspace = true }
+typed-builder = "0.14.0"
+types = { path = "../types" }
 
 [dev-dependencies]
-test-case = { workspace = true }
+chrono = { workspace = true, features = ["arbitrary"] }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 serde_json = { workspace = true }
-chrono = { workspace = true, features = ["arbitrary"] }
+test-case = { workspace = true }
+types = { path = "../types", features = ["arbitrary"] }

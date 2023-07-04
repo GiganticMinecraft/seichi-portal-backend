@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use errors::Error;
 use mockall::automock;
 
 use crate::form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets};
@@ -6,17 +7,14 @@ use crate::form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTa
 #[automock]
 #[async_trait]
 pub trait FormRepository: Send + Sync + 'static {
-    async fn create(
-        &self,
-        title: FormTitle,
-        description: FormDescription,
-    ) -> anyhow::Result<FormId>;
-    async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>>;
-    async fn get(&self, id: FormId) -> anyhow::Result<Form>;
-    async fn delete(&self, id: FormId) -> anyhow::Result<FormId>;
+    async fn create(&self, title: FormTitle, description: FormDescription)
+        -> Result<FormId, Error>;
+    async fn list(&self, offset: i32, limit: i32) -> Result<Vec<Form>, Error>;
+    async fn get(&self, id: FormId) -> Result<Form, Error>;
+    async fn delete(&self, id: FormId) -> Result<FormId, Error>;
     async fn update(
         &self,
         form_id: FormId,
         form_update_targets: FormUpdateTargets,
-    ) -> anyhow::Result<Form>;
+    ) -> Result<(), Error>;
 }

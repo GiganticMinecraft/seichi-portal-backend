@@ -35,3 +35,14 @@ args = [ "fmt", "--", "--config-path=${REPOSITORY_ROOT}/.cargo-husky/hooks/rustf
 
 [tasks.pretty]
 dependencies = ["fix", "test", "lint", "format"]
+
+[tasks.udeps]
+install_crate = { crate_name = "cargo-udeps" }
+toolchain = "nightly"
+command = "cargo"
+args = [ "udeps", "--all-targets", "--all-features" ]
+
+[tasks.sort]
+install_crate = { crate_name = "cargo-sort" }
+command = "cargo"
+args = ["sort", "-wg"]

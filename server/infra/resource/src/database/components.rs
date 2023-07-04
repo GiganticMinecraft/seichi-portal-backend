@@ -1,6 +1,9 @@
 use async_trait::async_trait;
-use domain::form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets};
+use domain::form::models::{FormDescription, FormId, FormTitle, FormUpdateTargets};
+use errors::infra::InfraError;
 use mockall::automock;
+
+use crate::dto::FormDto;
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -18,13 +21,13 @@ pub trait FormDatabase: Send + Sync {
         &self,
         title: FormTitle,
         description: FormDescription,
-    ) -> anyhow::Result<FormId>;
-    async fn list(&self, offset: i32, limit: i32) -> anyhow::Result<Vec<Form>>;
-    async fn get(&self, form_id: FormId) -> anyhow::Result<Form>;
-    async fn delete(&self, form_id: FormId) -> anyhow::Result<FormId>;
+    ) -> Result<FormId, InfraError>;
+    async fn list(&self, offset: i32, limit: i32) -> Result<Vec<FormDto>, InfraError>;
+    async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
+    async fn delete(&self, form_id: FormId) -> Result<FormId, InfraError>;
     async fn update(
         &self,
         form_id: FormId,
         form_update_targets: FormUpdateTargets,
-    ) -> anyhow::Result<Form>;
+    ) -> Result<(), InfraError>;
 }

@@ -9,10 +9,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, Clone, Copy, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, Default, Serialize(via: i32), Deserialize(via: i32))]
-pub struct FormId(pub i32);
+pub type FormId = types::Id<Form>;
 
 #[derive(Deserialize)]
 pub struct OffsetAndLimit {
@@ -34,7 +31,7 @@ pub struct FormUpdateTargets {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Clone, Getters, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, Serialize(via: String), Deserialize(via: String))]
+#[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]
 pub struct FormTitle {
     #[builder(setter(into))]
     title: String,
@@ -44,13 +41,17 @@ pub struct FormTitle {
 #[derive(TypedBuilder, Serialize, Deserialize, Debug, PartialEq)]
 pub struct Form {
     #[serde(default)]
+    #[builder(setter(into))]
     pub id: FormId,
+    #[builder(setter(into))]
     pub title: FormTitle,
+    #[builder(setter(into))]
     pub description: FormDescription,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
     #[serde(default)]
     pub questions: Vec<Question>,
     #[serde(default)]
+    #[builder(setter(into))]
     pub metadata: FormMeta,
     #[serde(default)]
     pub settings: FormSettings,
@@ -58,7 +59,7 @@ pub struct Form {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Serialize, Getters, Debug, PartialEq)]
-#[deriving(From, Into, Deserialize(via: Option::<String>))]
+#[deriving(From, Into, IntoInner, Deserialize(via: Option::<String>))]
 pub struct FormDescription {
     description: Option<String>,
 }
@@ -100,6 +101,15 @@ pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     #[serde(default = "chrono::Utc::now")]
     update_at: DateTime<Utc>,
+}
+
+impl From<(DateTime<Utc>, DateTime<Utc>)> for FormMeta {
+    fn from((created_at, update_at): (DateTime<Utc>, DateTime<Utc>)) -> Self {
+        Self {
+            created_at,
+            update_at,
+        }
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]

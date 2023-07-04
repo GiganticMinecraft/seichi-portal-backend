@@ -4,18 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
 domain = { path = "../../domain" }
 entities =  { path = "../entities" }
-migration = { path = "../../migration" }
+envy = { workspace = true }
 errors = { path = "../../errors" }
+futures = { workspace = true }
+itertools = { workspace = true }
+migration = { path = "../../migration" }
+mockall = { workspace = true }
+once_cell = { workspace = true }
 outgoing = { path = "../outgoing" }
 sea-orm = { workspace = true }
-async-trait = { workspace = true }
-anyhow = { workspace = true }
 serde = { workspace = true }
-mockall = { workspace = true }
-envy = { workspace = true }
-once_cell = { workspace = true }
-itertools = { workspace = true }
-futures = { workspace = true }
 tracing = { workspace = true }
