@@ -787,7 +787,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "syn 2.0.23",
- "typed-builder",
+ "typed-builder 0.14.0",
 ]
 
 [[package]]
@@ -824,7 +824,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "test-case",
- "typed-builder",
+ "typed-builder 0.15.0",
  "types",
 ]
 
@@ -3667,6 +3667,26 @@ dependencies = [
  "proc-macro2 1.0.63",
  "quote 1.0.29",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "typed-builder"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d2135600ca28125d27c63643ed7789b9f467a316e3a8ad98a9abeeb3eec4a83"
+dependencies = [
+ "typed-builder-macro",
+]
+
+[[package]]
+name = "typed-builder-macro"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "952108e5d54c3c3f6552e8c5cdb3600adf49c22a4ea82066dea90d2f5c71c526"
+dependencies = [
+ "proc-macro2 1.0.63",
+ "quote 1.0.29",
+ "syn 2.0.23",
 ]
 
 [[package]]
