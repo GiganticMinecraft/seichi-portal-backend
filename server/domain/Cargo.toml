@@ -14,7 +14,7 @@ mockall = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = "0.25.1"
-typed-builder = "0.15.0"
+typed-builder = "0.15.1"
 types = { path = "../types" }
 
 [dev-dependencies]
