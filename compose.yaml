@@ -1,6 +1,6 @@
 services:
   db:
-    image: mysql:8.0
+    image: mysql:8.1
     container_name: mysql
     environment:
       - TZ=Asia/Tokyo
