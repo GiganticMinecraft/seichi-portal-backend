@@ -2,7 +2,7 @@
 
 use sea_orm::entity::prelude::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, DeriveDisplay)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "question_type")]
 pub enum QuestionType {
     #[sea_orm(string_value = "text")]
