@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use domain::{
-    form::models::{Form, FormId, FormUpdateTargets, OffsetAndLimit},
+    form::models::{Form, FormId, FormUpdateTargets, OffsetAndLimit, PostedAnswers},
     repository::Repositories,
 };
 use errors::{infra::InfraError, Error};
@@ -107,6 +107,20 @@ pub async fn update_form_handler(
 
     match form_use_case.update_form(form_id, targets).await {
         Ok(form) => (StatusCode::OK, Json(form)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn post_answer_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Json(answers): Json<PostedAnswers>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.post_answers(answers).await {
+        Ok(_) => (StatusCode::OK).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }

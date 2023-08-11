@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use domain::form::models::{FormDescription, FormId, FormTitle, FormUpdateTargets};
+use domain::form::models::{FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers};
 use entities::{
-    form_choices, form_meta_data, form_questions, form_webhooks,
-    prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks},
-    response_period,
+    answers, form_choices, form_meta_data, form_questions, form_webhooks,
+    prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers},
+    real_answers, response_period,
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use futures::{stream, stream::StreamExt};
@@ -313,6 +313,34 @@ impl FormDatabase for ConnectionPool {
             .insert(&self.pool)
             .await?;
         }
+
+        Ok(())
+    }
+
+    async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
+        let id = answers::ActiveModel {
+            id: Default::default(),
+            user: Set(answer.user.uuid.to_owned().as_ref().to_vec()),
+            time_stamp: Default::default(),
+        }
+        .insert(&self.pool)
+        .await?
+        .id;
+
+        let real_answer_models = answer
+            .answers
+            .iter()
+            .map(|answer| real_answers::ActiveModel {
+                id: Default::default(),
+                answer_id: Set(id),
+                question_id: Set(answer.question_id.to_owned()),
+                answer: Set(answer.answer.to_owned()),
+            })
+            .collect_vec();
+
+        RealAnswers::insert_many(real_answer_models)
+            .exec(&self.pool)
+            .await?;
 
         Ok(())
     }

@@ -16,6 +16,7 @@ strum = { workspace = true }
 strum_macros = "0.25.2"
 typed-builder = "0.15.2"
 types = { path = "../types" }
+uuid = { workspace = true }
 
 [dev-dependencies]
 chrono = { workspace = true, features = ["arbitrary"] }

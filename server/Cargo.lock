@@ -889,6 +889,7 @@ dependencies = [
  "test-case",
  "typed-builder",
  "types",
+ "uuid 1.4.1",
 ]
 
 [[package]]

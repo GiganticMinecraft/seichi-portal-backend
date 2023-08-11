@@ -1,5 +1,5 @@
 use domain::{
-    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets},
+    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers},
     repository::form_repository::FormRepository,
 };
 use errors::Error;
@@ -35,5 +35,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         form_update_targets: FormUpdateTargets,
     ) -> Result<(), Error> {
         self.repository.update(form_id, form_update_targets).await
+    }
+
+    pub async fn post_answers(&self, answers: PostedAnswers) -> Result<(), Error> {
+        self.repository.post_answer(answers).await
     }
 }

@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 
+use crate::user::models::User;
+
 pub type FormId = types::Id<Form>;
 
 #[derive(Deserialize)]
@@ -147,6 +149,21 @@ impl ResponsePeriod {
             }
         })
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PostedAnswers {
+    pub user: User,
+    pub timestamp: DateTime<Utc>,
+    pub answers: Vec<Answer>,
+}
+
+pub type QuestionId = types::Id<Question>;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Answer {
+    pub question_id: QuestionId,
+    pub answer: String,
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets},
+    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers},
     repository::form_repository::FormRepository,
 };
 use errors::Error;
@@ -52,6 +52,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         self.client.form().delete(id).await.map_err(Into::into)
     }
 
+    #[tracing::instrument(skip(self))]
     async fn update(
         &self,
         form_id: FormId,
@@ -60,6 +61,15 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         self.client
             .form()
             .update(form_id, form_update_targets)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn post_answer(&self, answers: PostedAnswers) -> Result<(), Error> {
+        self.client
+            .form()
+            .post_answer(answers)
             .await
             .map_err(Into::into)
     }
