@@ -10,8 +10,6 @@ use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
-use crate::user::models::User;
-
 pub type FormId = types::Id<Form>;
 
 #[derive(Deserialize)]

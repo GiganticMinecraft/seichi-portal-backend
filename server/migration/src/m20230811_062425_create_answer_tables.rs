@@ -24,7 +24,8 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(AnswersTable::TimeStamp)
                             .timestamp()
-                            .not_null(),
+                            .not_null()
+                            .extra("DEFAULT CURRENT_TIMESTAMP".to_string()),
                     )
                     .to_owned(),
             )

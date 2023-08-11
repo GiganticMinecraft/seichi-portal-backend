@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::Utc;
 use domain::form::models::{FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers};
 use entities::{
     answers, form_choices, form_meta_data, form_questions, form_webhooks,
@@ -323,7 +324,7 @@ impl FormDatabase for ConnectionPool {
         let id = answers::ActiveModel {
             id: Default::default(),
             user: Set(answer.uuid.to_owned().as_ref().to_vec()),
-            time_stamp: Default::default(),
+            time_stamp: Set(Utc::now()),
         }
         .insert(&self.pool)
         .await?
