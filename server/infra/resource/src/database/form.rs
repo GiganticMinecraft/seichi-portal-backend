@@ -93,6 +93,7 @@ impl FormDatabase for ConnectionPool {
                             .collect_vec();
 
                         QuestionDto {
+                            id: question.question_id.to_owned(),
                             title: question.title.to_owned(),
                             description: question.description.to_owned(),
                             question_type: question.question_type.to_string(),
@@ -161,6 +162,7 @@ impl FormDatabase for ConnectionPool {
                 .collect_vec();
 
             Ok::<QuestionDto, InfraError>(QuestionDto {
+                id: question.question_id.to_owned(),
                 title: question.title.to_owned(),
                 description: question.description.to_owned(),
                 question_type: question.question_type.to_string(),
@@ -320,7 +322,7 @@ impl FormDatabase for ConnectionPool {
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
         let id = answers::ActiveModel {
             id: Default::default(),
-            user: Set(answer.user.uuid.to_owned().as_ref().to_vec()),
+            user: Set(answer.uuid.to_owned().as_ref().to_vec()),
             time_stamp: Default::default(),
         }
         .insert(&self.pool)
