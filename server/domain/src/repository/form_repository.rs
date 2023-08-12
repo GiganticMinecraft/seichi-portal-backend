@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets};
+use crate::form::models::{
+    Form, FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers,
+};
 
 #[automock]
 #[async_trait]
@@ -17,4 +19,5 @@ pub trait FormRepository: Send + Sync + 'static {
         form_id: FormId,
         form_update_targets: FormUpdateTargets,
     ) -> Result<(), Error>;
+    async fn post_answer(&self, answers: PostedAnswers) -> Result<(), Error>;
 }

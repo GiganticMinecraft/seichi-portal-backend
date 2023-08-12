@@ -6,13 +6,8 @@ use axum::{
     response::Response,
 };
 use common::config::ENV;
-use uuid::{uuid, Uuid};
-
-#[derive(Debug, Clone)]
-pub struct User {
-    pub name: String,
-    pub uuid: Uuid,
-}
+use domain::user::models::User;
+use uuid::uuid;
 
 pub async fn auth<B>(
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,

@@ -8,6 +8,7 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use typed_builder::TypedBuilder;
+use uuid::Uuid;
 
 pub type FormId = types::Id<Form>;
 
@@ -64,9 +65,12 @@ pub struct FormDescription {
     description: Option<String>,
 }
 
+pub type QuestionId = types::Id<Question>;
+
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct Question {
+    id: QuestionId,
     title: String,
     description: Option<String>,
     question_type: QuestionType,
@@ -146,6 +150,19 @@ impl ResponsePeriod {
             }
         })
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PostedAnswers {
+    pub uuid: Uuid, //todo: あとでUser型に直す
+    pub timestamp: DateTime<Utc>,
+    pub answers: Vec<Answer>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Answer {
+    pub question_id: QuestionId,
+    pub answer: String,
 }
 
 #[cfg(test)]
