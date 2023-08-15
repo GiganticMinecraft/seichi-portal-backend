@@ -76,6 +76,7 @@ pub struct Question {
     question_type: QuestionType,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
     choices: Vec<String>,
+    is_required: bool,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]

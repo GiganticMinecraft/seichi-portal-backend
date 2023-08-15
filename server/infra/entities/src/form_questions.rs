@@ -13,6 +13,7 @@ pub struct Model {
     pub title: String,
     pub description: Option<String>,
     pub question_type: QuestionType,
+    pub is_required: i8,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
