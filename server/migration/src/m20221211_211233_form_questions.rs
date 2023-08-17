@@ -57,6 +57,12 @@ impl MigrationTrait for Migration {
                         .not_null()
                         .borrow_mut(),
                     )
+                    .col(
+                        ColumnDef::new(FormQuestionsTable::IsRequired)
+                            .boolean()
+                            .default(false)
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await
@@ -81,6 +87,7 @@ pub enum FormQuestionsTable {
     Title,
     Description,
     QuestionType,
+    IsRequired,
 }
 
 #[derive(Iden)]

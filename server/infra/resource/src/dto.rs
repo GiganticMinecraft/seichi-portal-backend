@@ -7,6 +7,7 @@ pub struct QuestionDto {
     pub description: Option<String>,
     pub question_type: String,
     pub choices: Vec<String>,
+    pub is_required: bool,
 }
 
 impl TryFrom<QuestionDto> for domain::form::models::Question {
@@ -19,6 +20,7 @@ impl TryFrom<QuestionDto> for domain::form::models::Question {
             description,
             question_type,
             choices,
+            is_required,
         }: QuestionDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Question::builder()
@@ -27,6 +29,7 @@ impl TryFrom<QuestionDto> for domain::form::models::Question {
             .description(description)
             .question_type(question_type.try_into()?)
             .choices(choices)
+            .is_required(is_required)
             .build())
     }
 }

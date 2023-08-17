@@ -99,6 +99,7 @@ impl FormDatabase for ConnectionPool {
                             description: question.description.to_owned(),
                             question_type: question.question_type.to_string(),
                             choices,
+                            is_required: question.is_required != 0,
                         }
                     })
                     .collect::<Vec<_>>();
@@ -168,6 +169,7 @@ impl FormDatabase for ConnectionPool {
                 description: question.description.to_owned(),
                 question_type: question.question_type.to_string(),
                 choices,
+                is_required: question.is_required != 0,
             })
         })
         .collect::<Vec<Result<QuestionDto, _>>>()
