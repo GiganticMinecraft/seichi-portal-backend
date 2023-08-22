@@ -1,12 +1,14 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use domain::form::models::{
-    FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+    FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+    OffsetAndLimit, PostedAnswers,
 };
 use entities::{
     answers, form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers},
     real_answers, response_period,
+    sea_orm_active_enums::QuestionType,
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use futures::{stream, stream::StreamExt};
@@ -14,7 +16,7 @@ use itertools::Itertools;
 use num_traits::cast::FromPrimitive;
 use sea_orm::{
     sea_query::{Expr, SimpleExpr},
-    ActiveModelTrait, ActiveValue,
+    ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
     ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
 };
@@ -350,6 +352,34 @@ impl FormDatabase for ConnectionPool {
             .collect_vec();
 
         RealAnswers::insert_many(real_answer_models)
+            .exec(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn create_questions(
+        &self,
+        questions: FormQuestionUpdateSchema,
+    ) -> Result<(), InfraError> {
+        let question_active_values = questions
+            .questions
+            .iter()
+            .map(|question| {
+                QuestionType::try_from_value(&question.question_type.to_string()).map(
+                    |question_type| form_questions::ActiveModel {
+                        question_id: ActiveValue::NotSet,
+                        form_id: Set(questions.form_id.to_owned()),
+                        title: Set(question.title.to_owned()),
+                        description: Set(question.description.to_owned()),
+                        question_type: Set(question_type),
+                        is_required: Set(i8::from(question.is_required().to_owned())),
+                    },
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        FormQuestions::insert_many(question_active_values)
             .exec(&self.pool)
             .await?;
 

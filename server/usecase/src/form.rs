@@ -1,6 +1,8 @@
+use domain::form::models::OffsetAndLimit;
 use domain::{
     form::models::{
-        Form, FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+        PostedAnswers,
     },
     repository::form_repository::FormRepository,
 };
@@ -41,5 +43,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
 
     pub async fn post_answers(&self, answers: PostedAnswers) -> Result<(), Error> {
         self.repository.post_answer(answers).await
+    }
+
+    pub async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {
+        self.repository.create_questions(questions).await
     }
 }

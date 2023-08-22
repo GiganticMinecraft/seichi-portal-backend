@@ -11,8 +11,8 @@ use hyper::header::AUTHORIZATION;
 use presentation::{
     auth::auth,
     form_handler::{
-        create_form_handler, delete_form_handler, form_list_handler, get_form_handler,
-        post_answer_handler, update_form_handler,
+        create_form_handler, create_question_handler, delete_form_handler, form_list_handler,
+        get_form_handler, post_answer_handler, update_form_handler,
     },
     health_check_handler::health_check,
 };
@@ -72,6 +72,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route("/forms/answers", post(post_answer_handler))
+        .with_state(shared_repository.to_owned())
+        .route("/forms/questions", post(create_question_handler))
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(layer)

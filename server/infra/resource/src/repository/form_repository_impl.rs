@@ -1,7 +1,9 @@
 use async_trait::async_trait;
+use domain::form::models::OffsetAndLimit;
 use domain::{
     form::models::{
-        Form, FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+        PostedAnswers,
     },
     repository::form_repository::FormRepository,
 };
@@ -72,6 +74,14 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         self.client
             .form()
             .post_answer(answers)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {
+        self.client
+            .form()
+            .create_questions(questions)
             .await
             .map_err(Into::into)
     }

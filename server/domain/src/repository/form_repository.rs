@@ -3,7 +3,8 @@ use errors::Error;
 use mockall::automock;
 
 use crate::form::models::{
-    Form, FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+    Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+    OffsetAndLimit, PostedAnswers,
 };
 
 #[automock]
@@ -20,4 +21,5 @@ pub trait FormRepository: Send + Sync + 'static {
         form_update_targets: FormUpdateTargets,
     ) -> Result<(), Error>;
     async fn post_answer(&self, answers: PostedAnswers) -> Result<(), Error>;
+    async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error>;
 }
