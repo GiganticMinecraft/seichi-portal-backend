@@ -378,7 +378,34 @@ impl FormDatabase for ConnectionPool {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        FormQuestions::insert_many(question_active_values)
+        let last_insert_id = FormQuestions::insert_many(question_active_values)
+            .exec(&self.pool)
+            .await?
+            .last_insert_id;
+
+        let first_insert_id = last_insert_id - form_question_update_schema.questions.len() as i32;
+
+        let question_ids: Vec<_> = (first_insert_id..last_insert_id).collect();
+
+        let choices_active_values = form_question_update_schema
+            .questions
+            .iter()
+            .zip(question_ids)
+            .flat_map(|(question, question_id)| {
+                question
+                    .choices
+                    .iter()
+                    .cloned()
+                    .map(|choice| form_choices::ActiveModel {
+                        id: ActiveValue::NotSet,
+                        question_id: Set(question_id),
+                        choice: Set(choice),
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
+
+        FormChoices::insert_many(choices_active_values)
             .exec(&self.pool)
             .await?;
 
