@@ -366,16 +366,15 @@ impl FormDatabase for ConnectionPool {
             .questions
             .iter()
             .map(|question| {
-                QuestionType::try_from_value(&question.question_type.to_string()).map(
-                    |question_type| form_questions::ActiveModel {
+                QuestionType::try_from_value(&question.question_type.to_string().to_lowercase())
+                    .map(|question_type| form_questions::ActiveModel {
                         question_id: ActiveValue::NotSet,
                         form_id: Set(questions.form_id.to_owned()),
                         title: Set(question.title.to_owned()),
                         description: Set(question.description.to_owned()),
                         question_type: Set(question_type),
                         is_required: Set(i8::from(question.is_required().to_owned())),
-                    },
-                )
+                    })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
