@@ -360,16 +360,16 @@ impl FormDatabase for ConnectionPool {
 
     async fn create_questions(
         &self,
-        questions: FormQuestionUpdateSchema,
+        form_question_update_schema: FormQuestionUpdateSchema,
     ) -> Result<(), InfraError> {
-        let question_active_values = questions
+        let question_active_values = form_question_update_schema
             .questions
             .iter()
             .map(|question| {
                 QuestionType::try_from_value(&question.question_type.to_string().to_lowercase())
                     .map(|question_type| form_questions::ActiveModel {
                         question_id: ActiveValue::NotSet,
-                        form_id: Set(questions.form_id.to_owned()),
+                        form_id: Set(form_question_update_schema.form_id.to_owned()),
                         title: Set(question.title.to_owned()),
                         description: Set(question.description.to_owned()),
                         question_type: Set(question_type),
