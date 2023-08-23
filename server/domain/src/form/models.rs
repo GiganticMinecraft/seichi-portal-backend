@@ -78,11 +78,13 @@ pub type QuestionId = types::Id<Question>;
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct Question {
+    #[serde(default)]
     pub id: QuestionId,
     pub title: String,
     pub description: Option<String>,
     pub question_type: QuestionType,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
+    #[serde(default)]
     pub choices: Vec<String>,
     pub is_required: bool,
 }
