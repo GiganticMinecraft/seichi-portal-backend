@@ -20,3 +20,4 @@ outgoing = { path = "../outgoing" }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
+num-traits = { workspace = true }

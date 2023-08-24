@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers},
+    form::models::{
+        Form, FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+    },
     repository::form_repository::FormRepository,
 };
 use errors::Error;
@@ -28,8 +30,8 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn list(&self, offset: i32, limit: i32) -> Result<Vec<Form>, Error> {
-        let forms = self.client.form().list(offset, limit).await?;
+    async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<Form>, Error> {
+        let forms = self.client.form().list(offset_and_limit).await?;
         forms
             .into_iter()
             .map(|form| form.try_into())

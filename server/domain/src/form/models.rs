@@ -12,10 +12,12 @@ use uuid::Uuid;
 
 pub type FormId = types::Id<Form>;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct OffsetAndLimit {
-    pub offset: i32,
-    pub limit: i32,
+    #[serde(default)]
+    pub offset: Option<i32>,
+    #[serde(default)]
+    pub limit: Option<i32>,
 }
 
 #[derive(Deserialize, Debug)]
