@@ -1,8 +1,7 @@
-use domain::form::models::OffsetAndLimit;
 use domain::{
     form::models::{
         Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-        PostedAnswers,
+        OffsetAndLimit, PostedAnswers,
     },
     repository::form_repository::FormRepository,
 };
