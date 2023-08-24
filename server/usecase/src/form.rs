@@ -1,5 +1,7 @@
 use domain::{
-    form::models::{Form, FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers},
+    form::models::{
+        Form, FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+    },
     repository::form_repository::FormRepository,
 };
 use errors::Error;
@@ -17,8 +19,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.create(title, description).await
     }
 
-    pub async fn form_list(&self, offset: i32, limit: i32) -> Result<Vec<Form>, Error> {
-        self.repository.list(offset, limit).await
+    pub async fn form_list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<Form>, Error> {
+        self.repository.list(offset_and_limit).await
     }
 
     pub async fn get_form(&self, form_id: FormId) -> Result<Form, Error> {

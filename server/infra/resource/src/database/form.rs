@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::form::models::{FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers};
+use domain::form::models::{
+    FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+};
 use entities::{
     answers, form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers},
@@ -9,6 +11,7 @@ use entities::{
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
+use num_traits::cast::FromPrimitive;
 use sea_orm::{
     sea_query::{Expr, SimpleExpr},
     ActiveModelTrait, ActiveValue,
@@ -44,11 +47,14 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn list(&self, offset: i32, limit: i32) -> Result<Vec<FormDto>, InfraError> {
+    async fn list(
+        &self,
+        OffsetAndLimit { offset, limit }: OffsetAndLimit,
+    ) -> Result<Vec<FormDto>, InfraError> {
         let forms = FormMetaData::find()
             .order_by_asc(form_meta_data::Column::Id)
-            .offset(offset as u64)
-            .limit(limit as u64)
+            .offset(offset.and_then(u64::from_i32))
+            .limit(limit.and_then(u64::from_i32))
             .all(&self.pool)
             .await?;
 

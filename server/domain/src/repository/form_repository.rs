@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::form::models::{
-    Form, FormDescription, FormId, FormTitle, FormUpdateTargets, PostedAnswers,
+    Form, FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
 };
 
 #[automock]
@@ -11,7 +11,7 @@ use crate::form::models::{
 pub trait FormRepository: Send + Sync + 'static {
     async fn create(&self, title: FormTitle, description: FormDescription)
         -> Result<FormId, Error>;
-    async fn list(&self, offset: i32, limit: i32) -> Result<Vec<Form>, Error>;
+    async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<Form>, Error>;
     async fn get(&self, id: FormId) -> Result<Form, Error>;
     async fn delete(&self, id: FormId) -> Result<FormId, Error>;
     async fn update(

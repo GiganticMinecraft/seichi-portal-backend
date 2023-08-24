@@ -45,10 +45,7 @@ pub async fn form_list_handler(
         repository: repository.form_repository(),
     };
 
-    match form_use_case
-        .form_list(offset_and_limit.offset, offset_and_limit.limit)
-        .await
-    {
+    match form_use_case.form_list(offset_and_limit).await {
         Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
         Err(err) => {
             tracing::error!("{}", err);
