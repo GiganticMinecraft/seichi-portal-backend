@@ -9,7 +9,7 @@ pub struct Model {
     pub id: i32,
     #[sea_orm(column_type = "Binary(BlobSize::Blob(Some(16)))")]
     pub user: Vec<u8>,
-    pub title: Option<String>,
+    pub title: String,
     pub time_stamp: DateTimeUtc,
 }
 

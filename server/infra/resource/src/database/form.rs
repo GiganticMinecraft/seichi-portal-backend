@@ -4,10 +4,11 @@ use domain::form::models::{
     FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
     OffsetAndLimit, PostedAnswers,
 };
-use entities::prelude::DefaultAnswerTitle;
 use entities::{
     answers, default_answer_title, form_choices, form_meta_data, form_questions, form_webhooks,
-    prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers},
+    prelude::{
+        DefaultAnswerTitle, FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers,
+    },
     real_answers, response_period,
     sea_orm_active_enums::QuestionType,
 };
@@ -15,6 +16,7 @@ use errors::infra::{InfraError, InfraError::FormNotFound};
 use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use num_traits::cast::FromPrimitive;
+use regex::Regex;
 use sea_orm::{
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
@@ -354,11 +356,35 @@ impl FormDatabase for ConnectionPool {
     }
 
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
-        todo!();
+        let regex = Regex::new(r"\$\d+").unwrap();
+
+        let default_answer_title = DefaultAnswerTitle::find()
+            .filter(Expr::col(default_answer_title::Column::FormId).eq(answer.form_id.to_owned()))
+            .all(&self.pool)
+            .await?
+            .first()
+            .and_then(|answer_title_setting| answer_title_setting.title.to_owned())
+            .unwrap_or("未設定".to_string());
+
+        let embed_title = regex.find_iter(&default_answer_title.to_owned()).fold(
+            default_answer_title,
+            |replaced_title, question_id| {
+                let answer_opt = answer.answers.iter().find(|answer| {
+                    answer.question_id.to_string() == question_id.as_str().replace('$', "")
+                });
+                replaced_title.replace(
+                    question_id.as_str(),
+                    &answer_opt
+                        .map(|answer| answer.answer.to_owned())
+                        .unwrap_or_default(),
+                )
+            },
+        );
+
         let id = answers::ActiveModel {
             id: Default::default(),
             user: Set(answer.uuid.to_owned().as_ref().to_vec()),
-            title: todo!(),
+            title: Set(embed_title),
             time_stamp: Set(Utc::now()),
         }
         .insert(&self.pool)

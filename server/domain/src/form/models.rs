@@ -176,6 +176,8 @@ pub struct DefaultAnswerTitle {
 pub struct PostedAnswers {
     pub uuid: Uuid, //todo: あとでUser型に直す
     pub timestamp: DateTime<Utc>,
+    pub form_id: FormId,
+    pub title: String,
     pub answers: Vec<Answer>,
 }
 

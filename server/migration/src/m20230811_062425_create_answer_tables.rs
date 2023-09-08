@@ -24,6 +24,7 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(AnswersTable::Title)
                             .string()
+                            .not_null()
                             .default("未設定"),
                     )
                     .col(
