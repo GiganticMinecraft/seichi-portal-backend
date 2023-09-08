@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use domain::form::models::{
-    FormDescription, FormId, FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+    FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+    OffsetAndLimit, PostedAnswers,
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -33,4 +34,6 @@ pub trait FormDatabase: Send + Sync {
         form_update_targets: FormUpdateTargets,
     ) -> Result<(), InfraError>;
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError>;
+    async fn create_questions(&self, questions: FormQuestionUpdateSchema)
+        -> Result<(), InfraError>;
 }

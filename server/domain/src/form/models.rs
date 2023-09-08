@@ -6,7 +6,7 @@ use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use strum_macros::EnumString;
+use strum_macros::{Display, EnumString};
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
@@ -30,6 +30,12 @@ pub struct FormUpdateTargets {
     pub response_period: Option<ResponsePeriod>,
     #[serde(default)]
     pub webhook: Option<WebhookUrl>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormQuestionUpdateSchema {
+    pub form_id: FormId,
+    pub questions: Vec<Question>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -72,17 +78,19 @@ pub type QuestionId = types::Id<Question>;
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct Question {
-    id: QuestionId,
-    title: String,
-    description: Option<String>,
-    question_type: QuestionType,
+    #[serde(default)]
+    pub id: QuestionId,
+    pub title: String,
+    pub description: Option<String>,
+    pub question_type: QuestionType,
     #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
-    choices: Vec<String>,
-    is_required: bool,
+    #[serde(default)]
+    pub choices: Vec<String>,
+    pub is_required: bool,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Debug, Serialize, Deserialize, EnumString, PartialOrd, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, EnumString, PartialOrd, PartialEq, Display)]
 #[strum(ascii_case_insensitive)]
 pub enum QuestionType {
     TEXT,
