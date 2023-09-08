@@ -134,6 +134,8 @@ pub struct FormSettings {
     pub response_period: ResponsePeriod,
     #[serde(default)]
     pub webhook_url: WebhookUrl,
+    #[serde(default)]
+    pub default_answer_title: DefaultAnswerTitle,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -161,6 +163,13 @@ impl ResponsePeriod {
             }
         })
     }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(DerivingVia, Default, Debug, PartialEq)]
+#[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
+pub struct DefaultAnswerTitle {
+    pub default_answer_title: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

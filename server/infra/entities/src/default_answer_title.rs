@@ -3,25 +3,29 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "answers")]
+#[sea_orm(table_name = "default_answer_title")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    #[sea_orm(column_type = "Binary(BlobSize::Blob(Some(16)))")]
-    pub user: Vec<u8>,
+    pub form_id: i32,
     pub title: Option<String>,
-    pub time_stamp: DateTimeUtc,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::real_answers::Entity")]
-    RealAnswers,
+    #[sea_orm(
+        belongs_to = "super::form_meta_data::Entity",
+        from = "Column::FormId",
+        to = "super::form_meta_data::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    FormMetaData,
 }
 
-impl Related<super::real_answers::Entity> for Entity {
+impl Related<super::form_meta_data::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::RealAnswers.def()
+        Relation::FormMetaData.def()
     }
 }
 

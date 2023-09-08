@@ -4,8 +4,9 @@ use domain::form::models::{
     FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
     OffsetAndLimit, PostedAnswers,
 };
+use entities::prelude::DefaultAnswerTitle;
 use entities::{
-    answers, form_choices, form_meta_data, form_questions, form_webhooks,
+    answers, default_answer_title, form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers},
     real_answers, response_period,
     sea_orm_active_enums::QuestionType,
@@ -87,6 +88,11 @@ impl FormDatabase for ConnectionPool {
             .all(&self.pool)
             .await?;
 
+        let all_default_answer_title = DefaultAnswerTitle::find()
+            .filter(Expr::col(default_answer_title::Column::FormId).is_in(form_ids.to_owned()))
+            .all(&self.pool)
+            .await?;
+
         Ok(forms
             .into_iter()
             .map(|form| {
@@ -131,6 +137,13 @@ impl FormDatabase for ConnectionPool {
                     .next()
                     .unwrap_or_default();
 
+                let default_answer_title = all_default_answer_title
+                    .iter()
+                    .filter(|default_answer_title| default_answer_title.form_id == form.id)
+                    .map(|default_answer_title| default_answer_title.title.to_owned())
+                    .next()
+                    .unwrap_or_default();
+
                 FormDto {
                     id: form.id,
                     title: form.title,
@@ -139,6 +152,7 @@ impl FormDatabase for ConnectionPool {
                     metadata: (form.created_at, form.updated_at),
                     response_period,
                     webhook_url,
+                    default_answer_title,
                 }
             })
             .collect())
@@ -206,6 +220,14 @@ impl FormDatabase for ConnectionPool {
             .map(|webhook_url_model| Some(webhook_url_model.url.to_owned()))
             .unwrap_or_default();
 
+        let default_answer_title = DefaultAnswerTitle::find()
+            .filter(Expr::col(default_answer_title::Column::FormId).eq(target_form.id))
+            .all(&self.pool)
+            .await?
+            .first()
+            .map(|answer_title_setting| answer_title_setting.title.to_owned())
+            .unwrap_or_default();
+
         Ok(FormDto {
             id: target_form.id,
             title: target_form.title,
@@ -214,6 +236,7 @@ impl FormDatabase for ConnectionPool {
             metadata: (target_form.created_at, target_form.updated_at),
             response_period,
             webhook_url,
+            default_answer_title,
         })
     }
 
@@ -334,6 +357,7 @@ impl FormDatabase for ConnectionPool {
         let id = answers::ActiveModel {
             id: Default::default(),
             user: Set(answer.uuid.to_owned().as_ref().to_vec()),
+            title: todo!(),
             time_stamp: Set(Utc::now()),
         }
         .insert(&self.pool)
