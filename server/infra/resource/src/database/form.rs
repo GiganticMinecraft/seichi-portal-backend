@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use domain::form::models::{
-    FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-    OffsetAndLimit, PostedAnswers,
+    DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+    FormUpdateTargets, OffsetAndLimit, PostedAnswers,
 };
 use entities::{
-    answers, default_answer_title, form_choices, form_meta_data, form_questions, form_webhooks,
+    answers, default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{
-        DefaultAnswerTitle, FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers,
+        DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers,
     },
     real_answers, response_period,
     sea_orm_active_enums::QuestionType,
@@ -90,8 +90,8 @@ impl FormDatabase for ConnectionPool {
             .all(&self.pool)
             .await?;
 
-        let all_default_answer_title = DefaultAnswerTitle::find()
-            .filter(Expr::col(default_answer_title::Column::FormId).is_in(form_ids.to_owned()))
+        let all_default_answer_title = DefaultAnswerTitles::find()
+            .filter(Expr::col(default_answer_titles::Column::FormId).is_in(form_ids.to_owned()))
             .all(&self.pool)
             .await?;
 
@@ -143,8 +143,7 @@ impl FormDatabase for ConnectionPool {
                     .iter()
                     .filter(|default_answer_title| default_answer_title.form_id == form.id)
                     .map(|default_answer_title| default_answer_title.title.to_owned())
-                    .next()
-                    .unwrap_or_default();
+                    .next();
 
                 FormDto {
                     id: form.id,
@@ -222,13 +221,12 @@ impl FormDatabase for ConnectionPool {
             .map(|webhook_url_model| Some(webhook_url_model.url.to_owned()))
             .unwrap_or_default();
 
-        let default_answer_title = DefaultAnswerTitle::find()
-            .filter(Expr::col(default_answer_title::Column::FormId).eq(target_form.id))
+        let default_answer_title = DefaultAnswerTitles::find()
+            .filter(Expr::col(default_answer_titles::Column::FormId).eq(target_form.id))
             .all(&self.pool)
             .await?
             .first()
-            .map(|answer_title_setting| answer_title_setting.title.to_owned())
-            .unwrap_or_default();
+            .map(|answer_title_setting| answer_title_setting.title.to_owned());
 
         Ok(FormDto {
             id: target_form.id,
@@ -289,6 +287,7 @@ impl FormDatabase for ConnectionPool {
             description,
             response_period,
             webhook,
+            default_answer_title,
         }: FormUpdateTargets,
     ) -> Result<(), InfraError> {
         let current_form = self.get(form_id.to_owned().into()).await?;
@@ -352,19 +351,42 @@ impl FormDatabase for ConnectionPool {
             .await?;
         }
 
+        if current_form.default_answer_title.is_some() && default_answer_title.is_some() {
+            DefaultAnswerTitles::update_many()
+                .filter(default_answer_titles::Column::FormId.eq(form_id.to_owned()))
+                .col_expr(
+                    default_answer_titles::Column::Title,
+                    Expr::value(default_answer_title.unwrap().unwrap_or_default()),
+                )
+                .exec(&self.pool)
+                .await?;
+        } else if let Some(default_answer_title) = default_answer_title {
+            default_answer_titles::ActiveModel {
+                id: ActiveValue::NotSet,
+                form_id: Set(form_id.to_owned()),
+                title: Set(default_answer_title.unwrap_or_default()),
+            }
+            .insert(&self.pool)
+            .await?;
+        }
+
         Ok(())
     }
 
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
         let regex = Regex::new(r"\$\d+").unwrap();
 
-        let default_answer_title = DefaultAnswerTitle::find()
-            .filter(Expr::col(default_answer_title::Column::FormId).eq(answer.form_id.to_owned()))
-            .all(&self.pool)
-            .await?
-            .first()
-            .and_then(|answer_title_setting| answer_title_setting.title.to_owned())
-            .unwrap_or("未設定".to_string());
+        let default_answer_title = DefaultAnswerTitle {
+            default_answer_title: DefaultAnswerTitles::find()
+                .filter(
+                    Expr::col(default_answer_titles::Column::FormId).eq(answer.form_id.to_owned()),
+                )
+                .all(&self.pool)
+                .await?
+                .first()
+                .map(|answer_title_setting| answer_title_setting.title.to_owned()),
+        }
+        .unwrap_or_default();
 
         let embed_title = regex.find_iter(&default_answer_title.to_owned()).fold(
             default_answer_title,
@@ -434,7 +456,8 @@ impl FormDatabase for ConnectionPool {
             .await?
             .last_insert_id;
 
-        let first_insert_id = last_insert_id - form_question_update_schema.questions.len() as i32;
+        let first_insert_id =
+            last_insert_id - form_question_update_schema.questions.len() as i32 + 1;
 
         let question_ids: Vec<_> = (first_insert_id..last_insert_id).collect();
 
@@ -456,9 +479,12 @@ impl FormDatabase for ConnectionPool {
             })
             .collect_vec();
 
-        FormChoices::insert_many(choices_active_values)
-            .exec(&self.pool)
-            .await?;
+        if !choices_active_values.is_empty() {
+            // NOTE: insert_manyに渡すvecが空だとinsertに失敗する
+            FormChoices::insert_many(choices_active_values)
+                .exec(&self.pool)
+                .await?;
+        }
 
         Ok(())
     }

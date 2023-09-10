@@ -3,7 +3,7 @@
 pub mod prelude;
 
 pub mod answers;
-pub mod default_answer_title;
+pub mod default_answer_titles;
 pub mod form_choices;
 pub mod form_meta_data;
 pub mod form_questions;

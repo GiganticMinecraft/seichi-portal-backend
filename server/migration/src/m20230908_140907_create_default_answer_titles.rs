@@ -11,17 +11,17 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(DefaultAnswerTitleTable::DefaultAnswerTitle)
+                    .table(DefaultAnswerTitlesTable::DefaultAnswerTitles)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(DefaultAnswerTitleTable::Id)
+                        ColumnDef::new(DefaultAnswerTitlesTable::Id)
                             .integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new(DefaultAnswerTitleTable::FormId)
+                        ColumnDef::new(DefaultAnswerTitlesTable::FormId)
                             .integer()
                             .not_null(),
                     )
@@ -29,12 +29,16 @@ impl MigrationTrait for Migration {
                         ForeignKey::create()
                             .name("fk-form_key_default_answer_title")
                             .from(
-                                DefaultAnswerTitleTable::DefaultAnswerTitle,
-                                DefaultAnswerTitleTable::FormId,
+                                DefaultAnswerTitlesTable::DefaultAnswerTitles,
+                                DefaultAnswerTitlesTable::FormId,
                             )
                             .to(FormMetaDataTable::FormMetaData, FormMetaDataTable::Id),
                     )
-                    .col(ColumnDef::new(DefaultAnswerTitleTable::Title).string())
+                    .col(
+                        ColumnDef::new(DefaultAnswerTitlesTable::Title)
+                            .string()
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await
@@ -44,7 +48,7 @@ impl MigrationTrait for Migration {
         manager
             .drop_table(
                 Table::drop()
-                    .table(DefaultAnswerTitleTable::DefaultAnswerTitle)
+                    .table(DefaultAnswerTitlesTable::DefaultAnswerTitles)
                     .to_owned(),
             )
             .await
@@ -52,8 +56,8 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum DefaultAnswerTitleTable {
-    DefaultAnswerTitle,
+enum DefaultAnswerTitlesTable {
+    DefaultAnswerTitles,
     Id,
     FormId,
     Title,
