@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use domain::form::models::{
-    DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+    Answer, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
     FormUpdateTargets, OffsetAndLimit, PostedAnswers,
 };
+use entities::prelude::Answers;
 use entities::{
     answers, default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{
@@ -17,13 +18,16 @@ use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
+use sea_orm::prelude::Uuid;
 use sea_orm::{
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
     ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
 };
+use std::fmt::Error;
 
+use crate::dto::{AnswerDto, PostedAnswersDto};
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
     dto::{FormDto, QuestionDto},
@@ -429,6 +433,44 @@ impl FormDatabase for ConnectionPool {
             .await?;
 
         Ok(())
+    }
+
+    async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
+        stream::iter(
+            Answers::find()
+                .order_by_desc(answers::Column::TimeStamp)
+                .all(&self.pool)
+                .await?,
+        )
+        .then(|answer| async {
+            let answers = RealAnswers::find()
+                .filter(Expr::col(real_answers::Column::AnswerId).eq(answer.id))
+                .all(&self.pool)
+                .await?
+                .iter()
+                .map(|answer| AnswerDto {
+                    question_id: answer.question_id,
+                    answer: answer.to_owned().answer,
+                })
+                .collect_vec();
+
+            Ok(PostedAnswersDto {
+                uuid: answer
+                    .user
+                    .chunks_exact(16)
+                    .map(Uuid::from_slice)
+                    .collect::<Result<_, _>>()
+                    .unwrap(),
+                timestamp: answer.time_stamp,
+                form_id: 1, // TODO: answersテーブルにはform_idが存在しないので、追加して取得できるようにしたい
+                title: Some(answer.title),
+                answers,
+            })
+        })
+        .collect::<Vec<Result<PostedAnswersDto, _>>>()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<PostedAnswersDto>, _>>()
     }
 
     async fn create_questions(

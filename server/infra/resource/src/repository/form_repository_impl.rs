@@ -7,6 +7,7 @@ use domain::{
     repository::form_repository::FormRepository,
 };
 use errors::Error;
+use futures::{stream, stream::StreamExt};
 use outgoing::form_outgoing;
 
 use crate::{
@@ -75,6 +76,16 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .post_answer(answers)
             .await
             .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
+        stream::iter(self.client.form().get_all_answers().await?)
+            .then(|posted_answers_dto| async { Ok(posted_answers_dto.try_into()?) })
+            .collect::<Vec<Result<PostedAnswers, _>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<PostedAnswers>, _>>()
     }
 
     async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {

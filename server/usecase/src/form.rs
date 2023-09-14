@@ -44,6 +44,10 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.post_answer(answers).await
     }
 
+    pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
+        self.repository.get_all_answers().await
+    }
+
     pub async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {
         self.repository.create_questions(questions).await
     }

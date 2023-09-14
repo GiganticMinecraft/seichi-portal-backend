@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
 use domain::form::models::{FormSettings, ResponsePeriod};
+use itertools::Itertools;
+use uuid::Uuid;
 
 pub struct QuestionDto {
     pub id: i32,
@@ -77,5 +79,59 @@ impl TryFrom<FormDto> for domain::form::models::Form {
                 default_answer_title: default_answer_title.into(),
             })
             .build())
+    }
+}
+
+pub struct AnswerDto {
+    pub question_id: i32,
+    pub answer: String,
+}
+
+impl TryFrom<AnswerDto> for domain::form::models::Answer {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        AnswerDto {
+            question_id,
+            answer,
+        }: AnswerDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(domain::form::models::Answer {
+            question_id: question_id.into(),
+            answer,
+        })
+    }
+}
+
+pub struct PostedAnswersDto {
+    pub uuid: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub form_id: i32,
+    pub title: Option<String>,
+    pub answers: Vec<AnswerDto>,
+}
+
+impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        PostedAnswersDto {
+            uuid,
+            timestamp,
+            form_id,
+            title,
+            answers,
+        }: PostedAnswersDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(domain::form::models::PostedAnswers {
+            uuid,
+            timestamp,
+            form_id: form_id.into(),
+            title: title.into(),
+            answers: answers
+                .into_iter()
+                .map(|answer| answer.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+        })
     }
 }

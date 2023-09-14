@@ -8,6 +8,7 @@ use axum::{
 };
 use common::config::{ENV, HTTP};
 use hyper::header::AUTHORIZATION;
+use presentation::form_handler::get_all_answers;
 use presentation::{
     auth::auth,
     form_handler::{
@@ -71,7 +72,10 @@ async fn main() -> anyhow::Result<()> {
                 .patch(update_form_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route("/forms/answers", post(post_answer_handler))
+        .route(
+            "/forms/answers",
+            post(post_answer_handler).get(get_all_answers),
+        )
         .with_state(shared_repository.to_owned())
         .route("/forms/questions", post(create_question_handler))
         .with_state(shared_repository.to_owned())

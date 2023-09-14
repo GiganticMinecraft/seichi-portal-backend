@@ -13,6 +13,7 @@ use domain::{
 use errors::{infra::InfraError, Error};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
+use std::os::unix::raw::mode_t;
 use usecase::form::FormUseCase;
 
 pub async fn create_form_handler(
@@ -106,6 +107,19 @@ pub async fn update_form_handler(
 
     match form_use_case.update_form(form_id, targets).await {
         Ok(form) => (StatusCode::OK, Json(form)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn get_all_answers(
+    State(repository): State<RealInfrastructureRepository>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_all_answers().await {
+        Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
