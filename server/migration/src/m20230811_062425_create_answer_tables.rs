@@ -22,6 +22,12 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(AnswersTable::User).uuid().not_null())
                     .col(
+                        ColumnDef::new(AnswersTable::Title)
+                            .string()
+                            .not_null()
+                            .default("未設定"),
+                    )
+                    .col(
                         ColumnDef::new(AnswersTable::TimeStamp)
                             .timestamp()
                             .not_null()
@@ -93,6 +99,7 @@ enum AnswersTable {
     Answers,
     Id,
     User,
+    Title,
     TimeStamp,
 }
 

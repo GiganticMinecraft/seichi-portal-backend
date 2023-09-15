@@ -30,6 +30,8 @@ pub struct FormUpdateTargets {
     pub response_period: Option<ResponsePeriod>,
     #[serde(default)]
     pub webhook: Option<WebhookUrl>,
+    #[serde(default)]
+    pub default_answer_title: Option<DefaultAnswerTitle>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -134,6 +136,8 @@ pub struct FormSettings {
     pub response_period: ResponsePeriod,
     #[serde(default)]
     pub webhook_url: WebhookUrl,
+    #[serde(default)]
+    pub default_answer_title: DefaultAnswerTitle,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -163,10 +167,27 @@ impl ResponsePeriod {
     }
 }
 
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(DerivingVia, Default, Debug, PartialEq)]
+#[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
+pub struct DefaultAnswerTitle {
+    pub default_answer_title: Option<String>,
+}
+
+impl DefaultAnswerTitle {
+    pub fn unwrap_or_default(&self) -> String {
+        self.default_answer_title
+            .to_owned()
+            .unwrap_or("未設定".to_string())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PostedAnswers {
     pub uuid: Uuid, //todo: あとでUser型に直す
     pub timestamp: DateTime<Utc>,
+    pub form_id: FormId,
+    pub title: DefaultAnswerTitle,
     pub answers: Vec<Answer>,
 }
 
