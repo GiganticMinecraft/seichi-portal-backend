@@ -1,14 +1,14 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use domain::form::models::{
-    Answer, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+    DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
     FormUpdateTargets, OffsetAndLimit, PostedAnswers,
 };
-use entities::prelude::Answers;
 use entities::{
     answers, default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{
-        DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers,
+        Answers, DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks,
+        RealAnswers,
     },
     real_answers, response_period,
     sea_orm_active_enums::QuestionType,
@@ -18,19 +18,17 @@ use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
-use sea_orm::prelude::Uuid;
 use sea_orm::{
+    prelude::Uuid,
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
     ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
 };
-use std::fmt::Error;
 
-use crate::dto::{AnswerDto, PostedAnswersDto};
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
-    dto::{FormDto, QuestionDto},
+    dto::{AnswerDto, FormDto, PostedAnswersDto, QuestionDto},
 };
 
 #[async_trait]
@@ -442,7 +440,7 @@ impl FormDatabase for ConnectionPool {
                 .all(&self.pool)
                 .await?,
         )
-        .then(|answer| async {
+        .then(|answer| async move {
             let answers = RealAnswers::find()
                 .filter(Expr::col(real_answers::Column::AnswerId).eq(answer.id))
                 .all(&self.pool)
@@ -455,12 +453,7 @@ impl FormDatabase for ConnectionPool {
                 .collect_vec();
 
             Ok(PostedAnswersDto {
-                uuid: answer
-                    .user
-                    .chunks_exact(16)
-                    .map(Uuid::from_slice)
-                    .collect::<Result<_, _>>()
-                    .unwrap(),
+                uuid: Uuid::from_slice(answer.user.as_slice())?,
                 timestamp: answer.time_stamp,
                 form_id: 1, // TODO: answersテーブルにはform_idが存在しないので、追加して取得できるようにしたい
                 title: Some(answer.title),

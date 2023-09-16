@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use domain::form::models::{FormSettings, ResponsePeriod};
-use itertools::Itertools;
 use uuid::Uuid;
 
 pub struct QuestionDto {

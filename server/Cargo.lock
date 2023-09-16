@@ -993,6 +993,7 @@ dependencies = [
  "sea-orm",
  "strum",
  "thiserror",
+ "uuid 1.4.1",
 ]
 
 [[package]]
