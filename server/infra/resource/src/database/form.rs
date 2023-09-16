@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use domain::form::models::{
-    DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+    Answer, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
     FormUpdateTargets, OffsetAndLimit, PostedAnswers,
 };
 use entities::{
@@ -418,13 +418,19 @@ impl FormDatabase for ConnectionPool {
 
         let real_answer_models = answer
             .answers
-            .iter()
-            .map(|answer| real_answers::ActiveModel {
-                id: Default::default(),
-                answer_id: Set(id),
-                question_id: Set(answer.question_id.to_owned()),
-                answer: Set(answer.answer.to_owned()),
-            })
+            .into_iter()
+            .map(
+                |Answer {
+                     question_id,
+                     answer,
+                     ..
+                 }| real_answers::ActiveModel {
+                    id: Default::default(),
+                    answer_id: Set(id),
+                    question_id: Set(question_id.into()),
+                    answer: Set(answer),
+                },
+            )
             .collect_vec();
 
         RealAnswers::insert_many(real_answer_models)
@@ -448,7 +454,7 @@ impl FormDatabase for ConnectionPool {
                 .await?
                 .into_iter()
                 .map(
-                    |entities::real_answers::Model {
+                    |real_answers::Model {
                          question_id,
                          answer,
                          ..
