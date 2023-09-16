@@ -456,15 +456,12 @@ impl FormDatabase for ConnectionPool {
             .await?
             .last_insert_id;
 
-        let first_insert_id =
-            last_insert_id - form_question_update_schema.questions.len() as i32 + 1;
-
-        let question_ids: Vec<_> = (first_insert_id..last_insert_id).collect();
-
         let choices_active_values = form_question_update_schema
             .questions
             .iter()
-            .zip(question_ids)
+            .rev()
+            .zip((0..last_insert_id).rev())
+            .filter(|(q, _)| !q.choices.is_empty())
             .flat_map(|(question, question_id)| {
                 question
                     .choices
