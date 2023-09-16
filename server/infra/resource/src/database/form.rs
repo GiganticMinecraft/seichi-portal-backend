@@ -447,14 +447,16 @@ impl FormDatabase for ConnectionPool {
                 .all(&self.pool)
                 .await?
                 .into_iter()
-                .map(|entities::real_answers::Model { 
-                    question_id,
-                    answer,
-                    ..
-                }| AnswerDto {
-                    question_id,
-                    answer,
-                })
+                .map(
+                    |entities::real_answers::Model {
+                         question_id,
+                         answer,
+                         ..
+                     }| AnswerDto {
+                        question_id,
+                        answer,
+                    },
+                )
                 .collect_vec();
 
             Ok(PostedAnswersDto {
