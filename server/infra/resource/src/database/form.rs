@@ -7,7 +7,8 @@ use domain::form::models::{
 use entities::{
     answers, default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
     prelude::{
-        DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks, RealAnswers,
+        Answers, DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks,
+        RealAnswers,
     },
     real_answers, response_period,
     sea_orm_active_enums::QuestionType,
@@ -18,6 +19,7 @@ use itertools::Itertools;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use sea_orm::{
+    prelude::Uuid,
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
@@ -26,7 +28,7 @@ use sea_orm::{
 
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
-    dto::{FormDto, QuestionDto},
+    dto::{AnswerDto, FormDto, PostedAnswersDto, QuestionDto},
 };
 
 #[async_trait]
@@ -405,6 +407,7 @@ impl FormDatabase for ConnectionPool {
 
         let id = answers::ActiveModel {
             id: Default::default(),
+            form_id: Set(answer.form_id.to_owned()),
             user: Set(answer.uuid.to_owned().as_ref().to_vec()),
             title: Set(embed_title),
             time_stamp: Set(Utc::now()),
@@ -429,6 +432,45 @@ impl FormDatabase for ConnectionPool {
             .await?;
 
         Ok(())
+    }
+
+    async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
+        stream::iter(
+            Answers::find()
+                .order_by_desc(answers::Column::TimeStamp)
+                .all(&self.pool)
+                .await?,
+        )
+        .then(|answer| async move {
+            let answers = RealAnswers::find()
+                .filter(Expr::col(real_answers::Column::AnswerId).eq(answer.id))
+                .all(&self.pool)
+                .await?
+                .into_iter()
+                .map(
+                    |entities::real_answers::Model {
+                         question_id,
+                         answer,
+                         ..
+                     }| AnswerDto {
+                        question_id,
+                        answer,
+                    },
+                )
+                .collect_vec();
+
+            Ok(PostedAnswersDto {
+                uuid: Uuid::from_slice(answer.user.as_slice())?,
+                timestamp: answer.time_stamp,
+                form_id: answer.form_id,
+                title: Some(answer.title),
+                answers,
+            })
+        })
+        .collect::<Vec<Result<PostedAnswersDto, _>>>()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<PostedAnswersDto>, _>>()
     }
 
     async fn create_questions(

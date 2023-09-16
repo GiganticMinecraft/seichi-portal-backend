@@ -21,5 +21,6 @@ pub trait FormRepository: Send + Sync + 'static {
         form_update_targets: FormUpdateTargets,
     ) -> Result<(), Error>;
     async fn post_answer(&self, answers: PostedAnswers) -> Result<(), Error>;
+    async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error>;
 }

@@ -993,6 +993,7 @@ dependencies = [
  "sea-orm",
  "strum",
  "thiserror",
+ "uuid 1.4.1",
 ]
 
 [[package]]
@@ -2530,6 +2531,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "tracing",
+ "uuid 1.4.1",
 ]
 
 [[package]]

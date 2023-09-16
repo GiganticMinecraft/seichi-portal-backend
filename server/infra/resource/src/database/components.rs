@@ -6,7 +6,7 @@ use domain::form::models::{
 use errors::infra::InfraError;
 use mockall::automock;
 
-use crate::dto::FormDto;
+use crate::dto::{FormDto, PostedAnswersDto};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -34,6 +34,7 @@ pub trait FormDatabase: Send + Sync {
         form_update_targets: FormUpdateTargets,
     ) -> Result<(), InfraError>;
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError>;
+    async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema)
         -> Result<(), InfraError>;
 }

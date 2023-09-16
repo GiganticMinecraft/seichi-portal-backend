@@ -1,6 +1,9 @@
 use sea_orm_migration::prelude::*;
 
-use crate::m20221211_211233_form_questions::FormQuestionsTable;
+use crate::{
+    m20220101_000001_create_table::FormMetaDataTable,
+    m20221211_211233_form_questions::FormQuestionsTable,
+};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -19,6 +22,13 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .auto_increment()
                             .primary_key(),
+                    )
+                    .col(ColumnDef::new(AnswersTable::FormId).integer().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-form-id-from-answers")
+                            .from(AnswersTable::Answers, AnswersTable::FormId)
+                            .to(FormMetaDataTable::FormMetaData, FormMetaDataTable::Id),
                     )
                     .col(ColumnDef::new(AnswersTable::User).uuid().not_null())
                     .col(
@@ -98,6 +108,7 @@ impl MigrationTrait for Migration {
 enum AnswersTable {
     Answers,
     Id,
+    FormId,
     User,
     Title,
     TimeStamp,

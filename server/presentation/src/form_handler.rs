@@ -110,6 +110,19 @@ pub async fn update_form_handler(
     }
 }
 
+pub async fn get_all_answers(
+    State(repository): State<RealInfrastructureRepository>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_all_answers().await {
+        Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub async fn post_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     Json(answers): Json<PostedAnswers>,

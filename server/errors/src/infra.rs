@@ -7,6 +7,11 @@ pub enum InfraError {
         #[from]
         source: sea_orm::error::DbErr,
     },
+    #[error("Uuid Parse Error: {}", .source)]
+    UuidParse {
+        #[from]
+        source: uuid::Error,
+    },
     #[error("Form Not Found: id = {}", .id)]
     FormNotFound { id: i32 },
     #[error("Outgoing Error: {}", .cause)]
