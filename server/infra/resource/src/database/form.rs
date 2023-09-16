@@ -460,7 +460,7 @@ impl FormDatabase for ConnectionPool {
             .questions
             .iter()
             .rev()
-            .zip((0..last_insert_id).rev())
+            .zip((0..=last_insert_id).rev())
             .filter(|(q, _)| !q.choices.is_empty())
             .flat_map(|(question, question_id)| {
                 question
