@@ -1,7 +1,9 @@
-use crate::m20220101_000001_create_table::FormMetaDataTable;
 use sea_orm_migration::prelude::*;
 
-use crate::m20221211_211233_form_questions::FormQuestionsTable;
+use crate::{
+    m20220101_000001_create_table::FormMetaDataTable,
+    m20221211_211233_form_questions::FormQuestionsTable,
+};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

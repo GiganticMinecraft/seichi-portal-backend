@@ -407,6 +407,7 @@ impl FormDatabase for ConnectionPool {
 
         let id = answers::ActiveModel {
             id: Default::default(),
+            form_id: Set(answer.form_id.to_owned()),
             user: Set(answer.uuid.to_owned().as_ref().to_vec()),
             title: Set(embed_title),
             time_stamp: Set(Utc::now()),
@@ -455,7 +456,7 @@ impl FormDatabase for ConnectionPool {
             Ok(PostedAnswersDto {
                 uuid: Uuid::from_slice(answer.user.as_slice())?,
                 timestamp: answer.time_stamp,
-                form_id: 1, // TODO: answersテーブルにはform_idが存在しないので、追加して取得できるようにしたい
+                form_id: answer.form_id,
                 title: Some(answer.title),
                 answers,
             })
