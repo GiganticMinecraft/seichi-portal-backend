@@ -446,10 +446,14 @@ impl FormDatabase for ConnectionPool {
                 .filter(Expr::col(real_answers::Column::AnswerId).eq(answer.id))
                 .all(&self.pool)
                 .await?
-                .iter()
-                .map(|answer| AnswerDto {
-                    question_id: answer.question_id,
-                    answer: answer.to_owned().answer,
+                .into_iter()
+                .map(|entities::real_answers::Model { 
+                    question_id,
+                    answer,
+                    ..
+                }| AnswerDto {
+                    question_id,
+                    answer,
                 })
                 .collect_vec();
 
