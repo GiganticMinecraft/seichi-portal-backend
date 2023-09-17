@@ -509,7 +509,9 @@ impl FormDatabase for ConnectionPool {
             .iter()
             .rev()
             .zip((0..=last_insert_id).rev())
-            .filter(|(q, _)| !q.choices.is_empty())
+            .filter(|(q, _)| {
+                !q.choices.is_empty() && q.question_type != domain::form::models::QuestionType::TEXT
+            })
             .flat_map(|(question, question_id)| {
                 question
                     .choices
