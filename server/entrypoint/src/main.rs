@@ -40,8 +40,6 @@ async fn main() -> anyhow::Result<()> {
             sentry::ClientOptions {
                 release: sentry::release_name!(),
                 traces_sample_rate: 1.0,
-                enable_profiling: true,
-                profiles_sample_rate: 1.0,
                 environment: Some(ENV.name.to_owned().into()),
                 ..Default::default()
             },
