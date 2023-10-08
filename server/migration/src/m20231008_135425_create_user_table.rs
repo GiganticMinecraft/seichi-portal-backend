@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(UsersTable::Id)
-                            .uuid()
+                            .integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
@@ -33,7 +33,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum UsersTable {
+pub enum UsersTable {
     Users,
     Id,
     Uuid,

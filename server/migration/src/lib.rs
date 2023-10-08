@@ -15,6 +15,7 @@ pub struct Migrator;
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
+            Box::new(m20231008_135425_create_user_table::Migration),
             Box::new(m20220101_000001_create_table::Migration),
             Box::new(m20221211_211233_form_questions::Migration),
             Box::new(m20230219_143118_create_form_choices::Migration),
@@ -22,7 +23,6 @@ impl MigratorTrait for Migrator {
             Box::new(m20230622_053919_create_form_webhook::Migration),
             Box::new(m20230811_062425_create_answer_tables::Migration),
             Box::new(m20230908_140907_create_default_answer_titles::Migration),
-            Box::new(m20231008_135425_create_user_table::Migration),
         ]
     }
 }
