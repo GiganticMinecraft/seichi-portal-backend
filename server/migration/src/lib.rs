@@ -7,6 +7,7 @@ mod m20230614_083950_crate_form_response_period_table;
 mod m20230622_053919_create_form_webhook;
 mod m20230811_062425_create_answer_tables;
 mod m20230908_140907_create_default_answer_titles;
+mod m20231008_135425_create_user_table;
 
 pub struct Migrator;
 
@@ -21,6 +22,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20230622_053919_create_form_webhook::Migration),
             Box::new(m20230811_062425_create_answer_tables::Migration),
             Box::new(m20230908_140907_create_default_answer_titles::Migration),
+            Box::new(m20231008_135425_create_user_table::Migration),
         ]
     }
 }
