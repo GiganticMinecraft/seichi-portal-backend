@@ -38,17 +38,17 @@ pub async fn auth<B>(
             .await
             .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-        println!(
-            "{:?}",
-            serde_json::from_str::<User>(
-                response
-                    .text()
-                    .await
-                    .map_err(|_| StatusCode::UNAUTHORIZED)?
-                    .as_str()
-            )
-        );
+        let user = serde_json::from_str::<User>(
+            response
+                .text()
+                .await
+                .map_err(|_| StatusCode::UNAUTHORIZED)?
+                .as_str(),
+        )
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-        Err(StatusCode::UNAUTHORIZED)
+        request.extensions_mut().insert(user);
+        let response = next.run(request).await;
+        Ok(response)
     }
 }
