@@ -1,7 +1,6 @@
 use async_trait::async_trait;
-use chrono::Utc;
 use domain::form::models::{
-    Answer, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+    DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
     FormUpdateTargets, OffsetAndLimit, PostedAnswers,
 };
 use entities::{
@@ -19,11 +18,11 @@ use itertools::Itertools;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use sea_orm::{
-    prelude::Uuid,
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
-    ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
+    ColumnTrait, ConnectionTrait, DatabaseBackend, EntityTrait, ModelTrait, QueryFilter,
+    QueryOrder, QuerySelect, Statement,
 };
 
 use crate::{
@@ -44,7 +43,9 @@ impl FormDatabase for ConnectionPool {
             title: Set(title.title().to_owned()),
             description: Set(description.to_owned()),
             created_at: Default::default(),
+            created_by: Set(1),
             updated_at: Default::default(),
+            updated_by: Set(1),
         }
         .insert(&self.pool)
         .await?
@@ -405,36 +406,39 @@ impl FormDatabase for ConnectionPool {
             },
         );
 
-        let id = answers::ActiveModel {
-            id: Default::default(),
-            form_id: Set(answer.form_id.to_owned()),
-            user: Set(answer.uuid.to_owned().as_ref().to_vec()),
-            title: Set(embed_title),
-            time_stamp: Set(Utc::now()),
-        }
-        .insert(&self.pool)
-        .await?
-        .id;
+        let id = self.pool.execute(Statement::from_sql_and_values(
+            DatabaseBackend::MySql,
+                "INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = UUID_TO_BIN(?)), ?)",
+            [answer.form_id.to_owned().into(), answer.uuid.to_string().into(), embed_title.into()])
+            )
+            .await?
+            .last_insert_id();
 
-        let real_answer_models = answer
+        let params = answer
             .answers
             .into_iter()
-            .map(
-                |Answer {
-                     question_id,
-                     answer,
-                     ..
-                 }| real_answers::ActiveModel {
-                    id: Default::default(),
-                    answer_id: Set(id),
-                    question_id: Set(question_id.into()),
-                    answer: Set(answer),
-                },
-            )
+            .map(|answer| {
+                vec![
+                    id.to_string(),
+                    answer.question_id.to_string(),
+                    answer.answer,
+                ]
+            })
             .collect_vec();
 
-        RealAnswers::insert_many(real_answer_models)
-            .exec(&self.pool)
+        self.pool
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                format!(
+                    "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
+                    vec!["(?, ?, ?)"; params.len()].iter().join(", ")
+                ),
+                params
+                    .iter()
+                    .flatten()
+                    .map(|value| value.into())
+                    .collect_vec(),
+            ))
             .await?;
 
         Ok(())
@@ -466,7 +470,8 @@ impl FormDatabase for ConnectionPool {
                 .collect_vec();
 
             Ok(PostedAnswersDto {
-                uuid: Uuid::from_slice(answer.user.as_slice())?,
+                // uuid: Uuid::from_slice(answer.user.as_slice())?,
+                uuid: todo!(),
                 timestamp: answer.time_stamp,
                 form_id: answer.form_id,
                 title: Some(answer.title),

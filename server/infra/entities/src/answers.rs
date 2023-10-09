@@ -8,8 +8,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub form_id: i32,
-    #[sea_orm(column_type = "Binary(BlobSize::Blob(Some(16)))")]
-    pub user: Vec<u8>,
+    pub user: i32,
     pub title: String,
     pub time_stamp: DateTimeUtc,
 }
@@ -26,6 +25,14 @@ pub enum Relation {
     FormMetaData,
     #[sea_orm(has_many = "super::real_answers::Entity")]
     RealAnswers,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::User",
+        to = "super::users::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Users,
 }
 
 impl Related<super::form_meta_data::Entity> for Entity {
@@ -37,6 +44,12 @@ impl Related<super::form_meta_data::Entity> for Entity {
 impl Related<super::real_answers::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::RealAnswers.def()
+    }
+}
+
+impl Related<super::users::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Users.def()
     }
 }
 
