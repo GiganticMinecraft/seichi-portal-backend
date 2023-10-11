@@ -1,8 +1,7 @@
-use axum::http::HeaderValue;
 use axum::{
     extract::TypedHeader,
     headers::authorization::{Authorization, Bearer},
-    http::{Request, StatusCode},
+    http::{HeaderValue, Request, StatusCode},
     middleware::Next,
     response::Response,
 };
