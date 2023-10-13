@@ -1,7 +1,10 @@
 use async_trait::async_trait;
-use domain::form::models::{
-    DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-    FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+use domain::{
+    form::models::{
+        DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+    },
+    user::models::User,
 };
 use entities::{
     default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
@@ -34,19 +37,22 @@ impl FormDatabase for ConnectionPool {
         &self,
         title: FormTitle,
         description: FormDescription,
+        user: User,
     ) -> Result<FormId, InfraError> {
-        let form_id = form_meta_data::ActiveModel {
-            id: ActiveValue::NotSet,
-            title: Set(title.title().to_owned()),
-            description: Set(description.to_owned()),
-            created_at: Default::default(),
-            created_by: Set(1),
-            updated_at: Default::default(),
-            updated_by: Set(1),
-        }
-        .insert(&self.pool)
-        .await?
-        .id;
+        let form_id = self
+            .pool
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                "INSERT INTO form_meta_data (title, description, created_by, updated_by)
+                        SELECT ?, ?, users.id, users.id FROM users WHERE uuid = UUID_TO_BIN(?)",
+                [
+                    title.title().to_owned().into(),
+                    description.to_owned().into(),
+                    user.id.to_string().into(),
+                ],
+            ))
+            .await?
+            .last_insert_id() as i32;
 
         Ok(form_id.into())
     }

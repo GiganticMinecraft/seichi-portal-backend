@@ -1,7 +1,10 @@
 use async_trait::async_trait;
-use domain::form::models::{
-    FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-    OffsetAndLimit, PostedAnswers,
+use domain::{
+    form::models::{
+        FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+        OffsetAndLimit, PostedAnswers,
+    },
+    user::models::User,
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -24,6 +27,7 @@ pub trait FormDatabase: Send + Sync {
         &self,
         title: FormTitle,
         description: FormDescription,
+        user: User,
     ) -> Result<FormId, InfraError>;
     async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<FormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
