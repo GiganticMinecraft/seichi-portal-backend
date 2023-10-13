@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -27,7 +27,15 @@ pub async fn create_form_handler(
         .create_form(form.title, form.description)
         .await
     {
-        Ok(id) => (StatusCode::CREATED, Json(json!({ "id": id }))).into_response(),
+        Ok(id) => (
+            StatusCode::CREATED,
+            [(
+                header::LOCATION,
+                HeaderValue::from_str(id.to_string().as_str()).unwrap(),
+            )],
+            Json(json!({ "id": id })),
+        )
+            .into_response(),
         Err(err) => {
             tracing::error!("{}", err);
             (

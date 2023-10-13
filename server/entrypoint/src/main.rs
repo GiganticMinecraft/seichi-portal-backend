@@ -7,7 +7,7 @@ use axum::{
     Router,
 };
 use common::config::{ENV, HTTP};
-use hyper::header::AUTHORIZATION;
+use hyper::header::{AUTHORIZATION, LOCATION};
 use presentation::{
     auth::auth,
     form_handler::{
@@ -83,7 +83,8 @@ async fn main() -> anyhow::Result<()> {
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])
                 .allow_origin(Any) // todo: allow_originを制限する
-                .allow_headers([CONTENT_TYPE, AUTHORIZATION]),
+                .allow_headers([CONTENT_TYPE, AUTHORIZATION])
+                .expose_headers([LOCATION]),
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], HTTP.port.parse().unwrap()));
