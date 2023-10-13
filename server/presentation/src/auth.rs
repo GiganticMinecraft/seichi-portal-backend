@@ -1,15 +1,15 @@
-use axum::extract::State;
 use axum::{
-    extract::TypedHeader,
+    extract::{State, TypedHeader},
     headers::authorization::{Authorization, Bearer},
     http::{HeaderValue, Request, StatusCode},
     middleware::Next,
     response::Response,
 };
 use common::config::ENV;
-use domain::repository::user_repository::UserRepository;
-use domain::repository::Repositories;
-use domain::user::models::User;
+use domain::{
+    repository::{user_repository::UserRepository, Repositories},
+    user::models::User,
+};
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use resource::repository::RealInfrastructureRepository;
 use usecase::user::UserUseCase;

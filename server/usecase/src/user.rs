@@ -1,5 +1,4 @@
-use domain::repository::user_repository::UserRepository;
-use domain::user::models::User;
+use domain::{repository::user_repository::UserRepository, user::models::User};
 use errors::Error;
 
 pub struct UserUseCase<'a, UserRepo: UserRepository> {

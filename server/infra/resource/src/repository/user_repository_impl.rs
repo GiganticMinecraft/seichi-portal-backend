@@ -1,9 +1,11 @@
-use crate::database::components::UserDatabase;
-use crate::{database::components::DatabaseComponents, repository::Repository};
 use async_trait::async_trait;
-use domain::repository::user_repository::UserRepository;
-use domain::user::models::User;
+use domain::{repository::user_repository::UserRepository, user::models::User};
 use errors::Error;
+
+use crate::{
+    database::components::{DatabaseComponents, UserDatabase},
+    repository::Repository,
+};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client> {

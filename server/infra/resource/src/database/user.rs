@@ -1,9 +1,9 @@
-use crate::database::components::UserDatabase;
-use crate::database::connection::ConnectionPool;
 use async_trait::async_trait;
 use domain::user::models::User;
 use errors::infra::InfraError;
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+
+use crate::database::{components::UserDatabase, connection::ConnectionPool};
 
 #[async_trait]
 impl UserDatabase for ConnectionPool {
