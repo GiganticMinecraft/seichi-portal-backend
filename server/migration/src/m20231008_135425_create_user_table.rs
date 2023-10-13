@@ -18,7 +18,12 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(UsersTable::Uuid).uuid().not_null())
+                    .col(
+                        ColumnDef::new(UsersTable::Uuid)
+                            .uuid()
+                            .unique_key()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(UsersTable::Name).string().not_null())
                     .to_owned(),
             )

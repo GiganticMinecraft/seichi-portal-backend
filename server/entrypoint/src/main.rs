@@ -78,7 +78,10 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(layer)
-        .route_layer(middleware::from_fn(auth))
+        .route_layer(middleware::from_fn_with_state(
+            shared_repository.to_owned(),
+            auth,
+        ))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])

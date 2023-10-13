@@ -42,6 +42,7 @@ impl ConnectionPool {
 #[async_trait]
 impl DatabaseComponents for ConnectionPool {
     type ConcreteFormDatabase = Self;
+    type ConcreteUserDatabase = Self;
     type TransactionAcrossComponents = DatabaseTransaction;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents> {
@@ -49,6 +50,10 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn form(&self) -> &Self::ConcreteFormDatabase {
+        self
+    }
+
+    fn user(&self) -> &Self::ConcreteUserDatabase {
         self
     }
 }

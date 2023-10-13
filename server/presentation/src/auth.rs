@@ -1,3 +1,4 @@
+use axum::extract::State;
 use axum::{
     extract::TypedHeader,
     headers::authorization::{Authorization, Bearer},
@@ -6,25 +7,27 @@ use axum::{
     response::Response,
 };
 use common::config::ENV;
+use domain::repository::user_repository::UserRepository;
+use domain::repository::Repositories;
 use domain::user::models::User;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
+use resource::repository::RealInfrastructureRepository;
+use usecase::user::UserUseCase;
 use uuid::uuid;
 
 pub async fn auth<B>(
+    State(repository): State<RealInfrastructureRepository>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     mut request: Request<B>,
     next: Next<B>,
 ) -> Result<Response, StatusCode> {
     let token = auth.token();
 
-    if ENV.name == "local" && token == "debug_user" {
-        let user = User {
+    let user = if ENV.name == "local" && token == "debug_user" {
+        User {
             name: "test_user".to_string(),
             id: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
-        };
-        request.extensions_mut().insert(user);
-        let response = next.run(request).await;
-        Ok(response)
+        }
     } else {
         let client = reqwest::Client::new();
 
@@ -37,17 +40,29 @@ pub async fn auth<B>(
             .await
             .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-        let user = serde_json::from_str::<User>(
+        serde_json::from_str::<User>(
             response
                 .text()
                 .await
                 .map_err(|_| StatusCode::UNAUTHORIZED)?
                 .as_str(),
         )
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(|_| StatusCode::UNAUTHORIZED)?
+    };
 
-        request.extensions_mut().insert(user);
-        let response = next.run(request).await;
-        Ok(response)
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    match user_use_case.repository.upsert_user(&user).await {
+        Ok(_) => {
+            request.extensions_mut().insert(user);
+            let response = next.run(request).await;
+            Ok(response)
+        }
+        Err(err) => {
+            tracing::error!("{}", err);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }

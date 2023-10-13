@@ -14,10 +14,12 @@ use crate::dto::{FormDto, PostedAnswersDto};
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
+    type ConcreteUserDatabase: UserDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
+    fn user(&self) -> &Self::ConcreteUserDatabase;
 }
 
 #[automock]
@@ -41,4 +43,10 @@ pub trait FormDatabase: Send + Sync {
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema)
         -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait UserDatabase: Send + Sync {
+    async fn upsert_user(&self, user: &User) -> Result<(), InfraError>;
 }
