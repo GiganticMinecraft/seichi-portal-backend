@@ -41,4 +41,4 @@ uuid = { version = "1.4.1", features = ["v4"] }
 deriving_via = "1.5.0"
 reqwest = { version = "0.11.20", default-features = false, features = ["rustls"] }
 num-traits = "0.2.16"
-regex = "1.9.5"
+regex = "1.10.0"
