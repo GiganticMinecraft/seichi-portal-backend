@@ -1,5 +1,7 @@
 use async_trait::async_trait;
+use itertools::Itertools;
 use migration::MigratorTrait;
+use regex::Regex;
 use sea_orm::{
     ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, DatabaseTransaction, DbErr,
     ExecResult, QueryResult, Statement, TransactionTrait, Value,
@@ -79,6 +81,36 @@ impl ConnectionPool {
                 DatabaseBackend::MySql,
                 sql,
                 values,
+            ))
+            .await
+    }
+
+    pub async fn batch_insert<I>(&self, sql: &str, params: I) -> Result<ExecResult, DbErr>
+    where
+        I: IntoIterator<Item = Value>,
+    {
+        let regex = Regex::new(r"\((\?,\s*)+\?\)").unwrap();
+        let insert_part_opt = regex.find(sql);
+
+        assert!(
+            insert_part_opt.is_some(),
+            "SQL insert params must be exists."
+        );
+
+        let insert_part = insert_part_opt.unwrap().as_str();
+
+        let params_vec = params.into_iter().collect::<Vec<_>>();
+
+        self.pool
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                sql.replace(
+                    insert_part,
+                    &vec![insert_part; params_vec.len() / insert_part.matches('?').count()]
+                        .iter()
+                        .join(", "),
+                ),
+                params_vec,
             ))
             .await
     }

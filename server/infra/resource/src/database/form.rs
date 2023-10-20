@@ -412,7 +412,7 @@ impl FormDatabase for ConnectionPool {
         let params = answer
             .answers
             .into_iter()
-            .map(|answer| {
+            .flat_map(|answer| {
                 vec![
                     id.to_string(),
                     answer.question_id.to_string(),
@@ -421,16 +421,9 @@ impl FormDatabase for ConnectionPool {
             })
             .collect_vec();
 
-        self.execute_and_values(
-            &format!(
-                "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
-                vec!["(?, ?, ?)"; params.len()].iter().join(", ")
-            ),
-            params
-                .iter()
-                .flatten()
-                .map(|value| value.into())
-                .collect_vec(),
+        self.batch_insert(
+            "INSERT INTO real_answers (answer_id, question_id, answer) VALUES (?, ?, ?)",
+            params.iter().map(|value| value.into()),
         )
         .await?;
 
