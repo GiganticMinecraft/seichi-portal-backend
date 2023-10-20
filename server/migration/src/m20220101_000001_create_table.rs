@@ -1,5 +1,4 @@
-use sea_orm_migration::prelude::*;
-use sea_orm_migration::sea_orm::Statement;
+use sea_orm_migration::{prelude::*, sea_orm::Statement};
 
 use crate::sea_orm::DatabaseBackend;
 
