@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use migration::MigratorTrait;
-use sea_orm::{Database, DatabaseConnection, DatabaseTransaction, TransactionTrait};
+use sea_orm::{
+    ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, DatabaseTransaction, DbErr,
+    ExecResult, QueryResult, Statement, TransactionTrait, Value,
+};
 
 use crate::database::{
     components::DatabaseComponents,
@@ -36,6 +39,48 @@ impl ConnectionPool {
         migration::Migrator::up(&self.pool, None).await?;
 
         Ok(())
+    }
+
+    pub async fn query_all(&self, sql: &str) -> Result<Vec<QueryResult>, DbErr> {
+        self.pool
+            .query_all(Statement::from_string(DatabaseBackend::MySql, sql))
+            .await
+    }
+
+    pub async fn query_all_and_values<I>(
+        &self,
+        sql: &str,
+        values: I,
+    ) -> Result<Vec<QueryResult>, DbErr>
+    where
+        I: IntoIterator<Item = Value>,
+    {
+        self.pool
+            .query_all(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                sql,
+                values,
+            ))
+            .await
+    }
+
+    pub async fn execute(&self, sql: &str) -> Result<ExecResult, DbErr> {
+        self.pool
+            .execute(Statement::from_string(DatabaseBackend::MySql, sql))
+            .await
+    }
+
+    pub async fn execute_and_values<I>(&self, sql: &str, values: I) -> Result<ExecResult, DbErr>
+    where
+        I: IntoIterator<Item = Value>,
+    {
+        self.pool
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                sql,
+                values,
+            ))
+            .await
     }
 }
 

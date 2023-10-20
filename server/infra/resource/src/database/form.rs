@@ -21,8 +21,7 @@ use sea_orm::{
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
-    ColumnTrait, ConnectionTrait, DatabaseBackend, DbErr, EntityTrait, ModelTrait, QueryFilter,
-    Statement,
+    ColumnTrait, DbErr, EntityTrait, ModelTrait, QueryFilter,
 };
 
 use crate::{
@@ -40,9 +39,7 @@ impl FormDatabase for ConnectionPool {
         user: User,
     ) -> Result<FormId, InfraError> {
         let form_id = self
-            .pool
-            .execute(Statement::from_sql_and_values(
-                DatabaseBackend::MySql,
+            .execute_and_values(
                 "INSERT INTO form_meta_data (title, description, created_by, updated_by)
                         SELECT ?, ?, users.id, users.id FROM users WHERE uuid = ?",
                 [
@@ -50,7 +47,7 @@ impl FormDatabase for ConnectionPool {
                     description.to_owned().into(),
                     user.id.to_string().into(),
                 ],
-            ))
+            )
             .await?
             .last_insert_id() as i32;
 
@@ -63,10 +60,8 @@ impl FormDatabase for ConnectionPool {
         OffsetAndLimit { offset, limit }: OffsetAndLimit,
     ) -> Result<Vec<FormDto>, InfraError> {
         let forms = self
-            .pool
-            .query_all(Statement::from_string(
-                DatabaseBackend::MySql,
-                format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+            .query_all(
+                &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
                             FROM form_meta_data
                             LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
@@ -75,23 +70,17 @@ impl FormDatabase for ConnectionPool {
                             {} {}", 
                         limit.map(|value| format!("LIMIT {}", value)).unwrap_or_default(), 
                         offset.map(|value| format!("OFFSET {}", value)).unwrap_or_default()),
-            ))
+            )
             .await?;
 
         let questions = self
-            .pool
-            .query_all(Statement::from_string(
-                DatabaseBackend::MySql,
+            .query_all(
                 r"SELECT form_id, question_id, title, description, question_type, is_required FROM form_questions"
-            ))
+            )
             .await?;
 
         let choices = self
-            .pool
-            .query_all(Statement::from_string(
-                DatabaseBackend::MySql,
-                r"SELECT question_id, choice FROM form_choices",
-            ))
+            .query_all(r"SELECT question_id, choice FROM form_choices")
             .await?;
 
         let form_id_with_questions = questions
@@ -409,16 +398,14 @@ impl FormDatabase for ConnectionPool {
         );
 
         let id = self
-            .pool
-            .execute(Statement::from_sql_and_values(
-                DatabaseBackend::MySql,
+            .execute_and_values(
                 r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
                 [
                     answer.form_id.to_owned().into(),
                     answer.uuid.to_string().into(),
                     embed_title.into(),
                 ],
-            ))
+            )
             .await?
             .last_insert_id();
 
@@ -434,41 +421,33 @@ impl FormDatabase for ConnectionPool {
             })
             .collect_vec();
 
-        self.pool
-            .execute(Statement::from_sql_and_values(
-                DatabaseBackend::MySql,
-                format!(
-                    "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
-                    vec!["(?, ?, ?)"; params.len()].iter().join(", ")
-                ),
-                params
-                    .iter()
-                    .flatten()
-                    .map(|value| value.into())
-                    .collect_vec(),
-            ))
-            .await?;
+        self.execute_and_values(
+            &format!(
+                "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
+                vec!["(?, ?, ?)"; params.len()].iter().join(", ")
+            ),
+            params
+                .iter()
+                .flatten()
+                .map(|value| value.into())
+                .collect_vec(),
+        )
+        .await?;
 
         Ok(())
     }
 
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         let answers = self
-            .pool
-            .query_all(Statement::from_string(
-                DatabaseBackend::MySql,
+            .query_all(
                 "SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
-            ))
+            )
             .await?;
 
         let real_answers = self
-            .pool
-            .query_all(Statement::from_string(
-                DatabaseBackend::MySql,
-                "SELECT answer_id, question_id, answer FROM real_answers",
-            ))
+            .query_all("SELECT answer_id, question_id, answer FROM real_answers")
             .await?;
 
         answers
