@@ -8,19 +8,15 @@ use domain::{
     user::models::User,
 };
 use entities::{
-    default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
-    prelude::{DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks},
-    response_period,
+    default_answer_titles, form_choices, form_questions,
+    prelude::{DefaultAnswerTitles, FormChoices, FormQuestions},
     sea_orm_active_enums::QuestionType,
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use itertools::Itertools;
 use regex::Regex;
 use sea_orm::{
-    sea_query::{Expr, SimpleExpr},
-    ActiveEnum, ActiveModelTrait, ActiveValue,
-    ActiveValue::Set,
-    ColumnTrait, DbErr, EntityTrait, QueryFilter,
+    sea_query::Expr, ActiveEnum, ActiveValue, ActiveValue::Set, DbErr, EntityTrait, QueryFilter,
 };
 
 use crate::{
@@ -254,81 +250,68 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         let current_form = self.get(form_id.to_owned().into()).await?;
 
-        FormMetaData::update_many()
-            .filter(form_meta_data::Column::Id.eq(form_id.to_owned()))
-            .col_expr(
-                form_meta_data::Column::Title,
-                Expr::value(
-                    title
-                        .map(|title| title.into_inner())
-                        .unwrap_or(current_form.title),
-                ),
-            )
-            .col_expr(
-                form_meta_data::Column::Description,
-                Expr::value(
-                    description
-                        .map(|description| description.into_inner())
-                        .unwrap_or(current_form.description),
-                ),
-            )
-            .col_expr(
-                form_meta_data::Column::UpdatedAt,
-                SimpleExpr::from(Expr::current_timestamp()),
-            )
-            .exec(&self.pool)
-            .await?;
+        self.execute_and_values(
+            r"UPDATE form_meta_data SET title = ?, description = ?, update_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [
+                title
+                    .map(|title| title.into_inner())
+                    .unwrap_or(current_form.title)
+                    .into(),
+                description
+                    .map(|description| description.into_inner())
+                    .unwrap_or(current_form.description)
+                    .into(),
+                form_id.to_owned().into(),
+            ],
+        )
+        .await?;
 
         if let Some(response_period) = response_period {
-            response_period::Entity::update_many()
-                .filter(response_period::Column::FormId.eq(form_id.to_owned()))
-                .col_expr(
-                    response_period::Column::StartAt,
-                    Expr::value(response_period.start_at),
-                )
-                .col_expr(
-                    response_period::Column::EndAt,
-                    Expr::value(response_period.end_at),
-                )
-                .exec(&self.pool)
-                .await?;
+            self.execute_and_values(
+                "UPDATE response_period SET start_at = ?, end_at = ? WHERE form_id = ?",
+                [
+                    response_period.start_at.into(),
+                    response_period.end_at.into(),
+                    form_id.to_owned().into(),
+                ],
+            )
+            .await?;
         }
 
         if current_form.webhook_url.is_some() {
-            FormWebhooks::update_many()
-                .filter(form_webhooks::Column::FormId.eq(form_id.to_owned()))
-                .col_expr(
-                    form_webhooks::Column::Url,
-                    Expr::value(webhook.and_then(|url| url.webhook_url)),
-                )
-                .exec(&self.pool)
-                .await?;
+            self.execute_and_values(
+                "UPDATE form_webhooks SET url = ? WHERE form_id = ?",
+                [
+                    webhook.and_then(|url| url.webhook_url).into(),
+                    form_id.to_owned().into(),
+                ],
+            )
+            .await?;
         } else if let Some(webhook_url) = webhook.and_then(|url| url.webhook_url) {
-            form_webhooks::ActiveModel {
-                id: ActiveValue::NotSet,
-                form_id: Set(form_id.to_owned()),
-                url: Set(webhook_url),
-            }
-            .insert(&self.pool)
+            self.execute_and_values(
+                "INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)",
+                [form_id.to_owned().into(), webhook_url.into()],
+            )
             .await?;
         }
 
         if current_form.default_answer_title.is_some() && default_answer_title.is_some() {
-            DefaultAnswerTitles::update_many()
-                .filter(default_answer_titles::Column::FormId.eq(form_id.to_owned()))
-                .col_expr(
-                    default_answer_titles::Column::Title,
-                    Expr::value(default_answer_title.unwrap().unwrap_or_default()),
-                )
-                .exec(&self.pool)
-                .await?;
+            self.execute_and_values(
+                "UPDATE default_answer_titles SET title = ?, WHERE form_id = ?",
+                [
+                    default_answer_title.unwrap().unwrap_or_default().into(),
+                    form_id.to_owned().into(),
+                ],
+            )
+            .await?;
         } else if let Some(default_answer_title) = default_answer_title {
-            default_answer_titles::ActiveModel {
-                id: ActiveValue::NotSet,
-                form_id: Set(form_id.to_owned()),
-                title: Set(default_answer_title.unwrap_or_default()),
-            }
-            .insert(&self.pool)
+            self.execute_and_values(
+                "INSERT INTO default_answer_titles (form_id, title) VALUES (?, ?)",
+                [
+                    form_id.to_owned().into(),
+                    default_answer_title.unwrap_or_default().into(),
+                ],
+            )
             .await?;
         }
 
