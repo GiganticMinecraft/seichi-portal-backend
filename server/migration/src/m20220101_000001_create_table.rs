@@ -48,7 +48,7 @@ impl MigrationTrait for Migration {
                     description TEXT,
                     question_type ENUM('TEXT', 'SINGLE', 'MULTIPLE'),
                     is_required BOOL DEFAULT FALSE,
-                    FOREIGN KEY fk_form_questions_form_id(form_id) REFERENCES form_meta_data(id)
+                    FOREIGN KEY fk_form_questions_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
             .await?;
@@ -60,7 +60,7 @@ impl MigrationTrait for Migration {
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     question_id INT NOT NULL,
                     choice TEXT NOT NULL,
-                    FOREIGN KEY fk_form_choices_question_id(question_id) REFERENCES form_questions(question_id)
+                    FOREIGN KEY fk_form_choices_question_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
                 )",
             ))
             .await?;
@@ -73,7 +73,7 @@ impl MigrationTrait for Migration {
                     form_id INT NOT NULL,
                     start_at DATETIME NOT NULL,
                     end_at DATETIME NOT NULL,
-                    FOREIGN KEY fk_response_period_form_id(form_id) REFERENCES form_meta_data(id)
+                    FOREIGN KEY fk_response_period_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
             .await?;
@@ -85,7 +85,7 @@ impl MigrationTrait for Migration {
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id INT NOT NULL,
                     url TEXT NOT NULL,
-                    FOREIGN KEY fk_form_webhooks_form_id(form_id) REFERENCES form_meta_data(id)
+                    FOREIGN KEY fk_form_webhooks_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
             .await?;
@@ -99,7 +99,7 @@ impl MigrationTrait for Migration {
                     user INT NOT NULL,
                     title TEXT,
                     time_stamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY fk_answers_form_id(form_id) REFERENCES form_meta_data(id),
+                    FOREIGN KEY fk_answers_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
                     FOREIGN KEY fk_answers_user(user) REFERENCES users(id)
                 )",
             ))
@@ -114,7 +114,7 @@ impl MigrationTrait for Migration {
                     question_id INT NOT NULL,
                     answer TEXT NOT NULL,
                     FOREIGN KEY fk_real_answers_answer_id(answer_id) REFERENCES answers(id),
-                    FOREIGN KEY fk_real_answers_quesiton_id(question_id) REFERENCES form_questions(question_id)
+                    FOREIGN KEY fk_real_answers_quesiton_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
                 )",
             ))
             .await?;
@@ -126,7 +126,7 @@ impl MigrationTrait for Migration {
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id INT NOT NULL,
                     title TEXT NOT NULL,
-                    FOREIGN KEY fk_default_answer_titles_form_id(form_id) REFERENCES form_meta_data(id)
+                    FOREIGN KEY fk_default_answer_titles_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
             .await?;
