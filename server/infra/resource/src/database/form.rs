@@ -7,15 +7,10 @@ use domain::{
     },
     user::models::User,
 };
-use entities::{
-    form_choices, form_questions,
-    prelude::{FormChoices, FormQuestions},
-    sea_orm_active_enums::QuestionType,
-};
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use itertools::Itertools;
 use regex::Regex;
-use sea_orm::{ActiveEnum, ActiveValue, ActiveValue::Set, DbErr, EntityTrait};
+use sea_orm::DbErr;
 
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
@@ -432,26 +427,23 @@ impl FormDatabase for ConnectionPool {
         &self,
         form_question_update_schema: FormQuestionUpdateSchema,
     ) -> Result<(), InfraError> {
-        let question_active_values = form_question_update_schema
-            .questions
-            .iter()
-            .map(|question| {
-                QuestionType::try_from_value(&question.question_type.to_string().to_lowercase())
-                    .map(|question_type| form_questions::ActiveModel {
-                        question_id: ActiveValue::NotSet,
-                        form_id: Set(form_question_update_schema.form_id.to_owned()),
-                        title: Set(question.title.to_owned()),
-                        description: Set(question.description.to_owned()),
-                        question_type: Set(question_type),
-                        is_required: Set(i8::from(question.is_required().to_owned())),
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let last_insert_id = FormQuestions::insert_many(question_active_values)
-            .exec(&self.pool)
+        let last_insert_id = self.batch_insert(
+            r"INSERT INTO form_questions (form_id, title, description, question_type, is_required) VALUES (?, ?, ?, ?, ?)",
+            form_question_update_schema
+                .questions
+                .iter()
+                .flat_map(|question|
+                    vec![
+                        form_question_update_schema.form_id.to_owned().into(),
+                        question.title.to_owned().into(),
+                        question.description.to_owned().into(),
+                        question.question_type.to_string().into(),
+                        question.is_required().to_owned().into()
+                    ]
+                ).collect_vec()
+        )
             .await?
-            .last_insert_id;
+            .last_insert_id();
 
         let choices_active_values = form_question_update_schema
             .questions
@@ -466,21 +458,16 @@ impl FormDatabase for ConnectionPool {
                     .choices
                     .iter()
                     .cloned()
-                    .map(|choice| form_choices::ActiveModel {
-                        id: ActiveValue::NotSet,
-                        question_id: Set(question_id),
-                        choice: Set(choice),
-                    })
+                    .flat_map(|choice| vec![question_id.to_string(), choice])
                     .collect_vec()
             })
             .collect_vec();
 
-        if !choices_active_values.is_empty() {
-            // NOTE: insert_manyに渡すvecが空だとinsertに失敗する
-            FormChoices::insert_many(choices_active_values)
-                .exec(&self.pool)
-                .await?;
-        }
+        self.batch_insert(
+            "INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
+            choices_active_values.into_iter().map(|value| value.into()),
+        )
+        .await?;
 
         Ok(())
     }
