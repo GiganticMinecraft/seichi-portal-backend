@@ -1,7 +1,10 @@
 use async_trait::async_trait;
-use domain::form::models::{
-    FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-    OffsetAndLimit, PostedAnswers,
+use domain::{
+    form::models::{
+        FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+        OffsetAndLimit, PostedAnswers,
+    },
+    user::models::User,
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -11,10 +14,12 @@ use crate::dto::{FormDto, PostedAnswersDto};
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
+    type ConcreteUserDatabase: UserDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
+    fn user(&self) -> &Self::ConcreteUserDatabase;
 }
 
 #[automock]
@@ -24,6 +29,7 @@ pub trait FormDatabase: Send + Sync {
         &self,
         title: FormTitle,
         description: FormDescription,
+        user: User,
     ) -> Result<FormId, InfraError>;
     async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<FormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
@@ -37,4 +43,10 @@ pub trait FormDatabase: Send + Sync {
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema)
         -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait UserDatabase: Send + Sync {
+    async fn upsert_user(&self, user: &User) -> Result<(), InfraError>;
 }

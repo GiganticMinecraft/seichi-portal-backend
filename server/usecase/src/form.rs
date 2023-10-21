@@ -4,6 +4,7 @@ use domain::{
         OffsetAndLimit, PostedAnswers,
     },
     repository::form_repository::FormRepository,
+    user::models::User,
 };
 use errors::Error;
 
@@ -16,8 +17,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         &self,
         title: FormTitle,
         description: FormDescription,
+        user: User,
     ) -> Result<FormId, Error> {
-        self.repository.create(title, description).await
+        self.repository.create(title, description, user).await
     }
 
     pub async fn form_list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<Form>, Error> {

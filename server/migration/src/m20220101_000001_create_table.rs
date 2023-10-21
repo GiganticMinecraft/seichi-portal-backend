@@ -1,5 +1,7 @@
 use sea_orm_migration::prelude::*;
 
+use crate::m20231008_135425_create_user_table::UsersTable;
+
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -27,10 +29,38 @@ impl MigrationTrait for Migration {
                             .extra("DEFAULT CURRENT_TIMESTAMP".to_string()),
                     )
                     .col(
+                        ColumnDef::new(FormMetaDataTable::CreatedBy)
+                            .integer()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-created-user-id")
+                            .from(
+                                FormMetaDataTable::FormMetaData,
+                                FormMetaDataTable::CreatedBy,
+                            )
+                            .to(UsersTable::Users, UsersTable::Id),
+                    )
+                    .col(
                         ColumnDef::new(FormMetaDataTable::UpdatedAt)
                             .timestamp()
                             .not_null()
                             .extra("DEFAULT CURRENT_TIMESTAMP".to_string()),
+                    )
+                    .col(
+                        ColumnDef::new(FormMetaDataTable::UpdatedBy)
+                            .integer()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-updated-user-id")
+                            .from(
+                                FormMetaDataTable::FormMetaData,
+                                FormMetaDataTable::UpdatedBy,
+                            )
+                            .to(UsersTable::Users, UsersTable::Id),
                     )
                     .to_owned(),
             )
@@ -55,5 +85,7 @@ pub enum FormMetaDataTable {
     Title,
     Description,
     CreatedAt,
+    CreatedBy,
     UpdatedAt,
+    UpdatedBy,
 }

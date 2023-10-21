@@ -2,16 +2,23 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::models::{
-    Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-    OffsetAndLimit, PostedAnswers,
+use crate::{
+    form::models::{
+        Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
+        OffsetAndLimit, PostedAnswers,
+    },
+    user::models::User,
 };
 
 #[automock]
 #[async_trait]
 pub trait FormRepository: Send + Sync + 'static {
-    async fn create(&self, title: FormTitle, description: FormDescription)
-        -> Result<FormId, Error>;
+    async fn create(
+        &self,
+        title: FormTitle,
+        description: FormDescription,
+        user: User,
+    ) -> Result<FormId, Error>;
     async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<Form>, Error>;
     async fn get(&self, id: FormId) -> Result<Form, Error>;
     async fn delete(&self, id: FormId) -> Result<FormId, Error>;

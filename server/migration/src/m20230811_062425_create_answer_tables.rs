@@ -3,6 +3,7 @@ use sea_orm_migration::prelude::*;
 use crate::{
     m20220101_000001_create_table::FormMetaDataTable,
     m20221211_211233_form_questions::FormQuestionsTable,
+    m20231008_135425_create_user_table::UsersTable,
 };
 
 #[derive(DeriveMigrationName)]
@@ -30,7 +31,13 @@ impl MigrationTrait for Migration {
                             .from(AnswersTable::Answers, AnswersTable::FormId)
                             .to(FormMetaDataTable::FormMetaData, FormMetaDataTable::Id),
                     )
-                    .col(ColumnDef::new(AnswersTable::User).uuid().not_null())
+                    .col(ColumnDef::new(AnswersTable::User).integer().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-answer-user-id")
+                            .from(AnswersTable::Answers, AnswersTable::User)
+                            .to(UsersTable::Users, UsersTable::Id),
+                    )
                     .col(
                         ColumnDef::new(AnswersTable::Title)
                             .string()

@@ -2,13 +2,14 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use domain::{
     form::models::{
         Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
     },
     repository::Repositories,
+    user::models::User,
 };
 use errors::{infra::InfraError, Error};
 use resource::repository::RealInfrastructureRepository;
@@ -16,6 +17,7 @@ use serde_json::json;
 use usecase::form::FormUseCase;
 
 pub async fn create_form_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Json(form): Json<Form>,
 ) -> impl IntoResponse {
@@ -24,7 +26,7 @@ pub async fn create_form_handler(
     };
 
     match form_use_case
-        .create_form(form.title, form.description)
+        .create_form(form.title, form.description, user)
         .await
     {
         Ok(id) => (StatusCode::CREATED, Json(json!({ "id": id }))).into_response(),

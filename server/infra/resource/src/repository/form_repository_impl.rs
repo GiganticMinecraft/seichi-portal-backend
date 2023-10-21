@@ -5,6 +5,7 @@ use domain::{
         OffsetAndLimit, PostedAnswers,
     },
     repository::form_repository::FormRepository,
+    user::models::User,
 };
 use errors::Error;
 use futures::{stream, stream::StreamExt};
@@ -22,8 +23,9 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         &self,
         title: FormTitle,
         description: FormDescription,
+        user: User,
     ) -> Result<FormId, Error> {
-        let form_id = self.client.form().create(title, description).await?;
+        let form_id = self.client.form().create(title, description, user).await?;
         let form = self.client.form().get(form_id.to_owned().into()).await?;
 
         form_outgoing::create(form.try_into()?).await?;

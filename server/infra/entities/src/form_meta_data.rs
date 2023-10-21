@@ -10,7 +10,9 @@ pub struct Model {
     pub title: String,
     pub description: Option<String>,
     pub created_at: DateTimeUtc,
+    pub created_by: i32,
     pub updated_at: DateTimeUtc,
+    pub updated_by: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -25,6 +27,22 @@ pub enum Relation {
     FormWebhooks,
     #[sea_orm(has_many = "super::response_period::Entity")]
     ResponsePeriod,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::CreatedBy",
+        to = "super::users::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Users2,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::UpdatedBy",
+        to = "super::users::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Users1,
 }
 
 impl Related<super::answers::Entity> for Entity {

@@ -1,16 +1,15 @@
 use async_trait::async_trait;
-use chrono::Utc;
-use domain::form::models::{
-    Answer, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-    FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+use domain::{
+    form::models::{
+        DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+    },
+    user::models::User,
 };
 use entities::{
-    answers, default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
-    prelude::{
-        Answers, DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks,
-        RealAnswers,
-    },
-    real_answers, response_period,
+    default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
+    prelude::{DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks},
+    response_period,
     sea_orm_active_enums::QuestionType,
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
@@ -19,11 +18,11 @@ use itertools::Itertools;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use sea_orm::{
-    prelude::Uuid,
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
-    ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder, QuerySelect,
+    ColumnTrait, ConnectionTrait, DatabaseBackend, DbErr, EntityTrait, ModelTrait, QueryFilter,
+    QueryOrder, QuerySelect, Statement,
 };
 
 use crate::{
@@ -38,17 +37,22 @@ impl FormDatabase for ConnectionPool {
         &self,
         title: FormTitle,
         description: FormDescription,
+        user: User,
     ) -> Result<FormId, InfraError> {
-        let form_id = form_meta_data::ActiveModel {
-            id: ActiveValue::NotSet,
-            title: Set(title.title().to_owned()),
-            description: Set(description.to_owned()),
-            created_at: Default::default(),
-            updated_at: Default::default(),
-        }
-        .insert(&self.pool)
-        .await?
-        .id;
+        let form_id = self
+            .pool
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                "INSERT INTO form_meta_data (title, description, created_by, updated_by)
+                        SELECT ?, ?, users.id, users.id FROM users WHERE uuid = UUID_TO_BIN(?)",
+                [
+                    title.title().to_owned().into(),
+                    description.to_owned().into(),
+                    user.id.to_string().into(),
+                ],
+            ))
+            .await?
+            .last_insert_id() as i32;
 
         Ok(form_id.into())
     }
@@ -405,78 +409,97 @@ impl FormDatabase for ConnectionPool {
             },
         );
 
-        let id = answers::ActiveModel {
-            id: Default::default(),
-            form_id: Set(answer.form_id.to_owned()),
-            user: Set(answer.uuid.to_owned().as_ref().to_vec()),
-            title: Set(embed_title),
-            time_stamp: Set(Utc::now()),
-        }
-        .insert(&self.pool)
-        .await?
-        .id;
+        let id = self
+            .pool
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                "INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users \
+                 WHERE uuid = UUID_TO_BIN(?)), ?)",
+                [
+                    answer.form_id.to_owned().into(),
+                    answer.uuid.to_string().into(),
+                    embed_title.into(),
+                ],
+            ))
+            .await?
+            .last_insert_id();
 
-        let real_answer_models = answer
+        let params = answer
             .answers
             .into_iter()
-            .map(
-                |Answer {
-                     question_id,
-                     answer,
-                     ..
-                 }| real_answers::ActiveModel {
-                    id: Default::default(),
-                    answer_id: Set(id),
-                    question_id: Set(question_id.into()),
-                    answer: Set(answer),
-                },
-            )
+            .map(|answer| {
+                vec![
+                    id.to_string(),
+                    answer.question_id.to_string(),
+                    answer.answer,
+                ]
+            })
             .collect_vec();
 
-        RealAnswers::insert_many(real_answer_models)
-            .exec(&self.pool)
+        self.pool
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                format!(
+                    "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
+                    vec!["(?, ?, ?)"; params.len()].iter().join(", ")
+                ),
+                params
+                    .iter()
+                    .flatten()
+                    .map(|value| value.into())
+                    .collect_vec(),
+            ))
             .await?;
 
         Ok(())
     }
 
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
-        stream::iter(
-            Answers::find()
-                .order_by_desc(answers::Column::TimeStamp)
-                .all(&self.pool)
-                .await?,
-        )
-        .then(|answer| async move {
-            let answers = RealAnswers::find()
-                .filter(Expr::col(real_answers::Column::AnswerId).eq(answer.id))
-                .all(&self.pool)
-                .await?
-                .into_iter()
-                .map(
-                    |real_answers::Model {
-                         question_id,
-                         answer,
-                         ..
-                     }| AnswerDto {
-                        question_id,
-                        answer,
-                    },
-                )
-                .collect_vec();
+        let answers = self
+            .pool
+            .query_all(Statement::from_string(
+                DatabaseBackend::MySql,
+                "SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                        INNER JOIN users ON answers.user = users.id
+                        ORDER BY answers.time_stamp",
+            ))
+            .await?;
 
-            Ok(PostedAnswersDto {
-                uuid: Uuid::from_slice(answer.user.as_slice())?,
-                timestamp: answer.time_stamp,
-                form_id: answer.form_id,
-                title: Some(answer.title),
-                answers,
+        let real_answers = self
+            .pool
+            .query_all(Statement::from_string(
+                DatabaseBackend::MySql,
+                "SELECT answer_id, question_id, answer FROM real_answers",
+            ))
+            .await?;
+
+        answers
+            .iter()
+            .map(|rs| {
+                let answer_id: i32 = rs.try_get("", "answer_id")?;
+                let answers = real_answers
+                    .iter()
+                    .filter(|rs| {
+                        rs.try_get::<i32>("", "answer_id")
+                            .is_ok_and(|id| id == answer_id)
+                    })
+                    .map(|rs| {
+                        Ok::<AnswerDto, DbErr>(AnswerDto {
+                            question_id: rs.try_get("", "question_id")?,
+                            answer: rs.try_get("", "answer")?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                Ok(PostedAnswersDto {
+                    uuid: rs.try_get("", "uuid")?,
+                    timestamp: rs.try_get("", "time_stamp")?,
+                    form_id: rs.try_get("", "form_id")?,
+                    title: rs.try_get("", "title")?,
+                    answers,
+                })
             })
-        })
-        .collect::<Vec<Result<PostedAnswersDto, _>>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<PostedAnswersDto>, _>>()
+            .collect::<Result<Vec<_>, _>>()
     }
 
     async fn create_questions(

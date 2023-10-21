@@ -9,7 +9,9 @@ common = { path = "../common" }
 domain = { path = "../domain" }
 errors = { path = "../errors" }
 resource = { path = "../infra/resource" }
+serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 usecase = { path = "../usecase" }
 uuid = { workspace = true }
+reqwest = { workspace = true }
