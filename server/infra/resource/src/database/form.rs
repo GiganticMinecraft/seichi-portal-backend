@@ -20,7 +20,7 @@ use sea_orm::{
     sea_query::{Expr, SimpleExpr},
     ActiveEnum, ActiveModelTrait, ActiveValue,
     ActiveValue::Set,
-    ColumnTrait, DbErr, EntityTrait, ModelTrait, QueryFilter,
+    ColumnTrait, DbErr, EntityTrait, QueryFilter,
 };
 
 use crate::{
@@ -232,39 +232,11 @@ impl FormDatabase for ConnectionPool {
 
     #[tracing::instrument]
     async fn delete(&self, form_id: FormId) -> Result<FormId, InfraError> {
-        let target_form = FormMetaData::find_by_id(form_id.to_owned())
-            .all(&self.pool)
-            .await?
-            .first()
-            .ok_or(FormNotFound {
-                id: form_id.to_owned(),
-            })?
-            .to_owned();
-
-        let question_ids = FormQuestions::find()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
-            .all(&self.pool)
-            .await?
-            .iter()
-            .map(|question| question.question_id)
-            .collect_vec();
-
-        FormChoices::delete_many()
-            .filter(Expr::col(form_choices::Column::QuestionId).is_in(question_ids))
-            .exec(&self.pool)
-            .await?;
-
-        response_period::Entity::delete_many()
-            .filter(Expr::col(response_period::Column::FormId).eq(form_id.to_owned()))
-            .exec(&self.pool)
-            .await?;
-
-        FormQuestions::delete_many()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
-            .exec(&self.pool)
-            .await?;
-
-        target_form.delete(&self.pool).await?;
+        self.execute_and_values(
+            "DELETE FROM form_meta_data WHERE id = ?",
+            [form_id.to_owned().into()],
+        )
+        .await?;
 
         Ok(form_id)
     }
