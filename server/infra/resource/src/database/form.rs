@@ -8,16 +8,14 @@ use domain::{
     user::models::User,
 };
 use entities::{
-    default_answer_titles, form_choices, form_questions,
-    prelude::{DefaultAnswerTitles, FormChoices, FormQuestions},
+    form_choices, form_questions,
+    prelude::{FormChoices, FormQuestions},
     sea_orm_active_enums::QuestionType,
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use itertools::Itertools;
 use regex::Regex;
-use sea_orm::{
-    sea_query::Expr, ActiveEnum, ActiveValue, ActiveValue::Set, DbErr, EntityTrait, QueryFilter,
-};
+use sea_orm::{ActiveEnum, ActiveValue, ActiveValue::Set, DbErr, EntityTrait};
 
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
@@ -321,15 +319,22 @@ impl FormDatabase for ConnectionPool {
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
         let regex = Regex::new(r"\$\d+").unwrap();
 
+        let default_answer_title_query_result = self
+            .query_all_and_values(
+                r"SELECT title FROM default_answer_titles WHERE form_id = ?",
+                [answer.form_id.to_owned().into()],
+            )
+            .await?;
+
+        let default_answer_title: Option<String> = default_answer_title_query_result
+            .first()
+            .ok_or(FormNotFound {
+                id: answer.form_id.to_owned(),
+            })?
+            .try_get("", "title")?;
+
         let default_answer_title = DefaultAnswerTitle {
-            default_answer_title: DefaultAnswerTitles::find()
-                .filter(
-                    Expr::col(default_answer_titles::Column::FormId).eq(answer.form_id.to_owned()),
-                )
-                .all(&self.pool)
-                .await?
-                .first()
-                .map(|answer_title_setting| answer_title_setting.title.to_owned()),
+            default_answer_title,
         }
         .unwrap_or_default();
 
