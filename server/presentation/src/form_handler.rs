@@ -148,7 +148,7 @@ pub async fn create_question_handler(
     };
 
     match form_use_case.create_questions(questions).await {
-        Ok(_) => (StatusCode::OK).into_response(),
+        Ok(_) => (StatusCode::CREATED).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
