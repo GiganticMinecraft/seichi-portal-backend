@@ -85,7 +85,7 @@ impl ConnectionPool {
             .await
     }
 
-    pub async fn batch_insert<I>(&self, sql: &str, params: I) -> Result<ExecResult, DbErr>
+    pub async fn batch_insert<I>(&self, sql: &str, params: I) -> Result<Option<ExecResult>, DbErr>
     where
         I: IntoIterator<Item = Value>,
     {
@@ -100,25 +100,24 @@ impl ConnectionPool {
         let params_vec = params.into_iter().collect::<Vec<_>>();
 
         if params_vec.is_empty() {
-            // NOTE: paramsが空だったら適当なSELECTを実行してINSERT文の構築失敗を阻止する
-            self.pool
-                .execute(Statement::from_string(DatabaseBackend::MySql, "SELECT 1"))
-                .await
+            Ok(None)
         } else {
             let insert_part = insert_part_opt.unwrap().as_str();
 
-            self.pool
-                .execute(Statement::from_sql_and_values(
-                    DatabaseBackend::MySql,
-                    sql.replace(
-                        insert_part,
-                        &vec![insert_part; params_vec.len() / insert_part.matches('?').count()]
-                            .iter()
-                            .join(", "),
-                    ),
-                    params_vec,
-                ))
-                .await
+            Ok(Some(
+                self.pool
+                    .execute(Statement::from_sql_and_values(
+                        DatabaseBackend::MySql,
+                        sql.replace(
+                            insert_part,
+                            &vec![insert_part; params_vec.len() / insert_part.matches('?').count()]
+                                .iter()
+                                .join(", "),
+                        ),
+                        params_vec,
+                    ))
+                    .await?,
+            ))
         }
     }
 }
