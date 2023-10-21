@@ -443,7 +443,7 @@ impl FormDatabase for ConnectionPool {
                 ).collect_vec()
         )
             .await?
-            .unwrap_or_default()
+            .unwrap()
             .last_insert_id();
 
         let choices_active_values = form_question_update_schema
@@ -468,8 +468,7 @@ impl FormDatabase for ConnectionPool {
             "INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
             choices_active_values.into_iter().map(|value| value.into()),
         )
-        .await?
-        .unwrap_or_default();
+        .await?;
 
         Ok(())
     }
