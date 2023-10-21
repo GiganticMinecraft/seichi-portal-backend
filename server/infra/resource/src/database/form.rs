@@ -14,7 +14,6 @@ use entities::{
     sea_orm_active_enums::QuestionType,
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
-use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
 use regex::Regex;
 use sea_orm::{
@@ -155,82 +154,79 @@ impl FormDatabase for ConnectionPool {
 
     #[tracing::instrument]
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError> {
-        let target_form = FormMetaData::find()
-            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.to_owned()))
-            .all(&self.pool)
-            .await?
-            .first()
-            .ok_or(FormNotFound {
-                id: form_id.to_owned(),
-            })?
-            .to_owned();
+        let form_query = self
+            .query_all_and_values(
+                r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                            FROM form_meta_data
+                            LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
+                            LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
+                            LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
+                            WHERE form_meta_data.id = ?",
+                [form_id.to_owned().into()]
+            )
+            .await?;
 
-        let form_questions = stream::iter(
-            FormQuestions::find()
-                .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
-                .all(&self.pool)
-                .await?,
-        )
-        .then(move |question| async move {
-            let choices = FormChoices::find()
-                .filter(Expr::col(form_choices::Column::QuestionId).eq(question.question_id))
-                .all(&self.pool)
-                .await?
-                .into_iter()
-                .map(|choice| choice.choice)
-                .collect_vec();
+        let form = form_query.first().ok_or(FormNotFound {
+            id: form_id.to_owned(),
+        })?;
 
-            Ok::<QuestionDto, InfraError>(QuestionDto {
-                id: question.question_id.to_owned(),
-                title: question.title.to_owned(),
-                description: question.description.to_owned(),
-                question_type: question.question_type.to_string(),
-                choices,
-                is_required: question.is_required != 0,
+        let questions = self
+            .query_all_and_values(
+                r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
+                [form_id.to_owned().into()]
+            )
+            .await?;
+
+        let choices = self
+            .query_all(r"SELECT question_id, choice FROM form_choices")
+            .await?;
+
+        let questions = questions
+            .into_iter()
+            .map(|rs| {
+                let question_id: i32 = rs.try_get("", "question_id")?;
+
+                let choices = choices
+                    .iter()
+                    .filter_map(|rs| {
+                        let choice_question_id: i32 = rs.try_get("", "question_id").ok()?;
+
+                        if choice_question_id == question_id {
+                            let choice: Result<String, _> = rs.try_get("", "choice");
+
+                            choice.ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect_vec();
+
+                Ok(QuestionDto {
+                    id: question_id,
+                    title: rs.try_get("", "title")?,
+                    description: rs.try_get("", "description")?,
+                    question_type: rs.try_get("", "question_type")?,
+                    choices,
+                    is_required: rs.try_get("", "is_required")?,
+                })
             })
-        })
-        .collect::<Vec<Result<QuestionDto, _>>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<QuestionDto>, _>>()?;
+            .collect::<Result<Vec<_>, DbErr>>()?;
 
-        let response_period = entities::response_period::Entity::find()
-            .filter(Expr::col(response_period::Column::FormId).eq(target_form.id))
-            .all(&self.pool)
-            .await?
-            .first()
-            .map(|period| {
-                Some((
-                    period.start_at.to_owned().and_utc(),
-                    period.end_at.to_owned().and_utc(),
-                ))
-            })
-            .unwrap_or_default();
-
-        let webhook_url = FormWebhooks::find()
-            .filter(Expr::col(form_webhooks::Column::FormId).eq(target_form.id))
-            .all(&self.pool)
-            .await?
-            .first()
-            .map(|webhook_url_model| Some(webhook_url_model.url.to_owned()))
-            .unwrap_or_default();
-
-        let default_answer_title = DefaultAnswerTitles::find()
-            .filter(Expr::col(default_answer_titles::Column::FormId).eq(target_form.id))
-            .all(&self.pool)
-            .await?
-            .first()
-            .map(|answer_title_setting| answer_title_setting.title.to_owned());
+        let start_at: Option<DateTime<Utc>> = form.try_get("", "start_at")?;
+        let end_at: Option<DateTime<Utc>> = form.try_get("", "end_at")?;
 
         Ok(FormDto {
-            id: target_form.id,
-            title: target_form.title,
-            description: target_form.description,
-            questions: form_questions,
-            metadata: (target_form.created_at, target_form.updated_at),
-            response_period,
-            webhook_url,
-            default_answer_title,
+            id: form_id.to_owned(),
+            title: form.try_get("", "form_title")?,
+            description: form.try_get("", "description")?,
+            questions,
+            metadata: (
+                form.try_get("", "created_at")?,
+                form.try_get("", "updated_at")?,
+            ),
+            response_period: start_at.zip(end_at),
+            webhook_url: form.try_get("", "url")?,
+            default_answer_title: form.try_get("", "default_answer_titles.title")?,
         })
     }
 
