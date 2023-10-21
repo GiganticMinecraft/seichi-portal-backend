@@ -6,10 +6,6 @@ default_to_workspace = false
 __CARGO_FIX_YOLO=1
 REPOSITORY_ROOT = { script = ["git rev-parse --show-superproject-working-tree --show-toplevel"] }
 
-[tasks.generate-entity]
-command = "sea-orm-cli"
-args = [ "generate", "entity", "--database-url", "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}/${MYSQL_DATABASE}", "-o", "infra/entities/src" ]
-
 [tasks.generate-migrate-file]
 command = "sea-orm-cli"
 args = [ "migrate", "generate", "${@}" ]

@@ -8,7 +8,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 domain = { path = "../../domain" }
-entities =  { path = "../entities" }
 envy = { workspace = true }
 errors = { path = "../../errors" }
 futures = { workspace = true }

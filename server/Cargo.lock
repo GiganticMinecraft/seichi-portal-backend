@@ -907,15 +907,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "entities"
-version = "0.1.0"
-dependencies = [
- "cargo-husky",
- "sea-orm",
- "serde",
-]
-
-[[package]]
 name = "entrypoint"
 version = "0.1.0"
 dependencies = [
@@ -1682,7 +1673,6 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "cargo-husky",
- "entities",
  "sea-orm-migration",
 ]
 
@@ -2390,7 +2380,6 @@ dependencies = [
  "async-trait",
  "chrono",
  "domain",
- "entities",
  "envy",
  "errors",
  "futures",
