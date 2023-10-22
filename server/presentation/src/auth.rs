@@ -1,14 +1,17 @@
 use axum::{
     extract::{State, TypedHeader},
     headers::authorization::{Authorization, Bearer},
-    http::{HeaderValue, Request, StatusCode},
+    http::{HeaderValue, Method, Request, StatusCode},
     middleware::Next,
     response::Response,
 };
 use common::config::ENV;
 use domain::{
     repository::{user_repository::UserRepository, Repositories},
-    user::models::User,
+    user::models::{
+        Role::{Administrator, StandardUser},
+        User,
+    },
 };
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use resource::repository::RealInfrastructureRepository;
@@ -27,6 +30,7 @@ pub async fn auth<B>(
         User {
             name: "test_user".to_string(),
             id: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
+            role: Administrator,
         }
     } else {
         let client = reqwest::Client::new();
@@ -49,6 +53,16 @@ pub async fn auth<B>(
         )
         .map_err(|_| StatusCode::UNAUTHORIZED)?
     };
+
+    let standard_user_endpoints = [(&Method::GET, "/forms"), (&Method::POST, "/forms/answers")];
+
+    if user.role == StandardUser
+        && !standard_user_endpoints.contains(&(request.method(), request.uri().path()))
+    {
+        // NOTE: standard_user_endpointsに存在しないMethodとエンドポイントに
+        //          一般ユーザーがアクセスした場合は、アクセス権限なしとしてすべてFORBIDDENを返す。
+        return Err(StatusCode::FORBIDDEN);
+    }
 
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),

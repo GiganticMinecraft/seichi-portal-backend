@@ -11,10 +11,15 @@ impl UserDatabase for ConnectionPool {
         self.pool
             .execute(Statement::from_sql_and_values(
                 DatabaseBackend::MySql,
-                "INSERT INTO users (uuid, name) VALUES (?, ?)
+                "INSERT INTO users (uuid, name, role) VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE
-                        name = VALUES(name)",
-                [user.id.to_string().into(), user.name.to_owned().into()],
+                        name = VALUES(name),
+                        role = VALUES(role)",
+                [
+                    user.id.to_string().into(),
+                    user.name.to_owned().into(),
+                    user.role.to_string().into(),
+                ],
             ))
             .await?;
 

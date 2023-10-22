@@ -16,7 +16,8 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS users(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     uuid CHAR(36) NOT NULL UNIQUE KEY,
-                    name VARCHAR(16) NOT NULL
+                    name VARCHAR(16) NOT NULL,
+                    role ENUM('ADMINISTRATOR', 'STANDARD_USER') NOT NULL
                 )",
             ))
             .await?;
