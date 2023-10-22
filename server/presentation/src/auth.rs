@@ -8,7 +8,7 @@ use axum::{
 use common::config::ENV;
 use domain::{
     repository::{user_repository::UserRepository, Repositories},
-    user::models::User,
+    user::models::{Role::Administrator, User},
 };
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use resource::repository::RealInfrastructureRepository;
@@ -27,6 +27,7 @@ pub async fn auth<B>(
         User {
             name: "test_user".to_string(),
             id: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
+            role: Administrator,
         }
     } else {
         let client = reqwest::Client::new();
