@@ -6,11 +6,13 @@ use uuid::Uuid;
 pub struct User {
     pub name: String,
     pub id: Uuid,
+    #[serde(default)]
     pub role: Role,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Display)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Display)]
 pub enum Role {
     Administrator,
+    #[default]
     StandardUser,
 }
