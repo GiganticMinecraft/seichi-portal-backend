@@ -5,7 +5,6 @@ members = [
     "domain",
     "entrypoint",
     "errors",
-    "infra/entities",
     "infra/outgoing",
     "infra/resource",
     "migration",

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
@@ -6,24 +7,10 @@ use domain::{
     },
     user::models::User,
 };
-use entities::{
-    default_answer_titles, form_choices, form_meta_data, form_questions, form_webhooks,
-    prelude::{DefaultAnswerTitles, FormChoices, FormMetaData, FormQuestions, FormWebhooks},
-    response_period,
-    sea_orm_active_enums::QuestionType,
-};
 use errors::infra::{InfraError, InfraError::FormNotFound};
-use futures::{stream, stream::StreamExt};
 use itertools::Itertools;
-use num_traits::cast::FromPrimitive;
 use regex::Regex;
-use sea_orm::{
-    sea_query::{Expr, SimpleExpr},
-    ActiveEnum, ActiveModelTrait, ActiveValue,
-    ActiveValue::Set,
-    ColumnTrait, ConnectionTrait, DatabaseBackend, DbErr, EntityTrait, ModelTrait, QueryFilter,
-    QueryOrder, QuerySelect, Statement,
-};
+use sea_orm::DbErr;
 
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
@@ -40,17 +27,15 @@ impl FormDatabase for ConnectionPool {
         user: User,
     ) -> Result<FormId, InfraError> {
         let form_id = self
-            .pool
-            .execute(Statement::from_sql_and_values(
-                DatabaseBackend::MySql,
+            .execute_and_values(
                 "INSERT INTO form_meta_data (title, description, created_by, updated_by)
-                        SELECT ?, ?, users.id, users.id FROM users WHERE uuid = UUID_TO_BIN(?)",
+                        SELECT ?, ?, users.id, users.id FROM users WHERE uuid = ?",
                 [
                     title.title().to_owned().into(),
                     description.to_owned().into(),
                     user.id.to_string().into(),
                 ],
-            ))
+            )
             .await?
             .last_insert_id() as i32;
 
@@ -62,225 +47,185 @@ impl FormDatabase for ConnectionPool {
         &self,
         OffsetAndLimit { offset, limit }: OffsetAndLimit,
     ) -> Result<Vec<FormDto>, InfraError> {
-        let forms = FormMetaData::find()
-            .order_by_asc(form_meta_data::Column::Id)
-            .offset(offset.and_then(u64::from_i32))
-            .limit(limit.and_then(u64::from_i32))
-            .all(&self.pool)
+        let forms = self
+            .query_all(
+                &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                            FROM form_meta_data
+                            LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
+                            LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
+                            LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
+                            ORDER BY form_meta_data.id
+                            {} {}", 
+                        limit.map(|value| format!("LIMIT {}", value)).unwrap_or_default(), 
+                        offset.map(|value| format!("OFFSET {}", value)).unwrap_or_default()),
+            )
             .await?;
 
-        let form_ids = forms.iter().map(|form| form.id).collect_vec();
-
-        let all_questions = FormQuestions::find()
-            .filter(Expr::col(form_questions::Column::FormId).is_in(form_ids.to_owned()))
-            .all(&self.pool)
+        let questions = self
+            .query_all(
+                r"SELECT form_id, question_id, title, description, question_type, is_required FROM form_questions"
+            )
             .await?;
 
-        let question_ids = all_questions
-            .iter()
-            .map(|question| question.question_id)
-            .collect_vec();
-
-        let all_choices = FormChoices::find()
-            .filter(Expr::col(form_choices::Column::QuestionId).is_in(question_ids))
-            .all(&self.pool)
+        let choices = self
+            .query_all(r"SELECT question_id, choice FROM form_choices")
             .await?;
 
-        let all_periods = entities::response_period::Entity::find()
-            .filter(Expr::col(response_period::Column::FormId).is_in(form_ids.to_owned()))
-            .all(&self.pool)
-            .await?;
-
-        let all_webhook_urls = FormWebhooks::find()
-            .filter(Expr::col(form_webhooks::Column::FormId).is_in(form_ids.to_owned()))
-            .all(&self.pool)
-            .await?;
-
-        let all_default_answer_title = DefaultAnswerTitles::find()
-            .filter(Expr::col(default_answer_titles::Column::FormId).is_in(form_ids.to_owned()))
-            .all(&self.pool)
-            .await?;
-
-        Ok(forms
+        let form_id_with_questions = questions
             .into_iter()
-            .map(|form| {
-                let questions = all_questions
-                    .iter()
-                    .filter(|question| question.form_id == form.id)
-                    .map(|question| {
-                        let choices = all_choices
-                            .iter()
-                            .filter(|choice| choice.question_id == question.question_id)
-                            .cloned()
-                            .map(|choice| choice.choice)
-                            .collect_vec();
+            .map(|rs| {
+                let question_id: i32 = rs.try_get("", "question_id")?;
 
-                        QuestionDto {
-                            id: question.question_id.to_owned(),
-                            title: question.title.to_owned(),
-                            description: question.description.to_owned(),
-                            question_type: question.question_type.to_string(),
-                            choices,
-                            is_required: question.is_required != 0,
+                let choices = choices
+                    .iter()
+                    .filter_map(|rs| {
+                        let choice_question_id: i32 = rs.try_get("", "question_id").ok()?;
+
+                        if choice_question_id == question_id {
+                            let choice: Result<String, _> = rs.try_get("", "choice");
+
+                            choice.ok()
+                        } else {
+                            None
                         }
                     })
-                    .collect::<Vec<_>>();
+                    .collect_vec();
 
-                let response_period = all_periods
-                    .iter()
-                    .filter(|period| period.form_id == form.id)
-                    .map(|period| {
-                        Some((
-                            period.start_at.to_owned().and_utc(),
-                            period.end_at.to_owned().and_utc(),
-                        ))
-                    })
-                    .next()
-                    .unwrap_or_default();
+                let form_id: i32 = rs.try_get("", "form_id")?;
 
-                let webhook_url = all_webhook_urls
-                    .iter()
-                    .filter(|webhook_url| webhook_url.form_id == form.id)
-                    .map(|webhook_url| Some(webhook_url.url.to_owned()))
-                    .next()
-                    .unwrap_or_default();
-
-                let default_answer_title = all_default_answer_title
-                    .iter()
-                    .filter(|default_answer_title| default_answer_title.form_id == form.id)
-                    .map(|default_answer_title| default_answer_title.title.to_owned())
-                    .next();
-
-                FormDto {
-                    id: form.id,
-                    title: form.title,
-                    description: form.description,
-                    questions,
-                    metadata: (form.created_at, form.updated_at),
-                    response_period,
-                    webhook_url,
-                    default_answer_title,
-                }
+                Ok((
+                    form_id,
+                    QuestionDto {
+                        id: question_id,
+                        title: rs.try_get("", "title")?,
+                        description: rs.try_get("", "description")?,
+                        question_type: rs.try_get("", "question_type")?,
+                        choices,
+                        is_required: rs.try_get("", "is_required")?,
+                    },
+                ))
             })
-            .collect())
+            .collect::<Result<Vec<_>, DbErr>>()?;
+
+        forms
+            .into_iter()
+            .map(|rs| {
+                let form_id: i32 = rs.try_get("", "form_id")?;
+
+                let questions = form_id_with_questions
+                    .iter()
+                    .cloned()
+                    .filter_map(|(question_form_id, questions)| {
+                        if question_form_id == form_id {
+                            Some(questions)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect_vec();
+
+                let start_at: Option<DateTime<Utc>> = rs.try_get("", "start_at")?;
+                let end_at: Option<DateTime<Utc>> = rs.try_get("", "end_at")?;
+
+                Ok(FormDto {
+                    id: form_id,
+                    title: rs.try_get("", "form_title")?,
+                    description: rs.try_get("", "description")?,
+                    questions,
+                    metadata: (rs.try_get("", "created_at")?, rs.try_get("", "updated_at")?),
+                    response_period: start_at.zip(end_at),
+                    webhook_url: rs.try_get("", "url")?,
+                    default_answer_title: rs.try_get("", "default_answer_titles.title")?,
+                })
+            })
+            .collect()
     }
 
     #[tracing::instrument]
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError> {
-        let target_form = FormMetaData::find()
-            .filter(Expr::col(form_meta_data::Column::Id).eq(form_id.to_owned()))
-            .all(&self.pool)
-            .await?
-            .first()
-            .ok_or(FormNotFound {
-                id: form_id.to_owned(),
-            })?
-            .to_owned();
+        let form_query = self
+            .query_all_and_values(
+                r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                            FROM form_meta_data
+                            LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
+                            LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
+                            LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
+                            WHERE form_meta_data.id = ?",
+                [form_id.to_owned().into()]
+            )
+            .await?;
 
-        let form_questions = stream::iter(
-            FormQuestions::find()
-                .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
-                .all(&self.pool)
-                .await?,
-        )
-        .then(move |question| async move {
-            let choices = FormChoices::find()
-                .filter(Expr::col(form_choices::Column::QuestionId).eq(question.question_id))
-                .all(&self.pool)
-                .await?
-                .into_iter()
-                .map(|choice| choice.choice)
-                .collect_vec();
+        let form = form_query.first().ok_or(FormNotFound {
+            id: form_id.to_owned(),
+        })?;
 
-            Ok::<QuestionDto, InfraError>(QuestionDto {
-                id: question.question_id.to_owned(),
-                title: question.title.to_owned(),
-                description: question.description.to_owned(),
-                question_type: question.question_type.to_string(),
-                choices,
-                is_required: question.is_required != 0,
+        let questions = self
+            .query_all_and_values(
+                r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
+                [form_id.to_owned().into()]
+            )
+            .await?;
+
+        let choices = self
+            .query_all(r"SELECT question_id, choice FROM form_choices")
+            .await?;
+
+        let questions = questions
+            .into_iter()
+            .map(|rs| {
+                let question_id: i32 = rs.try_get("", "question_id")?;
+
+                let choices = choices
+                    .iter()
+                    .filter_map(|rs| {
+                        let choice_question_id: i32 = rs.try_get("", "question_id").ok()?;
+
+                        if choice_question_id == question_id {
+                            let choice: Result<String, _> = rs.try_get("", "choice");
+
+                            choice.ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect_vec();
+
+                Ok(QuestionDto {
+                    id: question_id,
+                    title: rs.try_get("", "title")?,
+                    description: rs.try_get("", "description")?,
+                    question_type: rs.try_get("", "question_type")?,
+                    choices,
+                    is_required: rs.try_get("", "is_required")?,
+                })
             })
-        })
-        .collect::<Vec<Result<QuestionDto, _>>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<QuestionDto>, _>>()?;
+            .collect::<Result<Vec<_>, DbErr>>()?;
 
-        let response_period = entities::response_period::Entity::find()
-            .filter(Expr::col(response_period::Column::FormId).eq(target_form.id))
-            .all(&self.pool)
-            .await?
-            .first()
-            .map(|period| {
-                Some((
-                    period.start_at.to_owned().and_utc(),
-                    period.end_at.to_owned().and_utc(),
-                ))
-            })
-            .unwrap_or_default();
-
-        let webhook_url = FormWebhooks::find()
-            .filter(Expr::col(form_webhooks::Column::FormId).eq(target_form.id))
-            .all(&self.pool)
-            .await?
-            .first()
-            .map(|webhook_url_model| Some(webhook_url_model.url.to_owned()))
-            .unwrap_or_default();
-
-        let default_answer_title = DefaultAnswerTitles::find()
-            .filter(Expr::col(default_answer_titles::Column::FormId).eq(target_form.id))
-            .all(&self.pool)
-            .await?
-            .first()
-            .map(|answer_title_setting| answer_title_setting.title.to_owned());
+        let start_at: Option<DateTime<Utc>> = form.try_get("", "start_at")?;
+        let end_at: Option<DateTime<Utc>> = form.try_get("", "end_at")?;
 
         Ok(FormDto {
-            id: target_form.id,
-            title: target_form.title,
-            description: target_form.description,
-            questions: form_questions,
-            metadata: (target_form.created_at, target_form.updated_at),
-            response_period,
-            webhook_url,
-            default_answer_title,
+            id: form_id.to_owned(),
+            title: form.try_get("", "form_title")?,
+            description: form.try_get("", "description")?,
+            questions,
+            metadata: (
+                form.try_get("", "created_at")?,
+                form.try_get("", "updated_at")?,
+            ),
+            response_period: start_at.zip(end_at),
+            webhook_url: form.try_get("", "url")?,
+            default_answer_title: form.try_get("", "default_answer_titles.title")?,
         })
     }
 
     #[tracing::instrument]
     async fn delete(&self, form_id: FormId) -> Result<FormId, InfraError> {
-        let target_form = FormMetaData::find_by_id(form_id.to_owned())
-            .all(&self.pool)
-            .await?
-            .first()
-            .ok_or(FormNotFound {
-                id: form_id.to_owned(),
-            })?
-            .to_owned();
-
-        let question_ids = FormQuestions::find()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
-            .all(&self.pool)
-            .await?
-            .iter()
-            .map(|question| question.question_id)
-            .collect_vec();
-
-        FormChoices::delete_many()
-            .filter(Expr::col(form_choices::Column::QuestionId).is_in(question_ids))
-            .exec(&self.pool)
-            .await?;
-
-        response_period::Entity::delete_many()
-            .filter(Expr::col(response_period::Column::FormId).eq(form_id.to_owned()))
-            .exec(&self.pool)
-            .await?;
-
-        FormQuestions::delete_many()
-            .filter(Expr::col(form_questions::Column::FormId).eq(form_id.to_owned()))
-            .exec(&self.pool)
-            .await?;
-
-        target_form.delete(&self.pool).await?;
+        self.execute_and_values(
+            "DELETE FROM form_meta_data WHERE id = ?",
+            [form_id.to_owned().into()],
+        )
+        .await?;
 
         Ok(form_id)
     }
@@ -298,81 +243,68 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         let current_form = self.get(form_id.to_owned().into()).await?;
 
-        FormMetaData::update_many()
-            .filter(form_meta_data::Column::Id.eq(form_id.to_owned()))
-            .col_expr(
-                form_meta_data::Column::Title,
-                Expr::value(
-                    title
-                        .map(|title| title.into_inner())
-                        .unwrap_or(current_form.title),
-                ),
-            )
-            .col_expr(
-                form_meta_data::Column::Description,
-                Expr::value(
-                    description
-                        .map(|description| description.into_inner())
-                        .unwrap_or(current_form.description),
-                ),
-            )
-            .col_expr(
-                form_meta_data::Column::UpdatedAt,
-                SimpleExpr::from(Expr::current_timestamp()),
-            )
-            .exec(&self.pool)
-            .await?;
+        self.execute_and_values(
+            r"UPDATE form_meta_data SET title = ?, description = ?, update_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [
+                title
+                    .map(|title| title.into_inner())
+                    .unwrap_or(current_form.title)
+                    .into(),
+                description
+                    .map(|description| description.into_inner())
+                    .unwrap_or(current_form.description)
+                    .into(),
+                form_id.to_owned().into(),
+            ],
+        )
+        .await?;
 
         if let Some(response_period) = response_period {
-            response_period::Entity::update_many()
-                .filter(response_period::Column::FormId.eq(form_id.to_owned()))
-                .col_expr(
-                    response_period::Column::StartAt,
-                    Expr::value(response_period.start_at),
-                )
-                .col_expr(
-                    response_period::Column::EndAt,
-                    Expr::value(response_period.end_at),
-                )
-                .exec(&self.pool)
-                .await?;
+            self.execute_and_values(
+                "UPDATE response_period SET start_at = ?, end_at = ? WHERE form_id = ?",
+                [
+                    response_period.start_at.into(),
+                    response_period.end_at.into(),
+                    form_id.to_owned().into(),
+                ],
+            )
+            .await?;
         }
 
         if current_form.webhook_url.is_some() {
-            FormWebhooks::update_many()
-                .filter(form_webhooks::Column::FormId.eq(form_id.to_owned()))
-                .col_expr(
-                    form_webhooks::Column::Url,
-                    Expr::value(webhook.and_then(|url| url.webhook_url)),
-                )
-                .exec(&self.pool)
-                .await?;
+            self.execute_and_values(
+                "UPDATE form_webhooks SET url = ? WHERE form_id = ?",
+                [
+                    webhook.and_then(|url| url.webhook_url).into(),
+                    form_id.to_owned().into(),
+                ],
+            )
+            .await?;
         } else if let Some(webhook_url) = webhook.and_then(|url| url.webhook_url) {
-            form_webhooks::ActiveModel {
-                id: ActiveValue::NotSet,
-                form_id: Set(form_id.to_owned()),
-                url: Set(webhook_url),
-            }
-            .insert(&self.pool)
+            self.execute_and_values(
+                "INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)",
+                [form_id.to_owned().into(), webhook_url.into()],
+            )
             .await?;
         }
 
         if current_form.default_answer_title.is_some() && default_answer_title.is_some() {
-            DefaultAnswerTitles::update_many()
-                .filter(default_answer_titles::Column::FormId.eq(form_id.to_owned()))
-                .col_expr(
-                    default_answer_titles::Column::Title,
-                    Expr::value(default_answer_title.unwrap().unwrap_or_default()),
-                )
-                .exec(&self.pool)
-                .await?;
+            self.execute_and_values(
+                "UPDATE default_answer_titles SET title = ?, WHERE form_id = ?",
+                [
+                    default_answer_title.unwrap().unwrap_or_default().into(),
+                    form_id.to_owned().into(),
+                ],
+            )
+            .await?;
         } else if let Some(default_answer_title) = default_answer_title {
-            default_answer_titles::ActiveModel {
-                id: ActiveValue::NotSet,
-                form_id: Set(form_id.to_owned()),
-                title: Set(default_answer_title.unwrap_or_default()),
-            }
-            .insert(&self.pool)
+            self.execute_and_values(
+                "INSERT INTO default_answer_titles (form_id, title) VALUES (?, ?)",
+                [
+                    form_id.to_owned().into(),
+                    default_answer_title.unwrap_or_default().into(),
+                ],
+            )
             .await?;
         }
 
@@ -382,15 +314,22 @@ impl FormDatabase for ConnectionPool {
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
         let regex = Regex::new(r"\$\d+").unwrap();
 
+        let default_answer_title_query_result = self
+            .query_all_and_values(
+                r"SELECT title FROM default_answer_titles WHERE form_id = ?",
+                [answer.form_id.to_owned().into()],
+            )
+            .await?;
+
+        let default_answer_title: Option<String> = default_answer_title_query_result
+            .first()
+            .ok_or(FormNotFound {
+                id: answer.form_id.to_owned(),
+            })?
+            .try_get("", "title")?;
+
         let default_answer_title = DefaultAnswerTitle {
-            default_answer_title: DefaultAnswerTitles::find()
-                .filter(
-                    Expr::col(default_answer_titles::Column::FormId).eq(answer.form_id.to_owned()),
-                )
-                .all(&self.pool)
-                .await?
-                .first()
-                .map(|answer_title_setting| answer_title_setting.title.to_owned()),
+            default_answer_title,
         }
         .unwrap_or_default();
 
@@ -410,24 +349,21 @@ impl FormDatabase for ConnectionPool {
         );
 
         let id = self
-            .pool
-            .execute(Statement::from_sql_and_values(
-                DatabaseBackend::MySql,
-                "INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users \
-                 WHERE uuid = UUID_TO_BIN(?)), ?)",
+            .execute_and_values(
+                r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
                 [
                     answer.form_id.to_owned().into(),
                     answer.uuid.to_string().into(),
                     embed_title.into(),
                 ],
-            ))
+            )
             .await?
             .last_insert_id();
 
         let params = answer
             .answers
             .into_iter()
-            .map(|answer| {
+            .flat_map(|answer| {
                 vec![
                     id.to_string(),
                     answer.question_id.to_string(),
@@ -436,41 +372,26 @@ impl FormDatabase for ConnectionPool {
             })
             .collect_vec();
 
-        self.pool
-            .execute(Statement::from_sql_and_values(
-                DatabaseBackend::MySql,
-                format!(
-                    "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
-                    vec!["(?, ?, ?)"; params.len()].iter().join(", ")
-                ),
-                params
-                    .iter()
-                    .flatten()
-                    .map(|value| value.into())
-                    .collect_vec(),
-            ))
-            .await?;
+        self.batch_insert(
+            "INSERT INTO real_answers (answer_id, question_id, answer) VALUES (?, ?, ?)",
+            params.iter().map(|value| value.into()),
+        )
+        .await?;
 
         Ok(())
     }
 
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         let answers = self
-            .pool
-            .query_all(Statement::from_string(
-                DatabaseBackend::MySql,
+            .query_all(
                 "SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
-            ))
+            )
             .await?;
 
         let real_answers = self
-            .pool
-            .query_all(Statement::from_string(
-                DatabaseBackend::MySql,
-                "SELECT answer_id, question_id, answer FROM real_answers",
-            ))
+            .query_all("SELECT answer_id, question_id, answer FROM real_answers")
             .await?;
 
         answers
@@ -506,26 +427,24 @@ impl FormDatabase for ConnectionPool {
         &self,
         form_question_update_schema: FormQuestionUpdateSchema,
     ) -> Result<(), InfraError> {
-        let question_active_values = form_question_update_schema
-            .questions
-            .iter()
-            .map(|question| {
-                QuestionType::try_from_value(&question.question_type.to_string().to_lowercase())
-                    .map(|question_type| form_questions::ActiveModel {
-                        question_id: ActiveValue::NotSet,
-                        form_id: Set(form_question_update_schema.form_id.to_owned()),
-                        title: Set(question.title.to_owned()),
-                        description: Set(question.description.to_owned()),
-                        question_type: Set(question_type),
-                        is_required: Set(i8::from(question.is_required().to_owned())),
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let last_insert_id = FormQuestions::insert_many(question_active_values)
-            .exec(&self.pool)
+        let last_insert_id = self.batch_insert(
+            r"INSERT INTO form_questions (form_id, title, description, question_type, is_required) VALUES (?, ?, ?, ?, ?)",
+            form_question_update_schema
+                .questions
+                .iter()
+                .flat_map(|question|
+                    vec![
+                        form_question_update_schema.form_id.to_owned().into(),
+                        question.title.to_owned().into(),
+                        question.description.to_owned().into(),
+                        question.question_type.to_string().into(),
+                        question.is_required().to_owned().into()
+                    ]
+                ).collect_vec()
+        )
             .await?
-            .last_insert_id;
+            .unwrap()
+            .last_insert_id();
 
         let choices_active_values = form_question_update_schema
             .questions
@@ -540,21 +459,16 @@ impl FormDatabase for ConnectionPool {
                     .choices
                     .iter()
                     .cloned()
-                    .map(|choice| form_choices::ActiveModel {
-                        id: ActiveValue::NotSet,
-                        question_id: Set(question_id),
-                        choice: Set(choice),
-                    })
+                    .flat_map(|choice| vec![question_id.to_string(), choice])
                     .collect_vec()
             })
             .collect_vec();
 
-        if !choices_active_values.is_empty() {
-            // NOTE: insert_manyに渡すvecが空だとinsertに失敗する
-            FormChoices::insert_many(choices_active_values)
-                .exec(&self.pool)
-                .await?;
-        }
+        self.batch_insert(
+            "INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
+            choices_active_values.into_iter().map(|value| value.into()),
+        )
+        .await?;
 
         Ok(())
     }

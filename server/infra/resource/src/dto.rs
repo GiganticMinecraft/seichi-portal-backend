@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use domain::form::models::{FormSettings, ResponsePeriod};
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct QuestionDto {
     pub id: i32,
     pub title: String,
