@@ -15,3 +15,4 @@ tracing = { workspace = true }
 usecase = { path = "../usecase" }
 uuid = { workspace = true }
 reqwest = { workspace = true }
+regex = { workspace = true }

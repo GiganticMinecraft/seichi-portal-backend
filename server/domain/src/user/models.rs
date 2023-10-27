@@ -14,5 +14,6 @@ pub struct User {
 pub enum Role {
     Administrator,
     #[default]
+    #[strum(serialize = "STANDARD_USER")]
     StandardUser,
 }
