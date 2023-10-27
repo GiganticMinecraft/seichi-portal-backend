@@ -408,4 +408,50 @@ impl FormDatabase for ConnectionPool {
 
         Ok(())
     }
+
+    async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError> {
+        let questions_rs = self.query_all_and_values(
+            r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
+            [form_id.to_owned().into()]
+        ).await?;
+
+        let choices_rs = self
+            .query_all_and_values(
+                r"SELECT question_id, choice FROM form_choices 
+            INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
+            WHERE form_id = ?",
+                [form_id.to_owned().into()],
+            )
+            .await?;
+
+        questions_rs
+            .into_iter()
+            .map(|question_rs| {
+                let question_id: i32 = question_rs.try_get("", "question_id")?;
+
+                let choices = choices_rs
+                    .iter()
+                    .filter_map(|choice_rs| {
+                        if choice_rs
+                            .try_get::<i32>("", "question_id")
+                            .is_ok_and(|id| id == question_id)
+                        {
+                            choice_rs.try_get::<String>("", "choice").ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect_vec();
+
+                Ok(QuestionDto {
+                    id: question_id,
+                    title: question_rs.try_get("", "title")?,
+                    description: question_rs.try_get("", "description")?,
+                    question_type: question_rs.try_get("", "question_type")?,
+                    choices,
+                    is_required: question_rs.try_get("", "is_required")?,
+                })
+            })
+            .collect::<Result<Vec<QuestionDto>, _>>()
+    }
 }

@@ -9,7 +9,7 @@ use domain::{
 use errors::infra::InfraError;
 use mockall::automock;
 
-use crate::dto::{FormDto, PostedAnswersDto, SimpleFormDto};
+use crate::dto::{FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -46,6 +46,7 @@ pub trait FormDatabase: Send + Sync {
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema)
         -> Result<(), InfraError>;
+    async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
 }
 
 #[automock]
