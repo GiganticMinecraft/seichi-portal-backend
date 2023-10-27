@@ -14,7 +14,7 @@ use sea_orm::DbErr;
 
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
-    dto::{AnswerDto, FormDto, PostedAnswersDto, QuestionDto},
+    dto::{AnswerDto, FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto},
 };
 
 #[async_trait]
@@ -46,14 +46,12 @@ impl FormDatabase for ConnectionPool {
     async fn list(
         &self,
         OffsetAndLimit { offset, limit }: OffsetAndLimit,
-    ) -> Result<Vec<FormDto>, InfraError> {
+    ) -> Result<Vec<SimpleFormDto>, InfraError> {
         let forms = self
             .query_all(
-                &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, start_at, end_at
                             FROM form_meta_data
-                            LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
-                            LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
                             ORDER BY form_meta_data.id
                             {} {}", 
                         limit.map(|value| format!("LIMIT {}", value)).unwrap_or_default(), 
@@ -61,81 +59,19 @@ impl FormDatabase for ConnectionPool {
             )
             .await?;
 
-        let questions = self
-            .query_all(
-                r"SELECT form_id, question_id, title, description, question_type, is_required FROM form_questions"
-            )
-            .await?;
-
-        let choices = self
-            .query_all(r"SELECT question_id, choice FROM form_choices")
-            .await?;
-
-        let form_id_with_questions = questions
-            .into_iter()
-            .map(|rs| {
-                let question_id: i32 = rs.try_get("", "question_id")?;
-
-                let choices = choices
-                    .iter()
-                    .filter_map(|rs| {
-                        let choice_question_id: i32 = rs.try_get("", "question_id").ok()?;
-
-                        if choice_question_id == question_id {
-                            let choice: Result<String, _> = rs.try_get("", "choice");
-
-                            choice.ok()
-                        } else {
-                            None
-                        }
-                    })
-                    .collect_vec();
-
-                let form_id: i32 = rs.try_get("", "form_id")?;
-
-                Ok((
-                    form_id,
-                    QuestionDto {
-                        id: question_id,
-                        title: rs.try_get("", "title")?,
-                        description: rs.try_get("", "description")?,
-                        question_type: rs.try_get("", "question_type")?,
-                        choices,
-                        is_required: rs.try_get("", "is_required")?,
-                    },
-                ))
-            })
-            .collect::<Result<Vec<_>, DbErr>>()?;
-
         forms
             .into_iter()
             .map(|rs| {
                 let form_id: i32 = rs.try_get("", "form_id")?;
 
-                let questions = form_id_with_questions
-                    .iter()
-                    .cloned()
-                    .filter_map(|(question_form_id, questions)| {
-                        if question_form_id == form_id {
-                            Some(questions)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect_vec();
-
                 let start_at: Option<DateTime<Utc>> = rs.try_get("", "start_at")?;
                 let end_at: Option<DateTime<Utc>> = rs.try_get("", "end_at")?;
 
-                Ok(FormDto {
+                Ok(SimpleFormDto {
                     id: form_id,
                     title: rs.try_get("", "form_title")?,
                     description: rs.try_get("", "description")?,
-                    questions,
-                    metadata: (rs.try_get("", "created_at")?, rs.try_get("", "updated_at")?),
                     response_period: start_at.zip(end_at),
-                    webhook_url: rs.try_get("", "url")?,
-                    default_answer_title: rs.try_get("", "default_answer_titles.title")?,
                 })
             })
             .collect()

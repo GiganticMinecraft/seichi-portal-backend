@@ -82,6 +82,33 @@ impl TryFrom<FormDto> for domain::form::models::Form {
     }
 }
 
+pub struct SimpleFormDto {
+    pub id: i32,
+    pub title: String,
+    pub description: Option<String>,
+    pub response_period: Option<(DateTime<Utc>, DateTime<Utc>)>,
+}
+
+impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        SimpleFormDto {
+            id,
+            title,
+            description,
+            response_period,
+        }: SimpleFormDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(domain::form::models::SimpleForm {
+            id: id.into(),
+            title: title.into(),
+            description: description.into(),
+            response_period: ResponsePeriod::new(response_period),
+        })
+    }
+}
+
 pub struct AnswerDto {
     pub question_id: i32,
     pub answer: String,
