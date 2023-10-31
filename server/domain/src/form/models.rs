@@ -34,6 +34,14 @@ pub struct FormUpdateTargets {
     pub default_answer_title: Option<DefaultAnswerTitle>,
 }
 
+#[derive(Serialize, Debug)]
+pub struct SimpleForm {
+    pub id: FormId,
+    pub title: FormTitle,
+    pub description: FormDescription,
+    pub response_period: ResponsePeriod,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct FormQuestionUpdateSchema {
     pub form_id: FormId,

@@ -9,7 +9,7 @@ use domain::{
 use errors::infra::InfraError;
 use mockall::automock;
 
-use crate::dto::{FormDto, PostedAnswersDto};
+use crate::dto::{FormDto, PostedAnswersDto, SimpleFormDto};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -31,7 +31,10 @@ pub trait FormDatabase: Send + Sync {
         description: FormDescription,
         user: User,
     ) -> Result<FormId, InfraError>;
-    async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<FormDto>, InfraError>;
+    async fn list(
+        &self,
+        offset_and_limit: OffsetAndLimit,
+    ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<FormId, InfraError>;
     async fn update(

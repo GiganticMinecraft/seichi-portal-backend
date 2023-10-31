@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-        OffsetAndLimit, PostedAnswers,
+        OffsetAndLimit, PostedAnswers, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -34,7 +34,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<Form>, Error> {
+    async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<SimpleForm>, Error> {
         let forms = self.client.form().list(offset_and_limit).await?;
         forms
             .into_iter()
