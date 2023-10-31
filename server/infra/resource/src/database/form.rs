@@ -81,7 +81,7 @@ impl FormDatabase for ConnectionPool {
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError> {
         let form_query = self
             .query_all_and_values(
-                r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
                             FROM form_meta_data
                             LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
@@ -152,6 +152,7 @@ impl FormDatabase for ConnectionPool {
             response_period: start_at.zip(end_at),
             webhook_url: form.try_get("", "url")?,
             default_answer_title: form.try_get("", "default_answer_titles.title")?,
+            visibility: form.try_get("", "visibility")?,
         })
     }
 

@@ -146,6 +146,8 @@ pub struct FormSettings {
     pub webhook_url: WebhookUrl,
     #[serde(default)]
     pub default_answer_title: DefaultAnswerTitle,
+    #[serde(default)]
+    pub visibility: Visibility,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -172,6 +174,23 @@ impl ResponsePeriod {
                 end_at: Some(end_at),
             }
         })
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Debug, EnumString, Display, Default, PartialOrd, PartialEq)]
+pub enum Visibility {
+    #[default]
+    PUBLIC,
+    PRIVATE,
+}
+
+impl TryFrom<String> for Visibility {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        use std::str::FromStr;
+        Self::from_str(&value).map_err(Into::into)
     }
 }
 
