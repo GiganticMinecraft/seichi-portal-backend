@@ -417,7 +417,7 @@ impl FormDatabase for ConnectionPool {
 
         let choices_rs = self
             .query_all_and_values(
-                r"SELECT form_choices.question_id AS choice_question_id, choice FROM form_choices 
+                r"SELECT form_choices.question_id, choice FROM form_choices 
             INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
             WHERE form_id = ?",
                 [form_id.to_owned().into()],
@@ -427,7 +427,7 @@ impl FormDatabase for ConnectionPool {
         questions_rs
             .into_iter()
             .map(|question_rs| {
-                let question_id: i32 = question_rs.try_get("", "choice_question_id")?;
+                let question_id: i32 = question_rs.try_get("", "question_id")?;
 
                 let choices = choices_rs
                     .iter()
