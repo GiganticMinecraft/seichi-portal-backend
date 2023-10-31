@@ -13,6 +13,7 @@ use domain::{
         User,
     },
 };
+use regex::Regex;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use resource::repository::RealInfrastructureRepository;
 use usecase::user::UserUseCase;
@@ -54,10 +55,24 @@ pub async fn auth<B>(
         .map_err(|_| StatusCode::UNAUTHORIZED)?
     };
 
-    let standard_user_endpoints = [(&Method::GET, "/forms"), (&Method::POST, "/forms/answers")];
+    let static_endpoints_allowed_for_standard_users =
+        [(&Method::GET, "/forms"), (&Method::POST, "/forms/answers")];
+
+    // NOTE: 動的パスを指定する場合は、正規表現を埋め込む
+    let dynamic_endpoints_allowed_for_standard_users = [(&Method::GET, "/forms/[^/]+/questions")];
+
+    let is_not_allow_dynamic_endpoint = !dynamic_endpoints_allowed_for_standard_users
+        .into_iter()
+        .any(|(method, endpoint)| {
+            let regex = Regex::new(endpoint).unwrap();
+
+            method == request.method() && regex.is_match(request.uri().path())
+        });
 
     if user.role == StandardUser
-        && !standard_user_endpoints.contains(&(request.method(), request.uri().path()))
+        && !static_endpoints_allowed_for_standard_users
+            .contains(&(request.method(), request.uri().path()))
+        && is_not_allow_dynamic_endpoint
     {
         // NOTE: standard_user_endpointsに存在しないMethodとエンドポイントに
         //          一般ユーザーがアクセスした場合は、アクセス権限なしとしてすべてFORBIDDENを返す。

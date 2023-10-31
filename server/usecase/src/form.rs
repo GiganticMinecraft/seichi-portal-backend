@@ -1,7 +1,7 @@
 use domain::{
     form::models::{
         Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-        OffsetAndLimit, PostedAnswers, SimpleForm,
+        OffsetAndLimit, PostedAnswers, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -35,6 +35,10 @@ impl<R: FormRepository> FormUseCase<'_, R> {
 
     pub async fn delete_form(&self, form_id: FormId) -> Result<FormId, Error> {
         self.repository.delete(form_id).await
+    }
+
+    pub async fn get_questions(&self, form_id: FormId) -> Result<Vec<Question>, Error> {
+        self.repository.get_questions(form_id).await
     }
 
     pub async fn update_form(

@@ -120,6 +120,20 @@ pub async fn update_form_handler(
     }
 }
 
+pub async fn get_questions_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(form_id): Path<FormId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_questions(form_id).await {
+        Ok(questions) => (StatusCode::OK, Json(questions)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub async fn get_all_answers(
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
