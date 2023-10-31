@@ -29,6 +29,7 @@ impl MigrationTrait for Migration {
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     title TEXT NOT NULL,
                     description TEXT NOT NULL,
+                    visibility ENUM('PUBLIC', 'PRIVATE'),
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     created_by INT NOT NULL,
                     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

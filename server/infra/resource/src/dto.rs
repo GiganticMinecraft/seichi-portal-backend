@@ -45,6 +45,7 @@ pub struct FormDto {
     pub response_period: Option<(DateTime<Utc>, DateTime<Utc>)>,
     pub webhook_url: Option<String>,
     pub default_answer_title: Option<String>,
+    pub visibility: String,
 }
 
 impl TryFrom<FormDto> for domain::form::models::Form {
@@ -60,6 +61,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             response_period,
             webhook_url,
             default_answer_title,
+            visibility,
         }: FormDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Form::builder()
@@ -77,6 +79,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
                 response_period: ResponsePeriod::new(response_period),
                 webhook_url: webhook_url.into(),
                 default_answer_title: default_answer_title.into(),
+                visibility: visibility.try_into()?,
             })
             .build())
     }
