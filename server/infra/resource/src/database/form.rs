@@ -181,7 +181,7 @@ impl FormDatabase for ConnectionPool {
         let current_form = self.get(form_id.to_owned().into()).await?;
 
         self.execute_and_values(
-            r"UPDATE form_meta_data SET title = ?, description = ?, update_at = CURRENT_TIMESTAMP WHERE id = ?",
+            r"UPDATE form_meta_data SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             [
                 title
                     .map(|title| title.into_inner())
