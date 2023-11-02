@@ -39,6 +39,12 @@ impl FormDatabase for ConnectionPool {
             .await?
             .last_insert_id() as i32;
 
+        self.execute_and_values(
+            "INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
+            [form_id.to_owned().into()],
+        )
+        .await?;
+
         Ok(form_id.into())
     }
 

@@ -127,7 +127,7 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS default_answer_titles(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id INT NOT NULL,
-                    title TEXT NOT NULL,
+                    title TEXT,
                     FOREIGN KEY fk_default_answer_titles_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
