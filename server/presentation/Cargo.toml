@@ -16,3 +16,4 @@ usecase = { path = "../usecase" }
 uuid = { workspace = true }
 reqwest = { workspace = true }
 regex = { workspace = true }
+chrono = { workspace = true }
