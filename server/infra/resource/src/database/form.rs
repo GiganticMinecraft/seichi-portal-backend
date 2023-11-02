@@ -11,6 +11,7 @@ use errors::infra::{InfraError, InfraError::FormNotFound};
 use itertools::Itertools;
 use regex::Regex;
 use sea_orm::DbErr;
+use std::str::FromStr;
 
 use crate::{
     database::{components::FormDatabase, connection::ConnectionPool},
@@ -350,7 +351,7 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(PostedAnswersDto {
-                    uuid: rs.try_get("", "uuid")?,
+                    uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
                     timestamp: rs.try_get("", "time_stamp")?,
                     form_id: rs.try_get("", "form_id")?,
                     title: rs.try_get("", "title")?,
