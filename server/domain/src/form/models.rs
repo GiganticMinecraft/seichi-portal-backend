@@ -210,6 +210,13 @@ impl DefaultAnswerTitle {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct PostedAnswersSchema {
+    pub form_id: FormId,
+    pub title: DefaultAnswerTitle,
+    pub answers: Vec<Answer>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PostedAnswers {
     pub uuid: Uuid, //todo: あとでUser型に直す
     pub timestamp: DateTime<Utc>,

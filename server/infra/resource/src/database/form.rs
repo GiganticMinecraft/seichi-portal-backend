@@ -321,7 +321,7 @@ impl FormDatabase for ConnectionPool {
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         let answers = self
             .query_all(
-                "SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                r"SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
             )

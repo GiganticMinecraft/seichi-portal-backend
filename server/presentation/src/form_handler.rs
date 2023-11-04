@@ -4,9 +4,11 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
+use chrono::Utc;
 use domain::{
     form::models::{
         Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        PostedAnswersSchema,
     },
     repository::Repositories,
     user::models::User,
@@ -148,11 +150,20 @@ pub async fn get_all_answers(
 }
 
 pub async fn post_answer_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(answers): Json<PostedAnswers>,
+    Json(schema): Json<PostedAnswersSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
+    };
+
+    let answers = PostedAnswers {
+        uuid: user.id,
+        timestamp: Utc::now(),
+        form_id: schema.form_id,
+        title: schema.title,
+        answers: schema.answers,
     };
 
     match form_use_case.post_answers(answers).await {
