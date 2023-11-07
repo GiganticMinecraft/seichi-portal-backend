@@ -16,6 +16,7 @@ use presentation::{
         update_form_handler,
     },
     health_check_handler::health_check,
+    user_handler::get_my_user_info,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -79,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/forms/questions", post(create_question_handler))
         .with_state(shared_repository.to_owned())
+        .route("/users", get(get_my_user_info))
         .route("/health", get(health_check))
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(
