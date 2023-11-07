@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
@@ -356,7 +358,7 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(PostedAnswersDto {
-                    uuid: rs.try_get("", "uuid")?,
+                    uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
                     timestamp: rs.try_get("", "time_stamp")?,
                     form_id: rs.try_get("", "form_id")?,
                     title: rs.try_get("", "title")?,
