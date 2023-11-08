@@ -6,7 +6,7 @@ use axum::{
 };
 use domain::{
     repository::Repositories,
-    user::models::{Role, User},
+    user::models::{RoleQuery, User},
 };
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -20,13 +20,13 @@ pub async fn get_my_user_info(Extension(user): Extension<User>) -> impl IntoResp
 pub async fn patch_user_role(
     State(repository): State<RealInfrastructureRepository>,
     Path(uuid): Path<Uuid>,
-    Query(role): Query<Role>,
+    Query(role): Query<RoleQuery>,
 ) -> impl IntoResponse {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case.patch_user_role(uuid, role).await {
+    match user_use_case.patch_user_role(uuid, role.role).await {
         Ok(_) => (StatusCode::OK).into_response(),
         Err(err) => {
             tracing::error!("{}", err);

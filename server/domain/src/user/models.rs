@@ -20,3 +20,8 @@ pub enum Role {
     #[strum(serialize = "STANDARD_USER")]
     StandardUser,
 }
+
+#[derive(Deserialize)]
+pub struct RoleQuery {
+    pub role: Role,
+}
