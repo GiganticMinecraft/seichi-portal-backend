@@ -26,7 +26,7 @@ impl UserDatabase for ConnectionPool {
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError> {
         self.execute_and_values(
             "UPDATE users SET role = ? WHERE uuid = ?",
-            [uuid.to_string().into(), role.to_string().into()],
+            [role.to_string().into(), uuid.to_string().into()],
         )
         .await?;
 
