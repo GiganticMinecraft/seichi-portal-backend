@@ -12,8 +12,11 @@ pub struct User {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Display)]
 pub enum Role {
+    #[serde(rename = "ADMINISTRATOR")]
+    #[strum(serialize = "ADMINISTRATOR")]
     Administrator,
     #[default]
+    #[serde(rename = "STANDARD_USER")]
     #[strum(serialize = "STANDARD_USER")]
     StandardUser,
 }
