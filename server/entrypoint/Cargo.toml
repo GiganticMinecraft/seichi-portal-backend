@@ -18,7 +18,7 @@ tokio = { version = "1.33.0", features = ["full"] }
 tower = "0.4.13"
 tower-http = { version = "0.4.4", features = ["cors"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3.17", features = ["std", "registry", "env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["std", "registry", "env-filter"] }
 
 [package.metadata.cargo-udeps.ignore]
 development = ["cargo-husky"]
