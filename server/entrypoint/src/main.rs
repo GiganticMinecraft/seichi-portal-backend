@@ -1,13 +1,15 @@
 use std::net::SocketAddr;
 
 use axum::{
-    http::{header::CONTENT_TYPE, Method},
+    http::{
+        header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
+        Method,
+    },
     middleware,
     routing::{get, post},
     Router,
 };
 use common::config::{ENV, HTTP};
-use hyper::header::{AUTHORIZATION, LOCATION};
 use presentation::{
     auth::auth,
     form_handler::{
