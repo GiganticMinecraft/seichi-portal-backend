@@ -55,8 +55,11 @@ pub async fn auth<B>(
         .map_err(|_| StatusCode::UNAUTHORIZED)?
     };
 
-    let static_endpoints_allowed_for_standard_users =
-        [(&Method::GET, "/forms"), (&Method::POST, "/forms/answers")];
+    let static_endpoints_allowed_for_standard_users = [
+        (&Method::GET, "/forms"),
+        (&Method::POST, "/forms/answers"),
+        (&Method::GET, "/users"),
+    ];
 
     // NOTE: 動的パスを指定する場合は、正規表現を埋め込む
     let dynamic_endpoints_allowed_for_standard_users = [(&Method::GET, "/forms/[^/]+/questions")];
