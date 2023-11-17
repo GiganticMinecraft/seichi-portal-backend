@@ -13,8 +13,7 @@ impl UserDatabase for ConnectionPool {
                 DatabaseBackend::MySql,
                 "INSERT INTO users (uuid, name, role) VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE
-                        name = VALUES(name),
-                        role = VALUES(role)",
+                        name = VALUES(name)",
                 [
                     user.id.to_string().into(),
                     user.name.to_owned().into(),
