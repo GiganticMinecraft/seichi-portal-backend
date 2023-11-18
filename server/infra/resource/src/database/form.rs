@@ -176,6 +176,7 @@ impl FormDatabase for ConnectionPool {
         Ok(form_id)
     }
 
+    #[tracing::instrument]
     async fn update(
         &self,
         form_id: FormId,
@@ -257,6 +258,7 @@ impl FormDatabase for ConnectionPool {
         Ok(())
     }
 
+    #[tracing::instrument]
     async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
         let regex = Regex::new(r"\$\d+").unwrap();
 
@@ -327,6 +329,7 @@ impl FormDatabase for ConnectionPool {
         Ok(())
     }
 
+    #[tracing::instrument]
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         let answers = self
             .query_all(
@@ -369,6 +372,7 @@ impl FormDatabase for ConnectionPool {
             .collect::<Result<Vec<_>, _>>()
     }
 
+    #[tracing::instrument]
     async fn create_questions(
         &self,
         form_question_update_schema: FormQuestionUpdateSchema,
@@ -419,6 +423,7 @@ impl FormDatabase for ConnectionPool {
         Ok(())
     }
 
+    #[tracing::instrument]
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError> {
         let questions_rs = self.query_all_and_values(
             r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
@@ -465,6 +470,7 @@ impl FormDatabase for ConnectionPool {
             .collect::<Result<Vec<QuestionDto>, _>>()
     }
 
+    #[tracing::instrument]
     async fn post_comment(&self, comment: Comment) -> Result<(), InfraError> {
         self.execute_and_values(
             r"INSERT INTO form_answer_comments (answer_id, commented_by, content)
