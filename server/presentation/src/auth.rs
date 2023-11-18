@@ -58,6 +58,7 @@ pub async fn auth<B>(
     let static_endpoints_allowed_for_standard_users = [
         (&Method::GET, "/forms"),
         (&Method::POST, "/forms/answers"),
+        (&Method::POST, "/forms/answers/comment"),
         (&Method::GET, "/users"),
     ];
 
