@@ -2,13 +2,12 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use domain::form::models::Comment;
 use domain::{
     form::models::{
-        DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
+        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
     },
-    user::models::User,
+    user::models::{Role::Administrator, User},
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use itertools::Itertools;
@@ -35,7 +34,7 @@ impl FormDatabase for ConnectionPool {
                         SELECT ?, ?, users.id, users.id FROM users WHERE uuid = ?",
                 [
                     title.title().to_owned().into(),
-                    description.to_owned().into(),
+                    description.to_owned().into_inner().into(),
                     user.id.to_string().into(),
                 ],
             )
@@ -44,7 +43,7 @@ impl FormDatabase for ConnectionPool {
 
         self.execute_and_values(
             "INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
-            [form_id.to_owned().into()],
+            [form_id.into()],
         )
         .await?;
 
@@ -96,18 +95,18 @@ impl FormDatabase for ConnectionPool {
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
                             LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
                             WHERE form_meta_data.id = ?",
-                [form_id.to_owned().into()]
+                [form_id.to_owned().into_inner().into()]
             )
             .await?;
 
         let form = form_query.first().ok_or(FormNotFound {
-            id: form_id.to_owned(),
+            id: form_id.to_owned().into_inner(),
         })?;
 
         let questions = self
             .query_all_and_values(
                 r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
-                [form_id.to_owned().into()]
+                [form_id.to_owned().into_inner().into()]
             )
             .await?;
 
@@ -150,7 +149,7 @@ impl FormDatabase for ConnectionPool {
         let end_at: Option<DateTime<Utc>> = form.try_get("", "end_at")?;
 
         Ok(FormDto {
-            id: form_id.to_owned(),
+            id: form_id.into_inner(),
             title: form.try_get("", "form_title")?,
             description: form.try_get("", "description")?,
             questions,
@@ -169,7 +168,7 @@ impl FormDatabase for ConnectionPool {
     async fn delete(&self, form_id: FormId) -> Result<FormId, InfraError> {
         self.execute_and_values(
             "DELETE FROM form_meta_data WHERE id = ?",
-            [form_id.to_owned().into()],
+            [form_id.to_owned().into_inner().into()],
         )
         .await?;
 
@@ -188,7 +187,7 @@ impl FormDatabase for ConnectionPool {
             default_answer_title,
         }: FormUpdateTargets,
     ) -> Result<(), InfraError> {
-        let current_form = self.get(form_id.to_owned().into()).await?;
+        let current_form = self.get(form_id.to_owned().into_inner().into()).await?;
 
         self.execute_and_values(
             r"UPDATE form_meta_data SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -201,7 +200,7 @@ impl FormDatabase for ConnectionPool {
                     .map(|description| description.into_inner())
                     .unwrap_or(current_form.description)
                     .into(),
-                form_id.to_owned().into(),
+                form_id.to_owned().into_inner().into(),
             ],
         )
         .await?;
@@ -212,7 +211,7 @@ impl FormDatabase for ConnectionPool {
                 [
                     response_period.start_at.into(),
                     response_period.end_at.into(),
-                    form_id.to_owned().into(),
+                    form_id.to_owned().into_inner().into(),
                 ],
             )
             .await?;
@@ -223,14 +222,14 @@ impl FormDatabase for ConnectionPool {
                 "UPDATE form_webhooks SET url = ? WHERE form_id = ?",
                 [
                     webhook.and_then(|url| url.webhook_url).into(),
-                    form_id.to_owned().into(),
+                    form_id.to_owned().into_inner().into(),
                 ],
             )
             .await?;
         } else if let Some(webhook_url) = webhook.and_then(|url| url.webhook_url) {
             self.execute_and_values(
                 "INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)",
-                [form_id.to_owned().into(), webhook_url.into()],
+                [form_id.to_owned().into_inner().into(), webhook_url.into()],
             )
             .await?;
         }
@@ -240,7 +239,7 @@ impl FormDatabase for ConnectionPool {
                 "UPDATE default_answer_titles SET title = ?, WHERE form_id = ?",
                 [
                     default_answer_title.unwrap().unwrap_or_default().into(),
-                    form_id.to_owned().into(),
+                    form_id.to_owned().into_inner().into(),
                 ],
             )
             .await?;
@@ -248,7 +247,7 @@ impl FormDatabase for ConnectionPool {
             self.execute_and_values(
                 "INSERT INTO default_answer_titles (form_id, title) VALUES (?, ?)",
                 [
-                    form_id.to_owned().into(),
+                    form_id.to_owned().into_inner().into(),
                     default_answer_title.unwrap_or_default().into(),
                 ],
             )
@@ -265,14 +264,14 @@ impl FormDatabase for ConnectionPool {
         let default_answer_title_query_result = self
             .query_all_and_values(
                 r"SELECT title FROM default_answer_titles WHERE form_id = ?",
-                [answer.form_id.to_owned().into()],
+                [answer.form_id.to_owned().into_inner().into()],
             )
             .await?;
 
         let default_answer_title: Option<String> = default_answer_title_query_result
             .first()
             .ok_or(FormNotFound {
-                id: answer.form_id.to_owned(),
+                id: answer.form_id.to_owned().into_inner(),
             })?
             .try_get("", "title")?;
 
@@ -300,7 +299,7 @@ impl FormDatabase for ConnectionPool {
             .execute_and_values(
                 r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
                 [
-                    answer.form_id.to_owned().into(),
+                    answer.form_id.to_owned().into_inner().into(),
                     answer.uuid.to_string().into(),
                     embed_title.into(),
                 ],
@@ -384,7 +383,7 @@ impl FormDatabase for ConnectionPool {
                 .iter()
                 .flat_map(|question|
                     vec![
-                        form_question_update_schema.form_id.to_owned().into(),
+                        form_question_update_schema.form_id.to_owned().into_inner().into(),
                         question.title.to_owned().into(),
                         question.description.to_owned().into(),
                         question.question_type.to_string().into(),
@@ -427,7 +426,7 @@ impl FormDatabase for ConnectionPool {
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError> {
         let questions_rs = self.query_all_and_values(
             r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
-            [form_id.to_owned().into()]
+            [form_id.to_owned().into_inner().into()]
         ).await?;
 
         let choices_rs = self
@@ -435,7 +434,7 @@ impl FormDatabase for ConnectionPool {
                 r"SELECT form_choices.question_id, choice FROM form_choices 
             INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
             WHERE form_id = ?",
-                [form_id.to_owned().into()],
+                [form_id.to_owned().into_inner().into()],
             )
             .await?;
 
@@ -471,13 +470,36 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
+    async fn has_permission(&self, answer_id: AnswerId, user: User) -> Result<bool, InfraError> {
+        if user.role == Administrator {
+            return Ok(true);
+        }
+
+        let rs_opt = self
+            .query_one_and_values(
+                r"
+            SELECT visibility FROM form_meta_data INNER JOIN 
+                ON answers.form_id = form_meta_data.id
+                WHERE answers.id = ?
+            ",
+                [answer_id.to_owned().into_inner().into()],
+            )
+            .await?;
+
+        rs_opt
+            .map(|rs| rs.try_get::<bool>("", "visibility"))
+            .unwrap_or_else(|| Ok(false))
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
     async fn post_comment(&self, comment: Comment) -> Result<(), InfraError> {
         self.execute_and_values(
             r"INSERT INTO form_answer_comments (answer_id, commented_by, content)
                 SELECT ?, ?, users.id FROM users WHERE uuid = ?
             ",
             [
-                comment.answer_id.to_owned().into(),
+                comment.answer_id.to_owned().into_inner().into(),
                 comment.content.into(),
                 comment.commented_by.id.to_string().into(),
             ],

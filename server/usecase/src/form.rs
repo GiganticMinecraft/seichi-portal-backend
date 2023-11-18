@@ -1,13 +1,12 @@
-use domain::form::models::Comment;
 use domain::{
     form::models::{
-        Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-        OffsetAndLimit, PostedAnswers, Question, SimpleForm,
+        Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
 };
-use errors::Error;
+use errors::{infra::InfraError::Forbidden, Error};
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
     pub repository: &'a FormRepo,
@@ -63,6 +62,18 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     }
 
     pub async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
-        self.repository.post_comment(comment).await
+        let has_permission = self
+            .repository
+            .has_permission(
+                comment.to_owned().answer_id,
+                comment.to_owned().commented_by,
+            )
+            .await?;
+
+        if has_permission {
+            self.repository.post_comment(comment).await
+        } else {
+            Err(Error::from(Forbidden))
+        }
     }
 }

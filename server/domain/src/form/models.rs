@@ -1,4 +1,3 @@
-use crate::user::models::User;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
@@ -11,9 +10,11 @@ use strum_macros::{Display, EnumString};
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
+use crate::user::models::User;
+
 pub type FormId = types::Id<Form>;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct OffsetAndLimit {
     #[serde(default)]
     pub offset: Option<i32>,
@@ -58,7 +59,7 @@ pub struct FormTitle {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Form {
     #[serde(default)]
     #[builder(setter(into))]
@@ -78,7 +79,7 @@ pub struct Form {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, TypedBuilder, Getters, Debug, PartialEq)]
+#[derive(DerivingVia, TypedBuilder, Getters, Clone, Debug, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
 pub struct FormDescription {
     description: Option<String>,
@@ -87,7 +88,7 @@ pub struct FormDescription {
 pub type QuestionId = types::Id<Question>;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, Clone, PartialEq)]
 pub struct Question {
     #[serde(default)]
     pub id: QuestionId,
@@ -101,7 +102,7 @@ pub struct Question {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Debug, Serialize, Deserialize, EnumString, PartialOrd, PartialEq, Display)]
+#[derive(Debug, Serialize, Deserialize, EnumString, Clone, PartialOrd, PartialEq, Display)]
 #[strum(ascii_case_insensitive)]
 pub enum QuestionType {
     TEXT,
@@ -119,7 +120,7 @@ impl TryFrom<String> for QuestionType {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, TypedBuilder, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, TypedBuilder, Debug, Clone, PartialEq)]
 pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     #[serde(default = "chrono::Utc::now")]
@@ -139,7 +140,7 @@ impl From<(DateTime<Utc>, DateTime<Utc>)> for FormMeta {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 pub struct FormSettings {
     #[serde(default)]
     pub response_period: ResponsePeriod,
@@ -152,14 +153,14 @@ pub struct FormSettings {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, Default, Debug, PartialEq)]
+#[derive(DerivingVia, Default, Debug, Clone, PartialEq)]
 #[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
 pub struct WebhookUrl {
     pub webhook_url: Option<String>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Default, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 pub struct ResponsePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
     pub start_at: Option<DateTime<Utc>>,
@@ -179,7 +180,9 @@ impl ResponsePeriod {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, EnumString, Display, Default, PartialOrd, PartialEq)]
+#[derive(
+    Serialize, Deserialize, Debug, EnumString, Display, Default, Clone, PartialOrd, PartialEq,
+)]
 pub enum Visibility {
     PUBLIC,
     #[default]
@@ -196,7 +199,7 @@ impl TryFrom<String> for Visibility {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, Default, Debug, PartialEq)]
+#[derive(DerivingVia, Default, Debug, Clone, PartialEq)]
 #[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
 pub struct DefaultAnswerTitle {
     pub default_answer_title: Option<String>,
@@ -219,7 +222,7 @@ pub struct PostedAnswersSchema {
 
 pub type AnswerId = types::Id<PostedAnswers>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PostedAnswers {
     pub uuid: Uuid, //todo: あとでUser型に直す
     pub timestamp: DateTime<Utc>,
@@ -228,13 +231,13 @@ pub struct PostedAnswers {
     pub answers: Vec<Answer>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Answer {
     pub question_id: QuestionId,
     pub answer: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Comment {
     pub answer_id: AnswerId,
     pub content: String,

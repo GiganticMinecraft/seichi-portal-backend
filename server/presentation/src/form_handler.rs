@@ -5,11 +5,10 @@ use axum::{
     Extension, Json,
 };
 use chrono::Utc;
-use domain::form::models::{Comment, CommentSchema};
 use domain::{
     form::models::{
-        Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
-        PostedAnswersSchema,
+        Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets,
+        OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
     },
     repository::Repositories,
     user::models::User,
@@ -216,13 +215,18 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
         } => (
             StatusCode::NOT_FOUND,
             Json(json!({ "reason": "FORM NOT FOUND" })),
-        ),
+        )
+            .into_response(),
+        Error::Infra {
+            source: InfraError::Forbidden,
+        } => StatusCode::FORBIDDEN.into_response(),
         _ => {
             tracing::error!("{}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "reason": "unknown error" })),
             )
+                .into_response()
         }
     }
 }
