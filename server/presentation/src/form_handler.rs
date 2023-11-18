@@ -5,6 +5,7 @@ use axum::{
     Extension, Json,
 };
 use chrono::Utc;
+use domain::form::models::{Comment, CommentSchema};
 use domain::{
     form::models::{
         Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
@@ -182,6 +183,28 @@ pub async fn create_question_handler(
 
     match form_use_case.create_questions(questions).await {
         Ok(_) => (StatusCode::CREATED).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn post_form_comment(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Json(comment_schema): Json<CommentSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    let comment = Comment {
+        answer_id: comment_schema.answer_id,
+        content: comment_schema.content,
+        timestamp: chrono::Utc::now(),
+        commented_by: user,
+    };
+
+    match form_use_case.post_comment(comment).await {
+        Ok(_) => (StatusCode::OK).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }

@@ -1,3 +1,4 @@
+use crate::user::models::User;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
@@ -216,6 +217,8 @@ pub struct PostedAnswersSchema {
     pub answers: Vec<Answer>,
 }
 
+pub type AnswerId = types::Id<PostedAnswers>;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PostedAnswers {
     pub uuid: Uuid, //todo: あとでUser型に直す
@@ -229,6 +232,20 @@ pub struct PostedAnswers {
 pub struct Answer {
     pub question_id: QuestionId,
     pub answer: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Comment {
+    pub answer_id: AnswerId,
+    pub content: String,
+    pub timestamp: DateTime<Utc>,
+    pub commented_by: User,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CommentSchema {
+    pub answer_id: AnswerId,
+    pub content: String,
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 use common::config::{ENV, HTTP};
+use presentation::form_handler::post_form_comment;
 use presentation::{
     auth::auth,
     form_handler::{
@@ -79,6 +80,8 @@ async fn main() -> anyhow::Result<()> {
             "/forms/answers",
             post(post_answer_handler).get(get_all_answers),
         )
+        .with_state(shared_repository.to_owned())
+        .route("/forms/answers/comment", post(post_form_comment))
         .with_state(shared_repository.to_owned())
         .route("/forms/questions", post(create_question_handler))
         .with_state(shared_repository.to_owned())

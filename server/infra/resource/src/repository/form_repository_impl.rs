@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use domain::form::models::Comment;
 use domain::{
     form::models::{
         Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
@@ -109,6 +110,14 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
                     .map(|question_dto| question_dto.try_into())
                     .collect::<Result<Vec<Question>, _>>()
             })?
+            .map_err(Into::into)
+    }
+
+    async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
+        self.client
+            .form()
+            .post_comment(comment)
+            .await
             .map_err(Into::into)
     }
 }

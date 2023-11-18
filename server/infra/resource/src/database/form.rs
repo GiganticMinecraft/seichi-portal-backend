@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use domain::form::models::Comment;
 use domain::{
     form::models::{
         DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
@@ -462,5 +463,21 @@ impl FormDatabase for ConnectionPool {
                 })
             })
             .collect::<Result<Vec<QuestionDto>, _>>()
+    }
+
+    async fn post_comment(&self, comment: Comment) -> Result<(), InfraError> {
+        self.execute_and_values(
+            r"INSERT INTO form_answer_comments (answer_id, commented_by, content)
+                SELECT ?, ?, users.id FROM users WHERE uuid = ?
+            ",
+            [
+                comment.answer_id.to_owned().into(),
+                comment.content.into(),
+                comment.commented_by.id.to_string().into(),
+            ],
+        )
+        .await?;
+
+        Ok(())
     }
 }

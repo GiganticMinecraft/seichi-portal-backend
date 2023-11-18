@@ -1,3 +1,4 @@
+use domain::form::models::Comment;
 use domain::{
     form::models::{
         Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
@@ -59,5 +60,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
 
     pub async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {
         self.repository.create_questions(questions).await
+    }
+
+    pub async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
+        self.repository.post_comment(comment).await
     }
 }
