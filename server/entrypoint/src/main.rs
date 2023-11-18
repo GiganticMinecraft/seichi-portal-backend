@@ -6,7 +6,7 @@ use axum::{
         Method,
     },
     middleware,
-    routing::{get, post},
+    routing::{get, patch, post},
     Router,
 };
 use common::config::{ENV, HTTP};
@@ -18,7 +18,7 @@ use presentation::{
         update_form_handler,
     },
     health_check_handler::health_check,
-    user_handler::get_my_user_info,
+    user_handler::{get_my_user_info, patch_user_role},
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -83,6 +83,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/forms/questions", post(create_question_handler))
         .with_state(shared_repository.to_owned())
         .route("/users", get(get_my_user_info))
+        .route("/users/:uuid", patch(patch_user_role))
+        .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(

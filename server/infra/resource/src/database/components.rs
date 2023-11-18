@@ -4,10 +4,11 @@ use domain::{
         FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
         OffsetAndLimit, PostedAnswers,
     },
-    user::models::User,
+    user::models::{Role, User},
 };
 use errors::infra::InfraError;
 use mockall::automock;
+use uuid::Uuid;
 
 use crate::dto::{FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
 
@@ -53,4 +54,5 @@ pub trait FormDatabase: Send + Sync {
 #[async_trait]
 pub trait UserDatabase: Send + Sync {
     async fn upsert_user(&self, user: &User) -> Result<(), InfraError>;
+    async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
 }

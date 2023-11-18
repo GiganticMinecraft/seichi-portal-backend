@@ -1,6 +1,7 @@
 use async_trait::async_trait;
-use domain::user::models::User;
+use domain::user::models::{Role, User};
 use errors::infra::InfraError;
+use uuid::Uuid;
 
 use crate::database::{components::UserDatabase, connection::ConnectionPool};
 
@@ -16,6 +17,16 @@ impl UserDatabase for ConnectionPool {
                 user.name.to_owned().into(),
                 user.role.to_string().into(),
             ],
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError> {
+        self.execute_and_values(
+            "UPDATE users SET role = ? WHERE uuid = ?",
+            [role.to_string().into(), uuid.to_string().into()],
         )
         .await?;
 
