@@ -14,7 +14,7 @@ use crate::user::models::User;
 
 pub type FormId = types::Id<Form>;
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct OffsetAndLimit {
     #[serde(default)]
     pub offset: Option<i32>,

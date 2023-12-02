@@ -112,7 +112,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn has_permission(&self, answer_id: AnswerId, user: User) -> Result<bool, Error> {
+    async fn has_permission(&self, answer_id: &AnswerId, user: &User) -> Result<bool, Error> {
         self.client
             .form()
             .has_permission(answer_id, user)

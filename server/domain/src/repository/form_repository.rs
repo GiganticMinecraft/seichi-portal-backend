@@ -31,6 +31,6 @@ pub trait FormRepository: Send + Sync + 'static {
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<Question>, Error>;
-    async fn has_permission(&self, answer_id: AnswerId, user: User) -> Result<bool, Error>;
+    async fn has_permission(&self, answer_id: &AnswerId, user: &User) -> Result<bool, Error>;
     async fn post_comment(&self, comment: Comment) -> Result<(), Error>;
 }

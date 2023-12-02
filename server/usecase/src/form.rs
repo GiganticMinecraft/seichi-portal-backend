@@ -64,10 +64,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
         let has_permission = self
             .repository
-            .has_permission(
-                comment.to_owned().answer_id,
-                comment.to_owned().commented_by,
-            )
+            .has_permission(&comment.answer_id, &comment.commented_by)
             .await?;
 
         if has_permission {

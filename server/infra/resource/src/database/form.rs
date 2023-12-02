@@ -470,7 +470,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn has_permission(&self, answer_id: AnswerId, user: User) -> Result<bool, InfraError> {
+    async fn has_permission(&self, answer_id: &AnswerId, user: &User) -> Result<bool, InfraError> {
         if user.role == Administrator {
             return Ok(true);
         }
