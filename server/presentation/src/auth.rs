@@ -1,9 +1,13 @@
 use axum::{
-    extract::{State, TypedHeader},
-    headers::authorization::{Authorization, Bearer},
-    http::{HeaderValue, Method, Request, StatusCode},
+    body::Body,
+    extract::State,
+    http::{Method, Request, StatusCode},
     middleware::Next,
     response::Response,
+};
+use axum_extra::{
+    extract::TypedHeader,
+    headers::{authorization::Bearer, Authorization},
 };
 use common::config::ENV;
 use domain::{
@@ -14,16 +18,16 @@ use domain::{
     },
 };
 use regex::Regex;
-use reqwest::header::{ACCEPT, CONTENT_TYPE};
+use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use resource::repository::RealInfrastructureRepository;
 use usecase::user::UserUseCase;
 use uuid::uuid;
 
-pub async fn auth<B>(
+pub async fn auth(
     State(repository): State<RealInfrastructureRepository>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    mut request: Request<B>,
-    next: Next<B>,
+    mut request: Request<Body>,
+    next: Next,
 ) -> Result<Response, StatusCode> {
     let token = auth.token();
 

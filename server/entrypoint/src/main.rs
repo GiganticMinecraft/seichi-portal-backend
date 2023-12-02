@@ -22,7 +22,7 @@ use presentation::{
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::log;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -103,21 +103,20 @@ async fn main() -> anyhow::Result<()> {
 
     log::info!("listening on {}", HTTP.port);
 
-    axum::Server::bind(&addr)
-        .serve(router.into_make_service())
-        .with_graceful_shutdown(graceful_handler())
-        .await
-        .expect("Fail to serve.");
+    let listener = TcpListener::bind(addr).await.unwrap();
 
+    axum::serve(listener, router).await.expect("Fail to serve.");
     Ok(())
 }
 
-async fn graceful_handler() {
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
-
-    tokio::select! {
-        _ = sigterm.recv() => {
-            //todo: シャットダウン時にしなければいけない処理を記述する
-        }
-    }
-}
+// NOTE: hyper::Serverが削除され、2023/12/03時点でgraceful_shutdownが実装できない
+// ref: https://github.com/hyperium/hyper/issues/2862
+// async fn graceful_handler() {
+//     let mut sigterm = signal(SignalKind::terminate()).unwrap();
+//
+//     tokio::select! {
+//         _ = sigterm.recv() => {
+//             //todo: シャットダウン時にしなければいけない処理を記述する
+//         }
+//     }
+// }
