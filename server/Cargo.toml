@@ -19,7 +19,8 @@ edition = "2021"
 publish = false
 
 [workspace.dependencies]
-axum = { version = "0.6.20", features = ["headers"] }
+axum = "0.7.1"
+axum-extra = { version = "0.9.0", features = ["typed-header"] }
 serde = { version = "1.0.193", features = ["derive"] }
 anyhow = "1.0.75"
 async-trait = "0.1.74"
