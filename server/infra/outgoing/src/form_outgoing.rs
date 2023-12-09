@@ -28,7 +28,7 @@ pub async fn create(form: Form) -> Result<(), InfraError> {
     Ok(())
 }
 
-pub async fn post(form: &Form, answers: &PostedAnswers) -> Result<(), InfraError> {
+pub async fn post_answer(form: &Form, answers: &PostedAnswers) -> Result<(), InfraError> {
     if let Some(url) = form.settings.webhook_url.to_owned() {
         Webhook::new(url, "回答が送信されました".to_string())
             .field(
