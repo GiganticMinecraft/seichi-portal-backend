@@ -66,6 +66,23 @@ impl ConnectionPool {
             .await
     }
 
+    pub async fn query_one_and_values<I>(
+        &self,
+        sql: &str,
+        values: I,
+    ) -> Result<Option<QueryResult>, DbErr>
+    where
+        I: IntoIterator<Item = Value>,
+    {
+        self.pool
+            .query_one(Statement::from_sql_and_values(
+                DatabaseBackend::MySql,
+                sql,
+                values,
+            ))
+            .await
+    }
+
     pub async fn execute(&self, sql: &str) -> Result<ExecResult, DbErr> {
         self.pool
             .execute(Statement::from_string(DatabaseBackend::MySql, sql))

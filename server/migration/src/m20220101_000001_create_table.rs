@@ -133,6 +133,21 @@ impl MigrationTrait for Migration {
             ))
             .await?;
 
+        connection
+            .execute(Statement::from_string(
+                DatabaseBackend::MySql,
+                r"CREATE TABLE IF NOT EXISTS form_answer_comments(
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    answer_id INT NOT NULL,
+                    commented_by INT NOT NULL,
+                    content TEXT NOT NULL,
+                    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY fk_form_answer_comments_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+                    FOREIGN KEY fk_form_answer_comments_commented_by(commented_by) REFERENCES users(id)
+                )",
+            ))
+            .await?;
+
         Ok(())
     }
 
@@ -152,7 +167,8 @@ impl MigrationTrait for Migration {
                         form_webhooks,
                         answers,
                         real_answers,
-                        default_answer_titles;
+                        default_answer_titles,
+                        form_answer_comments;
                     ",
             ))
             .await?;

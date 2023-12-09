@@ -14,6 +14,8 @@ pub enum InfraError {
     },
     #[error("Form Not Found: id = {}", .id)]
     FormNotFound { id: i32 },
+    #[error("Forbidden")]
+    Forbidden,
     #[error("Outgoing Error: {}", .cause)]
     Outgoing { cause: String },
 }

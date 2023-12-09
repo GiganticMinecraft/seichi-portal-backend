@@ -1,12 +1,12 @@
 use domain::{
     form::models::{
-        Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-        OffsetAndLimit, PostedAnswers, Question, SimpleForm,
+        Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
 };
-use errors::Error;
+use errors::{infra::InfraError::Forbidden, Error};
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
     pub repository: &'a FormRepo,
@@ -33,7 +33,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.get(form_id).await
     }
 
-    pub async fn delete_form(&self, form_id: FormId) -> Result<FormId, Error> {
+    pub async fn delete_form(&self, form_id: FormId) -> Result<(), Error> {
         self.repository.delete(form_id).await
     }
 
@@ -59,5 +59,18 @@ impl<R: FormRepository> FormUseCase<'_, R> {
 
     pub async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {
         self.repository.create_questions(questions).await
+    }
+
+    pub async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
+        let has_permission = self
+            .repository
+            .has_permission(comment.answer_id, &comment.commented_by)
+            .await?;
+
+        if has_permission {
+            self.repository.post_comment(&comment).await
+        } else {
+            Err(Error::from(Forbidden))
+        }
     }
 }

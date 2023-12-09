@@ -15,7 +15,7 @@ use presentation::{
     form_handler::{
         create_form_handler, create_question_handler, delete_form_handler, form_list_handler,
         get_all_answers, get_form_handler, get_questions_handler, post_answer_handler,
-        update_form_handler,
+        post_form_comment, update_form_handler,
     },
     health_check_handler::health_check,
     user_handler::{get_my_user_info, patch_user_role},
@@ -79,6 +79,8 @@ async fn main() -> anyhow::Result<()> {
             "/forms/answers",
             post(post_answer_handler).get(get_all_answers),
         )
+        .with_state(shared_repository.to_owned())
+        .route("/forms/answers/comment", post(post_form_comment))
         .with_state(shared_repository.to_owned())
         .route("/forms/questions", post(create_question_handler))
         .with_state(shared_repository.to_owned())

@@ -10,6 +10,8 @@ use strum_macros::{Display, EnumString};
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
+use crate::user::models::User;
+
 pub type FormId = types::Id<Form>;
 
 #[derive(Deserialize, Debug)]
@@ -216,6 +218,8 @@ pub struct PostedAnswersSchema {
     pub answers: Vec<Answer>,
 }
 
+pub type AnswerId = types::Id<PostedAnswers>;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PostedAnswers {
     pub uuid: Uuid, //todo: あとでUser型に直す
@@ -229,6 +233,20 @@ pub struct PostedAnswers {
 pub struct Answer {
     pub question_id: QuestionId,
     pub answer: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Comment {
+    pub answer_id: AnswerId,
+    pub content: String,
+    pub timestamp: DateTime<Utc>,
+    pub commented_by: User,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CommentSchema {
+    pub answer_id: AnswerId,
+    pub content: String,
 }
 
 #[cfg(test)]

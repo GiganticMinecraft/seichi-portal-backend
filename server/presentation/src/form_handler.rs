@@ -7,8 +7,8 @@ use axum::{
 use chrono::Utc;
 use domain::{
     form::models::{
-        Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
-        PostedAnswersSchema,
+        Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets,
+        OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
     },
     repository::Repositories,
     user::models::User,
@@ -186,6 +186,28 @@ pub async fn create_question_handler(
     }
 }
 
+pub async fn post_form_comment(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Json(comment_schema): Json<CommentSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    let comment = Comment {
+        answer_id: comment_schema.answer_id,
+        content: comment_schema.content,
+        timestamp: chrono::Utc::now(),
+        commented_by: user,
+    };
+
+    match form_use_case.post_comment(comment).await {
+        Ok(_) => (StatusCode::OK).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub fn handle_error(err: Error) -> impl IntoResponse {
     match err {
         Error::Infra {
@@ -193,13 +215,18 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
         } => (
             StatusCode::NOT_FOUND,
             Json(json!({ "reason": "FORM NOT FOUND" })),
-        ),
+        )
+            .into_response(),
+        Error::Infra {
+            source: InfraError::Forbidden,
+        } => StatusCode::FORBIDDEN.into_response(),
         _ => {
             tracing::error!("{}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "reason": "unknown error" })),
             )
+                .into_response()
         }
     }
 }

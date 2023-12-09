@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle, FormUpdateTargets,
-        OffsetAndLimit, PostedAnswers, Question, SimpleForm,
+        AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -26,7 +26,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         user: User,
     ) -> Result<FormId, Error> {
         let form_id = self.client.form().create(title, description, user).await?;
-        let form = self.client.form().get(form_id.to_owned().into()).await?;
+        let form = self.client.form().get(form_id).await?;
 
         form_outgoing::create(form.try_into()?).await?;
 
@@ -50,8 +50,8 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete(&self, id: FormId) -> Result<FormId, Error> {
-        let form = self.client.form().get(id.to_owned().into()).await?;
+    async fn delete(&self, id: FormId) -> Result<(), Error> {
+        let form = self.client.form().get(id).await?;
 
         form_outgoing::delete(form.try_into()?).await?;
 
@@ -109,6 +109,22 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
                     .map(|question_dto| question_dto.try_into())
                     .collect::<Result<Vec<Question>, _>>()
             })?
+            .map_err(Into::into)
+    }
+
+    async fn has_permission(&self, answer_id: AnswerId, user: &User) -> Result<bool, Error> {
+        self.client
+            .form()
+            .has_permission(answer_id, user)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn post_comment(&self, comment: &Comment) -> Result<(), Error> {
+        self.client
+            .form()
+            .post_comment(comment)
+            .await
             .map_err(Into::into)
     }
 }
