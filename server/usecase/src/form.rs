@@ -33,7 +33,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.get(form_id).await
     }
 
-    pub async fn delete_form(&self, form_id: FormId) -> Result<FormId, Error> {
+    pub async fn delete_form(&self, form_id: FormId) -> Result<(), Error> {
         self.repository.delete(form_id).await
     }
 
@@ -64,11 +64,11 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
         let has_permission = self
             .repository
-            .has_permission(&comment.answer_id, &comment.commented_by)
+            .has_permission(comment.answer_id, &comment.commented_by)
             .await?;
 
         if has_permission {
-            self.repository.post_comment(comment).await
+            self.repository.post_comment(&comment).await
         } else {
             Err(Error::from(Forbidden))
         }

@@ -37,7 +37,7 @@ pub trait FormDatabase: Send + Sync {
         offset_and_limit: OffsetAndLimit,
     ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
-    async fn delete(&self, form_id: FormId) -> Result<FormId, InfraError>;
+    async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(
         &self,
         form_id: FormId,
@@ -48,8 +48,8 @@ pub trait FormDatabase: Send + Sync {
     async fn create_questions(&self, questions: FormQuestionUpdateSchema)
         -> Result<(), InfraError>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
-    async fn has_permission(&self, answer_id: &AnswerId, user: &User) -> Result<bool, InfraError>;
-    async fn post_comment(&self, comment: Comment) -> Result<(), InfraError>;
+    async fn has_permission(&self, answer_id: AnswerId, user: &User) -> Result<bool, InfraError>;
+    async fn post_comment(&self, comment: &Comment) -> Result<(), InfraError>;
 }
 
 #[automock]
