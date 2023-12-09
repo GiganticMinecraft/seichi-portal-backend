@@ -2,7 +2,7 @@ use domain::form::models::{Form, PostedAnswers};
 use errors::infra::InfraError;
 use itertools::Itertools;
 
-use crate::webhook::Webhook;
+use crate::webhook::{Color, Webhook};
 
 #[tracing::instrument]
 pub async fn create(form: Form) -> Result<(), InfraError> {
@@ -21,7 +21,7 @@ pub async fn create(form: Form) -> Result<(), InfraError> {
                     .unwrap_or("フォームの説明は設定されていません。".to_string()),
                 false,
             )
-            .send()
+            .send(Color::Aqua)
             .await?;
     }
 
@@ -45,23 +45,25 @@ pub async fn post(form: &Form, answers: &PostedAnswers) -> Result<(), InfraError
                     .unwrap_or_default(),
                 false,
             )
-            .field(
-                "内容".to_string(),
+            .fields(
                 answers
                     .answers
                     .iter()
                     .map(|answer| {
-                        form.questions
-                            .iter()
-                            .find(|question| question.id == answer.question_id)
-                            .map(|question| question.title.to_owned())
-                            .unwrap_or_else(|| "不明な質問".to_string())
+                        (
+                            form.questions
+                                .iter()
+                                .find(|question| question.id == answer.question_id)
+                                .map(|question| question.title.to_owned())
+                                .unwrap_or("不明な質問".to_string()),
+                            answer.answer.to_owned(),
+                        )
                     })
-                    .join("\n"),
+                    .collect_vec(),
                 false,
             )
             .field("回答者".to_string(), answers.uuid.to_string(), false)
-            .send()
+            .send(Color::Lime)
             .await?;
     }
 
@@ -77,7 +79,7 @@ pub async fn delete(form: Form) -> Result<(), InfraError> {
                 form.title.title().to_owned(),
                 false,
             )
-            .send()
+            .send(Color::Red)
             .await?;
     }
 
