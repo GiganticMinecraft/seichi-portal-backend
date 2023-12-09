@@ -73,6 +73,9 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
 
     #[tracing::instrument(skip(self))]
     async fn post_answer(&self, answers: PostedAnswers) -> Result<(), Error> {
+        let form = self.get(answers.form_id).await?;
+        form_outgoing::post(&form, &answers).await?;
+
         self.client
             .form()
             .post_answer(answers)
