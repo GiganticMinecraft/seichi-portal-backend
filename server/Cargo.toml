@@ -24,7 +24,7 @@ axum-extra = { version = "0.9.0", features = ["typed-header"] }
 serde = { version = "1.0.193", features = ["derive"] }
 anyhow = "1.0.75"
 async-trait = "0.1.74"
-sea-orm = { version = "0.12.7", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
+sea-orm = { version = "0.12.9", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
 tracing = "0.1.40"
 mockall = "0.11.4"
 envy = "0.4.2"
