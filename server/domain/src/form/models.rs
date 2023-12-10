@@ -1,3 +1,5 @@
+use crate::repository::form_repository::FormRepository;
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
@@ -8,6 +10,7 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use typed_builder::TypedBuilder;
+use types::Resolver;
 use uuid::Uuid;
 
 use crate::user::models::User;
@@ -220,8 +223,21 @@ pub struct PostedAnswersSchema {
 
 pub type AnswerId = types::Id<PostedAnswers>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[async_trait]
+impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Repo> for AnswerId {
+    async fn resolve(&self, repo: &Repo) -> PostedAnswers {
+        repo.get_all_answers()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|answer| &answer.id == self)
+            .unwrap()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct PostedAnswers {
+    pub id: AnswerId,
     pub uuid: Uuid, //todo: あとでUser型に直す
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
@@ -229,7 +245,7 @@ pub struct PostedAnswers {
     pub answers: Vec<Answer>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Answer {
     pub question_id: QuestionId,
     pub answer: String,

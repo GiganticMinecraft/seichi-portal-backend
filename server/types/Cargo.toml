@@ -12,3 +12,4 @@ deriving_via = { workspace = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true }
+async-trait = { workspace = true }

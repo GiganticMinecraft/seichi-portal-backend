@@ -4,11 +4,11 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
-use chrono::Utc;
+
 use domain::{
     form::models::{
         Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets,
-        OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        OffsetAndLimit, PostedAnswersSchema,
     },
     repository::Repositories,
     user::models::User,
@@ -158,15 +158,7 @@ pub async fn post_answer_handler(
         repository: repository.form_repository(),
     };
 
-    let answers = PostedAnswers {
-        uuid: user.id,
-        timestamp: Utc::now(),
-        form_id: schema.form_id,
-        title: schema.title,
-        answers: schema.answers,
-    };
-
-    match form_use_case.post_answers(answers).await {
+    match form_use_case.post_answers(&user, &schema).await {
         Ok(_) => (StatusCode::OK).into_response(),
         Err(err) => handle_error(err).into_response(),
     }

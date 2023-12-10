@@ -1,3 +1,4 @@
+use domain::form::models::PostedAnswersSchema;
 use domain::{
     form::models::{
         Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
@@ -49,8 +50,12 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.update(form_id, form_update_targets).await
     }
 
-    pub async fn post_answers(&self, answers: PostedAnswers) -> Result<(), Error> {
-        self.repository.post_answer(answers).await
+    pub async fn post_answers(
+        &self,
+        user: &User,
+        answers: &PostedAnswersSchema,
+    ) -> Result<(), Error> {
+        self.repository.post_answer(user, answers).await
     }
 
     pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {

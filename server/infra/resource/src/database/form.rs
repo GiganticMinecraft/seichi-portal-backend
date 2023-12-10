@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use domain::form::models::PostedAnswersSchema;
 use domain::{
     form::models::{
         AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
@@ -258,20 +259,24 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
+    async fn post_answer(
+        &self,
+        user: &User,
+        answers_schema: &PostedAnswersSchema,
+    ) -> Result<(), InfraError> {
         let regex = Regex::new(r"\$\d+").unwrap();
 
         let default_answer_title_query_result = self
             .query_all_and_values(
                 r"SELECT title FROM default_answer_titles WHERE form_id = ?",
-                [answer.form_id.into_inner().into()],
+                [answers_schema.form_id.into_inner().into()],
             )
             .await?;
 
         let default_answer_title: Option<String> = default_answer_title_query_result
             .first()
             .ok_or(FormNotFound {
-                id: answer.form_id.into_inner(),
+                id: answers_schema.form_id.into_inner(),
             })?
             .try_get("", "title")?;
 
@@ -283,7 +288,7 @@ impl FormDatabase for ConnectionPool {
         let embed_title = regex.find_iter(&default_answer_title.to_owned()).fold(
             default_answer_title,
             |replaced_title, question_id| {
-                let answer_opt = answer.answers.iter().find(|answer| {
+                let answer_opt = answers_schema.answers.iter().find(|answer| {
                     answer.question_id.to_string() == question_id.as_str().replace('$', "")
                 });
                 replaced_title.replace(
@@ -299,22 +304,22 @@ impl FormDatabase for ConnectionPool {
             .execute_and_values(
                 r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
                 [
-                    answer.form_id.into_inner().into(),
-                    answer.uuid.to_string().into(),
+                    answers_schema.form_id.into_inner().into(),
+                    user.id.to_string().into(),
                     embed_title.into(),
                 ],
             )
             .await?
             .last_insert_id();
 
-        let params = answer
+        let params = answers_schema
             .answers
-            .into_iter()
+            .iter()
             .flat_map(|answer| {
                 vec![
                     id.to_string(),
                     answer.question_id.to_string(),
-                    answer.answer,
+                    answer.answer.to_owned(),
                 ]
             })
             .collect_vec();

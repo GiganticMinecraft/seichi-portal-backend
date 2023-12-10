@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use domain::form::models::PostedAnswersSchema;
 use domain::{
     form::models::{
         AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
@@ -10,6 +11,7 @@ use domain::{
 use errors::Error;
 use futures::{stream, stream::StreamExt};
 use outgoing::form_outgoing;
+use types::Resolver;
 
 use crate::{
     database::components::{DatabaseComponents, FormDatabase},
@@ -72,13 +74,17 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn post_answer(&self, answers: PostedAnswers) -> Result<(), Error> {
-        let form = self.get(answers.form_id).await?;
-        form_outgoing::post_answer(&form, &answers).await?;
+    async fn post_answer(
+        &self,
+        user: &User,
+        answers_schema: &PostedAnswersSchema,
+    ) -> Result<(), Error> {
+        let form = self.get(answers_schema.form_id).await?;
+        form_outgoing::post_answer(&form, user, &answers_schema).await?;
 
         self.client
             .form()
-            .post_answer(answers)
+            .post_answer(user, answers_schema)
             .await
             .map_err(Into::into)
     }
@@ -124,6 +130,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     async fn post_comment(&self, comment: &Comment) -> Result<(), Error> {
+        comment.answer_id.resolve(self).await;
         self.client
             .form()
             .post_comment(comment)

@@ -1,4 +1,5 @@
-use domain::form::models::{Form, PostedAnswers};
+use domain::form::models::{Answer, Comment, Form, PostedAnswersSchema};
+use domain::user::models::User;
 use errors::infra::InfraError;
 use itertools::Itertools;
 
@@ -28,7 +29,11 @@ pub async fn create(form: Form) -> Result<(), InfraError> {
     Ok(())
 }
 
-pub async fn post_answer(form: &Form, answers: &PostedAnswers) -> Result<(), InfraError> {
+pub async fn post_answer(
+    form: &Form,
+    user: &User,
+    answers: &PostedAnswersSchema,
+) -> Result<(), InfraError> {
     if let Some(url) = form.settings.webhook_url.to_owned() {
         Webhook::new(url, "回答が送信されました".to_string())
             .field(
@@ -62,12 +67,22 @@ pub async fn post_answer(form: &Form, answers: &PostedAnswers) -> Result<(), Inf
                     .collect_vec(),
                 false,
             )
-            .field("回答者".to_string(), answers.uuid.to_string(), false)
+            .field("回答者".to_string(), user.name.to_owned(), false)
             .send(Color::Lime)
             .await?;
     }
 
     Ok(())
+}
+
+#[tracing::instrument]
+pub async fn post_comment(
+    form: &Form,
+    comment: &Comment,
+    answer: Answer,
+) -> Result<(), InfraError> {
+    todo!()
+    // if let Some(url) = form.settings.webhook_url.into() {}
 }
 
 #[tracing::instrument]
