@@ -1,4 +1,4 @@
-use domain::form::models::{Answer, Comment, Form, PostedAnswersSchema};
+use domain::form::models::{Answer, Comment, Form, PostedAnswers, PostedAnswersSchema};
 use domain::user::models::User;
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -79,10 +79,22 @@ pub async fn post_answer(
 pub async fn post_comment(
     form: &Form,
     comment: &Comment,
-    answer: Answer,
+    answer: &PostedAnswers,
 ) -> Result<(), InfraError> {
-    todo!()
-    // if let Some(url) = form.settings.webhook_url.into() {}
+    if let Some(url) = form.settings.webhook_url.webhook_url.to_owned() {
+        Webhook::new(url, "回答に対してコメントが投稿されました".to_string())
+            .field("回答".to_string(), answer.title.unwrap_or_default(), false)
+            .field("内容".to_string(), comment.content.to_owned(), false)
+            .field(
+                "発言者".to_string(),
+                comment.commented_by.name.to_owned(),
+                false,
+            )
+            .send(Color::Lime)
+            .await?;
+    }
+
+    Ok(())
 }
 
 #[tracing::instrument]

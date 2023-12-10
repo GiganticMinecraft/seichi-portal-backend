@@ -130,7 +130,11 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     async fn post_comment(&self, comment: &Comment) -> Result<(), Error> {
-        comment.answer_id.resolve(self).await;
+        let posted_answers = comment.answer_id.resolve(self).await;
+        let form = self.get(posted_answers.form_id).await?;
+
+        form_outgoing::post_comment(&form, comment, &posted_answers).await?;
+
         self.client
             .form()
             .post_comment(comment)
