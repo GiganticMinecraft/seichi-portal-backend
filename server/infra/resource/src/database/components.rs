@@ -1,9 +1,8 @@
 use async_trait::async_trait;
-use domain::form::models::PostedAnswersSchema;
 use domain::{
     form::models::{
         AnswerId, Comment, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
     },
     user::models::{Role, User},
 };

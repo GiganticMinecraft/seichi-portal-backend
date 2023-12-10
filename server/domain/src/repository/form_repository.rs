@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::models::PostedAnswersSchema;
 use crate::{
     form::models::{
         AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, Question, SimpleForm,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
+        SimpleForm,
     },
     user::models::User,
 };

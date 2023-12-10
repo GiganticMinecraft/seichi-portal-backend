@@ -2,11 +2,10 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use domain::form::models::PostedAnswersSchema;
 use domain::{
     form::models::{
         AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
     },
     user::models::{Role::Administrator, User},
 };
@@ -366,6 +365,7 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(PostedAnswersDto {
+                    id: answer_id,
                     uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
                     timestamp: rs.try_get("", "time_stamp")?,
                     form_id: rs.try_get("", "form_id")?,

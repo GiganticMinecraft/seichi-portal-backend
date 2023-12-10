@@ -1,8 +1,8 @@
-use domain::form::models::PostedAnswersSchema;
 use domain::{
     form::models::{
         Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, Question, SimpleForm,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
+        SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,

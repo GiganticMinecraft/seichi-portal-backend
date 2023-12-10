@@ -1,4 +1,3 @@
-use crate::repository::form_repository::FormRepository;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
@@ -13,7 +12,7 @@ use typed_builder::TypedBuilder;
 use types::Resolver;
 use uuid::Uuid;
 
-use crate::user::models::User;
+use crate::{repository::form_repository::FormRepository, user::models::User};
 
 pub type FormId = types::Id<Form>;
 

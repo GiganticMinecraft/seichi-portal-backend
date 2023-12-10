@@ -134,6 +134,7 @@ impl TryFrom<AnswerDto> for domain::form::models::Answer {
 }
 
 pub struct PostedAnswersDto {
+    pub id: i32,
     pub uuid: Uuid,
     pub timestamp: DateTime<Utc>,
     pub form_id: i32,
@@ -146,6 +147,7 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
 
     fn try_from(
         PostedAnswersDto {
+            id,
             uuid,
             timestamp,
             form_id,
@@ -154,7 +156,7 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
         }: PostedAnswersDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::PostedAnswers {
-            id: todo!(),
+            id: id.into(),
             uuid,
             timestamp,
             form_id: form_id.into(),

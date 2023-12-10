@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use domain::form::models::PostedAnswersSchema;
 use domain::{
     form::models::{
         AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, Question, SimpleForm,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
+        SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -80,7 +80,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         answers_schema: &PostedAnswersSchema,
     ) -> Result<(), Error> {
         let form = self.get(answers_schema.form_id).await?;
-        form_outgoing::post_answer(&form, user, &answers_schema).await?;
+        form_outgoing::post_answer(&form, user, answers_schema).await?;
 
         self.client
             .form()
