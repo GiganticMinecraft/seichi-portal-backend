@@ -501,7 +501,7 @@ impl FormDatabase for ConnectionPool {
     async fn post_comment(&self, comment: &Comment) -> Result<(), InfraError> {
         self.execute_and_values(
             r"INSERT INTO form_answer_comments (answer_id, commented_by, content)
-                SELECT ?, ?, users.id FROM users WHERE uuid = ?
+                SELECT ?, users.id, ? FROM users WHERE uuid = ?
             ",
             [
                 comment.answer_id.into_inner().into(),
