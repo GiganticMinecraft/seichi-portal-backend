@@ -230,7 +230,7 @@ impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Repo> for Answ
             .unwrap()
             .into_iter()
             .find(|answer| &answer.id == self)
-            .unwrap()
+            .unwrap() // NOTE: AnswerIdからPostedAnswersが見つからないのであれば、データがぶっ壊れている
     }
 }
 
