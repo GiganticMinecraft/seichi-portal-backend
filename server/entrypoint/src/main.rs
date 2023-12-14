@@ -1,13 +1,12 @@
 use std::net::SocketAddr;
 
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
 use axum::{
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
-        Method,
+        Method, StatusCode,
     },
     middleware,
+    response::IntoResponse,
     routing::{get, patch, post},
     Json, Router,
 };
