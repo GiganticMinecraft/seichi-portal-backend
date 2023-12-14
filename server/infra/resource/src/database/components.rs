@@ -48,6 +48,10 @@ pub trait FormDatabase: Send + Sync {
         user: &User,
         answer: &PostedAnswersSchema,
     ) -> Result<(), InfraError>;
+    async fn get_answers(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Option<PostedAnswersDto>, InfraError>;
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema)
         -> Result<(), InfraError>;

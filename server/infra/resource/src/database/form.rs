@@ -333,6 +333,48 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
+    async fn get_answers(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Option<PostedAnswersDto>, InfraError> {
+        let real_answers = self
+            .query_all("SELECT answer_id, question_id, answer FROM real_answers")
+            .await?;
+
+        let answers = real_answers
+            .iter()
+            .map(|rs| {
+                Ok::<AnswerDto, DbErr>(AnswerDto {
+                    question_id: rs.try_get("", "question_id")?,
+                    answer: rs.try_get("", "answer")?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let answer_query_result_opt = self
+            .query_one_and_values(
+                r"SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                        INNER JOIN users ON answers.user = users.id
+                        WHERE answers.id = ?",
+                [answer_id.into_inner().into()],
+            )
+            .await?;
+
+        answer_query_result_opt
+            .map(|rs| {
+                Ok(PostedAnswersDto {
+                    id: answer_id.into_inner(),
+                    uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                    timestamp: rs.try_get("", "time_stamp")?,
+                    form_id: rs.try_get("", "form_id")?,
+                    title: rs.try_get("", "title")?,
+                    answers,
+                })
+            })
+            .transpose()
+    }
+
+    #[tracing::instrument]
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         let answers = self
             .query_all(

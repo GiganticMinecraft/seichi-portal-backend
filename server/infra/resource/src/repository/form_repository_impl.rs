@@ -82,6 +82,16 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
+    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<PostedAnswers>, Error> {
+        self.client
+            .form()
+            .get_answers(answer_id)
+            .await?
+            .map(|posted_answers_dto| Ok(posted_answers_dto.try_into()?))
+            .transpose()
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
         stream::iter(self.client.form().get_all_answers().await?)
             .then(|posted_answers_dto| async { Ok(posted_answers_dto.try_into()?) })

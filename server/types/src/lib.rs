@@ -17,6 +17,6 @@ impl<T> Clone for Id<T> {
 impl<T> Copy for Id<T> {}
 
 #[async_trait]
-pub trait Resolver<T, Repo> {
-    async fn resolve(&self, repo: &Repo) -> Option<T>;
+pub trait Resolver<T, Error, Repo> {
+    async fn resolve(&self, repo: &Repo) -> Result<Option<T>, Error>;
 }

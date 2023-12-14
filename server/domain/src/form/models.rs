@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
+use errors::Error;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
@@ -223,13 +224,9 @@ pub struct PostedAnswersSchema {
 pub type AnswerId = types::Id<PostedAnswers>;
 
 #[async_trait]
-impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Repo> for AnswerId {
-    async fn resolve(&self, repo: &Repo) -> Option<PostedAnswers> {
-        repo.get_all_answers()
-            .await
-            .unwrap()
-            .into_iter()
-            .find(|answer| &answer.id == self)
+impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Error, Repo> for AnswerId {
+    async fn resolve(&self, repo: &Repo) -> Result<Option<PostedAnswers>, Error> {
+        repo.get_answers(self.to_owned()).await
     }
 }
 
