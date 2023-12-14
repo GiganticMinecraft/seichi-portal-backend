@@ -18,5 +18,5 @@ impl<T> Copy for Id<T> {}
 
 #[async_trait]
 pub trait Resolver<T, Repo> {
-    async fn resolve(&self, repo: &Repo) -> T;
+    async fn resolve(&self, repo: &Repo) -> Option<T>;
 }

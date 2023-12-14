@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, Question, SimpleForm,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
+        SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -72,10 +73,10 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn post_answer(&self, answers: PostedAnswers) -> Result<(), Error> {
+    async fn post_answer(&self, user: &User, answers: &PostedAnswersSchema) -> Result<(), Error> {
         self.client
             .form()
-            .post_answer(answers)
+            .post_answer(user, answers)
             .await
             .map_err(Into::into)
     }

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
     },
     user::models::{Role, User},
 };
@@ -43,7 +43,11 @@ pub trait FormDatabase: Send + Sync {
         form_id: FormId,
         form_update_targets: FormUpdateTargets,
     ) -> Result<(), InfraError>;
-    async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError>;
+    async fn post_answer(
+        &self,
+        user: &User,
+        answer: &PostedAnswersSchema,
+    ) -> Result<(), InfraError>;
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn create_questions(&self, questions: FormQuestionUpdateSchema)
         -> Result<(), InfraError>;
