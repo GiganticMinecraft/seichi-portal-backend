@@ -938,6 +938,7 @@ dependencies = [
  "presentation",
  "resource",
  "sentry",
+ "serde_json",
  "tokio",
  "tower",
  "tower-http",
