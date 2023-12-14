@@ -2479,6 +2479,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "tracing",
+ "types",
  "uuid",
 ]
 

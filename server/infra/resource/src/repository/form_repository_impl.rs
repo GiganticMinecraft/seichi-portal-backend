@@ -8,6 +8,7 @@ use domain::{
     repository::form_repository::FormRepository,
     user::models::User,
 };
+use errors::infra::InfraError::AnswerNotFount;
 use errors::Error;
 use futures::{stream, stream::StreamExt};
 use outgoing::form_outgoing;
@@ -16,6 +17,7 @@ use crate::{
     database::components::{DatabaseComponents, FormDatabase},
     repository::Repository,
 };
+use types::Resolver;
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client> {
@@ -74,6 +76,9 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
 
     #[tracing::instrument(skip(self))]
     async fn post_answer(&self, user: &User, answers: &PostedAnswersSchema) -> Result<(), Error> {
+        let form = self.get(answers.form_id).await?;
+        form_outgoing::post_answer(&form, user, answers).await?;
+
         self.client
             .form()
             .post_answer(user, answers)
@@ -132,6 +137,17 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     async fn post_comment(&self, comment: &Comment) -> Result<(), Error> {
+        let posted_answers = comment
+            .answer_id
+            .resolve(self)
+            .await?
+            .ok_or(AnswerNotFount {
+                id: comment.answer_id.into_inner(),
+            })?;
+        let form = self.get(posted_answers.form_id).await?;
+
+        form_outgoing::post_comment(&form, comment, &posted_answers).await?;
+
         self.client
             .form()
             .post_comment(comment)
