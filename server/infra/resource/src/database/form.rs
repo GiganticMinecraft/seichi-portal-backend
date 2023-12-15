@@ -217,7 +217,7 @@ impl FormDatabase for ConnectionPool {
             .await?;
         }
 
-        if current_form.webhook_url.is_some() {
+        if current_form.webhook_url.is_some() && webhook.is_some() {
             self.execute_and_values(
                 "UPDATE form_webhooks SET url = ? WHERE form_id = ?",
                 [
