@@ -17,6 +17,13 @@ use crate::{repository::form_repository::FormRepository, user::models::User};
 
 pub type FormId = types::Id<Form>;
 
+#[async_trait]
+impl<Repo: FormRepository + Sized + Sync> Resolver<Form, Error, Repo> for FormId {
+    async fn resolve(&self, repo: &Repo) -> Result<Option<Form>, Error> {
+        repo.get(self.to_owned()).await.map(Some)
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct OffsetAndLimit {
     #[serde(default)]

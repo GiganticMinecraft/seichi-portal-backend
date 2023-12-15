@@ -1,3 +1,4 @@
+use chrono::Utc;
 use domain::{
     form::models::{
         Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
@@ -8,6 +9,7 @@ use domain::{
     user::models::User,
 };
 use errors::{infra::InfraError::Forbidden, Error};
+use types::Resolver;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
     pub repository: &'a FormRepo,
@@ -55,7 +57,29 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         user: &User,
         answers: &PostedAnswersSchema,
     ) -> Result<(), Error> {
-        self.repository.post_answer(user, answers).await
+        let is_within_period = answers
+            .form_id
+            .resolve(self.repository)
+            .await?
+            .and_then(|form| {
+                let response_period = form.settings.response_period;
+
+                response_period
+                    .start_at
+                    .zip(response_period.end_at)
+                    .map(|(start_at, end_at)| {
+                        let now = Utc::now();
+                        now >= start_at && now <= end_at
+                    })
+            })
+            // Note: Noneの場合はフォームが存在していないかそもそも回答期間が無いフォーム
+            .unwrap_or(true);
+
+        if is_within_period {
+            self.repository.post_answer(user, answers).await
+        } else {
+            Err(Error::from(Forbidden))
+        }
     }
 
     pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
