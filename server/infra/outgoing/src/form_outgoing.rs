@@ -1,5 +1,7 @@
-use domain::form::models::{Comment, Form, PostedAnswers, PostedAnswersSchema};
-use domain::user::models::User;
+use domain::{
+    form::models::{Comment, Form, PostedAnswers, PostedAnswersSchema},
+    user::models::User,
+};
 use errors::infra::InfraError;
 use itertools::Itertools;
 

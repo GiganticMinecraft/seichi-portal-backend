@@ -8,16 +8,15 @@ use domain::{
     repository::form_repository::FormRepository,
     user::models::User,
 };
-use errors::infra::InfraError::AnswerNotFount;
-use errors::Error;
+use errors::{infra::InfraError::AnswerNotFount, Error};
 use futures::{stream, stream::StreamExt};
 use outgoing::form_outgoing;
+use types::Resolver;
 
 use crate::{
     database::components::{DatabaseComponents, FormDatabase},
     repository::Repository,
 };
-use types::Resolver;
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client> {
