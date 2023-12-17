@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers,
+        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
     },
     user::models::{Role::Administrator, User},
 };
@@ -265,7 +265,11 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn post_answer(&self, answer: PostedAnswers) -> Result<(), InfraError> {
+    async fn post_answer(
+        &self,
+        user: &User,
+        answer: &PostedAnswersSchema,
+    ) -> Result<(), InfraError> {
         let regex = Regex::new(r"\$\d+").unwrap();
 
         let default_answer_title_query_result = self
@@ -307,7 +311,7 @@ impl FormDatabase for ConnectionPool {
                 r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
                 [
                     answer.form_id.into_inner().into(),
-                    answer.uuid.to_string().into(),
+                    user.id.to_string().into(),
                     embed_title.into(),
                 ],
             )
@@ -316,12 +320,12 @@ impl FormDatabase for ConnectionPool {
 
         let params = answer
             .answers
-            .into_iter()
+            .iter()
             .flat_map(|answer| {
                 vec![
                     id.to_string(),
                     answer.question_id.to_string(),
-                    answer.answer,
+                    answer.answer.to_owned(),
                 ]
             })
             .collect_vec();
@@ -333,6 +337,48 @@ impl FormDatabase for ConnectionPool {
         .await?;
 
         Ok(())
+    }
+
+    #[tracing::instrument]
+    async fn get_answers(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Option<PostedAnswersDto>, InfraError> {
+        let real_answers = self
+            .query_all("SELECT answer_id, question_id, answer FROM real_answers")
+            .await?;
+
+        let answers = real_answers
+            .iter()
+            .map(|rs| {
+                Ok::<AnswerDto, DbErr>(AnswerDto {
+                    question_id: rs.try_get("", "question_id")?,
+                    answer: rs.try_get("", "answer")?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let answer_query_result_opt = self
+            .query_one_and_values(
+                r"SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                        INNER JOIN users ON answers.user = users.id
+                        WHERE answers.id = ?",
+                [answer_id.into_inner().into()],
+            )
+            .await?;
+
+        answer_query_result_opt
+            .map(|rs| {
+                Ok(PostedAnswersDto {
+                    id: answer_id.into_inner(),
+                    uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                    timestamp: rs.try_get("", "time_stamp")?,
+                    form_id: rs.try_get("", "form_id")?,
+                    title: rs.try_get("", "title")?,
+                    answers,
+                })
+            })
+            .transpose()
     }
 
     #[tracing::instrument]
@@ -368,6 +414,7 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(PostedAnswersDto {
+                    id: answer_id,
                     uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
                     timestamp: rs.try_get("", "time_stamp")?,
                     form_id: rs.try_get("", "form_id")?,

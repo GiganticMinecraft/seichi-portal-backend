@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use deriving_via::DerivingVia;
 #[cfg(feature = "arbitrary")]
 use proptest_derive::Arbitrary;
@@ -14,3 +15,8 @@ impl<T> Clone for Id<T> {
 }
 
 impl<T> Copy for Id<T> {}
+
+#[async_trait]
+pub trait Resolver<T, Error, Repo> {
+    async fn resolve(&self, repo: &Repo) -> Result<Option<T>, Error>;
+}
