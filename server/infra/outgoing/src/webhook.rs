@@ -1,4 +1,5 @@
 use errors::infra::InfraError;
+use itertools::Itertools;
 use serde::Serialize;
 use serde_json::json;
 
@@ -18,6 +19,7 @@ struct SendContents {
 #[derive(Debug, Serialize)]
 struct Embeds {
     title: String,
+    color: i32,
     fields: Vec<Field>,
 }
 
@@ -26,6 +28,23 @@ struct Field {
     name: String,
     value: String,
     inline: bool,
+}
+
+#[derive(Debug)]
+pub enum Color {
+    Red,
+    Lime,
+    Aqua,
+}
+
+impl Color {
+    pub fn to_color_code(&self) -> i32 {
+        match self {
+            Color::Red => 16711680,
+            Color::Lime => 65280,
+            Color::Aqua => 65535,
+        }
+    }
 }
 
 impl Webhook {
@@ -57,11 +76,33 @@ impl Webhook {
     }
 
     #[tracing::instrument]
-    pub async fn send(&self) -> Result<(), InfraError> {
+    pub fn fields(&self, name_and_values: Vec<(String, String)>, inline: bool) -> Self {
+        let fields = name_and_values
+            .into_iter()
+            .map(|(name, value)| Field {
+                name,
+                value,
+                inline,
+            })
+            .collect_vec();
+
+        Self {
+            target_url: self.target_url.to_owned(),
+            title: self.title.to_owned(),
+            fields: vec![self.fields.to_vec(), fields]
+                .into_iter()
+                .flatten()
+                .collect(),
+        }
+    }
+
+    #[tracing::instrument]
+    pub async fn send(&self, color: Color) -> Result<(), InfraError> {
         let contents = SendContents {
             username: "seichi-portal-backend".to_string(),
             embeds: vec![Embeds {
                 title: self.title.to_owned(),
+                color: color.to_color_code(),
                 fields: self.fields.to_vec(),
             }],
         };
