@@ -3,11 +3,12 @@ use std::net::SocketAddr;
 use axum::{
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
-        Method,
+        Method, StatusCode,
     },
     middleware,
+    response::IntoResponse,
     routing::{get, patch, post},
-    Router,
+    Json, Router,
 };
 use common::config::{ENV, HTTP};
 use presentation::{
@@ -22,6 +23,7 @@ use presentation::{
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
+use serde_json::json;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::log;
@@ -88,6 +90,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/users/:uuid", patch(patch_user_role))
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
+        .fallback(not_found_handler)
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(
             shared_repository.to_owned(),
@@ -109,6 +112,14 @@ async fn main() -> anyhow::Result<()> {
 
     axum::serve(listener, router).await.expect("Fail to serve.");
     Ok(())
+}
+
+async fn not_found_handler() -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({ "reason": "ACCESS TO UNKNOWN ENDPOINT." })),
+    )
+        .into_response()
 }
 
 // NOTE: hyper::Serverが削除され、2023/12/03時点でgraceful_shutdownが実装できない
