@@ -182,7 +182,8 @@ impl FormDatabase for ConnectionPool {
         FormUpdateTargets {
             title,
             description,
-            response_period,
+            start_at,
+            end_at,
             webhook,
             default_answer_title,
         }: FormUpdateTargets,
@@ -205,19 +206,25 @@ impl FormDatabase for ConnectionPool {
         )
         .await?;
 
-        if let Some(response_period) = response_period {
-            self.execute_and_values(
-                "UPDATE response_period SET start_at = ?, end_at = ? WHERE form_id = ?",
-                [
-                    response_period.start_at.into(),
-                    response_period.end_at.into(),
-                    form_id.into_inner().into(),
-                ],
-            )
-            .await?;
+        let response_period = start_at.zip(end_at);
+
+        if let Some((start_at, end_at)) = response_period {
+            if current_form.response_period.is_some() {
+                self.execute_and_values(
+                    "UPDATE response_period SET start_at = ?, end_at = ? WHERE form_id = ?",
+                    [start_at.into(), end_at.into(), form_id.into_inner().into()],
+                )
+                .await?;
+            } else {
+                self.execute_and_values(
+                    r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, ?, ?)",
+                    [form_id.into_inner().into(), start_at.into(), end_at.into()],
+                )
+                .await?;
+            }
         }
 
-        if current_form.webhook_url.is_some() {
+        if current_form.webhook_url.is_some() && webhook.is_some() {
             self.execute_and_values(
                 "UPDATE form_webhooks SET url = ? WHERE form_id = ?",
                 [

@@ -29,7 +29,9 @@ pub struct FormUpdateTargets {
     #[serde(default)]
     pub description: Option<FormDescription>,
     #[serde(default)]
-    pub response_period: Option<ResponsePeriod>,
+    pub start_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub end_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub webhook: Option<WebhookUrl>,
     #[serde(default)]
