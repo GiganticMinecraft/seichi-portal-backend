@@ -13,13 +13,13 @@
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe flex-start; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 777px; margin-left: 290px;">
                         <div data-drawio-colors="color: #0066CC; " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: Helvetica; color: rgb(0, 102, 204); line-height: 1.2; pointer-events: all; white-space: nowrap;">
-                                MySQL
+                                MariaDB
                             </div>
                         </div>
                     </div>
                 </foreignObject>
                 <text x="290" y="793" fill="#0066CC" font-family="Helvetica" font-size="16px" text-anchor="middle">
-                    MySQL
+                    MariaDB
                 </text>
             </switch>
         </g>
