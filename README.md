@@ -20,7 +20,7 @@ API 定義は GitHub Pages 上に[公開](https://giganticminecraft.github.io/se
 
 ## 開発環境とミドルウェア
 
-バックエンド言語には Rust を採用しており、MySQL にフォームなどの必要な情報が永続化されます。開発環境では Docker Compose を使うため、必要であれば別途導入が必要です。
+バックエンド言語には Rust を採用しており、MariaDB にフォームなどの必要な情報が永続化されます。開発環境では Docker Compose を使うため、必要であれば別途導入が必要です。
 
 ## プロジェクト俯瞰図
 

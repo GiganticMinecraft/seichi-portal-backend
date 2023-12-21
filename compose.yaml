@@ -1,15 +1,14 @@
 services:
   db:
-    image: mysql:8.1
-    container_name: mysql
+    image: mariadb:10.11.6
+    container_name: mariadb
     environment:
-      - TZ=Asia/Tokyo
-      - MYSQL_DATABASE=seichi_portal
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=password
-      - MYSQL_HOST=db
-      - MYSQL_PORT=3306
+      - MYSQL_INITDB_SKIP_TZINFO=1
+      - MARIADB_DATABASE=seichi_portal
+      - MARIADB_ROOT_PASSWORD=root
+      - MARIADB_USER=user
+      - MARIADB_PASSWORD=password
+      - MYSQL_TCP_PORT=3306
     ports:
       - "3306:3306"
     networks:
