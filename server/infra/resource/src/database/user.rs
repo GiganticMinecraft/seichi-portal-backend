@@ -1,7 +1,8 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use domain::user::models::{Role, User};
 use errors::infra::InfraError;
-use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::database::{components::UserDatabase, connection::ConnectionPool};
