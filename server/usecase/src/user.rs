@@ -10,6 +10,10 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 }
 
 impl<R: UserRepository> UserUseCase<'_, R> {
+    pub async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, Error> {
+        self.repository.find_by(uuid).await
+    }
+
     pub async fn upsert_user(&self, user: &User) -> Result<(), Error> {
         self.repository.upsert_user(user).await
     }

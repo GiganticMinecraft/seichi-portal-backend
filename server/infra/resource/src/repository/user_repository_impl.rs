@@ -13,6 +13,10 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client> {
+    async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, Error> {
+        self.client.user().find_by(uuid).await.map_err(Into::into)
+    }
+
     async fn upsert_user(&self, user: &User) -> Result<(), Error> {
         self.client
             .user()

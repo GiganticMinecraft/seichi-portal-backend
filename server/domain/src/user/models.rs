@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use strum_macros::Display;
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -10,7 +10,7 @@ pub struct User {
     pub role: Role,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Display)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Display, EnumString)]
 pub enum Role {
     #[serde(rename = "ADMINISTRATOR")]
     #[strum(serialize = "ADMINISTRATOR")]

@@ -20,4 +20,9 @@ pub enum InfraError {
     Forbidden,
     #[error("Outgoing Error: {}", .cause)]
     Outgoing { cause: String },
+    #[error("Enum Parse Error: source = {}", .source)]
+    EnumParse {
+        #[from]
+        source: strum::ParseError,
+    },
 }
