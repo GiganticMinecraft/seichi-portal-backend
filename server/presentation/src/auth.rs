@@ -31,6 +31,10 @@ pub async fn auth(
 ) -> Result<Response, StatusCode> {
     let token = auth.token();
 
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
     let user = if ENV.name == "local" && token == "debug_user" {
         User {
             name: "test_user".to_string(),
@@ -49,14 +53,21 @@ pub async fn auth(
             .await
             .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-        serde_json::from_str::<User>(
+        let parsed_user = serde_json::from_str::<User>(
             response
                 .text()
                 .await
                 .map_err(|_| StatusCode::UNAUTHORIZED)?
                 .as_str(),
         )
-        .map_err(|_| StatusCode::UNAUTHORIZED)?
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+        user_use_case
+            .repository
+            .find_by(parsed_user.id)
+            .await
+            .map_err(|_| StatusCode::UNAUTHORIZED)?
+            .map_or(parsed_user, |user| user)
     };
 
     let static_endpoints_allowed_for_standard_users = [
@@ -86,10 +97,6 @@ pub async fn auth(
         //          一般ユーザーがアクセスした場合は、アクセス権限なしとしてすべてFORBIDDENを返す。
         return Err(StatusCode::FORBIDDEN);
     }
-
-    let user_use_case = UserUseCase {
-        repository: repository.user_repository(),
-    };
 
     match user_use_case.repository.upsert_user(&user).await {
         Ok(_) => {

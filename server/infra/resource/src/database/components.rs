@@ -63,6 +63,7 @@ pub trait FormDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait UserDatabase: Send + Sync {
+    async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, InfraError>;
     async fn upsert_user(&self, user: &User) -> Result<(), InfraError>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
 }
