@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 sea-orm = { workspace = true }
 strum = { workspace = true }
-thiserror = "1.0.53"
+thiserror = "1.0.56"
 uuid = { workspace = true }
