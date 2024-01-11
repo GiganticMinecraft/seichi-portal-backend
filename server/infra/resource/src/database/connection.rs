@@ -3,9 +3,12 @@ use itertools::Itertools;
 use migration::MigratorTrait;
 use regex::Regex;
 use sea_orm::{
-    ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, DatabaseTransaction, DbErr,
-    ExecResult, QueryResult, Statement, TransactionTrait, Value,
+    AccessMode, ConnectionTrait, Database, DatabaseBackend, DatabaseConnection,
+    DatabaseTransaction, DbErr, ExecResult, QueryResult, Statement, TransactionError,
+    TransactionTrait, Value,
 };
+use std::future::Future;
+use std::pin::Pin;
 
 use crate::database::{
     components::DatabaseComponents,
@@ -41,6 +44,42 @@ impl ConnectionPool {
         migration::Migrator::up(&self.pool, None).await?;
 
         Ok(())
+    }
+
+    pub async fn read_only_transaction<F, T, E>(
+        &self,
+        callback: F,
+    ) -> Result<T, TransactionError<E>>
+    where
+        F: for<'c> FnOnce(
+                &'c DatabaseTransaction,
+            ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'c>>
+            + Send,
+        T: Send,
+        E: std::error::Error + Send,
+    {
+        Ok(self
+            .pool
+            .transaction_with_config(callback, None, Some(AccessMode::ReadOnly))
+            .await?)
+    }
+
+    pub async fn read_write_transaction<F, T, E>(
+        &self,
+        callback: F,
+    ) -> Result<T, TransactionError<E>>
+    where
+        F: for<'c> FnOnce(
+                &'c DatabaseTransaction,
+            ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'c>>
+            + Send,
+        T: Send,
+        E: std::error::Error + Send,
+    {
+        Ok(self
+            .pool
+            .transaction_with_config(callback, None, Some(AccessMode::ReadWrite))
+            .await?)
     }
 
     pub async fn query_all(&self, sql: &str) -> Result<Vec<QueryResult>, DbErr> {
