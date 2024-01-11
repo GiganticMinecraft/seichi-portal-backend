@@ -7,6 +7,8 @@ pub enum InfraError {
         #[from]
         source: sea_orm::error::DbErr,
     },
+    #[error("Transaction Error: {}", .cause)]
+    DatabaseTransaction { cause: String },
     #[error("Uuid Parse Error: {}", .source)]
     UuidParse {
         #[from]
@@ -25,4 +27,15 @@ pub enum InfraError {
         #[from]
         source: strum::ParseError,
     },
+}
+
+impl<E> From<sea_orm::TransactionError<E>> for InfraError
+where
+    E: std::error::Error,
+{
+    fn from(value: sea_orm::TransactionError<E>) -> Self {
+        InfraError::DatabaseTransaction {
+            cause: value.to_string(),
+        }
+    }
 }
