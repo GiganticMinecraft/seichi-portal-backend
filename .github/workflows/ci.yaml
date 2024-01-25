@@ -53,7 +53,7 @@ jobs:
 
       - name: Save sccache
         id: restore-sccache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         continue-on-error: false
         with:
           path: |
