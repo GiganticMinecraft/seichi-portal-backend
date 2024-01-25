@@ -249,7 +249,7 @@ pub struct PostedAnswers {
     pub answers: Vec<Answer>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Answer {
     pub question_id: QuestionId,
     pub answer: String,
