@@ -891,7 +891,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4f76ff87041ebb7e899f18aeeda1886414940c78a275082f0c1e4e9c1b8334a"
 dependencies = [
  "deriving-via-impl",
- "itertools 0.12.0",
+ "itertools 0.12.1",
  "proc-macro-error",
  "proc-macro2",
  "quote",
@@ -1688,9 +1688,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25db6b064527c5d482d0423354fcd07a89a2dfe07b67892e62411946db7f07b0"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
 dependencies = [
  "either",
 ]
@@ -2052,7 +2052,7 @@ version = "0.1.0"
 dependencies = [
  "domain",
  "errors",
- "itertools 0.12.0",
+ "itertools 0.12.1",
  "reqwest",
  "serde",
  "serde_json",
@@ -2541,7 +2541,7 @@ dependencies = [
  "envy",
  "errors",
  "futures",
- "itertools 0.12.0",
+ "itertools 0.12.1",
  "migration",
  "mockall",
  "num-traits",
@@ -3229,7 +3229,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce81b7bd7c4493975347ef60d8c7e8b742d4694f4c49f93e0a12ea263938176c"
 dependencies = [
- "itertools 0.12.0",
+ "itertools 0.12.1",
  "nom",
  "unicode_categories",
 ]
