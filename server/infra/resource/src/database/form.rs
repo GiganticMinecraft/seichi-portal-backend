@@ -14,6 +14,7 @@ use itertools::Itertools;
 use regex::Regex;
 use sea_orm::DbErr;
 
+use crate::database::connection::query_one;
 use crate::{
     database::{
         components::FormDatabase,
@@ -498,7 +499,7 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                let last_insert_id = batch_insert(
+                batch_insert(
                     r"INSERT INTO form_questions (form_id, title, description, question_type, is_required) VALUES (?, ?, ?, ?, ?)",
                     form_question_update_schema
                         .questions
@@ -513,16 +514,21 @@ impl FormDatabase for ConnectionPool {
                             ]
                         ).collect_vec(),
                     txn
+                ).await?;
+
+                let last_insert_id = query_one(
+                    "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
+                    txn
                 )
-                    .await?
-                    .unwrap()
-                    .last_insert_id();
+                .await?
+                .unwrap()
+                .try_get("", "question_id")?;
 
                 let choices_active_values = form_question_update_schema
                     .questions
                     .iter()
                     .rev()
-                    .zip((0..=last_insert_id).rev())
+                    .zip((1..=last_insert_id).rev())
                     .filter(|(q, _)| {
                         !q.choices.is_empty() && q.question_type != domain::form::models::QuestionType::TEXT
                     })
