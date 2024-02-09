@@ -126,6 +126,15 @@ where
         .await
 }
 
+pub async fn query_one(
+    sql: &str,
+    transaction: &DatabaseTransaction,
+) -> Result<Option<QueryResult>, DbErr> {
+    transaction
+        .query_one(Statement::from_string(DatabaseBackend::MySql, sql))
+        .await
+}
+
 pub async fn query_one_and_values<I>(
     sql: &str,
     values: I,
