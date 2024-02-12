@@ -86,7 +86,10 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.get_all_answers().await
     }
 
-    pub async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {
+    pub async fn create_questions(
+        &self,
+        questions: &FormQuestionUpdateSchema,
+    ) -> Result<(), Error> {
         self.repository.create_questions(questions).await
     }
 

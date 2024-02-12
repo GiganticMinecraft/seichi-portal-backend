@@ -102,7 +102,7 @@ pub struct FormDescription {
 pub type QuestionId = types::Id<Question>;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Getters, Debug, PartialEq)]
+#[derive(TypedBuilder, Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
 pub struct Question {
     #[serde(default)]
     pub id: QuestionId,
@@ -116,7 +116,9 @@ pub struct Question {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Debug, Serialize, Deserialize, EnumString, PartialOrd, PartialEq, Display)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Copy, EnumString, PartialOrd, PartialEq, Display,
+)]
 #[strum(ascii_case_insensitive)]
 pub enum QuestionType {
     TEXT,

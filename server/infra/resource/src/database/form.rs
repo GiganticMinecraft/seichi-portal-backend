@@ -503,22 +503,25 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn create_questions(
         &self,
-        form_question_update_schema: FormQuestionUpdateSchema,
+        form_question_update_schema: &FormQuestionUpdateSchema,
     ) -> Result<(), InfraError> {
+        let form_id = form_question_update_schema.form_id.to_owned();
+        let questions = form_question_update_schema.questions.to_owned();
+
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 batch_insert(
                     r"INSERT INTO form_questions (form_id, title, description, question_type, is_required) VALUES (?, ?, ?, ?, ?)",
-                    form_question_update_schema
-                        .questions
-                        .iter()
+                    questions
+                        .clone()
+                        .into_iter()
                         .flat_map(|question|
                             vec![
-                                form_question_update_schema.form_id.into_inner().into(),
-                                question.title.to_owned().into(),
-                                question.description.to_owned().into(),
+                                form_id.into_inner().into(),
+                                question.title.clone().into(),
+                                question.description.clone().into(),
                                 question.question_type.to_string().into(),
-                                question.is_required().to_owned().into()
+                                (*question.is_required()).into()
                             ]
                         ).collect_vec(),
                     txn
@@ -532,8 +535,7 @@ impl FormDatabase for ConnectionPool {
                 .unwrap()
                 .try_get("", "question_id")?;
 
-                let choices_active_values = form_question_update_schema
-                    .questions
+                let choices_active_values = questions
                     .iter()
                     .rev()
                     .zip((1..=last_insert_id).rev())
