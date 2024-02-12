@@ -215,6 +215,7 @@ impl FormDatabase for ConnectionPool {
             end_at,
             webhook,
             default_answer_title,
+            visibility,
         }: FormUpdateTargets,
     ) -> Result<(), InfraError> {
         let current_form = self.get(form_id).await?;
@@ -297,6 +298,14 @@ impl FormDatabase for ConnectionPool {
                         txn
                     )
                         .await?;
+                }
+
+                if let Some(visibility) = visibility {
+                    execute_and_values(
+                        "UPDATE form_meta_data SET visibility = ? WHERE id = ?",
+                        [visibility.to_string().into(), form_id.into_inner().into()],
+                        txn
+                    ).await?;
                 }
 
                 Ok::<_, InfraError>(())

@@ -46,6 +46,8 @@ pub struct FormUpdateTargets {
     pub webhook: Option<WebhookUrl>,
     #[serde(default)]
     pub default_answer_title: Option<DefaultAnswerTitle>,
+    #[serde(default)]
+    pub visibility: Option<Visibility>,
 }
 
 #[derive(Serialize, Debug)]
