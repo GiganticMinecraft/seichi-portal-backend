@@ -171,8 +171,8 @@ pub async fn create_question_handler(
         repository: repository.form_repository(),
     };
 
-    match form_use_case.create_questions(questions).await {
-        Ok(_) => (StatusCode::CREATED).into_response(),
+    match form_use_case.create_questions(&questions).await {
+        Ok(_) => (StatusCode::CREATED, Json(json!({"id": questions.form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }

@@ -105,7 +105,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .collect::<Result<Vec<PostedAnswers>, _>>()
     }
 
-    async fn create_questions(&self, questions: FormQuestionUpdateSchema) -> Result<(), Error> {
+    async fn create_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
         self.client
             .form()
             .create_questions(questions)
