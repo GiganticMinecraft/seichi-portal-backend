@@ -16,7 +16,7 @@ resource = { path = "../infra/resource" }
 sentry = { version = "0.32.2", default-features = false, features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "tracing", "debug-images", "rustls", "tower", "tower-http"] }
 tokio = { version = "1.36.0", features = ["full"] }
 tower = "0.4.13"
-tower-http = { version = "0.5.1", features = ["cors"] }
+tower-http = { version = "0.5.2", features = ["cors"] }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.18", features = ["std", "registry", "env-filter"] }
 serde_json = { workspace = true }
