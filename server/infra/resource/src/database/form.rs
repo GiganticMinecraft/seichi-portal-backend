@@ -565,6 +565,65 @@ impl FormDatabase for ConnectionPool {
             .map_err(Into::into)
     }
 
+    async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), InfraError> {
+        let form_id = questions.form_id.to_owned();
+        let questions = questions.questions.to_owned();
+
+        self.read_write_transaction(|txn| Box::pin(async move {
+            batch_insert(
+                r"INSERT INTO form_questions (question_id, form_id, title, description, question_type, is_required)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                title = VALUES(title),
+                description = VALUES(description),
+                question_type = VALUES(question_type),
+                is_required = VALUES(is_required)",
+                questions.iter().flat_map(|question| vec![
+                    form_id.into_inner().into(),
+                    question.id.into_inner().into(),
+                    question.title.clone().into(),
+                    question.description.clone().into(),
+                    question.question_type.to_string().into(),
+                    question.is_required.to_owned().into()]),
+                txn
+            ).await?;
+
+            let last_insert_id = query_one(
+                "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
+                txn
+            )
+                .await?
+                .unwrap()
+                .try_get("", "question_id")?;
+
+            let choices_active_values = questions
+                .iter()
+                .rev()
+                .zip((1..=last_insert_id).rev())
+                .filter(|(q, _)| {
+                    !q.choices.is_empty() && q.question_type != domain::form::models::QuestionType::TEXT
+                })
+                .flat_map(|(question, question_id)| {
+                    question
+                        .choices
+                        .iter()
+                        .cloned()
+                        .flat_map(|choice| vec![question_id.to_string(), choice])
+                        .collect_vec()
+                })
+                .collect_vec();
+
+            batch_insert(
+                "INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
+                choices_active_values.into_iter().map(|value| value.into()),
+                txn
+            )
+                .await?;
+
+            Ok::<_, InfraError>(())
+        })).await.map_err(Into::into)
+    }
+
     #[tracing::instrument]
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError> {
         self.read_only_transaction(|txn| {
