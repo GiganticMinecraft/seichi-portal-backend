@@ -101,7 +101,13 @@ async fn main() -> anyhow::Result<()> {
         ))
         .layer(
             CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::DELETE,
+                    Method::PATCH,
+                    Method::PUT,
+                ])
                 .allow_origin(Any) // todo: allow_originを制限する
                 .allow_headers([CONTENT_TYPE, AUTHORIZATION])
                 .expose_headers([LOCATION]),
