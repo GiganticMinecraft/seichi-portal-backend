@@ -579,8 +579,8 @@ impl FormDatabase for ConnectionPool {
                 question_type = VALUES(question_type),
                 is_required = VALUES(is_required)",
                 questions.iter().flat_map(|question| vec![
-                    form_id.into_inner().into(),
                     question.id.into_inner().into(),
+                    form_id.into_inner().into(),
                     question.title.clone().into(),
                     question.description.clone().into(),
                     question.question_type.to_string().into(),
