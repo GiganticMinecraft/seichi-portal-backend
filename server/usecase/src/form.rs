@@ -93,6 +93,10 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.create_questions(questions).await
     }
 
+    pub async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
+        self.repository.put_questions(questions).await
+    }
+
     pub async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
         let has_permission = self
             .repository

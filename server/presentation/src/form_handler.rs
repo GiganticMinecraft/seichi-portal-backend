@@ -177,6 +177,20 @@ pub async fn create_question_handler(
     }
 }
 
+pub async fn put_question_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Json(questions): Json<FormQuestionUpdateSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.put_questions(&questions).await {
+        Ok(_) => (StatusCode::OK, Json(json!({"id": questions.form_id }))).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub async fn post_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

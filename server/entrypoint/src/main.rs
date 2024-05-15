@@ -16,7 +16,7 @@ use presentation::{
     form_handler::{
         create_form_handler, create_question_handler, delete_form_handler, form_list_handler,
         get_all_answers, get_form_handler, get_questions_handler, post_answer_handler,
-        post_form_comment, update_form_handler,
+        post_form_comment, put_question_handler, update_form_handler,
     },
     health_check_handler::health_check,
     user_handler::{get_my_user_info, patch_user_role},
@@ -84,7 +84,10 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/forms/answers/comment", post(post_form_comment))
         .with_state(shared_repository.to_owned())
-        .route("/forms/questions", post(create_question_handler))
+        .route(
+            "/forms/questions",
+            post(create_question_handler).put(put_question_handler),
+        )
         .with_state(shared_repository.to_owned())
         .route("/users", get(get_my_user_info))
         .route("/users/:uuid", patch(patch_user_role))
@@ -98,7 +101,13 @@ async fn main() -> anyhow::Result<()> {
         ))
         .layer(
             CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::DELETE,
+                    Method::PATCH,
+                    Method::PUT,
+                ])
                 .allow_origin(Any) // todo: allow_originを制限する
                 .allow_headers([CONTENT_TYPE, AUTHORIZATION])
                 .expose_headers([LOCATION]),

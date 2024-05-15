@@ -113,6 +113,14 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
+    async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
+        self.client
+            .form()
+            .put_questions(questions)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<Question>, Error> {
         self.client
             .form()
