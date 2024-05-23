@@ -64,11 +64,10 @@ jobs:
             sccache-${{ env.SCCACHE_VERSION }}-
 
       - if: ${{ steps.restore-sccache.outputs.cache-hit == false }}
-        name: Install sccache
-        uses: dtolnay/rust-toolchain@stable
+        name: install sccache
+        uses: taiki-e/install-action@v2
         with:
-          command: install
-          args: --version=${{ env.SCCACHE_VERSION }} --force sccache
+          tool: sccache
 
       - name: Install Deps
         run: sudo apt install -y musl-tools build-essential
