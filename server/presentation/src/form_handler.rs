@@ -12,8 +12,7 @@ use domain::{
     repository::Repositories,
     user::models::User,
 };
-use errors::usecase::UseCaseError;
-use errors::{infra::InfraError, Error};
+use errors::{infra::InfraError, usecase::UseCaseError, Error};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
