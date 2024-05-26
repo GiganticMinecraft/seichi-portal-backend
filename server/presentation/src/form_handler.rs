@@ -225,9 +225,6 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             })),
         )
             .into_response(),
-        Error::Infra {
-            source: InfraError::Forbidden,
-        } => StatusCode::FORBIDDEN.into_response(),
         Error::UseCase {
             source: UseCaseError::FormAnswerOutOfPeriod,
         } => (
