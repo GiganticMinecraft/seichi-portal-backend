@@ -12,6 +12,7 @@ use domain::{
     repository::Repositories,
     user::models::User,
 };
+use errors::usecase::UseCaseError;
 use errors::{infra::InfraError, Error};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -219,17 +220,43 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             source: InfraError::FormNotFound { .. },
         } => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "reason": "FORM NOT FOUND" })),
+            Json(json!({
+                "errorCode": "FORM_NOT_FOUND",
+                "reason": "FORM NOT FOUND"
+            })),
         )
             .into_response(),
         Error::Infra {
             source: InfraError::Forbidden,
         } => StatusCode::FORBIDDEN.into_response(),
+        Error::UseCase {
+            source: UseCaseError::FormAnswerOutOfPeriod,
+        } => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "FORM_ANSWER_OUT_OF_PERIOD",
+                "reason": "Posted form is out of period."
+            })),
+        )
+            .into_response(),
+        Error::UseCase {
+            source: UseCaseError::DoNotHavePermissionToPostFormComment,
+        } => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
+                "reason": "Do not have permission to post form comment."
+            })),
+        )
+            .into_response(),
         _ => {
             tracing::error!("{}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
+                Json(json!({
+                    "errorCode": "INTERNAL_SERVER_ERROR",
+                    "reason": "unknown error"
+                })),
             )
                 .into_response()
         }
