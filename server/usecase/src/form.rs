@@ -8,8 +8,10 @@ use domain::{
     repository::form_repository::FormRepository,
     user::models::User,
 };
-use errors::usecase::UseCaseError::{DoNotHavePermissionToPostFormComment, FormAnswerOutOfPeriod};
-use errors::{infra::InfraError::Forbidden, Error};
+use errors::{
+    usecase::UseCaseError::{DoNotHavePermissionToPostFormComment, FormAnswerOutOfPeriod},
+    Error,
+};
 use types::Resolver;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
