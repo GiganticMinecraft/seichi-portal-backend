@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:10.11.7
+    image: mariadb:10.11.8
     container_name: mariadb
     environment:
       - MYSQL_INITDB_SKIP_TZINFO=1
