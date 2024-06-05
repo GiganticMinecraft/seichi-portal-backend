@@ -613,8 +613,17 @@ impl FormDatabase for ConnectionPool {
                 })
                 .collect_vec();
 
+            // TODO: 現在の API の仕様上、form_choices で割り当てられているidをバックエンドから送信することはないため、
+            //  ON DUPLICATE KEY UPDATE を使用せずに完全に選択肢を上書きしているが、API の仕様を変更して choice_id を公開し、
+            //  それを使って選択肢の更新を行うべきか検討する
+            execute_and_values(
+                "DELETE FROM form_choices WHERE question_id = ?",
+                [last_insert_id.into()],
+                txn
+            ).await?;
+
             batch_insert(
-                "INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
+                r"INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
                 choices_active_values.into_iter().map(|value| value.into()),
                 txn
             )
