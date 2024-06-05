@@ -230,7 +230,7 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
         } => (
             StatusCode::FORBIDDEN,
             Json(json!({
-                "errorCode": "FORM_ANSWER_OUT_OF_PERIOD",
+                "errorCode": "OUT_OF_PERIOD",
                 "reason": "Posted form is out of period."
             })),
         )
