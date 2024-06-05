@@ -226,7 +226,7 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
         )
             .into_response(),
         Error::UseCase {
-            source: UseCaseError::FormAnswerOutOfPeriod,
+            source: UseCaseError::OutOfPeriod,
         } => (
             StatusCode::FORBIDDEN,
             Json(json!({
