@@ -4,6 +4,7 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
+use domain::form::models::AnswerId;
 use domain::{
     form::models::{
         Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets,
@@ -148,6 +149,20 @@ pub async fn get_all_answers(
     }
 }
 
+pub async fn get_answer_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_answers(answer_id).await {
+        Ok(answer) => (StatusCode::OK, Json(answer)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -222,6 +237,16 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             Json(json!({
                 "errorCode": "FORM_NOT_FOUND",
                 "reason": "FORM NOT FOUND"
+            })),
+        )
+            .into_response(),
+        Error::UseCase {
+            source: UseCaseError::AnswerNotFound,
+        } => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "ANSWER_NOT_FOUND",
+                "reason": "Answer not found"
             })),
         )
             .into_response(),
