@@ -1,17 +1,15 @@
 use chrono::Utc;
-use domain::form::models::AnswerId;
 use domain::{
     form::models::{
-        Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
         FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
         SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
 };
-use errors::usecase::UseCaseError::AnswerNotFound;
 use errors::{
-    usecase::UseCaseError::{DoNotHavePermissionToPostFormComment, OutOfPeriod},
+    usecase::UseCaseError::{AnswerNotFound, DoNotHavePermissionToPostFormComment, OutOfPeriod},
     Error,
 };
 use types::Resolver;
