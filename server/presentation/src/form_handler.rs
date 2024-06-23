@@ -7,7 +7,7 @@ use axum::{
 use domain::{
     form::models::{
         AnswerId, Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
     },
     repository::Repositories,
     user::models::User,
@@ -172,6 +172,21 @@ pub async fn post_answer_handler(
     };
 
     match form_use_case.post_answers(&user, &schema).await {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn update_answer_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+    Json(schema): Json<PostedAnswersUpdateSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.update_answer_meta(answer_id, &schema).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
