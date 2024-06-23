@@ -1,5 +1,8 @@
 use chrono::{DateTime, Utc};
-use domain::form::models::{FormSettings, ResponsePeriod};
+use domain::{
+    form::models::{FormSettings, ResponsePeriod},
+    user::models::{Role, User},
+};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -135,7 +138,9 @@ impl TryFrom<AnswerDto> for domain::form::models::Answer {
 
 pub struct PostedAnswersDto {
     pub id: i32,
+    pub user_name: String,
     pub uuid: Uuid,
+    pub user_role: Role,
     pub timestamp: DateTime<Utc>,
     pub form_id: i32,
     pub title: Option<String>,
@@ -148,7 +153,9 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
     fn try_from(
         PostedAnswersDto {
             id,
+            user_name,
             uuid,
+            user_role,
             timestamp,
             form_id,
             title,
@@ -157,7 +164,11 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::PostedAnswers {
             id: id.into(),
-            uuid,
+            user: User {
+                name: user_name,
+                id: uuid,
+                role: user_role,
+            },
             timestamp,
             form_id: form_id.into(),
             title: title.into(),
