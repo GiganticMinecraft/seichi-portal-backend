@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
-        SimpleForm,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -103,6 +103,19 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .into_iter()
             .collect::<Result<Vec<PostedAnswers>, _>>()
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_answer_meta(
+        &self,
+        answer_id: AnswerId,
+        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_answer_meta(answer_id, posted_answers_update_schema)
+            .await
+            .map_err(Into::into)
     }
 
     async fn create_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
