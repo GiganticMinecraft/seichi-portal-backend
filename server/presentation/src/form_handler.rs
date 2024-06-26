@@ -6,13 +6,13 @@ use axum::{
 };
 use domain::{
     form::models::{
-        Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema, FormUpdateTargets,
-        OffsetAndLimit, PostedAnswersSchema,
+        AnswerId, Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
     },
     repository::Repositories,
     user::models::User,
 };
-use errors::{infra::InfraError, Error};
+use errors::{infra::InfraError, usecase::UseCaseError, Error};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
@@ -148,6 +148,20 @@ pub async fn get_all_answers(
     }
 }
 
+pub async fn get_answer_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_answers(answer_id).await {
+        Ok(answer) => (StatusCode::OK, Json(answer)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -219,17 +233,50 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             source: InfraError::FormNotFound { .. },
         } => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "reason": "FORM NOT FOUND" })),
+            Json(json!({
+                "errorCode": "FORM_NOT_FOUND",
+                "reason": "FORM NOT FOUND"
+            })),
         )
             .into_response(),
-        Error::Infra {
-            source: InfraError::Forbidden,
-        } => StatusCode::FORBIDDEN.into_response(),
+        Error::UseCase {
+            source: UseCaseError::AnswerNotFound,
+        } => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "ANSWER_NOT_FOUND",
+                "reason": "Answer not found"
+            })),
+        )
+            .into_response(),
+        Error::UseCase {
+            source: UseCaseError::OutOfPeriod,
+        } => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "OUT_OF_PERIOD",
+                "reason": "Posted form is out of period."
+            })),
+        )
+            .into_response(),
+        Error::UseCase {
+            source: UseCaseError::DoNotHavePermissionToPostFormComment,
+        } => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
+                "reason": "Do not have permission to post form comment."
+            })),
+        )
+            .into_response(),
         _ => {
             tracing::error!("{}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
+                Json(json!({
+                    "errorCode": "INTERNAL_SERVER_ERROR",
+                    "reason": "unknown error"
+                })),
             )
                 .into_response()
         }
