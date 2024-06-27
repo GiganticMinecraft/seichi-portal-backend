@@ -38,7 +38,7 @@ pub async fn auth(
     let user = if ENV.name == "local" && token == "debug_user" {
         User {
             name: "test_user".to_string(),
-            id: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
+            uuid: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
             role: Administrator,
         }
     } else {
@@ -64,7 +64,7 @@ pub async fn auth(
 
         user_use_case
             .repository
-            .find_by(parsed_user.id)
+            .find_by(parsed_user.uuid)
             .await
             .map_err(|_| StatusCode::UNAUTHORIZED)?
             .map_or(parsed_user, |user| user)
