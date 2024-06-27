@@ -27,7 +27,7 @@ impl UserDatabase for ConnectionPool {
                         .map(|rs| {
                             Ok::<User, InfraError>(User {
                                 name: rs.try_get("", "name")?,
-                                uuid: uuid,
+                                uuid,
                                 role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             })
                         })
