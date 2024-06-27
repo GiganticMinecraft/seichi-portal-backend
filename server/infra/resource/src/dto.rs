@@ -166,7 +166,7 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             id: id.into(),
             user: User {
                 name: user_name,
-                uuid,
+                id: uuid,
                 role: user_role,
             },
             timestamp,

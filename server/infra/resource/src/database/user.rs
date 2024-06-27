@@ -27,7 +27,7 @@ impl UserDatabase for ConnectionPool {
                         .map(|rs| {
                             Ok::<User, InfraError>(User {
                                 name: rs.try_get("", "name")?,
-                                uuid,
+                                id: uuid,
                                 role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             })
                         })
@@ -41,7 +41,7 @@ impl UserDatabase for ConnectionPool {
 
     async fn upsert_user(&self, user: &User) -> Result<(), InfraError> {
         let params = [
-            user.uuid.to_string().into(),
+            user.id.to_string().into(),
             user.name.to_owned().into(),
             user.role.to_string().into(),
         ];
