@@ -43,7 +43,7 @@ impl FormDatabase for ConnectionPool {
                     [
                         title.title().to_owned().into(),
                         description.into_inner().into(),
-                        user.uuid.to_string().into(),
+                        user.id.to_string().into(),
                     ],
                     txn,
                 )
@@ -321,7 +321,7 @@ impl FormDatabase for ConnectionPool {
         user: &User,
         answer: &PostedAnswersSchema,
     ) -> Result<(), InfraError> {
-        let User { uuid: id, .. } = user.to_owned();
+        let User { id, .. } = user.to_owned();
         let form_id = answer.form_id.to_owned();
         let answers = answer.answers.to_owned();
 
@@ -749,7 +749,7 @@ impl FormDatabase for ConnectionPool {
         let params = [
             comment.answer_id.into_inner().into(),
             comment.content.to_owned().into(),
-            comment.commented_by.uuid.to_string().into(),
+            comment.commented_by.id.to_string().into(),
         ];
 
         self.read_write_transaction(|txn| {

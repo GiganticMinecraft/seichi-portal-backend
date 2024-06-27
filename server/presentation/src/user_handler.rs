@@ -14,7 +14,15 @@ use usecase::user::UserUseCase;
 use uuid::Uuid;
 
 pub async fn get_my_user_info(Extension(user): Extension<User>) -> impl IntoResponse {
-    (StatusCode::OK, Json(json!(user))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({
+            "uuid": user.id.to_string(),
+            "name": user.name,
+            "role": user.role.to_string()
+        })),
+    )
+        .into_response()
 }
 
 pub async fn patch_user_role(
