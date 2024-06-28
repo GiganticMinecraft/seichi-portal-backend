@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.8
-FROM ubuntu:24.04 as init
+FROM ubuntu:22.04 as init
 
 COPY --link / /work/
 
@@ -13,7 +13,7 @@ esac
 
 RUN chmod +x /seichi-portal-backend
 
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
 
 COPY --from=init /seichi-portal-backend /seichi-portal-backend
