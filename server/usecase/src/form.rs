@@ -8,7 +8,10 @@ use domain::{
     repository::form_repository::FormRepository,
     user::models::User,
 };
-use errors::{infra::InfraError::Forbidden, Error};
+use errors::{
+    usecase::UseCaseError::{DoNotHavePermissionToPostFormComment, OutOfPeriod},
+    Error,
+};
 use types::Resolver;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
@@ -78,7 +81,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         if is_within_period {
             self.repository.post_answer(user, answers).await
         } else {
-            Err(Error::from(Forbidden))
+            Err(Error::from(OutOfPeriod))
         }
     }
 
@@ -106,7 +109,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         if has_permission {
             self.repository.post_comment(&comment).await
         } else {
-            Err(Error::from(Forbidden))
+            Err(Error::from(DoNotHavePermissionToPostFormComment))
         }
     }
 }
