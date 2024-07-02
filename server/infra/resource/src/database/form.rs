@@ -6,8 +6,9 @@ use domain::{
     form::models::{
         AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
         FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
+        PostedAnswersUpdateSchema,
     },
-    user::models::{Role::Administrator, User},
+    user::models::{Role, Role::Administrator, User},
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use itertools::Itertools;
@@ -422,7 +423,7 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let answer_query_result_opt = query_one_and_values(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id = ?",
                     [answer_id.into_inner().into()],
@@ -435,6 +436,8 @@ impl FormDatabase for ConnectionPool {
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id.into_inner(),
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            user_name: rs.try_get("", "name")?,
+                            user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
@@ -453,7 +456,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = query_all(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
                     txn,
@@ -487,6 +490,8 @@ impl FormDatabase for ConnectionPool {
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            user_name: rs.try_get("", "name")?,
+                            user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
@@ -494,6 +499,32 @@ impl FormDatabase for ConnectionPool {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn update_answer_meta(
+        &self,
+        answer_id: AnswerId,
+        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+    ) -> Result<(), InfraError> {
+        let title = posted_answers_update_schema.title.to_owned();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                if let Some(title) = title {
+                    execute_and_values(
+                        r"UPDATE answers SET title = ? WHERE id = ?",
+                        [title.into(), answer_id.into_inner().into()],
+                        txn,
+                    )
+                    .await?;
+                }
+
+                Ok::<_, InfraError>(())
             })
         })
         .await
