@@ -1,14 +1,17 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
-        SimpleForm,
+        AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
 };
-use errors::{infra::InfraError::Forbidden, Error};
+use errors::{
+    usecase::UseCaseError::{AnswerNotFound, DoNotHavePermissionToPostFormComment, OutOfPeriod},
+    Error,
+};
 use types::Resolver;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
@@ -78,12 +81,30 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         if is_within_period {
             self.repository.post_answer(user, answers).await
         } else {
-            Err(Error::from(Forbidden))
+            Err(Error::from(OutOfPeriod))
+        }
+    }
+
+    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<PostedAnswers, Error> {
+        if let Some(posted_answers) = self.repository.get_answers(answer_id).await? {
+            Ok(posted_answers)
+        } else {
+            Err(Error::from(AnswerNotFound))
         }
     }
 
     pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
         self.repository.get_all_answers().await
+    }
+
+    pub async fn update_answer_meta(
+        &self,
+        answer_id: AnswerId,
+        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+    ) -> Result<(), Error> {
+        self.repository
+            .update_answer_meta(answer_id, posted_answers_update_schema)
+            .await
     }
 
     pub async fn create_questions(
@@ -106,7 +127,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         if has_permission {
             self.repository.post_comment(&comment).await
         } else {
-            Err(Error::from(Forbidden))
+            Err(Error::from(DoNotHavePermissionToPostFormComment))
         }
     }
 }
