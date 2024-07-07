@@ -329,9 +329,9 @@ checksum = "fbb36e985947064623dbd357f727af08ffd077f93d696782f3c56365fa2e2799"
 
 [[package]]
 name = "async-trait"
-version = "0.1.80"
+version = "0.1.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6fa2087f2753a7da8cc1c0dbfcf89579dd57458e36769de5ac750b4671737ca"
+checksum = "6e0c28dcc82d7c8ead5cb13beb15405b57b8546e93215673ff8ca0349a028107"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -881,7 +881,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99061ea972ed08b607ac4769035e05c0c48a78a23e7088220dd1c336e026d1e9"
 dependencies = [
  "deriving-via-impl",
- "itertools",
+ "itertools 0.12.1",
  "proc-macro-error",
  "proc-macro2",
  "quote",
@@ -1637,6 +1637,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1992,7 +2001,7 @@ version = "0.1.0"
 dependencies = [
  "domain",
  "errors",
- "itertools",
+ "itertools 0.13.0",
  "reqwest",
  "serde",
  "serde_json",
@@ -2529,7 +2538,7 @@ dependencies = [
  "envy",
  "errors",
  "futures",
- "itertools",
+ "itertools 0.13.0",
  "migration",
  "mockall",
  "num-traits",
@@ -3278,7 +3287,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce81b7bd7c4493975347ef60d8c7e8b742d4694f4c49f93e0a12ea263938176c"
 dependencies = [
- "itertools",
+ "itertools 0.12.1",
  "nom",
  "unicode_categories",
 ]
