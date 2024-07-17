@@ -6,10 +6,12 @@ use domain::{
     form::models::{
         AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
         FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
+        PostedAnswersUpdateSchema, ResponsePeriod,
     },
-    user::models::{Role::Administrator, User},
+    user::models::{Role, Role::Administrator, User},
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
+use futures::future::try_join;
 use itertools::Itertools;
 use regex::Regex;
 use sea_orm::DbErr;
@@ -49,10 +51,22 @@ impl FormDatabase for ConnectionPool {
                 .await?
                 .last_insert_id() as i32;
 
-                execute_and_values(
+                let insert_default_answer_title_table = execute_and_values(
                     "INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
                     [form_id.into()],
                     txn,
+                );
+
+                let insert_response_period_table = execute_and_values(
+                    "INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, \
+                     NULL)",
+                    [form_id.into()],
+                    txn,
+                );
+
+                try_join(
+                    insert_default_answer_title_table,
+                    insert_response_period_table,
                 )
                 .await?;
 
@@ -211,8 +225,8 @@ impl FormDatabase for ConnectionPool {
         FormUpdateTargets {
             title,
             description,
-            start_at,
-            end_at,
+            has_response_period,
+            response_period,
             webhook,
             default_answer_title,
             visibility,
@@ -239,20 +253,23 @@ impl FormDatabase for ConnectionPool {
                 )
                     .await?;
 
-                let response_period = start_at.zip(end_at);
+                if let Some(has_response_period) = has_response_period {
+                    if has_response_period && response_period.is_some() {
+                        let ResponsePeriod { start_at, end_at } = response_period.unwrap();
 
-                if let Some((start_at, end_at)) = response_period {
-                    if current_form.response_period.is_some() {
                         execute_and_values(
                             "UPDATE response_period SET start_at = ?, end_at = ? WHERE form_id = ?",
-                            [start_at.into(), end_at.into(), form_id.into_inner().into()],
+                            [
+                                start_at.or(current_form.response_period.map(|(start_at, _)| start_at)).into(),
+                                end_at.or(current_form.response_period.map(|(_, end_at)| end_at)).into(),
+                                form_id.into_inner().into(),
+                            ],
                             txn
-                        )
-                            .await?;
+                        ).await?;
                     } else {
                         execute_and_values(
-                            r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, ?, ?)",
-                            [form_id.into_inner().into(), start_at.into(), end_at.into()],
+                            "UPDATE response_period SET start_at = NULL, end_at = NULL WHERE form_id = ?",
+                            [form_id.into_inner().into()],
                             txn
                         )
                             .await?;
@@ -422,7 +439,7 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let answer_query_result_opt = query_one_and_values(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id = ?",
                     [answer_id.into_inner().into()],
@@ -435,6 +452,8 @@ impl FormDatabase for ConnectionPool {
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id.into_inner(),
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            user_name: rs.try_get("", "name")?,
+                            user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
@@ -453,7 +472,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = query_all(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
                     txn,
@@ -487,6 +506,8 @@ impl FormDatabase for ConnectionPool {
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            user_name: rs.try_get("", "name")?,
+                            user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
@@ -494,6 +515,32 @@ impl FormDatabase for ConnectionPool {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn update_answer_meta(
+        &self,
+        answer_id: AnswerId,
+        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+    ) -> Result<(), InfraError> {
+        let title = posted_answers_update_schema.title.to_owned();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                if let Some(title) = title {
+                    execute_and_values(
+                        r"UPDATE answers SET title = ? WHERE id = ?",
+                        [title.into(), answer_id.into_inner().into()],
+                        txn,
+                    )
+                    .await?;
+                }
+
+                Ok::<_, InfraError>(())
             })
         })
         .await
