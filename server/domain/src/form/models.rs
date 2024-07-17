@@ -38,9 +38,9 @@ pub struct FormUpdateTargets {
     #[serde(default)]
     pub description: Option<FormDescription>,
     #[serde(default)]
-    pub start_at: Option<DateTime<Utc>>,
+    pub has_response_period: Option<bool>,
     #[serde(default)]
-    pub end_at: Option<DateTime<Utc>>,
+    pub response_period: Option<ResponsePeriod>,
     #[serde(default)]
     pub webhook: Option<WebhookUrl>,
     #[serde(default)]
@@ -178,8 +178,10 @@ pub struct WebhookUrl {
 #[derive(TypedBuilder, Serialize, Deserialize, Default, Debug, PartialEq)]
 pub struct ResponsePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
     pub start_at: Option<DateTime<Utc>>,
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
     pub end_at: Option<DateTime<Utc>>,
 }
 

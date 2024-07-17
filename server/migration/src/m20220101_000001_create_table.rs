@@ -73,8 +73,8 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS response_period(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id INT NOT NULL,
-                    start_at DATETIME NOT NULL,
-                    end_at DATETIME NOT NULL,
+                    start_at DATETIME,
+                    end_at DATETIME,
                     FOREIGN KEY fk_response_period_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
