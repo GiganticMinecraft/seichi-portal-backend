@@ -156,21 +156,17 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn post_comment(&self, comment: &Comment) -> Result<(), Error> {
-        let posted_answers = comment
-            .answer_id
-            .resolve(self)
-            .await?
-            .ok_or(AnswerNotFount {
-                id: comment.answer_id.into_inner(),
-            })?;
+    async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error> {
+        let posted_answers = answer_id.resolve(self).await?.ok_or(AnswerNotFount {
+            id: answer_id.into_inner(),
+        })?;
         let form = self.get(posted_answers.form_id).await?;
 
         form_outgoing::post_comment(&form, comment, &posted_answers).await?;
 
         self.client
             .form()
-            .post_comment(comment)
+            .post_comment(answer_id, comment)
             .await
             .map_err(Into::into)
     }

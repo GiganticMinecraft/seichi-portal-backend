@@ -118,14 +118,14 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.put_questions(questions).await
     }
 
-    pub async fn post_comment(&self, comment: Comment) -> Result<(), Error> {
+    pub async fn post_comment(&self, comment: Comment, answer_id: AnswerId) -> Result<(), Error> {
         let has_permission = self
             .repository
-            .has_permission(comment.answer_id, &comment.commented_by)
+            .has_permission(answer_id, &comment.commented_by)
             .await?;
 
         if has_permission {
-            self.repository.post_comment(&comment).await
+            self.repository.post_comment(answer_id, &comment).await
         } else {
             Err(Error::from(DoNotHavePermissionToPostFormComment))
         }
