@@ -230,14 +230,16 @@ pub async fn post_form_comment(
     };
 
     let comment = Comment {
-        answer_id: comment_schema.answer_id,
         content: comment_schema.content,
         timestamp: chrono::Utc::now(),
         commented_by: user,
     };
 
-    match form_use_case.post_comment(comment).await {
-        Ok(_) => (StatusCode::OK).into_response(),
+    match form_use_case
+        .post_comment(comment, comment_schema.answer_id)
+        .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
