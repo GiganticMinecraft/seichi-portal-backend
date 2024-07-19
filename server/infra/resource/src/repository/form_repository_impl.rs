@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
-        SimpleForm,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -105,6 +105,19 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .collect::<Result<Vec<PostedAnswers>, _>>()
     }
 
+    #[tracing::instrument(skip(self))]
+    async fn update_answer_meta(
+        &self,
+        answer_id: AnswerId,
+        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_answer_meta(answer_id, posted_answers_update_schema)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn create_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
         self.client
             .form()
@@ -143,21 +156,17 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn post_comment(&self, comment: &Comment) -> Result<(), Error> {
-        let posted_answers = comment
-            .answer_id
-            .resolve(self)
-            .await?
-            .ok_or(AnswerNotFount {
-                id: comment.answer_id.into_inner(),
-            })?;
+    async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error> {
+        let posted_answers = answer_id.resolve(self).await?.ok_or(AnswerNotFount {
+            id: answer_id.into_inner(),
+        })?;
         let form = self.get(posted_answers.form_id).await?;
 
         form_outgoing::post_comment(&form, comment, &posted_answers).await?;
 
         self.client
             .form()
-            .post_comment(comment)
+            .post_comment(answer_id, comment)
             .await
             .map_err(Into::into)
     }
