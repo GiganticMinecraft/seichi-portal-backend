@@ -436,7 +436,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_comments = query_all_and_values(
-                    r"SELECT answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
                         INNER JOIN users ON form_answer_comments.commented_by = users.id
                         WHERE answer_id = ?",
                     [answer_id.into_inner().into()],
@@ -459,6 +459,7 @@ impl FormDatabase for ConnectionPool {
                     iter()
                     .map(|rs| {
                         Ok::<CommentDto, InfraError>(CommentDto {
+                            comment_id: rs.try_get("", "comment_id")?,
                             content: rs.try_get("", "content")?,
                             timestamp: rs.try_get("", "timestamp")?,
                             commented_by: UserDto {
@@ -508,7 +509,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_comments = query_all(
-                    r"SELECT answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
                         INNER JOIN users ON form_answer_comments.commented_by = users.id",
                     txn
                 );
@@ -540,6 +541,7 @@ impl FormDatabase for ConnectionPool {
                             })
                             .map(|rs|{
                                 Ok::<CommentDto, InfraError>(CommentDto {
+                                    comment_id: rs.try_get("", "comment_id")?,
                                     content: rs.try_get("", "content")?,
                                     timestamp: rs.try_get("", "timestamp")?,
                                     commented_by: UserDto {
