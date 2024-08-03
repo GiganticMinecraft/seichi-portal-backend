@@ -4,8 +4,8 @@ use mockall::automock;
 
 use crate::{
     form::models::{
-        AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
+        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
         PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     user::models::User,
@@ -41,4 +41,5 @@ pub trait FormRepository: Send + Sync + 'static {
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<Question>, Error>;
     async fn has_permission(&self, answer_id: AnswerId, user: &User) -> Result<bool, Error>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error>;
+    async fn delete_comment(&self, comment_id: CommentId) -> Result<(), Error>;
 }
