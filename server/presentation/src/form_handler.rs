@@ -6,7 +6,7 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
+        AnswerId, Comment, CommentId, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
         FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
     },
     repository::Repositories,
@@ -241,6 +241,20 @@ pub async fn post_form_comment(
         .post_comment(comment, comment_schema.answer_id)
         .await
     {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn delete_form_comment(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(comment_id): Path<CommentId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.delete_comment(comment_id).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }

@@ -88,7 +88,10 @@ async fn main() -> anyhow::Result<()> {
             get(get_answer_handler).patch(update_answer_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route("/forms/answers/comment", post(post_form_comment))
+        .route(
+            "/forms/answers/comment",
+            post(post_form_comment).delete(delete_form_handler),
+        )
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/questions",

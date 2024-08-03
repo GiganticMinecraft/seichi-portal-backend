@@ -1,8 +1,8 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
+        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
         PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
@@ -129,5 +129,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         } else {
             Err(Error::from(DoNotHavePermissionToPostFormComment))
         }
+    }
+
+    pub async fn delete_comment(&self, comment_id: CommentId) -> Result<(), Error> {
+        self.repository.delete_comment(comment_id).await
     }
 }

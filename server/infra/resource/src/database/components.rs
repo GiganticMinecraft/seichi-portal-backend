@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        AnswerId, Comment, CommentId, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
         FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
     },
     user::models::{Role, User},
@@ -66,6 +66,7 @@ pub trait FormDatabase: Send + Sync {
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
     async fn has_permission(&self, answer_id: AnswerId, user: &User) -> Result<bool, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
+    async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
 }
 
 #[automock]
