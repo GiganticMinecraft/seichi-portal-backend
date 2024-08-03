@@ -246,7 +246,7 @@ pub async fn post_form_comment(
     }
 }
 
-pub async fn delete_form_comment(
+pub async fn delete_form_comment_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(comment_id): Path<CommentId>,
 ) -> impl IntoResponse {
