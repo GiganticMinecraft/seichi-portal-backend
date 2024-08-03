@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use typed_builder::TypedBuilder;
 use types::Resolver;
-use uuid::Uuid;
 
 use crate::{repository::form_repository::FormRepository, user::models::User};
 
@@ -39,9 +38,9 @@ pub struct FormUpdateTargets {
     #[serde(default)]
     pub description: Option<FormDescription>,
     #[serde(default)]
-    pub start_at: Option<DateTime<Utc>>,
+    pub has_response_period: Option<bool>,
     #[serde(default)]
-    pub end_at: Option<DateTime<Utc>>,
+    pub response_period: Option<ResponsePeriod>,
     #[serde(default)]
     pub webhook: Option<WebhookUrl>,
     #[serde(default)]
@@ -179,8 +178,10 @@ pub struct WebhookUrl {
 #[derive(TypedBuilder, Serialize, Deserialize, Default, Debug, PartialEq)]
 pub struct ResponsePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
     pub start_at: Option<DateTime<Utc>>,
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
     pub end_at: Option<DateTime<Utc>>,
 }
 
@@ -246,11 +247,18 @@ impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Error, Repo> f
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct PostedAnswers {
     pub id: AnswerId,
-    pub uuid: Uuid, //todo: あとでUser型に直す
+    pub user: User,
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
     pub answers: Vec<Answer>,
+    pub comments: Vec<Comment>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct PostedAnswersUpdateSchema {
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -259,9 +267,11 @@ pub struct Answer {
     pub answer: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+pub type CommentId = types::Id<Comment>;
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Comment {
-    pub answer_id: AnswerId,
+    pub comment_id: CommentId,
     pub content: String,
     pub timestamp: DateTime<Utc>,
     pub commented_by: User,
