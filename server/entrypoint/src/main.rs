@@ -7,7 +7,7 @@ use axum::{
     },
     middleware,
     response::IntoResponse,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use common::config::{ENV, HTTP};
@@ -88,11 +88,12 @@ async fn main() -> anyhow::Result<()> {
             get(get_answer_handler).patch(update_answer_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/answers/comment",
-            post(post_form_comment).delete(delete_form_handler),
-        )
+        .route("/forms/answers/comment", post(post_form_comment))
         .with_state(shared_repository.to_owned())
+        .route(
+            "/forms/answers/comments/:comment_id",
+            delete(delete_form_handler),
+        )
         .route(
             "/forms/questions",
             post(create_question_handler).put(put_question_handler),
