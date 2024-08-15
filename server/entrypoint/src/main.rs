@@ -14,10 +14,10 @@ use common::config::{ENV, HTTP};
 use presentation::{
     auth::auth,
     form_handler::{
-        create_form_handler, create_question_handler, delete_form_comment_handler,
-        delete_form_handler, form_list_handler, get_all_answers, get_answer_handler,
-        get_form_handler, get_questions_handler, post_answer_handler, post_form_comment,
-        put_question_handler, update_answer_handler, update_form_handler,
+        create_form_handler, create_label_for_answers, create_question_handler,
+        delete_form_comment_handler, delete_form_handler, form_list_handler, get_all_answers,
+        get_answer_handler, get_form_handler, get_questions_handler, post_answer_handler,
+        post_form_comment, put_question_handler, update_answer_handler, update_form_handler,
     },
     health_check_handler::health_check,
     user_handler::{get_my_user_info, patch_user_role},
@@ -83,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
             post(post_answer_handler).get(get_all_answers),
         )
         .with_state(shared_repository.to_owned())
+        .route("/forms/answers/labels", post(create_label_for_answers))
         .route(
             "/forms/answers/:answer_id",
             get(get_answer_handler).patch(update_answer_handler),

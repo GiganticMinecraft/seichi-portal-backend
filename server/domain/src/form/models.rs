@@ -283,6 +283,11 @@ pub struct CommentSchema {
     pub content: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Label {
+    pub name: String,
+}
+
 #[cfg(test)]
 mod test {
 
