@@ -153,7 +153,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS form_answer_labels(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    label TEXT NOT NULL,
+                    label TEXT NOT NULL
                 )",
             ))
             .await?;
