@@ -858,8 +858,12 @@ impl FormDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values("INSERT INTO form_labels (label) VALUES (?)", params, txn)
-                    .await?;
+                execute_and_values(
+                    "INSERT INTO label_for_form_answers (label) VALUES (?)",
+                    params,
+                    txn,
+                )
+                .await?;
 
                 Ok::<_, InfraError>(())
             })
