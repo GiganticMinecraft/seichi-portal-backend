@@ -109,7 +109,7 @@ pub async fn delete_form_handler(
 pub async fn update_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-    Query(targets): Query<FormUpdateTargets>,
+    Json(targets): Json<FormUpdateTargets>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
