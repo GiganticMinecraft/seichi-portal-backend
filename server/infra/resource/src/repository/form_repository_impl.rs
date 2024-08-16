@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
-        PostedAnswersUpdateSchema, Question, SimpleForm,
+        FormTitle, FormUpdateTargets, Label, LabelSchema, OffsetAndLimit, PostedAnswers,
+        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -179,11 +179,20 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn create_label_for_answers(&self, label: &Label) -> Result<(), Error> {
+    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error> {
         self.client
             .form()
             .create_label_for_answers(label)
             .await
             .map_err(Into::into)
+    }
+
+    async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error> {
+        stream::iter(self.client.form().get_labels_for_answers().await?)
+            .then(|label_dto| async { Ok(label_dto.try_into()?) })
+            .collect::<Vec<Result<Label, _>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<Label>, _>>()
     }
 }

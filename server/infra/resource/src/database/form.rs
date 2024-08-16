@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, Label, OffsetAndLimit,
+        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, LabelSchema, OffsetAndLimit,
         PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod,
     },
     user::models::{Role, Role::Administrator, User},
@@ -24,7 +24,10 @@ use crate::{
             query_one, query_one_and_values, ConnectionPool,
         },
     },
-    dto::{AnswerDto, CommentDto, FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto, UserDto},
+    dto::{
+        AnswerDto, CommentDto, FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto,
+        UserDto,
+    },
 };
 
 #[async_trait]
@@ -877,7 +880,7 @@ impl FormDatabase for ConnectionPool {
         .map_err(Into::into)
     }
 
-    async fn create_label_for_answers(&self, label: &Label) -> Result<(), InfraError> {
+    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), InfraError> {
         let params = [label.name.to_owned().into()];
 
         self.read_write_transaction(|txn| {
@@ -890,6 +893,27 @@ impl FormDatabase for ConnectionPool {
                 .await?;
 
                 Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let labels_rs =
+                    query_all("SELECT id, label FROM label_for_form_answers", txn).await?;
+
+                labels_rs
+                    .into_iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>(LabelDto {
+                            id: rs.try_get("", "id")?,
+                            name: rs.try_get("", "label")?,
+                        })
+                    })
+                    .collect::<Result<Vec<LabelDto>, _>>()
             })
         })
         .await

@@ -283,8 +283,16 @@ pub struct CommentSchema {
     pub content: String,
 }
 
+pub type LabelId = types::Id<Label>;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Label {
+    pub id: LabelId,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LabelSchema {
     pub name: String,
 }
 
