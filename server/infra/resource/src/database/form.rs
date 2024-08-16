@@ -16,13 +16,12 @@ use itertools::Itertools;
 use regex::Regex;
 use sea_orm::DbErr;
 
-use crate::database::connection::multiple_delete;
 use crate::{
     database::{
         components::FormDatabase,
         connection::{
-            batch_insert, execute_and_values, query_all, query_all_and_values, query_one,
-            query_one_and_values, ConnectionPool,
+            batch_insert, execute_and_values, multiple_delete, query_all, query_all_and_values,
+            query_one, query_one_and_values, ConnectionPool,
         },
     },
     dto::{AnswerDto, CommentDto, FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto, UserDto},
@@ -715,9 +714,9 @@ impl FormDatabase for ConnectionPool {
             // TODO: 現在の API の仕様上、form_choices で割り当てられているidをバックエンドから送信することはないため、
             //  ON DUPLICATE KEY UPDATE を使用せずに完全に選択肢を上書きしているが、API の仕様を変更して choice_id を公開し、
             //  それを使って選択肢の更新を行うべきか検討する
-            execute_and_values(
-                "DELETE FROM form_choices WHERE question_id = ?",
-                [last_insert_id.into()],
+            multiple_delete(
+                "DELETE FROM form_choices WHERE question_id IN (?)",
+                questions.iter().map(|question| question.id.into_inner().into()),
                 txn
             ).await?;
 
