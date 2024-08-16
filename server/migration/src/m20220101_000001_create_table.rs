@@ -148,6 +148,29 @@ impl MigrationTrait for Migration {
             ))
             .await?;
 
+        connection
+            .execute(Statement::from_string(
+                DatabaseBackend::MySql,
+                r"CREATE TABLE IF NOT EXISTS label_for_form_answers(
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    label TEXT NOT NULL
+                )",
+            ))
+            .await?;
+
+        connection
+            .execute(Statement::from_string(
+                DatabaseBackend::MySql,
+                r"CREATE TABLE IF NOT EXISTS label_settings_for_form_answers(
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    answer_id INT NOT NULL,
+                    label_id INT NOT NULL,
+                    FOREIGN KEY fk_label_settings_for_form_answers_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+                    FOREIGN KEY fk_label_settings_for_form_answers_label_id(label_id) REFERENCES label_for_form_answers(id) ON DELETE CASCADE
+                )",
+            ))
+            .await?;
+
         Ok(())
     }
 
@@ -168,7 +191,9 @@ impl MigrationTrait for Migration {
                         answers,
                         real_answers,
                         default_answer_titles,
-                        form_answer_comments;
+                        form_answer_comments,
+                        form_answer_labels,
+                        form_answer_label_settings;
                     ",
             ))
             .await?;

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        FormTitle, FormUpdateTargets, Label, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
         PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
@@ -175,6 +175,14 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         self.client
             .form()
             .delete_comment(comment_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn create_label_for_answers(&self, label: &Label) -> Result<(), Error> {
+        self.client
+            .form()
+            .create_label_for_answers(label)
             .await
             .map_err(Into::into)
     }
