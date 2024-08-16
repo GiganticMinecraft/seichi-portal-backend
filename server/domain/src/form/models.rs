@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use typed_builder::TypedBuilder;
 use types::Resolver;
-use uuid::Uuid;
 
 use crate::{repository::form_repository::FormRepository, user::models::User};
 
@@ -246,7 +245,7 @@ impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Error, Repo> f
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct PostedAnswers {
     pub id: AnswerId,
-    pub uuid: Uuid, //todo: あとでUser型に直す
+    pub user: User,
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
