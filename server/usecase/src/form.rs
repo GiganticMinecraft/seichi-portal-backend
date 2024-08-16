@@ -1,7 +1,7 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
+        AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
         FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
         SimpleForm,
     },
@@ -9,7 +9,7 @@ use domain::{
     user::models::User,
 };
 use errors::{
-    usecase::UseCaseError::{DoNotHavePermissionToPostFormComment, OutOfPeriod},
+    usecase::UseCaseError::{AnswerNotFound, DoNotHavePermissionToPostFormComment, OutOfPeriod},
     Error,
 };
 use types::Resolver;
@@ -82,6 +82,14 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             self.repository.post_answer(user, answers).await
         } else {
             Err(Error::from(OutOfPeriod))
+        }
+    }
+
+    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<PostedAnswers, Error> {
+        if let Some(posted_answers) = self.repository.get_answers(answer_id).await? {
+            Ok(posted_answers)
+        } else {
+            Err(Error::from(AnswerNotFound))
         }
     }
 
