@@ -20,8 +20,8 @@ use crate::{
     database::{
         components::FormDatabase,
         connection::{
-            batch_insert, execute_and_values, query_all, query_all_and_values, query_one,
-            query_one_and_values, ConnectionPool,
+            batch_insert, execute_and_values, multiple_delete, query_all, query_all_and_values,
+            query_one, query_one_and_values, ConnectionPool,
         },
     },
     dto::{AnswerDto, CommentDto, FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto, UserDto},
@@ -714,9 +714,9 @@ impl FormDatabase for ConnectionPool {
             // TODO: 現在の API の仕様上、form_choices で割り当てられているidをバックエンドから送信することはないため、
             //  ON DUPLICATE KEY UPDATE を使用せずに完全に選択肢を上書きしているが、API の仕様を変更して choice_id を公開し、
             //  それを使って選択肢の更新を行うべきか検討する
-            execute_and_values(
-                "DELETE FROM form_choices WHERE question_id = ?",
-                [last_insert_id.into()],
+            multiple_delete(
+                "DELETE FROM form_choices WHERE question_id IN (?)",
+                questions.iter().map(|question| question.id.into_inner().into()),
                 txn
             ).await?;
 
@@ -726,6 +726,29 @@ impl FormDatabase for ConnectionPool {
                 txn
             )
                 .await?;
+
+            let form_question_ids = query_all_and_values(
+                r"SELECT question_id FROM form_questions WHERE form_id = ?",
+                [form_id.into_inner().into()],
+                txn
+            ).await?;
+
+            let already_exists_question_ids = form_question_ids
+                .into_iter()
+                .map(|rs| rs.try_get::<i32>("", "question_id"))
+                .collect::<Result<Vec<_>, DbErr>>()?;
+
+            let delete_target_question_ids = already_exists_question_ids
+                .into_iter()
+                .filter(|question_id| {
+                    !questions.iter().any(|question| question.id.into_inner() == *question_id)
+                }).collect_vec();
+
+            multiple_delete(
+                r"DELETE FROM form_questions WHERE question_id IN (?)",
+                delete_target_question_ids.into_iter().map(|id| id.into()),
+                txn
+            ).await?;
 
             Ok::<_, InfraError>(())
         })).await.map_err(Into::into)
