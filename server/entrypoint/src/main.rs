@@ -88,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
             "/forms/answers/labels",
             get(get_labels_for_answers).post(create_label_for_answers),
         )
+        .with_state(shared_repository.to_owned())
         .route(
             "/forms/answers/:answer_id",
             get(get_answer_handler).patch(update_answer_handler),
