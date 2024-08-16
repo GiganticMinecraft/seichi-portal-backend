@@ -2,8 +2,8 @@ use chrono::Utc;
 use domain::{
     form::models::{
         AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema, Question,
-        SimpleForm,
+        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -95,6 +95,16 @@ impl<R: FormRepository> FormUseCase<'_, R> {
 
     pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
         self.repository.get_all_answers().await
+    }
+
+    pub async fn update_answer_meta(
+        &self,
+        answer_id: AnswerId,
+        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+    ) -> Result<(), Error> {
+        self.repository
+            .update_answer_meta(answer_id, posted_answers_update_schema)
+            .await
     }
 
     pub async fn create_questions(

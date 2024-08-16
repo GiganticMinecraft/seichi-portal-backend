@@ -6,6 +6,7 @@ use domain::{
     form::models::{
         AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
         FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
+        PostedAnswersUpdateSchema,
     },
     user::models::{Role, Role::Administrator, User},
 };
@@ -498,6 +499,32 @@ impl FormDatabase for ConnectionPool {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn update_answer_meta(
+        &self,
+        answer_id: AnswerId,
+        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+    ) -> Result<(), InfraError> {
+        let title = posted_answers_update_schema.title.to_owned();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                if let Some(title) = title {
+                    execute_and_values(
+                        r"UPDATE answers SET title = ? WHERE id = ?",
+                        [title.into(), answer_id.into_inner().into()],
+                        txn,
+                    )
+                    .await?;
+                }
+
+                Ok::<_, InfraError>(())
             })
         })
         .await
