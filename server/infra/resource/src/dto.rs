@@ -136,6 +136,47 @@ impl TryFrom<AnswerDto> for domain::form::models::Answer {
     }
 }
 
+pub struct UserDto {
+    pub name: String,
+    pub id: Uuid,
+    pub role: Role,
+}
+
+impl TryFrom<UserDto> for User {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(UserDto { name, id, role }: UserDto) -> Result<Self, Self::Error> {
+        Ok(User { name, id, role })
+    }
+}
+
+pub struct CommentDto {
+    pub comment_id: i32,
+    pub content: String,
+    pub timestamp: DateTime<Utc>,
+    pub commented_by: UserDto,
+}
+
+impl TryFrom<CommentDto> for domain::form::models::Comment {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        CommentDto {
+            comment_id,
+            content,
+            timestamp,
+            commented_by,
+        }: CommentDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(domain::form::models::Comment {
+            comment_id: comment_id.into(),
+            content,
+            timestamp,
+            commented_by: commented_by.try_into()?,
+        })
+    }
+}
+
 pub struct PostedAnswersDto {
     pub id: i32,
     pub user_name: String,
@@ -145,6 +186,7 @@ pub struct PostedAnswersDto {
     pub form_id: i32,
     pub title: Option<String>,
     pub answers: Vec<AnswerDto>,
+    pub comments: Vec<CommentDto>,
 }
 
 impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
@@ -160,6 +202,7 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             form_id,
             title,
             answers,
+            comments,
         }: PostedAnswersDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::PostedAnswers {
@@ -175,6 +218,10 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             answers: answers
                 .into_iter()
                 .map(|answer| answer.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+            comments: comments
+                .into_iter()
+                .map(|comment| comment.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
         })
     }

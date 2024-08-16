@@ -11,7 +11,7 @@ use domain::{
     user::models::{Role, Role::Administrator, User},
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
-use futures::future::try_join;
+use futures::{future::try_join, try_join};
 use itertools::Itertools;
 use regex::Regex;
 use sea_orm::DbErr;
@@ -24,7 +24,7 @@ use crate::{
             query_one_and_values, ConnectionPool,
         },
     },
-    dto::{AnswerDto, FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto},
+    dto::{AnswerDto, CommentDto, FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto, UserDto},
 };
 
 #[async_trait]
@@ -422,11 +422,28 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<Option<PostedAnswersDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let real_answers = query_all(
+                let fetch_real_answers = query_all(
                     "SELECT answer_id, question_id, answer FROM real_answers",
                     txn,
-                )
-                .await?;
+                );
+
+                let fetch_answer_query_result_opt = query_one_and_values(
+                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
+                        INNER JOIN users ON answers.user = users.id
+                        WHERE answers.id = ?",
+                    [answer_id.into_inner().into()],
+                    txn,
+                );
+
+                let fetch_comments = query_all_and_values(
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                        INNER JOIN users ON form_answer_comments.commented_by = users.id
+                        WHERE answer_id = ?",
+                    [answer_id.into_inner().into()],
+                    txn
+                );
+
+                let (answer_query_result_opt, real_answers, comments) = try_join!(fetch_answer_query_result_opt, fetch_real_answers, fetch_comments)?;
 
                 let answers = real_answers
                     .iter()
@@ -438,14 +455,21 @@ impl FormDatabase for ConnectionPool {
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let answer_query_result_opt = query_one_and_values(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
-                        INNER JOIN users ON answers.user = users.id
-                        WHERE answers.id = ?",
-                    [answer_id.into_inner().into()],
-                    txn,
-                )
-                .await?;
+                let comments = comments.
+                    iter()
+                    .map(|rs| {
+                        Ok::<CommentDto, InfraError>(CommentDto {
+                            comment_id: rs.try_get("", "comment_id")?,
+                            content: rs.try_get("", "content")?,
+                            timestamp: rs.try_get("", "timestamp")?,
+                            commented_by: UserDto {
+                                name: rs.try_get("", "name")?,
+                                id: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                                role: Role::from_str(&rs.try_get::<String>("", "role")?)?
+                            },
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 answer_query_result_opt
                     .map(|rs| {
@@ -458,6 +482,7 @@ impl FormDatabase for ConnectionPool {
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             answers,
+                            comments,
                         })
                     })
                     .transpose()
@@ -471,19 +496,25 @@ impl FormDatabase for ConnectionPool {
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let answers = query_all(
+                let fetch_answers = query_all(
                     r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
                     txn,
-                )
-                .await?;
+                );
 
-                let real_answers = query_all(
+                let fetch_real_answers = query_all(
                     "SELECT answer_id, question_id, answer FROM real_answers",
                     txn,
-                )
-                .await?;
+                );
+
+                let fetch_comments = query_all(
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                        INNER JOIN users ON form_answer_comments.commented_by = users.id",
+                    txn
+                );
+
+                let (answers, real_answers, comments) = try_join!(fetch_answers, fetch_real_answers, fetch_comments)?;
 
                 answers
                     .iter()
@@ -503,6 +534,25 @@ impl FormDatabase for ConnectionPool {
                             })
                             .collect::<Result<Vec<_>, _>>()?;
 
+                        let comments = comments
+                            .iter()
+                            .filter(|rs| {
+                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
+                            })
+                            .map(|rs|{
+                                Ok::<CommentDto, InfraError>(CommentDto {
+                                    comment_id: rs.try_get("", "comment_id")?,
+                                    content: rs.try_get("", "content")?,
+                                    timestamp: rs.try_get("", "timestamp")?,
+                                    commented_by: UserDto {
+                                        name: rs.try_get("", "name")?,
+                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                                        role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                                    },
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
@@ -512,6 +562,7 @@ impl FormDatabase for ConnectionPool {
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             answers,
+                            comments,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -761,9 +812,9 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn post_comment(&self, comment: &Comment) -> Result<(), InfraError> {
+    async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError> {
         let params = [
-            comment.answer_id.into_inner().into(),
+            answer_id.into_inner().into(),
             comment.content.to_owned().into(),
             comment.commented_by.id.to_string().into(),
         ];

@@ -252,6 +252,7 @@ pub struct PostedAnswers {
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
     pub answers: Vec<Answer>,
+    pub comments: Vec<Comment>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -266,9 +267,11 @@ pub struct Answer {
     pub answer: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+pub type CommentId = types::Id<Comment>;
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Comment {
-    pub answer_id: AnswerId,
+    pub comment_id: CommentId,
     pub content: String,
     pub timestamp: DateTime<Utc>,
     pub commented_by: User,
