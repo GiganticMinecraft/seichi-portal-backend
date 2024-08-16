@@ -422,8 +422,9 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<Option<PostedAnswersDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let fetch_real_answers = query_all(
-                    "SELECT answer_id, question_id, answer FROM real_answers",
+                let fetch_real_answers = query_all_and_values(
+                    "SELECT answer_id, question_id, answer FROM real_answers WHERE answer_id = ?",
+                    [answer_id.into_inner().into()],
                     txn,
                 );
 
