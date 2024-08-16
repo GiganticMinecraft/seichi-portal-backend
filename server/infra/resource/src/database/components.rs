@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, Label, OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
+        FormUpdateTargets, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
+        PostedAnswersUpdateSchema,
     },
     user::models::{Role, User},
 };
@@ -10,7 +11,7 @@ use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::dto::{FormDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
+use crate::dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -67,7 +68,8 @@ pub trait FormDatabase: Send + Sync {
     async fn has_permission(&self, answer_id: AnswerId, user: &User) -> Result<bool, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
-    async fn create_label_for_answers(&self, label: &Label) -> Result<(), InfraError>;
+    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), InfraError>;
+    async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError>;
 }
 
 #[automock]

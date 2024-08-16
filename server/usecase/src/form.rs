@@ -2,8 +2,8 @@ use chrono::Utc;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
-        PostedAnswersUpdateSchema, Question, SimpleForm,
+        FormTitle, FormUpdateTargets, Label, LabelSchema, OffsetAndLimit, PostedAnswers,
+        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -135,7 +135,11 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.delete_comment(comment_id).await
     }
 
-    pub async fn create_label_for_answers(&self, label: &Label) -> Result<(), Error> {
+    pub async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error> {
         self.repository.create_label_for_answers(label).await
+    }
+
+    pub async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error> {
+        self.repository.get_labels_for_answers().await
     }
 }

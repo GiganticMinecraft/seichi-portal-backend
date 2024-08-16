@@ -226,3 +226,19 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
         })
     }
 }
+
+pub struct LabelDto {
+    pub id: i32,
+    pub name: String,
+}
+
+impl TryFrom<LabelDto> for domain::form::models::Label {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(LabelDto { id, name }: LabelDto) -> Result<Self, Self::Error> {
+        Ok(domain::form::models::Label {
+            id: id.into(),
+            name,
+        })
+    }
+}
