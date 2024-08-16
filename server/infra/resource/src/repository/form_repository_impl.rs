@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, Form, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
+        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
+        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswers, PostedAnswersSchema,
         PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
@@ -167,6 +167,14 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         self.client
             .form()
             .post_comment(answer_id, comment)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_comment(&self, comment_id: CommentId) -> Result<(), Error> {
+        self.client
+            .form()
+            .delete_comment(comment_id)
             .await
             .map_err(Into::into)
     }

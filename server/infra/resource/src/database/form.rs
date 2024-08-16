@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
-        AnswerId, Comment, DefaultAnswerTitle, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, OffsetAndLimit, PostedAnswersSchema,
-        PostedAnswersUpdateSchema, ResponsePeriod,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
+        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, OffsetAndLimit,
+        PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod,
     },
     user::models::{Role, Role::Administrator, User},
 };
@@ -825,6 +825,23 @@ impl FormDatabase for ConnectionPool {
                     r"INSERT INTO form_answer_comments (answer_id, commented_by, content)
                         SELECT ?, users.id, ? FROM users WHERE uuid = ?",
                     params,
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "DELETE FROM form_answer_comments WHERE id = ?",
+                    [comment_id.into_inner().into()],
                     txn,
                 )
                 .await?;
