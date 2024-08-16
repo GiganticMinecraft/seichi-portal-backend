@@ -214,3 +214,31 @@ where
         ))
     }
 }
+
+pub async fn multiple_delete<I>(
+    sql: &str,
+    params: I,
+    transaction: &DatabaseTransaction,
+) -> Result<Option<ExecResult>, DbErr>
+where
+    I: IntoIterator<Item = Value>,
+{
+    let params_vec = params.into_iter().collect::<Vec<_>>();
+
+    if params_vec.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(
+            transaction
+                .execute(Statement::from_sql_and_values(
+                    DatabaseBackend::MySql,
+                    sql.replace(
+                        "(?)",
+                        format!("({})", &vec!["?"; params_vec.len()].iter().join(", ")).as_str(),
+                    ),
+                    params_vec,
+                ))
+                .await?,
+        ))
+    }
+}

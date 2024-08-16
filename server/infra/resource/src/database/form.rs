@@ -16,6 +16,7 @@ use itertools::Itertools;
 use regex::Regex;
 use sea_orm::DbErr;
 
+use crate::database::connection::multiple_delete;
 use crate::{
     database::{
         components::FormDatabase,
@@ -726,6 +727,29 @@ impl FormDatabase for ConnectionPool {
                 txn
             )
                 .await?;
+
+            let form_question_ids = query_all_and_values(
+                r"SELECT question_id FROM form_questions WHERE form_id = ?",
+                [form_id.into_inner().into()],
+                txn
+            ).await?;
+
+            let already_exists_question_ids = form_question_ids
+                .into_iter()
+                .map(|rs| rs.try_get::<i32>("", "question_id"))
+                .collect::<Result<Vec<_>, DbErr>>()?;
+
+            let delete_target_question_ids = already_exists_question_ids
+                .into_iter()
+                .filter(|question_id| {
+                    !questions.iter().any(|question| question.id.into_inner() == *question_id)
+                }).collect_vec();
+
+            multiple_delete(
+                r"DELETE FROM form_questions WHERE question_id IN (?)",
+                delete_target_question_ids.into_iter().map(|id| id.into()),
+                txn
+            ).await?;
 
             Ok::<_, InfraError>(())
         })).await.map_err(Into::into)
