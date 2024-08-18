@@ -3,6 +3,7 @@ use std::{fmt::Debug, future::Future, pin::Pin};
 use async_trait::async_trait;
 use itertools::Itertools;
 use migration::MigratorTrait;
+use redis::Client;
 use regex::Regex;
 use sea_orm::{
     AccessMode, ConnectionTrait, Database, DatabaseBackend, DatabaseConnection,
@@ -12,7 +13,7 @@ use sea_orm::{
 
 use crate::database::{
     components::DatabaseComponents,
-    config::{MySQL, MYSQL},
+    config::{MySQL, Redis, MYSQL, REDIS},
 };
 
 #[derive(Clone, Debug)]
@@ -241,4 +242,14 @@ where
                 .await?,
         ))
     }
+}
+
+pub async fn redis_connection() -> Client {
+    let Redis { host, port } = &*REDIS;
+
+    let redis_url = format!("redis://{host}:{port}/");
+
+    let client_result = Client::open(redis_url);
+
+    client_result.unwrap_or_else(|_| panic!("Cannot establish connect to Redis. {host}"))
 }
