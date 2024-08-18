@@ -25,6 +25,11 @@ pub enum InfraError {
         #[from]
         source: strum::ParseError,
     },
+    #[error("Redis Error: {}", .source)]
+    Redis {
+        #[from]
+        source: redis::RedisError,
+    },
 }
 
 impl<E> From<sea_orm::TransactionError<E>> for InfraError
