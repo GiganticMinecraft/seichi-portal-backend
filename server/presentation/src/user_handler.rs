@@ -126,7 +126,21 @@ pub async fn end_session(
     let session_id = auth.token();
 
     match user_use_case.end_user_session(session_id.to_string()).await {
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => (
+            StatusCode::OK,
+            [(
+                header::SET_COOKIE,
+                HeaderValue::from_str(
+                    format!(
+                        "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age=0; Path=/; Secure; \
+                         HttpOnly"
+                    )
+                    .as_str(),
+                )
+                .unwrap(),
+            )],
+        )
+            .into_response(),
         Err(err) => {
             tracing::error!("{}", err);
             (
