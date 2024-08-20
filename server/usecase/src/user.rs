@@ -47,7 +47,16 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         session_id: String,
     ) -> Result<Option<User>, Error> {
-        self.repository.fetch_user_by_session_id(session_id).await
+        let fetched_user_uuid = self
+            .repository
+            .fetch_user_by_session_id(session_id)
+            .await?
+            .map(|user| user.id);
+
+        match fetched_user_uuid {
+            Some(uuid) => self.find_by(uuid).await,
+            None => Ok(None),
+        }
     }
 
     pub async fn update_user_session(&self, session_id: String) -> Result<(), Error> {
