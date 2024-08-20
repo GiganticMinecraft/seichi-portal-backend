@@ -23,7 +23,16 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     }
 
     pub async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error> {
-        self.repository.fetch_user_by_xbox_token(token).await
+        let fetched_user_uuid = self
+            .repository
+            .fetch_user_by_xbox_token(token)
+            .await?
+            .map(|user| user.id);
+
+        match fetched_user_uuid {
+            Some(uuid) => self.find_by(uuid).await,
+            None => Ok(None),
+        }
     }
 
     pub async fn start_user_session(
