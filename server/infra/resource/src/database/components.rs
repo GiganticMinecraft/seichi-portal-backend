@@ -78,4 +78,15 @@ pub trait UserDatabase: Send + Sync {
     async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, InfraError>;
     async fn upsert_user(&self, user: &User) -> Result<(), InfraError>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
+    async fn start_user_session(
+        &self,
+        xbox_token: String,
+        user: &User,
+    ) -> Result<String, InfraError>;
+    async fn fetch_user_by_session_id(
+        &self,
+        session_id: String,
+    ) -> Result<Option<User>, InfraError>;
+    async fn update_user_session(&self, session_id: String) -> Result<(), InfraError>;
+    async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
 }
