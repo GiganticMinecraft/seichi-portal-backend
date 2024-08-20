@@ -28,7 +28,8 @@ pub async fn auth(
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if request.uri().path() == "/session" {
+    let ignore_auth_paths = ["/session"];
+    if ignore_auth_paths.contains(&request.uri().path()) {
         return Ok(next.run(request).await);
     }
 
