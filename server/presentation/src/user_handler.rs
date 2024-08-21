@@ -10,7 +10,7 @@ use axum_extra::{
 };
 use domain::{
     repository::Repositories,
-    user::models::{RoleQuery, User},
+    user::models::{RoleQuery, User, UserSessionExpires},
 };
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -54,6 +54,7 @@ pub async fn patch_user_role(
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Json(expires): Json<UserSessionExpires>,
 ) -> impl IntoResponse {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
@@ -66,29 +67,27 @@ pub async fn start_session(
         .await
     {
         Ok(Some(user)) => {
+            let expires = expires.expires;
+
             match user_use_case
                 .start_user_session(token.to_string(), &user)
                 .await
             {
-                Ok(session_id) => {
-                    let half_an_hour = 1800;
-
-                    (
-                        StatusCode::OK,
-                        [(
-                            header::SET_COOKIE,
-                            HeaderValue::from_str(
-                                format!(
-                                    "SEICHI_PORTAL__SESSION_ID={session_id}; \
-                                     Max-Age={half_an_hour}; Path=/; Secure; HttpOnly"
-                                )
-                                .as_str(),
+                Ok(session_id) => (
+                    StatusCode::OK,
+                    [(
+                        header::SET_COOKIE,
+                        HeaderValue::from_str(
+                            format!(
+                                "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={expires}; \
+                                 Path=/; Secure; HttpOnly"
                             )
-                            .unwrap(),
-                        )],
-                    )
-                        .into_response()
-                }
+                            .as_str(),
+                        )
+                        .unwrap(),
+                    )],
+                )
+                    .into_response(),
                 Err(err) => {
                     tracing::error!("{}", err);
                     (
