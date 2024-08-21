@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::State,
-    http::{header, HeaderValue, Method, Request, StatusCode},
+    http::{Method, Request, StatusCode},
     middleware::Next,
     response::Response,
 };
@@ -39,22 +39,19 @@ pub async fn auth(
 
     let session_id = auth.token();
 
-    let (user, session_id) = if ENV.name == "local" && session_id == "debug_user" {
-        (
-            User {
-                name: "debug_user".to_string(),
-                id: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
-                role: Administrator,
-            },
-            "debug_user".to_string(),
-        )
+    let user = if ENV.name == "local" && session_id == "debug_user" {
+        User {
+            name: "debug_user".to_string(),
+            id: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
+            role: Administrator,
+        }
     } else {
         match user_use_case
             .fetch_user_by_session_id(session_id.to_string())
             .await
             .map_err(|_| StatusCode::UNAUTHORIZED)?
         {
-            Some(user) => (user, session_id.to_string()),
+            Some(user) => user,
             None => return Err(StatusCode::UNAUTHORIZED),
         }
     };
@@ -91,17 +88,7 @@ pub async fn auth(
         Ok(_) => {
             request.extensions_mut().insert(user);
 
-            let mut response = next.run(request).await;
-            let half_an_hour = 1800;
-
-            response.headers_mut().insert(
-                header::SET_COOKIE,
-                HeaderValue::from_str(&format!(
-                    "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={half_an_hour}; Path=/; \
-                     Secure; HttpOnly"
-                ))
-                .unwrap(),
-            );
+            let response = next.run(request).await;
             Ok(response)
         }
         Err(err) => {
