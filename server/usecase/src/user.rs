@@ -59,10 +59,6 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         }
     }
 
-    pub async fn update_user_session(&self, session_id: String) -> Result<(), Error> {
-        self.repository.update_user_session(session_id).await
-    }
-
     pub async fn end_user_session(&self, session_id: String) -> Result<(), Error> {
         self.repository.end_user_session(session_id).await
     }

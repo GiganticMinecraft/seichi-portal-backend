@@ -85,14 +85,6 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn update_user_session(&self, session_id: String) -> Result<(), Error> {
-        self.client
-            .user()
-            .update_user_session(session_id)
-            .await
-            .map_err(Into::into)
-    }
-
     async fn end_user_session(&self, session_id: String) -> Result<(), Error> {
         self.client
             .user()

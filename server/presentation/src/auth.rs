@@ -59,11 +59,6 @@ pub async fn auth(
         }
     };
 
-    user_use_case
-        .update_user_session(session_id.to_string())
-        .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
-
     let static_endpoints_allowed_for_standard_users = [
         (&Method::GET, "/forms"),
         (&Method::POST, "/forms/answers"),
@@ -84,7 +79,7 @@ pub async fn auth(
 
     if user.role == StandardUser
         && !static_endpoints_allowed_for_standard_users
-            .contains(&(request.method(), request.uri().path()))
+        .contains(&(request.method(), request.uri().path()))
         && is_not_allow_dynamic_endpoint
     {
         // NOTE: standard_user_endpointsに存在しないMethodとエンドポイントに
@@ -105,7 +100,7 @@ pub async fn auth(
                     "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={half_an_hour}; Path=/; \
                      Secure; HttpOnly"
                 ))
-                .unwrap(),
+                    .unwrap(),
             );
             Ok(response)
         }

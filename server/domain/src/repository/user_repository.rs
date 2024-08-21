@@ -14,6 +14,5 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error>;
     async fn start_user_session(&self, xbox_token: String, user: &User) -> Result<String, Error>;
     async fn fetch_user_by_session_id(&self, session_id: String) -> Result<Option<User>, Error>;
-    async fn update_user_session(&self, session_id: String) -> Result<(), Error>;
     async fn end_user_session(&self, session_id: String) -> Result<(), Error>;
 }
