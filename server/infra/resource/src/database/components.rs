@@ -82,6 +82,7 @@ pub trait UserDatabase: Send + Sync {
         &self,
         xbox_token: String,
         user: &User,
+        expires: i32,
     ) -> Result<String, InfraError>;
     async fn fetch_user_by_session_id(
         &self,

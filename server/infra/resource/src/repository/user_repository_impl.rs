@@ -69,10 +69,15 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         })
     }
 
-    async fn start_user_session(&self, xbox_token: String, user: &User) -> Result<String, Error> {
+    async fn start_user_session(
+        &self,
+        xbox_token: String,
+        user: &User,
+        expires: i32,
+    ) -> Result<String, Error> {
         self.client
             .user()
-            .start_user_session(xbox_token, user)
+            .start_user_session(xbox_token, user, expires)
             .await
             .map_err(Into::into)
     }

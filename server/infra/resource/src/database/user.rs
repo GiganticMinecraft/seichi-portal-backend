@@ -88,6 +88,7 @@ impl UserDatabase for ConnectionPool {
         &self,
         xbox_token: String,
         user: &User,
+        expires: i32,
     ) -> Result<String, InfraError> {
         let now = Utc::now().timestamp_millis();
         let session_id = digest(format!("{xbox_token}{now}"));
@@ -96,8 +97,7 @@ impl UserDatabase for ConnectionPool {
 
         redis_connection.json_set(&session_id, "$", user)?;
 
-        let half_an_hour = 1800;
-        redis_connection.expire(&session_id, half_an_hour)?;
+        redis_connection.expire(&session_id, expires as i64)?;
         Ok(session_id)
     }
 

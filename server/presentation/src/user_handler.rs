@@ -70,7 +70,7 @@ pub async fn start_session(
             let expires = expires.expires;
 
             match user_use_case
-                .start_user_session(token.to_string(), &user)
+                .start_user_session(token.to_string(), &user, expires)
                 .await
             {
                 Ok(session_id) => (
