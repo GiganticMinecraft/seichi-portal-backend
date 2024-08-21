@@ -1,13 +1,16 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use domain::user::models::{Role, User};
 use errors::infra::InfraError;
+use redis::{Commands, JsonCommands};
+use sha256::digest;
 use uuid::Uuid;
 
 use crate::database::{
     components::UserDatabase,
-    connection::{execute_and_values, query_one_and_values, ConnectionPool},
+    connection::{execute_and_values, query_one_and_values, redis_connection, ConnectionPool},
 };
 
 #[async_trait]
@@ -79,5 +82,46 @@ impl UserDatabase for ConnectionPool {
         })
         .await
         .map_err(Into::into)
+    }
+
+    async fn start_user_session(
+        &self,
+        xbox_token: String,
+        user: &User,
+        expires: i32,
+    ) -> Result<String, InfraError> {
+        let now = Utc::now().timestamp_millis();
+        let session_id = digest(format!("{xbox_token}{now}"));
+
+        let mut redis_connection = redis_connection().await;
+
+        redis_connection.json_set(&session_id, "$", user)?;
+
+        redis_connection.expire(&session_id, expires as i64)?;
+        Ok(session_id)
+    }
+
+    async fn fetch_user_by_session_id(
+        &self,
+        session_id: String,
+    ) -> Result<Option<User>, InfraError> {
+        let mut redis_connection = redis_connection().await;
+
+        let user = serde_json::from_str::<Vec<User>>(
+            &redis_connection.json_get::<&String, &str, String>(&session_id, "$")?,
+        )
+        .map(|users| users.into_iter().nth(0))
+        .ok()
+        .flatten();
+
+        Ok(user)
+    }
+
+    async fn end_user_session(&self, session_id: String) -> Result<(), InfraError> {
+        let mut redis_connection = redis_connection().await;
+
+        redis_connection.del(&session_id)?;
+
+        Ok(())
     }
 }

@@ -11,3 +11,11 @@ pub struct MySQL {
 }
 
 pub static MYSQL: Lazy<MySQL> = Lazy::new(|| envy::prefixed("MYSQL_").from_env::<MySQL>().unwrap());
+
+#[derive(Deserialize, Debug)]
+pub struct Redis {
+    pub host: String,
+    pub port: String,
+}
+
+pub static REDIS: Lazy<Redis> = Lazy::new(|| envy::prefixed("REDIS_").from_env::<Redis>().unwrap());

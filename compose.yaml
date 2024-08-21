@@ -16,6 +16,14 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     restart: always
+  redis:
+    image: redislabs/rejson:2.8.3
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - seichi_portal
+    restart: always
 networks:
   seichi_portal:
     name: seichi-portal-backend-network

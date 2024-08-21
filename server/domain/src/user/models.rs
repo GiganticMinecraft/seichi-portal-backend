@@ -25,3 +25,8 @@ pub enum Role {
 pub struct RoleQuery {
     pub role: Role,
 }
+
+#[derive(Deserialize)]
+pub struct UserSessionExpires {
+    pub expires: i32,
+}

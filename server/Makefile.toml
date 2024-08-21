@@ -3,31 +3,30 @@ skip_core_tasks = true
 default_to_workspace = false
 
 [env]
-__CARGO_FIX_YOLO=1
+__CARGO_FIX_YOLO = 1
 REPOSITORY_ROOT = { script = ["git rev-parse --show-superproject-working-tree --show-toplevel"] }
 
 [tasks.generate-migrate-file]
 command = "sea-orm-cli"
-args = [ "migrate", "generate", "${@}" ]
+args = ["migrate", "generate", "${@}"]
 
 [tasks.fix]
-toolchain = "nightly"
 command = "cargo"
-args = [ "clippy", "--fix", "--allow-dirty", "--allow-staged" ]
+args = ["clippy", "--fix", "--allow-dirty", "--allow-staged"]
 
 [tasks.test]
 install_crate = { crate_name = "cargo-nextst" }
 command = "cargo"
-args = [ "nextest", "run" ]
+args = ["nextest", "run"]
 
 [tasks.lint]
 command = "cargo"
-args = [ "clippy", "--", "-D", "warnings" ]
+args = ["clippy", "--", "-D", "warnings"]
 
 [tasks.format]
 toolchain = "nightly"
 command = "cargo"
-args = [ "fmt", "--", "--config-path=${REPOSITORY_ROOT}/.cargo-husky/hooks/rustfmt.toml", "--emit=files" ]
+args = ["fmt", "--", "--config-path=${REPOSITORY_ROOT}/.cargo-husky/hooks/rustfmt.toml", "--emit=files"]
 
 [tasks.pretty]
 dependencies = ["fix", "test", "lint", "format"]
@@ -36,7 +35,7 @@ dependencies = ["fix", "test", "lint", "format"]
 install_crate = { crate_name = "cargo-udeps" }
 toolchain = "nightly"
 command = "cargo"
-args = [ "udeps", "--all-targets", "--all-features" ]
+args = ["udeps", "--all-targets", "--all-features"]
 
 [tasks.sort]
 install_crate = { crate_name = "cargo-sort" }

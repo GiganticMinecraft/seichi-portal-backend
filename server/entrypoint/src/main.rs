@@ -11,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use common::config::{ENV, HTTP};
+use hyper::header::SET_COOKIE;
 use presentation::{
     auth::auth,
     form_handler::{
@@ -21,7 +22,7 @@ use presentation::{
         update_form_handler,
     },
     health_check_handler::health_check,
-    user_handler::{get_my_user_info, patch_user_role},
+    user_handler::{end_session, get_my_user_info, patch_user_role, start_session},
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -109,6 +110,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/users/:uuid", patch(patch_user_role))
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
+        .route("/session", post(start_session).delete(end_session))
+        .with_state(shared_repository.to_owned())
         .fallback(not_found_handler)
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(
@@ -126,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
                 ])
                 .allow_origin(Any) // todo: allow_originを制限する
                 .allow_headers([CONTENT_TYPE, AUTHORIZATION])
-                .expose_headers([LOCATION]),
+                .expose_headers([LOCATION, SET_COOKIE]),
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], HTTP.port.parse().unwrap()));

@@ -11,14 +11,13 @@ use axum_extra::{
 };
 use common::config::ENV;
 use domain::{
-    repository::{user_repository::UserRepository, Repositories},
+    repository::Repositories,
     user::models::{
         Role::{Administrator, StandardUser},
         User,
     },
 };
 use regex::Regex;
-use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use resource::repository::RealInfrastructureRepository;
 use usecase::user::UserUseCase;
 use uuid::uuid;
@@ -29,45 +28,32 @@ pub async fn auth(
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let token = auth.token();
+    let ignore_auth_paths = ["/session"];
+    if ignore_auth_paths.contains(&request.uri().path()) {
+        return Ok(next.run(request).await);
+    }
 
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    let user = if ENV.name == "local" && token == "debug_user" {
+    let session_id = auth.token();
+
+    let user = if ENV.name == "local" && session_id == "debug_user" {
         User {
-            name: "test_user".to_string(),
+            name: "debug_user".to_string(),
             id: uuid!("478911be-3356-46c1-936e-fb14b71bf282"),
             role: Administrator,
         }
     } else {
-        let client = reqwest::Client::new();
-
-        let response = client
-            .get("https://api.minecraftservices.com/minecraft/profile")
-            .bearer_auth(token)
-            .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-            .header(ACCEPT, HeaderValue::from_static("application/json"))
-            .send()
-            .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-        let parsed_user = serde_json::from_str::<User>(
-            response
-                .text()
-                .await
-                .map_err(|_| StatusCode::UNAUTHORIZED)?
-                .as_str(),
-        )
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-        user_use_case
-            .repository
-            .find_by(parsed_user.id)
+        match user_use_case
+            .fetch_user_by_session_id(session_id.to_string())
             .await
             .map_err(|_| StatusCode::UNAUTHORIZED)?
-            .map_or(parsed_user, |user| user)
+        {
+            Some(user) => user,
+            None => return Err(StatusCode::UNAUTHORIZED),
+        }
     };
 
     let static_endpoints_allowed_for_standard_users = [
@@ -98,9 +84,10 @@ pub async fn auth(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    match user_use_case.repository.upsert_user(&user).await {
+    match user_use_case.upsert_user(&user).await {
         Ok(_) => {
             request.extensions_mut().insert(user);
+
             let response = next.run(request).await;
             Ok(response)
         }

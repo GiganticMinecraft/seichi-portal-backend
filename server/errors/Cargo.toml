@@ -10,3 +10,5 @@ sea-orm = { workspace = true }
 strum = { workspace = true }
 thiserror = "1.0.57"
 uuid = { workspace = true }
+redis = { workspace = true }
+reqwest = { workspace = true }

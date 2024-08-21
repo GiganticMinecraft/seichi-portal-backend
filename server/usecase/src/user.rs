@@ -21,4 +21,48 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), Error> {
         self.repository.patch_user_role(uuid, role).await
     }
+
+    pub async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error> {
+        let fetched_user_uuid = self
+            .repository
+            .fetch_user_by_xbox_token(token)
+            .await?
+            .map(|user| user.id);
+
+        match fetched_user_uuid {
+            Some(uuid) => self.find_by(uuid).await,
+            None => Ok(None),
+        }
+    }
+
+    pub async fn start_user_session(
+        &self,
+        xbox_token: String,
+        user: &User,
+        expires: i32,
+    ) -> Result<String, Error> {
+        self.repository
+            .start_user_session(xbox_token, user, expires)
+            .await
+    }
+
+    pub async fn fetch_user_by_session_id(
+        &self,
+        session_id: String,
+    ) -> Result<Option<User>, Error> {
+        let fetched_user_uuid = self
+            .repository
+            .fetch_user_by_session_id(session_id)
+            .await?
+            .map(|user| user.id);
+
+        match fetched_user_uuid {
+            Some(uuid) => self.find_by(uuid).await,
+            None => Ok(None),
+        }
+    }
+
+    pub async fn end_user_session(&self, session_id: String) -> Result<(), Error> {
+        self.repository.end_user_session(session_id).await
+    }
 }
