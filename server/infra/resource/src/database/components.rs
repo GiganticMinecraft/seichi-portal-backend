@@ -87,6 +87,5 @@ pub trait UserDatabase: Send + Sync {
         &self,
         session_id: String,
     ) -> Result<Option<User>, InfraError>;
-    async fn update_user_session(&self, session_id: String) -> Result<(), InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
 }

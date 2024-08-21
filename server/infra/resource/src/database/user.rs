@@ -94,10 +94,10 @@ impl UserDatabase for ConnectionPool {
 
         let mut redis_connection = redis_connection().await;
 
-        let _: () = redis_connection.json_set(&session_id, "$", user)?;
+        redis_connection.json_set(&session_id, "$", user)?;
 
         let half_an_hour = 1800;
-        let _: () = redis_connection.expire(&session_id, half_an_hour)?;
+        redis_connection.expire(&session_id, half_an_hour)?;
         Ok(session_id)
     }
 
@@ -117,19 +117,10 @@ impl UserDatabase for ConnectionPool {
         Ok(user)
     }
 
-    async fn update_user_session(&self, session_id: String) -> Result<(), InfraError> {
-        let mut redis_connection = redis_connection().await;
-
-        let half_an_hour = 1800;
-        let _: () = redis_connection.expire(&session_id, half_an_hour)?;
-
-        Ok(())
-    }
-
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError> {
         let mut redis_connection = redis_connection().await;
 
-        let _: () = redis_connection.del(&session_id)?;
+        redis_connection.del(&session_id)?;
 
         Ok(())
     }

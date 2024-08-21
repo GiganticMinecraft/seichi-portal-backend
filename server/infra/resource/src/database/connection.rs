@@ -251,5 +251,5 @@ pub async fn redis_connection() -> Client {
 
     let client_result = Client::open(redis_url);
 
-    client_result.unwrap_or_else(|_| panic!("Cannot establish connect to Redis. {host}"))
+    client_result.unwrap_or_else(|_| panic!("Cannot connect to Redis."))
 }
