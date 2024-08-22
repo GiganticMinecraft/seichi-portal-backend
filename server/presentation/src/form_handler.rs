@@ -304,13 +304,20 @@ pub async fn delete_label_for_answers(
 
 pub async fn edit_label_for_answers(
     State(repository): State<RealInfrastructureRepository>,
-    Json(label): Json<Label>,
+    Path(label_id): Path<LabelId>,
+    Json(label): Json<LabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.edit_label_for_answers(&label).await {
+    match form_use_case
+        .edit_label_for_answers(&Label {
+            id: label_id,
+            name: label.name,
+        })
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
