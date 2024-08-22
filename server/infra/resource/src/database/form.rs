@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, LabelId, LabelSchema,
+        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema,
         OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod,
     },
     user::models::{Role, Role::Administrator, User},
@@ -926,6 +926,25 @@ impl FormDatabase for ConnectionPool {
                 execute_and_values(
                     "DELETE FROM label_for_form_answers WHERE id = ?",
                     [label_id.to_string().into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn edit_label_for_answers(&self, label: &Label) -> Result<(), InfraError> {
+        let params = [label.name.to_owned().into(), label.id.to_string().into()];
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "UPDATE label_for_form_answers SET label = ? WHERE id = ?",
+                    params,
                     txn,
                 )
                 .await?;

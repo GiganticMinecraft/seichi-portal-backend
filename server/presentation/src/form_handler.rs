@@ -7,7 +7,7 @@ use axum::{
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
-        FormUpdateTargets, LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
+        FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
         PostedAnswersUpdateSchema,
     },
     repository::Repositories,
@@ -297,6 +297,20 @@ pub async fn delete_label_for_answers(
     };
 
     match form_use_case.delete_label_for_answers(label_id).await {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn edit_label_for_answers(
+    State(repository): State<RealInfrastructureRepository>,
+    Json(label): Json<Label>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.edit_label_for_answers(&label).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
