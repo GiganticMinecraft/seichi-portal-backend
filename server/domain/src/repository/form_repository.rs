@@ -5,7 +5,7 @@ use mockall::automock;
 use crate::{
     form::models::{
         AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, LabelSchema, OffsetAndLimit, PostedAnswers,
+        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers,
         PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     user::models::User,
@@ -44,4 +44,5 @@ pub trait FormRepository: Send + Sync + 'static {
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), Error>;
     async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error>;
     async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error>;
+    async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), Error>;
 }

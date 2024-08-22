@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, LabelSchema, OffsetAndLimit,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod,
+        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, LabelId, LabelSchema,
+        OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod,
     },
     user::models::{Role, Role::Administrator, User},
 };
@@ -88,15 +88,15 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let forms = query_all(
-                        &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, start_at, end_at
+                    &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, start_at, end_at
                             FROM form_meta_data
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
                             ORDER BY form_meta_data.id
                             {} {}",
-                                 limit.map(|value| format!("LIMIT {}", value)).unwrap_or_default(),
-                                 offset.map(|value| format!("OFFSET {}", value)).unwrap_or_default()),
-                        txn
-                    )
+                             limit.map(|value| format!("LIMIT {}", value)).unwrap_or_default(),
+                             offset.map(|value| format!("OFFSET {}", value)).unwrap_or_default()),
+                    txn,
+                )
                     .await?;
 
                 forms
@@ -125,15 +125,15 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let form_query = query_all_and_values(
-                        r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
                             FROM form_meta_data
                             LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
                             LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
                             WHERE form_meta_data.id = ?",
-                        [form_id.into_inner().into()],
-                        txn
-                    )
+                    [form_id.into_inner().into()],
+                    txn,
+                )
                     .await?;
 
                 let form = form_query.first().ok_or(FormNotFound {
@@ -141,10 +141,10 @@ impl FormDatabase for ConnectionPool {
                 })?;
 
                 let questions = query_all_and_values(
-                        r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
-                        [form_id.into_inner().into()],
-                        txn
-                    )
+                    r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
+                    [form_id.into_inner().into()],
+                    txn,
+                )
                     .await?;
 
                 let choices = query_all(r"SELECT question_id, choice FROM form_choices", txn)
@@ -252,7 +252,7 @@ impl FormDatabase for ConnectionPool {
                             .into(),
                         form_id.into_inner().into(),
                     ],
-                    txn
+                    txn,
                 )
                     .await?;
 
@@ -267,13 +267,13 @@ impl FormDatabase for ConnectionPool {
                                 end_at.or(current_form.response_period.map(|(_, end_at)| end_at)).into(),
                                 form_id.into_inner().into(),
                             ],
-                            txn
+                            txn,
                         ).await?;
                     } else {
                         execute_and_values(
                             "UPDATE response_period SET start_at = NULL, end_at = NULL WHERE form_id = ?",
                             [form_id.into_inner().into()],
-                            txn
+                            txn,
                         )
                             .await?;
                     }
@@ -286,14 +286,14 @@ impl FormDatabase for ConnectionPool {
                             webhook.and_then(|url| url.webhook_url).into(),
                             form_id.into_inner().into(),
                         ],
-                        txn
+                        txn,
                     )
                         .await?;
                 } else if let Some(webhook_url) = webhook.and_then(|url| url.webhook_url) {
                     execute_and_values(
                         "INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)",
                         [form_id.into_inner().into(), webhook_url.into()],
-                        txn
+                        txn,
                     )
                         .await?;
                 }
@@ -305,7 +305,7 @@ impl FormDatabase for ConnectionPool {
                             default_answer_title.unwrap().unwrap_or_default().into(),
                             form_id.into_inner().into(),
                         ],
-                        txn
+                        txn,
                     )
                         .await?;
                 } else if let Some(default_answer_title) = default_answer_title {
@@ -315,7 +315,7 @@ impl FormDatabase for ConnectionPool {
                             form_id.into_inner().into(),
                             default_answer_title.unwrap_or_default().into(),
                         ],
-                        txn
+                        txn,
                     )
                         .await?;
                 }
@@ -324,14 +324,14 @@ impl FormDatabase for ConnectionPool {
                     execute_and_values(
                         "UPDATE form_meta_data SET visibility = ? WHERE id = ?",
                         [visibility.to_string().into(), form_id.into_inner().into()],
-                        txn
+                        txn,
                     ).await?;
                 }
 
                 Ok::<_, InfraError>(())
             })
         }).await
-        .map_err(Into::into)
+            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -349,10 +349,10 @@ impl FormDatabase for ConnectionPool {
                 let regex = Regex::new(r"\$\d+").unwrap();
 
                 let default_answer_title_query_result = query_all_and_values(
-                        r"SELECT title FROM default_answer_titles WHERE form_id = ?",
-                        [form_id.to_owned().into_inner().into()],
-                        txn
-                    )
+                    r"SELECT title FROM default_answer_titles WHERE form_id = ?",
+                    [form_id.to_owned().into_inner().into()],
+                    txn,
+                )
                     .await?;
 
                 let default_answer_title: Option<String> = default_answer_title_query_result
@@ -383,14 +383,14 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let id = execute_and_values(
-                        r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
-                        [
-                            form_id.to_owned().into_inner().into(),
-                            id.to_owned().to_string().into(),
-                            embed_title.into(),
-                        ],
-                        txn
-                    )
+                    r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
+                    [
+                        form_id.to_owned().into_inner().into(),
+                        id.to_owned().to_string().into(),
+                        embed_title.into(),
+                    ],
+                    txn,
+                )
                     .await?
                     .last_insert_id();
 
@@ -408,14 +408,14 @@ impl FormDatabase for ConnectionPool {
                 batch_insert(
                     "INSERT INTO real_answers (answer_id, question_id, answer) VALUES (?, ?, ?)",
                     params.into_iter().map(|value| value.into()),
-                    txn
+                    txn,
                 )
                     .await?;
 
                 Ok::<_, InfraError>(())
             })
         }).await
-        .map_err(Into::into)
+            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -444,7 +444,7 @@ impl FormDatabase for ConnectionPool {
                         INNER JOIN users ON form_answer_comments.commented_by = users.id
                         WHERE answer_id = ?",
                     [answer_id.into_inner().into()],
-                    txn
+                    txn,
                 );
 
                 let (answer_query_result_opt, real_answers, comments) = try_join!(fetch_answer_query_result_opt, fetch_real_answers, fetch_comments)?;
@@ -469,7 +469,7 @@ impl FormDatabase for ConnectionPool {
                             commented_by: UserDto {
                                 name: rs.try_get("", "name")?,
                                 id: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
-                                role: Role::from_str(&rs.try_get::<String>("", "role")?)?
+                                role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             },
                         })
                     })
@@ -492,8 +492,8 @@ impl FormDatabase for ConnectionPool {
                     .transpose()
             })
         })
-        .await
-        .map_err(Into::into)
+            .await
+            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -515,7 +515,7 @@ impl FormDatabase for ConnectionPool {
                 let fetch_comments = query_all(
                     r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
                         INNER JOIN users ON form_answer_comments.commented_by = users.id",
-                    txn
+                    txn,
                 );
 
                 let (answers, real_answers, comments) = try_join!(fetch_answers, fetch_real_answers, fetch_comments)?;
@@ -543,7 +543,7 @@ impl FormDatabase for ConnectionPool {
                             .filter(|rs| {
                                 rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
                             })
-                            .map(|rs|{
+                            .map(|rs| {
                                 Ok::<CommentDto, InfraError>(CommentDto {
                                     comment_id: rs.try_get("", "comment_id")?,
                                     content: rs.try_get("", "content")?,
@@ -572,8 +572,8 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()
             })
         })
-        .await
-        .map_err(Into::into)
+            .await
+            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -626,16 +626,16 @@ impl FormDatabase for ConnectionPool {
                                 (*question.is_required()).into()
                             ]
                         ).collect_vec(),
-                    txn
+                    txn,
                 ).await?;
 
                 let last_insert_id = query_one(
                     "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
-                    txn
+                    txn,
                 )
-                .await?
-                .unwrap()
-                .try_get("", "question_id")?;
+                    .await?
+                    .unwrap()
+                    .try_get("", "question_id")?;
 
                 let choices_active_values = questions
                     .iter()
@@ -657,7 +657,7 @@ impl FormDatabase for ConnectionPool {
                 batch_insert(
                     "INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
                     choices_active_values.into_iter().map(|value| value.into()),
-                    txn
+                    txn,
                 )
                     .await?;
 
@@ -687,12 +687,12 @@ impl FormDatabase for ConnectionPool {
                     question.description.clone().into(),
                     question.question_type.to_string().into(),
                     question.is_required.to_owned().into()]),
-                txn
+                txn,
             ).await?;
 
             let last_insert_id = query_one(
                 "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
-                txn
+                txn,
             )
                 .await?
                 .unwrap()
@@ -721,20 +721,20 @@ impl FormDatabase for ConnectionPool {
             multiple_delete(
                 "DELETE FROM form_choices WHERE question_id IN (?)",
                 questions.iter().map(|question| question.id.into_inner().into()),
-                txn
+                txn,
             ).await?;
 
             batch_insert(
                 r"INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
                 choices_active_values.into_iter().map(|value| value.into()),
-                txn
+                txn,
             )
                 .await?;
 
             let form_question_ids = query_all_and_values(
                 r"SELECT question_id FROM form_questions WHERE form_id = ?",
                 [form_id.into_inner().into()],
-                txn
+                txn,
             ).await?;
 
             let already_exists_question_ids = form_question_ids
@@ -751,7 +751,7 @@ impl FormDatabase for ConnectionPool {
             multiple_delete(
                 r"DELETE FROM form_questions WHERE question_id IN (?)",
                 delete_target_question_ids.into_iter().map(|id| id.into()),
-                txn
+                txn,
             ).await?;
 
             Ok::<_, InfraError>(())
@@ -765,16 +765,16 @@ impl FormDatabase for ConnectionPool {
                 let questions_rs = query_all_and_values(
                     r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
                     [form_id.into_inner().into()],
-                    txn
+                    txn,
                 ).await?;
 
                 let choices_rs = query_all_and_values(
-                        r"SELECT form_choices.question_id, choice FROM form_choices 
+                    r"SELECT form_choices.question_id, choice FROM form_choices
                                 INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
                                 WHERE form_id = ?",
-                        [form_id.into_inner().into()],
-                        txn
-                    )
+                    [form_id.into_inner().into()],
+                    txn,
+                )
                     .await?;
 
                 questions_rs
@@ -808,7 +808,7 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<QuestionDto>, _>>()
             })
         }).await
-        .map_err(Into::into)
+            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -914,6 +914,23 @@ impl FormDatabase for ConnectionPool {
                         })
                     })
                     .collect::<Result<Vec<LabelDto>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "DELETE FROM label_for_form_answers WHERE id = ?",
+                    [label_id.to_string().into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
             })
         })
         .await
