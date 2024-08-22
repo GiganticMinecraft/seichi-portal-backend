@@ -17,7 +17,7 @@ services:
       - mysql_data:/var/lib/mysql
     restart: always
   redis:
-    image: redislabs/rejson:2.8.3
+    image: redislabs/rejson:99.99.98
     container_name: redis
     ports:
       - "6379:6379"
