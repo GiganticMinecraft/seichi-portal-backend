@@ -93,7 +93,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/:label_id",
+            "/forms/answers/labels/:label_id",
             delete(delete_form_comment_handler),
         )
         .with_state(shared_repository.to_owned())
