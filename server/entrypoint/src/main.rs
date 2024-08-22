@@ -12,6 +12,7 @@ use axum::{
 };
 use common::config::{ENV, HTTP};
 use hyper::header::SET_COOKIE;
+use presentation::form_handler::delete_label_for_answers;
 use presentation::{
     auth::auth,
     form_handler::{
@@ -94,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/answers/labels/:label_id",
-            delete(delete_form_comment_handler),
+            delete(delete_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
         .route(
