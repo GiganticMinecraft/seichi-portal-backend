@@ -86,12 +86,12 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/labels",
+            "/forms/labels/answers",
             get(get_labels_for_answers).post(create_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/labels/:label_id",
+            "/forms/labels/answers/:label_id",
             delete(delete_label_for_answers).patch(edit_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
