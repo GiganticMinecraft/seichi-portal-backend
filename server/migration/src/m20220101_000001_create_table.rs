@@ -158,6 +158,17 @@ impl MigrationTrait for Migration {
             ))
             .await?;
 
+        connection.execute(Statement::from_string(
+            DatabaseBackend::MySql,
+            r"CREATE TABLE IF NOT EXISTS form_answer_labels(
+                id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                answer_id INT NOT NULL,
+                label_id INT NOT NULL,
+                FOREIGN KEY fk_form_answer_labels_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+                FOREIGN KEY fk_form_answer_labels_label_id(label_id) REFERENCES label_for_form_answers(id) ON DELETE CASCADE
+            )",
+        )).await?;
+
         connection
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,

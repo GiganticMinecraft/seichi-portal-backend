@@ -8,7 +8,7 @@ use domain::{
     form::models::{
         AnswerId, Comment, CommentId, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
         FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
-        PostedAnswersUpdateSchema,
+        PostedAnswersUpdateSchema, ReplaceAnswerLabelSchema,
     },
     repository::Repositories,
     user::models::User,
@@ -316,6 +316,24 @@ pub async fn edit_label_for_answers(
             id: label_id,
             name: label.name,
         })
+        .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn replace_answer_labels(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+    Json(label_ids): Json<ReplaceAnswerLabelSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .replace_answer_labels(answer_id, label_ids.labels)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),

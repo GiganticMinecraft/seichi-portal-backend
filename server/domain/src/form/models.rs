@@ -93,7 +93,8 @@ pub struct Form {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Getters, Debug, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
+))]
 pub struct FormDescription {
     description: Option<String>,
 }
@@ -253,6 +254,7 @@ pub struct PostedAnswers {
     pub title: DefaultAnswerTitle,
     pub answers: Vec<Answer>,
     pub comments: Vec<Comment>,
+    pub labels: Vec<Label>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -285,7 +287,7 @@ pub struct CommentSchema {
 
 pub type LabelId = types::Id<Label>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Label {
     pub id: LabelId,
     pub name: String,
@@ -296,9 +298,13 @@ pub struct LabelSchema {
     pub name: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ReplaceAnswerLabelSchema {
+    pub labels: Vec<LabelId>,
+}
+
 #[cfg(test)]
 mod test {
-
     use proptest::{prop_assert_eq, proptest};
     use serde_json::json;
     use test_case::test_case;

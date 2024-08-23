@@ -98,11 +98,13 @@ pub async fn start_session(
                 }
             }
         }
-        Ok(None) => (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "reason": "invalid token" })),
-        )
-            .into_response(),
+        Ok(None) => {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "reason": "invalid token" })),
+            )
+        }
+        .into_response(),
         Err(err) => {
             tracing::error!("{}", err);
             (
