@@ -77,6 +77,7 @@ pub trait FormDatabase: Send + Sync {
         answer_id: AnswerId,
         label_ids: Vec<LabelId>,
     ) -> Result<(), InfraError>;
+    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), InfraError>;
 }
 
 #[automock]

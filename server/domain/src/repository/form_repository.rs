@@ -51,4 +51,5 @@ pub trait FormRepository: Send + Sync + 'static {
         answer_id: AnswerId,
         label_ids: Vec<LabelId>,
     ) -> Result<(), Error>;
+    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error>;
 }

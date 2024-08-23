@@ -1029,4 +1029,23 @@ impl FormDatabase for ConnectionPool {
         .await
         .map_err(Into::into)
     }
+
+    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), InfraError> {
+        let params = [label.name.to_owned().into()];
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "INSERT INTO label_for_forms (label) VALUES (?)",
+                    params,
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
 }

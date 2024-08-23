@@ -223,4 +223,12 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .map_err(Into::into)
     }
+
+    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
+        self.client
+            .form()
+            .create_label_for_forms(label)
+            .await
+            .map_err(Into::into)
+    }
 }

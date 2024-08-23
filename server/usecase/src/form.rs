@@ -160,4 +160,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .replace_answer_labels(answer_id, label_ids)
             .await
     }
+
+    pub async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
+        self.repository.create_label_for_forms(label).await
+    }
 }
