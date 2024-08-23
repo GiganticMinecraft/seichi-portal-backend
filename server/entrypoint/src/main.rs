@@ -18,9 +18,9 @@ use presentation::{
         create_form_handler, create_label_for_answers, create_label_for_forms,
         create_question_handler, delete_form_comment_handler, delete_form_handler,
         delete_label_for_answers, edit_label_for_answers, form_list_handler, get_all_answers,
-        get_answer_handler, get_form_handler, get_labels_for_answers, get_questions_handler,
-        post_answer_handler, post_form_comment, put_question_handler, replace_answer_labels,
-        update_answer_handler, update_form_handler,
+        get_answer_handler, get_form_handler, get_labels_for_answers, get_labels_for_forms,
+        get_questions_handler, post_answer_handler, post_form_comment, put_question_handler,
+        replace_answer_labels, update_answer_handler, update_form_handler,
     },
     health_check_handler::health_check,
     user_handler::{end_session, get_my_user_info, patch_user_role, start_session},
@@ -91,7 +91,10 @@ async fn main() -> anyhow::Result<()> {
             get(get_labels_for_answers).post(create_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
-        .route("/forms/labels/forms", post(create_label_for_forms))
+        .route(
+            "/forms/labels/forms",
+            get(get_labels_for_forms).post(create_label_for_forms),
+        )
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/labels/answers/:label_id",

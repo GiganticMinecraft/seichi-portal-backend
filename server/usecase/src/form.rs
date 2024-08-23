@@ -164,4 +164,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
         self.repository.create_label_for_forms(label).await
     }
+
+    pub async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {
+        self.repository.get_labels_for_forms().await
+    }
 }

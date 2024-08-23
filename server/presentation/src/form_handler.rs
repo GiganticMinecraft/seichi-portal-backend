@@ -355,6 +355,19 @@ pub async fn create_label_for_forms(
     }
 }
 
+pub async fn get_labels_for_forms(
+    State(repository): State<RealInfrastructureRepository>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_labels_for_forms().await {
+        Ok(labels) => (StatusCode::OK, Json(labels)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub fn handle_error(err: Error) -> impl IntoResponse {
     match err {
         Error::Infra {

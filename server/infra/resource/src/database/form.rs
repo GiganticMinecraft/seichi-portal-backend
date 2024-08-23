@@ -1048,4 +1048,24 @@ impl FormDatabase for ConnectionPool {
         .await
         .map_err(Into::into)
     }
+
+    async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let labels_rs = query_all("SELECT id, label FROM label_for_forms", txn).await?;
+
+                labels_rs
+                    .into_iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>(LabelDto {
+                            id: rs.try_get("", "id")?,
+                            name: rs.try_get("", "label")?,
+                        })
+                    })
+                    .collect::<Result<Vec<LabelDto>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
 }

@@ -231,4 +231,13 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .map_err(Into::into)
     }
+
+    async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {
+        stream::iter(self.client.form().get_labels_for_forms().await?)
+            .then(|label_dto| async { Ok(label_dto.try_into()?) })
+            .collect::<Vec<Result<Label, _>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<Label>, _>>()
+    }
 }
