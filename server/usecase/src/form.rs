@@ -168,4 +168,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {
         self.repository.get_labels_for_forms().await
     }
+
+    pub async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), Error> {
+        self.repository.delete_label_for_forms(label_id).await
+    }
 }

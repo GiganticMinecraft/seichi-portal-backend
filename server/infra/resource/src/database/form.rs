@@ -1068,4 +1068,21 @@ impl FormDatabase for ConnectionPool {
         .await
         .map_err(Into::into)
     }
+
+    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "DELETE FROM label_for_forms WHERE id = ?",
+                    [label_id.to_string().into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
 }

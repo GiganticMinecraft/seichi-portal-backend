@@ -240,4 +240,12 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .into_iter()
             .collect::<Result<Vec<Label>, _>>()
     }
+
+    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), Error> {
+        self.client
+            .form()
+            .delete_label_for_forms(label_id)
+            .await
+            .map_err(Into::into)
+    }
 }

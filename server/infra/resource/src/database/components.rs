@@ -79,6 +79,7 @@ pub trait FormDatabase: Send + Sync {
     ) -> Result<(), InfraError>;
     async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), InfraError>;
     async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError>;
+    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), InfraError>;
 }
 
 #[automock]
