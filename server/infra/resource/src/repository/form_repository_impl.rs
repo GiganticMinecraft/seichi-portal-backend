@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, LabelSchema, OffsetAndLimit, PostedAnswers,
+        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers,
         PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
     },
     repository::form_repository::FormRepository,
@@ -194,5 +194,21 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .into_iter()
             .collect::<Result<Vec<Label>, _>>()
+    }
+
+    async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), Error> {
+        self.client
+            .form()
+            .delete_label_for_answers(label_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn edit_label_for_answers(&self, label: &Label) -> Result<(), Error> {
+        self.client
+            .form()
+            .edit_label_for_answers(label)
+            .await
+            .map_err(Into::into)
     }
 }
