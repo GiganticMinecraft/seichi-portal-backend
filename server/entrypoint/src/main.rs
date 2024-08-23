@@ -7,7 +7,7 @@ use axum::{
     },
     middleware,
     response::IntoResponse,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use common::config::{ENV, HTTP};
@@ -19,7 +19,8 @@ use presentation::{
         delete_form_comment_handler, delete_form_handler, delete_label_for_answers,
         edit_label_for_answers, form_list_handler, get_all_answers, get_answer_handler,
         get_form_handler, get_labels_for_answers, get_questions_handler, post_answer_handler,
-        post_form_comment, put_question_handler, update_answer_handler, update_form_handler,
+        post_form_comment, put_question_handler, replace_answer_labels, update_answer_handler,
+        update_form_handler,
     },
     health_check_handler::health_check,
     user_handler::{end_session, get_my_user_info, patch_user_role, start_session},
@@ -98,6 +99,11 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/forms/answers/:answer_id",
             get(get_answer_handler).patch(update_answer_handler),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/forms/answers/:answer_id/labels",
+            put(replace_answer_labels),
         )
         .with_state(shared_repository.to_owned())
         .route("/forms/answers/comment", post(post_form_comment))

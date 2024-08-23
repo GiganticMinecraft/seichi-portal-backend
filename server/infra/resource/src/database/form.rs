@@ -447,7 +447,15 @@ impl FormDatabase for ConnectionPool {
                     txn,
                 );
 
-                let (answer_query_result_opt, real_answers, comments) = try_join!(fetch_answer_query_result_opt, fetch_real_answers, fetch_comments)?;
+                let fetch_labels = query_all_and_values(
+                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id
+                    WHERE answer_id = ?",
+                    [answer_id.into_inner().into()],
+                    txn,
+                );
+
+                let (answer_query_result_opt, real_answers, comments, labels) = try_join!(fetch_answer_query_result_opt, fetch_real_answers, fetch_comments, fetch_labels)?;
 
                 let answers = real_answers
                     .iter()
@@ -475,6 +483,17 @@ impl FormDatabase for ConnectionPool {
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
+                let labels = labels
+                    .iter()
+                    .map(|rs| {
+                        Ok::<LabelDto, InfraError>(LabelDto {
+                            id: rs.try_get("", "label_id")?,
+                            name: rs.try_get("", "label")?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+
                 answer_query_result_opt
                     .map(|rs| {
                         Ok::<_, InfraError>(PostedAnswersDto {
@@ -487,6 +506,7 @@ impl FormDatabase for ConnectionPool {
                             title: rs.try_get("", "title")?,
                             answers,
                             comments,
+                            labels,
                         })
                     })
                     .transpose()
@@ -518,7 +538,13 @@ impl FormDatabase for ConnectionPool {
                     txn,
                 );
 
-                let (answers, real_answers, comments) = try_join!(fetch_answers, fetch_real_answers, fetch_comments)?;
+                let fetch_labels = query_all(
+                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id",
+                    txn,
+                );
+
+                let (answers, real_answers, comments, labels) = try_join!(fetch_answers, fetch_real_answers, fetch_comments, fetch_labels)?;
 
                 answers
                     .iter()
@@ -557,6 +583,19 @@ impl FormDatabase for ConnectionPool {
                             })
                             .collect::<Result<Vec<_>, _>>()?;
 
+                        let labels = labels
+                            .iter()
+                            .filter(|rs| {
+                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
+                            })
+                            .map(|rs| {
+                                Ok::<LabelDto, InfraError>(LabelDto {
+                                    id: rs.try_get("", "label_id")?,
+                                    name: rs.try_get("", "label")?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
@@ -567,6 +606,7 @@ impl FormDatabase for ConnectionPool {
                             title: rs.try_get("", "title")?,
                             answers,
                             comments,
+                            labels,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -945,6 +985,40 @@ impl FormDatabase for ConnectionPool {
                 execute_and_values(
                     "UPDATE label_for_form_answers SET label = ? WHERE id = ?",
                     params,
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn replace_answer_labels(
+        &self,
+        answer_id: AnswerId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                multiple_delete(
+                    "DELETE FROM label_settings_for_form_answers WHERE answer_id = ?",
+                    vec![answer_id.into_inner().into()],
+                    txn,
+                )
+                .await?;
+
+                let params = label_ids
+                    .into_iter()
+                    .flat_map(|label_id| [answer_id.into_inner(), label_id.into_inner()])
+                    .collect_vec();
+
+                batch_insert(
+                    "INSERT INTO label_settings_for_form_answers (answer_id, label_id) VALUES (?, \
+                     ?)",
+                    params.into_iter().map(|value| value.into()),
                     txn,
                 )
                 .await?;

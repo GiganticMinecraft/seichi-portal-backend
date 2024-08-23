@@ -192,7 +192,6 @@ impl MigrationTrait for Migration {
                         real_answers,
                         default_answer_titles,
                         form_answer_comments,
-                        form_answer_labels,
                         form_answer_label_settings;
                     ",
             ))

@@ -187,6 +187,7 @@ pub struct PostedAnswersDto {
     pub title: Option<String>,
     pub answers: Vec<AnswerDto>,
     pub comments: Vec<CommentDto>,
+    pub labels: Vec<LabelDto>,
 }
 
 impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
@@ -203,6 +204,7 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             title,
             answers,
             comments,
+            labels,
         }: PostedAnswersDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::PostedAnswers {
@@ -222,6 +224,10 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             comments: comments
                 .into_iter()
                 .map(|comment| comment.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+            labels: labels
+                .into_iter()
+                .map(|label| label.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
         })
     }

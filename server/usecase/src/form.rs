@@ -150,4 +150,14 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn edit_label_for_answers(&self, label_schema: &Label) -> Result<(), Error> {
         self.repository.edit_label_for_answers(label_schema).await
     }
+
+    pub async fn replace_answer_labels(
+        &self,
+        answer_id: AnswerId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), Error> {
+        self.repository
+            .replace_answer_labels(answer_id, label_ids)
+            .await
+    }
 }
