@@ -1153,4 +1153,37 @@ impl FormDatabase for ConnectionPool {
         .await
         .map_err(Into::into)
     }
+
+    async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                multiple_delete(
+                    "DELETE FROM label_settings_for_forms WHERE form_id = ?",
+                    vec![form_id.into_inner().into()],
+                    txn,
+                )
+                .await?;
+
+                let params = label_ids
+                    .into_iter()
+                    .flat_map(|label_id| [form_id.into_inner(), label_id.into_inner()])
+                    .collect_vec();
+
+                batch_insert(
+                    "INSERT INTO label_settings_for_forms (form_id, label_id) VALUES (?, ?)",
+                    params.into_iter().map(|value| value.into()),
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
 }

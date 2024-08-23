@@ -176,4 +176,14 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn edit_label_for_forms(&self, label: &Label) -> Result<(), Error> {
         self.repository.edit_label_for_forms(label).await
     }
+
+    pub async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), Error> {
+        self.repository
+            .replace_form_labels(form_id, label_ids)
+            .await
+    }
 }

@@ -403,6 +403,24 @@ pub async fn edit_label_for_forms(
     }
 }
 
+pub async fn replace_form_labels(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(form_id): Path<FormId>,
+    Json(label_ids): Json<ReplaceAnswerLabelSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .replace_form_labels(form_id, label_ids.labels)
+        .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub fn handle_error(err: Error) -> impl IntoResponse {
     match err {
         Error::Infra {

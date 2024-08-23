@@ -256,4 +256,16 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .map_err(Into::into)
     }
+
+    async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .replace_form_labels(form_id, label_ids)
+            .await
+            .map_err(Into::into)
+    }
 }
