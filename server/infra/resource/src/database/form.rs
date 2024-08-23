@@ -448,8 +448,8 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_labels = query_all_and_values(
-                    r"SELECT answer_id, label_id, label FROM form_answer_labels
-                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = answer_id
+                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id
                     WHERE answer_id = ?",
                     [answer_id.into_inner().into()],
                     txn,
@@ -539,8 +539,8 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_labels = query_all(
-                    r"SELECT answer_id, label_id, label FROM form_answer_labels
-                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = answer_id",
+                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id",
                     txn,
                 );
 
@@ -1004,7 +1004,7 @@ impl FormDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 multiple_delete(
-                    "DELETE FROM form_answer_labels WHERE answer_id = ?",
+                    "DELETE FROM label_settings_for_form_answers WHERE answer_id = ?",
                     vec![answer_id.into_inner().into()],
                     txn,
                 )
@@ -1016,7 +1016,8 @@ impl FormDatabase for ConnectionPool {
                     .collect_vec();
 
                 batch_insert(
-                    "INSERT INTO form_answer_labels (answer_id, label_id) VALUES (?, ?)",
+                    "INSERT INTO label_settings_for_form_answers (answer_id, label_id) VALUES (?, \
+                     ?)",
                     params.into_iter().map(|value| value.into()),
                     txn,
                 )
