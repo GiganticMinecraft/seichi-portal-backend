@@ -382,6 +382,27 @@ pub async fn delete_label_for_forms(
     }
 }
 
+pub async fn edit_label_for_forms(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(label_id): Path<LabelId>,
+    Json(label): Json<LabelSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .edit_label_for_forms(&Label {
+            id: label_id,
+            name: label.name,
+        })
+        .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub fn handle_error(err: Error) -> impl IntoResponse {
     match err {
         Error::Infra {
