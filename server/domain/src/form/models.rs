@@ -55,6 +55,7 @@ pub struct SimpleForm {
     pub title: FormTitle,
     pub description: FormDescription,
     pub response_period: ResponsePeriod,
+    pub labels: Vec<Label>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -89,6 +90,8 @@ pub struct Form {
     pub metadata: FormMeta,
     #[serde(default)]
     pub settings: FormSettings,
+    #[serde(default)]
+    pub labels: Vec<Label>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
