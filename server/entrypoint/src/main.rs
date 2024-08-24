@@ -15,12 +15,13 @@ use hyper::header::SET_COOKIE;
 use presentation::{
     auth::auth,
     form_handler::{
-        create_form_handler, create_label_for_answers, create_question_handler,
-        delete_form_comment_handler, delete_form_handler, delete_label_for_answers,
-        edit_label_for_answers, form_list_handler, get_all_answers, get_answer_handler,
-        get_form_handler, get_labels_for_answers, get_questions_handler, post_answer_handler,
-        post_form_comment, put_question_handler, replace_answer_labels, update_answer_handler,
-        update_form_handler,
+        create_form_handler, create_label_for_answers, create_label_for_forms,
+        create_question_handler, delete_form_comment_handler, delete_form_handler,
+        delete_label_for_answers, delete_label_for_forms, edit_label_for_answers,
+        edit_label_for_forms, form_list_handler, get_all_answers, get_answer_handler,
+        get_form_handler, get_labels_for_answers, get_labels_for_forms, get_questions_handler,
+        post_answer_handler, post_form_comment, put_question_handler, replace_answer_labels,
+        replace_form_labels, update_answer_handler, update_form_handler,
     },
     health_check_handler::health_check,
     user_handler::{end_session, get_my_user_info, patch_user_role, start_session},
@@ -92,8 +93,18 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route(
+            "/forms/labels/forms",
+            get(get_labels_for_forms).post(create_label_for_forms),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
             "/forms/labels/answers/:label_id",
             delete(delete_label_for_answers).patch(edit_label_for_answers),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/forms/labels/forms/:label_id",
+            delete(delete_label_for_forms).patch(edit_label_for_forms),
         )
         .with_state(shared_repository.to_owned())
         .route(
@@ -106,6 +117,7 @@ async fn main() -> anyhow::Result<()> {
             put(replace_answer_labels),
         )
         .with_state(shared_repository.to_owned())
+        .route("/forms/:form_id/labels", put(replace_form_labels))
         .route("/forms/answers/comment", post(post_form_comment))
         .with_state(shared_repository.to_owned())
         .route(

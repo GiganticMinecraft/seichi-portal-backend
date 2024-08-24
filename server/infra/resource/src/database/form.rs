@@ -99,6 +99,13 @@ impl FormDatabase for ConnectionPool {
                 )
                     .await?;
 
+                let labels = query_all(
+                    r"SELECT form_id, label_id, label FROM label_settings_for_forms
+                        INNER JOIN label_for_forms ON label_for_forms.id = label_id",
+                    txn,
+                )
+                    .await?;
+
                 forms
                     .into_iter()
                     .map(|rs| {
@@ -107,11 +114,32 @@ impl FormDatabase for ConnectionPool {
                         let start_at: Option<DateTime<Utc>> = rs.try_get("", "start_at")?;
                         let end_at: Option<DateTime<Utc>> = rs.try_get("", "end_at")?;
 
+                        let labels = labels.iter()
+                            .filter_map(|rs| {
+                                let label_form_id: i32 = rs.try_get("", "form_id").ok()?;
+
+                                if label_form_id == form_id {
+                                    let label_id: Option<i32> = rs.try_get("", "label_id").ok()?;
+                                    let label: Option<String> = rs.try_get("", "label").ok()?;
+
+                                    label_id.zip(label).map(|(label_id, label)| {
+                                        LabelDto {
+                                            id: label_id,
+                                            name: label,
+                                        }
+                                    })
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect_vec();
+
                         Ok::<_, InfraError>(SimpleFormDto {
                             id: form_id,
                             title: rs.try_get("", "form_title")?,
                             description: rs.try_get("", "description")?,
                             response_period: start_at.zip(end_at),
+                            labels,
                         })
                     })
                     .collect()
@@ -150,6 +178,15 @@ impl FormDatabase for ConnectionPool {
                 let choices = query_all(r"SELECT question_id, choice FROM form_choices", txn)
                     .await?;
 
+                let labels = query_all_and_values(
+                    r"SELECT label_id, label FROM label_settings_for_forms
+                        INNER JOIN label_for_forms ON label_for_forms.id = label_id
+                        WHERE form_id = ?",
+                    [form_id.into_inner().into()],
+                    txn,
+                )
+                    .await?;
+
                 let questions = questions
                     .into_iter()
                     .map(|rs| {
@@ -181,6 +218,17 @@ impl FormDatabase for ConnectionPool {
                     })
                     .collect::<Result<Vec<_>, DbErr>>()?;
 
+                let labels = labels
+                    .iter()
+                    .map(|rs| {
+                        Ok::<LabelDto, InfraError>(LabelDto {
+                            id: rs.try_get("", "label_id")?,
+                            name: rs.try_get("", "label")?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+
                 let start_at: Option<DateTime<Utc>> = form.try_get("", "start_at")?;
                 let end_at: Option<DateTime<Utc>> = form.try_get("", "end_at")?;
 
@@ -197,6 +245,7 @@ impl FormDatabase for ConnectionPool {
                     webhook_url: form.try_get("", "url")?,
                     default_answer_title: form.try_get("", "default_answer_titles.title")?,
                     visibility: form.try_get("", "visibility")?,
+                    labels,
                 })
             })
         }).await
@@ -1018,6 +1067,114 @@ impl FormDatabase for ConnectionPool {
                 batch_insert(
                     "INSERT INTO label_settings_for_form_answers (answer_id, label_id) VALUES (?, \
                      ?)",
+                    params.into_iter().map(|value| value.into()),
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), InfraError> {
+        let params = [label.name.to_owned().into()];
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "INSERT INTO label_for_forms (label) VALUES (?)",
+                    params,
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let labels_rs = query_all("SELECT id, label FROM label_for_forms", txn).await?;
+
+                labels_rs
+                    .into_iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>(LabelDto {
+                            id: rs.try_get("", "id")?,
+                            name: rs.try_get("", "label")?,
+                        })
+                    })
+                    .collect::<Result<Vec<LabelDto>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "DELETE FROM label_for_forms WHERE id = ?",
+                    [label_id.to_string().into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn edit_label_for_forms(&self, label: &Label) -> Result<(), InfraError> {
+        let params = [label.name.to_owned().into(), label.id.to_string().into()];
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "UPDATE label_for_forms SET label = ? WHERE id = ?",
+                    params,
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                multiple_delete(
+                    "DELETE FROM label_settings_for_forms WHERE form_id = ?",
+                    vec![form_id.into_inner().into()],
+                    txn,
+                )
+                .await?;
+
+                let params = label_ids
+                    .into_iter()
+                    .flat_map(|label_id| [form_id.into_inner(), label_id.into_inner()])
+                    .collect_vec();
+
+                batch_insert(
+                    "INSERT INTO label_settings_for_forms (form_id, label_id) VALUES (?, ?)",
                     params.into_iter().map(|value| value.into()),
                     txn,
                 )

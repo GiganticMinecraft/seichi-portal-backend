@@ -55,6 +55,7 @@ pub struct SimpleForm {
     pub title: FormTitle,
     pub description: FormDescription,
     pub response_period: ResponsePeriod,
+    pub labels: Vec<Label>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -89,6 +90,9 @@ pub struct Form {
     pub metadata: FormMeta,
     #[serde(default)]
     pub settings: FormSettings,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
+    #[serde(default)]
+    pub labels: Vec<Label>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -287,6 +291,7 @@ pub struct CommentSchema {
 
 pub type LabelId = types::Id<Label>;
 
+#[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Label {
     pub id: LabelId,

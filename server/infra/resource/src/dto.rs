@@ -49,6 +49,7 @@ pub struct FormDto {
     pub webhook_url: Option<String>,
     pub default_answer_title: Option<String>,
     pub visibility: String,
+    pub labels: Vec<LabelDto>,
 }
 
 impl TryFrom<FormDto> for domain::form::models::Form {
@@ -65,6 +66,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             webhook_url,
             default_answer_title,
             visibility,
+            labels,
         }: FormDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Form::builder()
@@ -84,6 +86,12 @@ impl TryFrom<FormDto> for domain::form::models::Form {
                 default_answer_title: default_answer_title.into(),
                 visibility: visibility.try_into()?,
             })
+            .labels(
+                labels
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
             .build())
     }
 }
@@ -93,6 +101,7 @@ pub struct SimpleFormDto {
     pub title: String,
     pub description: Option<String>,
     pub response_period: Option<(DateTime<Utc>, DateTime<Utc>)>,
+    pub labels: Vec<LabelDto>,
 }
 
 impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
@@ -104,6 +113,7 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
             title,
             description,
             response_period,
+            labels,
         }: SimpleFormDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::SimpleForm {
@@ -111,6 +121,10 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
             title: title.into(),
             description: description.into(),
             response_period: ResponsePeriod::new(response_period),
+            labels: labels
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, _>>()?,
         })
     }
 }

@@ -223,4 +223,49 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .map_err(Into::into)
     }
+
+    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
+        self.client
+            .form()
+            .create_label_for_forms(label)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {
+        stream::iter(self.client.form().get_labels_for_forms().await?)
+            .then(|label_dto| async { Ok(label_dto.try_into()?) })
+            .collect::<Vec<Result<Label, _>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<Label>, _>>()
+    }
+
+    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), Error> {
+        self.client
+            .form()
+            .delete_label_for_forms(label_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn edit_label_for_forms(&self, label: &Label) -> Result<(), Error> {
+        self.client
+            .form()
+            .edit_label_for_forms(label)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .replace_form_labels(form_id, label_ids)
+            .await
+            .map_err(Into::into)
+    }
 }

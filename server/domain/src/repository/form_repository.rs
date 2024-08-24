@@ -51,4 +51,13 @@ pub trait FormRepository: Send + Sync + 'static {
         answer_id: AnswerId,
         label_ids: Vec<LabelId>,
     ) -> Result<(), Error>;
+    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error>;
+    async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error>;
+    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), Error>;
+    async fn edit_label_for_forms(&self, label: &Label) -> Result<(), Error>;
+    async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), Error>;
 }

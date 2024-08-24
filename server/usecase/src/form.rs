@@ -160,4 +160,30 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .replace_answer_labels(answer_id, label_ids)
             .await
     }
+
+    pub async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
+        self.repository.create_label_for_forms(label).await
+    }
+
+    pub async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {
+        self.repository.get_labels_for_forms().await
+    }
+
+    pub async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), Error> {
+        self.repository.delete_label_for_forms(label_id).await
+    }
+
+    pub async fn edit_label_for_forms(&self, label: &Label) -> Result<(), Error> {
+        self.repository.edit_label_for_forms(label).await
+    }
+
+    pub async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<LabelId>,
+    ) -> Result<(), Error> {
+        self.repository
+            .replace_form_labels(form_id, label_ids)
+            .await
+    }
 }
