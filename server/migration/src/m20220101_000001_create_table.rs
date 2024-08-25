@@ -30,6 +30,7 @@ impl MigrationTrait for Migration {
                     title TEXT NOT NULL,
                     description TEXT NOT NULL,
                     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+                    answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     created_by INT NOT NULL,
                     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
