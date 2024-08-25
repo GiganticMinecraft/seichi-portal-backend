@@ -283,6 +283,7 @@ impl FormDatabase for ConnectionPool {
             webhook,
             default_answer_title,
             visibility,
+            answer_visibility,
         }: FormUpdateTargets,
     ) -> Result<(), InfraError> {
         let current_form = self.get(form_id).await?;
@@ -374,6 +375,14 @@ impl FormDatabase for ConnectionPool {
                     execute_and_values(
                         "UPDATE form_meta_data SET visibility = ? WHERE id = ?",
                         [visibility.to_string().into(), form_id.into_inner().into()],
+                        txn,
+                    ).await?;
+                }
+
+                if let Some(answer_visibility) = answer_visibility {
+                    execute_and_values(
+                        "UPDATE form_meta_data SET answer_visibility = ? WHERE id = ?",
+                        [answer_visibility.to_string().into(), form_id.into_inner().into()],
                         txn,
                     ).await?;
                 }

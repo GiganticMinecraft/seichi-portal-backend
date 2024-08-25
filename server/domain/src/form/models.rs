@@ -47,6 +47,8 @@ pub struct FormUpdateTargets {
     pub default_answer_title: Option<DefaultAnswerTitle>,
     #[serde(default)]
     pub visibility: Option<Visibility>,
+    #[serde(default)]
+    pub answer_visibility: Option<Visibility>,
 }
 
 #[derive(Serialize, Debug)]
