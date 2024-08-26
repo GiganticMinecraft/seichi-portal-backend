@@ -153,7 +153,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let form_query = query_all_and_values(
-                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, answer_visibility, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
                             FROM form_meta_data
                             LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
@@ -245,6 +245,7 @@ impl FormDatabase for ConnectionPool {
                     webhook_url: form.try_get("", "url")?,
                     default_answer_title: form.try_get("", "default_answer_titles.title")?,
                     visibility: form.try_get("", "visibility")?,
+                    answer_visibility: form.try_get("", "answer_visibility")?,
                     labels,
                 })
             })
@@ -282,6 +283,7 @@ impl FormDatabase for ConnectionPool {
             webhook,
             default_answer_title,
             visibility,
+            answer_visibility,
         }: FormUpdateTargets,
     ) -> Result<(), InfraError> {
         let current_form = self.get(form_id).await?;
@@ -373,6 +375,14 @@ impl FormDatabase for ConnectionPool {
                     execute_and_values(
                         "UPDATE form_meta_data SET visibility = ? WHERE id = ?",
                         [visibility.to_string().into(), form_id.into_inner().into()],
+                        txn,
+                    ).await?;
+                }
+
+                if let Some(answer_visibility) = answer_visibility {
+                    execute_and_values(
+                        "UPDATE form_meta_data SET answer_visibility = ? WHERE id = ?",
+                        [answer_visibility.to_string().into(), form_id.into_inner().into()],
                         txn,
                     ).await?;
                 }
