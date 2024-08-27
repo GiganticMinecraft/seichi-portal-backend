@@ -8,10 +8,10 @@ use domain::{
     form::models::{
         AnswerId, Comment, CommentId, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
         FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
-        PostedAnswersUpdateSchema, ReplaceAnswerLabelSchema,
+        PostedAnswersUpdateSchema, ReplaceAnswerLabelSchema, Visibility::PRIVATE,
     },
     repository::Repositories,
-    user::models::User,
+    user::models::{Role::StandardUser, User},
 };
 use errors::{infra::InfraError, usecase::UseCaseError, Error};
 use resource::repository::RealInfrastructureRepository;
@@ -185,12 +185,29 @@ pub async fn get_answer_handler(
 }
 
 pub async fn get_answer_by_form_id_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
+
+    if user.role == StandardUser {
+        match form_use_case.get_form(form_id).await {
+            Ok(form) if form.settings.answer_visibility == PRIVATE => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "errorCode": "DO_NOT_HAVE_PERMISSION_TO_GET_ANSWERS",
+                        "reason": "This form answer visibility is private."
+                    })),
+                )
+                    .into_response();
+            }
+            _ => {}
+        }
+    }
 
     match form_use_case.get_answers_by_form_id(form_id).await {
         Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),

@@ -64,7 +64,10 @@ pub async fn auth(
     ];
 
     // NOTE: 動的パスを指定する場合は、正規表現を埋め込む
-    let dynamic_endpoints_allowed_for_standard_users = [(&Method::GET, "/forms/[^/]+/questions")];
+    let dynamic_endpoints_allowed_for_standard_users = [
+        (&Method::GET, "/forms/[^/]+/questions"),
+        (&Method::GET, "/forms/[^/]+/answers"),
+    ];
 
     let is_not_allow_dynamic_endpoint = !dynamic_endpoints_allowed_for_standard_users
         .into_iter()
