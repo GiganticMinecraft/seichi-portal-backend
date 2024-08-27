@@ -100,6 +100,13 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         }
     }
 
+    pub async fn get_answers_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<Vec<PostedAnswers>, Error> {
+        self.repository.get_answers_by_form_id(form_id).await
+    }
+
     pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
         self.repository.get_all_answers().await
     }

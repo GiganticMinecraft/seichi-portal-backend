@@ -184,6 +184,20 @@ pub async fn get_answer_handler(
     }
 }
 
+pub async fn get_answer_by_form_id_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(form_id): Path<FormId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_answers_by_form_id(form_id).await {
+        Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

@@ -643,6 +643,113 @@ impl FormDatabase for ConnectionPool {
             .map_err(Into::into)
     }
 
+    async fn get_answers_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<Vec<PostedAnswersDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let fetch_answers = query_all_and_values(
+                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
+                        INNER JOIN users ON answers.user = users.id
+                        WHERE form_id = ?
+                        ORDER BY answers.time_stamp",
+                    [form_id.into_inner().into()],
+                    txn,
+                );
+
+                let fetch_real_answers = query_all(
+                    "SELECT answer_id, question_id, answer FROM real_answers",
+                    txn,
+                );
+
+                let fetch_comments = query_all_and_values(
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                        INNER JOIN users ON form_answer_comments.commented_by = users.id
+                        WHERE answer_id IN (SELECT id FROM answers WHERE form_id = ?)",
+                    [form_id.into_inner().into()],
+                    txn,
+                );
+
+                let fetch_labels = query_all_and_values(
+                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id
+                    WHERE answer_id IN (SELECT id FROM answers WHERE form_id = ?)",
+                    [form_id.into_inner().into()],
+                    txn,
+                );
+
+                let (answers, real_answers, comments, labels) = try_join!(fetch_answers, fetch_real_answers, fetch_comments, fetch_labels)?;
+
+                answers
+                    .iter()
+                    .map(|rs| {
+                        let answer_id: i32 = rs.try_get("", "answer_id")?;
+                        let answers = real_answers
+                            .iter()
+                            .filter(|rs| {
+                                rs.try_get::<i32>("", "answer_id")
+                                    .is_ok_and(|id| id == answer_id)
+                            })
+                            .map(|rs| {
+                                Ok::<AnswerDto, DbErr>(AnswerDto {
+                                    question_id: rs.try_get("", "question_id")?,
+                                    answer: rs.try_get("", "answer")?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        let comments = comments
+                            .iter()
+                            .filter(|rs| {
+                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
+                            })
+                            .map(|rs| {
+                                Ok::<CommentDto, InfraError>(CommentDto {
+                                    comment_id: rs.try_get("", "comment_id")?,
+                                    content: rs.try_get("", "content")?,
+                                    timestamp: rs.try_get("", "timestamp")?,
+                                    commented_by: UserDto {
+                                        name: rs.try_get("", "name")?,
+                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                                        role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                                    },
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        let labels = labels
+                            .iter()
+                            .filter(|rs| {
+                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
+                            })
+                            .map(|rs| {
+                                Ok::<LabelDto, InfraError>(LabelDto {
+                                    id: rs.try_get("", "label_id")?,
+                                    name: rs.try_get("", "label")?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        Ok::<_, InfraError>(PostedAnswersDto {
+                            id: answer_id,
+                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            user_name: rs.try_get("", "name")?,
+                            user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                            timestamp: rs.try_get("", "time_stamp")?,
+                            form_id: rs.try_get("", "form_id")?,
+                            title: rs.try_get("", "title")?,
+                            answers,
+                            comments,
+                            labels,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+        }).await
+            .map_err(Into::into)
+    }
+
     #[tracing::instrument]
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         self.read_only_transaction(|txn| {
