@@ -20,8 +20,8 @@ use presentation::{
         delete_label_for_answers, delete_label_for_forms, edit_label_for_answers,
         edit_label_for_forms, form_list_handler, get_all_answers, get_answer_handler,
         get_form_handler, get_labels_for_answers, get_labels_for_forms, get_questions_handler,
-        post_answer_handler, post_form_comment, put_question_handler, replace_answer_labels,
-        replace_form_labels, update_answer_handler, update_form_handler,
+        post_answer_handler, post_form_comment, public_form_list_handler, put_question_handler,
+        replace_answer_labels, replace_form_labels, update_answer_handler, update_form_handler,
     },
     health_check_handler::health_check,
     user_handler::{end_session, get_my_user_info, patch_user_role, start_session},
@@ -72,6 +72,8 @@ async fn main() -> anyhow::Result<()> {
 
     let router = Router::new()
         .route("/forms", post(create_form_handler).get(form_list_handler))
+        .with_state(shared_repository.to_owned())
+        .route("/forms/public", get(public_form_list_handler))
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/:id",

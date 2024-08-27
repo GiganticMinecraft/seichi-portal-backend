@@ -33,6 +33,10 @@ pub trait FormDatabase: Send + Sync {
         description: FormDescription,
         user: User,
     ) -> Result<FormId, InfraError>;
+    async fn public_list(
+        &self,
+        offset_and_limit: OffsetAndLimit,
+    ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn list(
         &self,
         offset_and_limit: OffsetAndLimit,

@@ -80,6 +80,74 @@ impl FormDatabase for ConnectionPool {
         .map_err(Into::into)
     }
 
+    async fn public_list(
+        &self,
+        OffsetAndLimit { offset, limit }: OffsetAndLimit,
+    ) -> Result<Vec<SimpleFormDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let forms = query_all(
+                    &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, start_at, end_at
+                            FROM form_meta_data
+                            WHERE visibility = 'PUBLIC'
+                            LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
+                            ORDER BY form_meta_data.id
+                            {} {}",
+                             limit.map(|value| format!("LIMIT {}", value)).unwrap_or_default(),
+                             offset.map(|value| format!("OFFSET {}", value)).unwrap_or_default()),
+                    txn,
+                )
+                    .await?;
+
+                let labels = query_all(
+                    r"SELECT form_id, label_id, label FROM label_settings_for_forms
+                        INNER JOIN label_for_forms ON label_for_forms.id = label_id",
+                    txn,
+                )
+                    .await?;
+
+                forms
+                    .into_iter()
+                    .map(|rs| {
+                        let form_id: i32 = rs.try_get("", "form_id")?;
+
+                        let start_at: Option<DateTime<Utc>> = rs.try_get("", "start_at")?;
+                        let end_at: Option<DateTime<Utc>> = rs.try_get("", "end_at")?;
+
+                        let labels = labels.iter()
+                            .filter_map(|rs| {
+                                let label_form_id: i32 = rs.try_get("", "form_id").ok()?;
+
+                                if label_form_id == form_id {
+                                    let label_id: Option<i32> = rs.try_get("", "label_id").ok()?;
+                                    let label: Option<String> = rs.try_get("", "label").ok()?;
+
+                                    label_id.zip(label).map(|(label_id, label)| {
+                                        LabelDto {
+                                            id: label_id,
+                                            name: label,
+                                        }
+                                    })
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect_vec();
+
+                        Ok::<_, InfraError>(SimpleFormDto {
+                            id: form_id,
+                            title: rs.try_get("", "form_title")?,
+                            description: rs.try_get("", "description")?,
+                            response_period: start_at.zip(end_at),
+                            labels,
+                        })
+                    })
+                    .collect()
+            })
+        }).await
+            .map_err(Into::into)
+    }
+
     #[tracing::instrument]
     async fn list(
         &self,
