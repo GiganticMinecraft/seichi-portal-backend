@@ -35,6 +35,18 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         Ok(form_id)
     }
 
+    async fn public_list(
+        &self,
+        offset_and_limit: OffsetAndLimit,
+    ) -> Result<Vec<SimpleForm>, Error> {
+        let forms = self.client.form().public_list(offset_and_limit).await?;
+        forms
+            .into_iter()
+            .map(|form| form.try_into())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
     #[tracing::instrument(skip(self))]
     async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<SimpleForm>, Error> {
         let forms = self.client.form().list(offset_and_limit).await?;

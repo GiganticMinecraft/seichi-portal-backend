@@ -20,6 +20,8 @@ pub trait FormRepository: Send + Sync + 'static {
         description: FormDescription,
         user: User,
     ) -> Result<FormId, Error>;
+    async fn public_list(&self, offset_and_limit: OffsetAndLimit)
+        -> Result<Vec<SimpleForm>, Error>;
     async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<SimpleForm>, Error>;
     async fn get(&self, id: FormId) -> Result<Form, Error>;
     async fn delete(&self, id: FormId) -> Result<(), Error>;
