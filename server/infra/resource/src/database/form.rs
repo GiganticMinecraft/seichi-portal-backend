@@ -89,8 +89,8 @@ impl FormDatabase for ConnectionPool {
                 let forms = query_all(
                     &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, start_at, end_at
                             FROM form_meta_data
-                            WHERE visibility = 'PUBLIC'
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
+                            WHERE visibility = 'PUBLIC'
                             ORDER BY form_meta_data.id
                             {} {}",
                              limit.map(|value| format!("LIMIT {}", value)).unwrap_or_default(),
