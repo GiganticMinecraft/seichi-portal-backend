@@ -57,6 +57,10 @@ pub trait FormDatabase: Send + Sync {
         &self,
         answer_id: AnswerId,
     ) -> Result<Option<PostedAnswersDto>, InfraError>;
+    async fn get_answers_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
     async fn update_answer_meta(
         &self,

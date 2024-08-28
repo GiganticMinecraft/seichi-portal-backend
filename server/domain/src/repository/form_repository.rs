@@ -32,6 +32,7 @@ pub trait FormRepository: Send + Sync + 'static {
     ) -> Result<(), Error>;
     async fn post_answer(&self, user: &User, answers: &PostedAnswersSchema) -> Result<(), Error>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<PostedAnswers>, Error>;
+    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<PostedAnswers>, Error>;
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error>;
     async fn update_answer_meta(
         &self,

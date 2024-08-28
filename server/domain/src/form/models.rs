@@ -58,6 +58,7 @@ pub struct SimpleForm {
     pub description: FormDescription,
     pub response_period: ResponsePeriod,
     pub labels: Vec<Label>,
+    pub answer_visibility: Visibility,
 }
 
 #[derive(Deserialize, Debug)]
