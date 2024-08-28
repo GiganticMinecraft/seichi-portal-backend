@@ -67,6 +67,7 @@ pub async fn auth(
     let dynamic_endpoints_allowed_for_standard_users = [
         (&Method::GET, "/forms/[^/]+/questions"),
         (&Method::GET, "/forms/[^/]+/answers"),
+        (&Method::GET, "/forms/answers/[^/]+"),
     ];
 
     let is_not_allow_dynamic_endpoint = !dynamic_endpoints_allowed_for_standard_users
