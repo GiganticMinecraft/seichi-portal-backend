@@ -87,7 +87,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let forms = query_all(
-                    &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, start_at, end_at
+                    &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, answer_visibility, start_at, end_at
                             FROM form_meta_data
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
                             WHERE visibility = 'PUBLIC'
@@ -140,6 +140,7 @@ impl FormDatabase for ConnectionPool {
                             description: rs.try_get("", "description")?,
                             response_period: start_at.zip(end_at),
                             labels,
+                            answer_visibility: rs.try_get("", "answer_visibility")?,
                         })
                     })
                     .collect()
@@ -156,7 +157,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let forms = query_all(
-                    &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, start_at, end_at
+                    &format!(r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, answer_visibility, start_at, end_at
                             FROM form_meta_data
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
                             ORDER BY form_meta_data.id
@@ -208,6 +209,7 @@ impl FormDatabase for ConnectionPool {
                             description: rs.try_get("", "description")?,
                             response_period: start_at.zip(end_at),
                             labels,
+                            answer_visibility: rs.try_get("", "answer_visibility")?,
                         })
                     })
                     .collect()

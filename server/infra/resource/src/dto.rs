@@ -105,6 +105,7 @@ pub struct SimpleFormDto {
     pub description: Option<String>,
     pub response_period: Option<(DateTime<Utc>, DateTime<Utc>)>,
     pub labels: Vec<LabelDto>,
+    pub answer_visibility: String,
 }
 
 impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
@@ -117,6 +118,7 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
             description,
             response_period,
             labels,
+            answer_visibility,
         }: SimpleFormDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::SimpleForm {
@@ -128,6 +130,7 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<Vec<_>, _>>()?,
+            answer_visibility: answer_visibility.try_into()?,
         })
     }
 }
