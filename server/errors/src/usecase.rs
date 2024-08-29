@@ -8,4 +8,6 @@ pub enum UseCaseError {
     DoNotHavePermissionToPostFormComment,
     #[error("Answer Not found.")]
     AnswerNotFound,
+    #[error("Form Not found.")]
+    FormNotFound,
 }

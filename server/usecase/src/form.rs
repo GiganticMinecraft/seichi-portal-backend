@@ -3,13 +3,18 @@ use domain::{
     form::models::{
         AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
         FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
+        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm, Visibility::PUBLIC,
     },
     repository::form_repository::FormRepository,
-    user::models::User,
+    user::models::{
+        Role::{Administrator, StandardUser},
+        User,
+    },
 };
 use errors::{
-    usecase::UseCaseError::{AnswerNotFound, DoNotHavePermissionToPostFormComment, OutOfPeriod},
+    usecase::UseCaseError::{
+        AnswerNotFound, DoNotHavePermissionToPostFormComment, FormNotFound, OutOfPeriod,
+    },
     Error,
 };
 use types::Resolver;
@@ -133,12 +138,25 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     }
 
     pub async fn post_comment(&self, comment: Comment, answer_id: AnswerId) -> Result<(), Error> {
-        let has_permission = self
-            .repository
-            .has_permission(answer_id, &comment.commented_by)
-            .await?;
+        let can_post_comment = match comment.commented_by.role {
+            Administrator => true,
+            StandardUser => {
+                let answer = answer_id
+                    .resolve(self.repository)
+                    .await?
+                    .ok_or(AnswerNotFound)?;
 
-        if has_permission {
+                let form = answer
+                    .form_id
+                    .resolve(self.repository)
+                    .await?
+                    .ok_or(FormNotFound)?;
+
+                form.settings.answer_visibility == PUBLIC
+            }
+        };
+
+        if can_post_comment {
             self.repository.post_comment(answer_id, &comment).await
         } else {
             Err(Error::from(DoNotHavePermissionToPostFormComment))
