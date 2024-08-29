@@ -8,7 +8,7 @@ use domain::{
         FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema,
         OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod,
     },
-    user::models::{Role, Role::Administrator, User},
+    user::models::{Role, User},
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
 use futures::{future::try_join, try_join};
@@ -1085,33 +1085,6 @@ impl FormDatabase for ConnectionPool {
             })
         }).await
             .map_err(Into::into)
-    }
-
-    #[tracing::instrument]
-    async fn has_permission(&self, answer_id: AnswerId, user: &User) -> Result<bool, InfraError> {
-        if user.role == Administrator {
-            return Ok(true);
-        }
-
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let rs_opt = query_one_and_values(
-                    r"SELECT visibility FROM form_meta_data INNER JOIN 
-                                ON answers.form_id = form_meta_data.id
-                                WHERE answers.id = ?",
-                    [answer_id.into_inner().into()],
-                    txn,
-                )
-                .await?;
-
-                rs_opt
-                    .map(|rs| rs.try_get::<bool>("", "visibility"))
-                    .unwrap_or_else(|| Ok(false))
-                    .map_err(Into::<InfraError>::into)
-            })
-        })
-        .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]

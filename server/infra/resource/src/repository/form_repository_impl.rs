@@ -174,14 +174,6 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn has_permission(&self, answer_id: AnswerId, user: &User) -> Result<bool, Error> {
-        self.client
-            .form()
-            .has_permission(answer_id, user)
-            .await
-            .map_err(Into::into)
-    }
-
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error> {
         let posted_answers = answer_id.resolve(self).await?.ok_or(AnswerNotFount {
             id: answer_id.into_inner(),
