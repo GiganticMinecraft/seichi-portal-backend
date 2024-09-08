@@ -1,6 +1,8 @@
 name: Security Audit
 on:
   schedule:
+    # Runs every day at 00:00 UTC
+    # https://crontab.guru/#0_0_*_*_*
     - cron: "0 0 * * *"
 jobs:
   audit:
