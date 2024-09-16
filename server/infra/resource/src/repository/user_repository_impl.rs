@@ -69,6 +69,14 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         })
     }
 
+    async fn fetch_all_users(&self) -> Result<Vec<User>, Error> {
+        self.client
+            .user()
+            .fetch_all_users()
+            .await
+            .map_err(Into::into)
+    }
+
     async fn start_user_session(
         &self,
         xbox_token: String,

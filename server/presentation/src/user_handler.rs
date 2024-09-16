@@ -51,6 +51,26 @@ pub async fn patch_user_role(
     }
 }
 
+pub async fn user_list(
+    State(repository): State<RealInfrastructureRepository>,
+) -> impl IntoResponse {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    match user_use_case.fetch_all_users().await {
+        Ok(users) => (StatusCode::OK, Json(json!(users))).into_response(),
+        Err(err) => {
+            tracing::error!("{}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "reason": "unknown error" })),
+            )
+                .into_response()
+        }
+    }
+}
+
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
@@ -82,9 +102,9 @@ pub async fn start_session(
                                 "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={expires}; \
                                  Path=/; Secure; HttpOnly"
                             )
-                            .as_str(),
+                                .as_str(),
                         )
-                        .unwrap(),
+                            .unwrap(),
                     )],
                 )
                     .into_response(),
@@ -104,7 +124,7 @@ pub async fn start_session(
                 Json(json!({ "reason": "invalid token" })),
             )
         }
-        .into_response(),
+            .into_response(),
         Err(err) => {
             tracing::error!("{}", err);
             (
@@ -136,9 +156,9 @@ pub async fn end_session(
                         "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age=0; Path=/; Secure; \
                          HttpOnly"
                     )
-                    .as_str(),
+                        .as_str(),
                 )
-                .unwrap(),
+                    .unwrap(),
             )],
         )
             .into_response(),

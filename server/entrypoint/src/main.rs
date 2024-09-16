@@ -25,7 +25,7 @@ use presentation::{
         update_form_handler,
     },
     health_check_handler::health_check,
-    user_handler::{end_session, get_my_user_info, patch_user_role, start_session},
+    user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -135,6 +135,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route("/users", get(get_my_user_info))
+        .route("/users/list", get(user_list))
+        .with_state(shared_repository.to_owned())
         .route("/users/:uuid", patch(patch_user_role))
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
