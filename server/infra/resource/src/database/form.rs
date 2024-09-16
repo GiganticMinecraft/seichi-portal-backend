@@ -278,7 +278,7 @@ impl FormDatabase for ConnectionPool {
                             .collect_vec();
 
                         Ok(QuestionDto {
-                            id: question_id,
+                            id: Some(question_id),
                             title: rs.try_get("", "title")?,
                             description: rs.try_get("", "description")?,
                             question_type: rs.try_get("", "question_type")?,
@@ -948,6 +948,27 @@ impl FormDatabase for ConnectionPool {
         let questions = questions.questions.to_owned();
 
         self.read_write_transaction(|txn| Box::pin(async move {
+            let current_form_question_ids = query_all_and_values(
+                r"SELECT question_id FROM form_questions WHERE form_id = ?",
+                [form_id.into_inner().into()],
+                txn,
+            ).await?
+                .into_iter()
+                .map(|rs| rs.try_get::<i32>("", "question_id"))
+                .collect::<Result<Vec<_>, DbErr>>()?;
+
+            let delete_target_question_ids = current_form_question_ids
+                .into_iter()
+                .filter(|question_id| {
+                    !questions.iter().any(|question| question.id.map(|id| id.into_inner()) == Some(*question_id))
+                }).collect_vec();
+
+            multiple_delete(
+                r"DELETE FROM form_questions WHERE question_id IN (?)",
+                delete_target_question_ids.into_iter().map(|id| id.into()),
+                txn,
+            ).await?;
+
             batch_insert(
                 r"INSERT INTO form_questions (question_id, form_id, title, description, question_type, is_required)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -957,7 +978,7 @@ impl FormDatabase for ConnectionPool {
                 question_type = VALUES(question_type),
                 is_required = VALUES(is_required)",
                 questions.iter().flat_map(|question| vec![
-                    question.id.into_inner().into(),
+                    question.id.map(|id| id.into_inner()).into(),
                     form_id.into_inner().into(),
                     question.title.clone().into(),
                     question.description.clone().into(),
@@ -996,7 +1017,7 @@ impl FormDatabase for ConnectionPool {
             //  それを使って選択肢の更新を行うべきか検討する
             multiple_delete(
                 "DELETE FROM form_choices WHERE question_id IN (?)",
-                questions.iter().map(|question| question.id.into_inner().into()),
+                questions.iter().map(|question| question.id.map(|id| id.into_inner()).into()),
                 txn,
             ).await?;
 
@@ -1006,29 +1027,6 @@ impl FormDatabase for ConnectionPool {
                 txn,
             )
                 .await?;
-
-            let form_question_ids = query_all_and_values(
-                r"SELECT question_id FROM form_questions WHERE form_id = ?",
-                [form_id.into_inner().into()],
-                txn,
-            ).await?;
-
-            let already_exists_question_ids = form_question_ids
-                .into_iter()
-                .map(|rs| rs.try_get::<i32>("", "question_id"))
-                .collect::<Result<Vec<_>, DbErr>>()?;
-
-            let delete_target_question_ids = already_exists_question_ids
-                .into_iter()
-                .filter(|question_id| {
-                    !questions.iter().any(|question| question.id.into_inner() == *question_id)
-                }).collect_vec();
-
-            multiple_delete(
-                r"DELETE FROM form_questions WHERE question_id IN (?)",
-                delete_target_question_ids.into_iter().map(|id| id.into()),
-                txn,
-            ).await?;
 
             Ok::<_, InfraError>(())
         })).await.map_err(Into::into)
@@ -1073,7 +1071,7 @@ impl FormDatabase for ConnectionPool {
                             .collect_vec();
 
                         Ok::<_, InfraError>(QuestionDto {
-                            id: question_id,
+                            id: Some(question_id),
                             title: question_rs.try_get("", "title")?,
                             description: question_rs.try_get("", "description")?,
                             question_type: question_rs.try_get("", "question_type")?,

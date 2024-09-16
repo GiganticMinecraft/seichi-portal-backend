@@ -60,7 +60,7 @@ pub async fn post_answer(
                         (
                             form.questions
                                 .iter()
-                                .find(|question| question.id == answer.question_id)
+                                .find(|question| question.id == Some(answer.question_id))
                                 .map(|question| question.title.to_owned())
                                 .unwrap_or("不明な質問".to_string()),
                             answer.answer.to_owned(),

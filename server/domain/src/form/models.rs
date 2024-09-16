@@ -112,7 +112,7 @@ pub type QuestionId = types::Id<Question>;
 #[derive(TypedBuilder, Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
 pub struct Question {
     #[serde(default)]
-    pub id: QuestionId,
+    pub id: Option<QuestionId>,
     pub title: String,
     pub description: Option<String>,
     pub question_type: QuestionType,
