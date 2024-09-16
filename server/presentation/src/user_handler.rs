@@ -102,9 +102,9 @@ pub async fn start_session(
                                 "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={expires}; \
                                  Path=/; Secure; HttpOnly"
                             )
-                                .as_str(),
+                            .as_str(),
                         )
-                            .unwrap(),
+                        .unwrap(),
                     )],
                 )
                     .into_response(),
@@ -124,7 +124,7 @@ pub async fn start_session(
                 Json(json!({ "reason": "invalid token" })),
             )
         }
-            .into_response(),
+        .into_response(),
         Err(err) => {
             tracing::error!("{}", err);
             (
@@ -156,9 +156,9 @@ pub async fn end_session(
                         "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age=0; Path=/; Secure; \
                          HttpOnly"
                     )
-                        .as_str(),
+                    .as_str(),
                 )
-                    .unwrap(),
+                .unwrap(),
             )],
         )
             .into_response(),

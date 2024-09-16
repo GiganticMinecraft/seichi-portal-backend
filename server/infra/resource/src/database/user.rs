@@ -8,10 +8,11 @@ use redis::{Commands, JsonCommands};
 use sha256::digest;
 use uuid::Uuid;
 
-use crate::database::connection::query_all;
 use crate::database::{
     components::UserDatabase,
-    connection::{execute_and_values, query_one_and_values, redis_connection, ConnectionPool},
+    connection::{
+        execute_and_values, query_all, query_one_and_values, redis_connection, ConnectionPool,
+    },
 };
 
 #[async_trait]
