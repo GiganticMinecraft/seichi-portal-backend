@@ -12,6 +12,7 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn upsert_user(&self, user: &User) -> Result<(), Error>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), Error>;
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error>;
+    async fn fetch_all_users(&self) -> Result<Vec<User>, Error>;
     async fn start_user_session(
         &self,
         xbox_token: String,

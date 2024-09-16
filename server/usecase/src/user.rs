@@ -22,6 +22,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         self.repository.patch_user_role(uuid, role).await
     }
 
+    pub async fn fetch_all_users(&self) -> Result<Vec<User>, Error> {
+        self.repository.fetch_all_users().await
+    }
+
     pub async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error> {
         let fetched_user = self.repository.fetch_user_by_xbox_token(token).await?;
 

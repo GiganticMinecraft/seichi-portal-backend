@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use crate::database::{
     components::UserDatabase,
-    connection::{execute_and_values, query_one_and_values, redis_connection, ConnectionPool},
+    connection::{
+        execute_and_values, query_all, query_one_and_values, redis_connection, ConnectionPool,
+    },
 };
 
 #[async_trait]
@@ -78,6 +80,29 @@ impl UserDatabase for ConnectionPool {
                 .await?;
 
                 Ok::<(), InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn fetch_all_users(&self) -> Result<Vec<User>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let query = query_all("SELECT uuid, name, role FROM users", txn).await?;
+
+                let users = query
+                    .into_iter()
+                    .map(|rs| {
+                        Ok::<User, InfraError>(User {
+                            name: rs.try_get("", "name")?,
+                            id: Uuid::parse_str(&rs.try_get::<String>("", "uuid")?)?,
+                            role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                        })
+                    })
+                    .collect::<Result<Vec<User>, InfraError>>()?;
+
+                Ok::<_, InfraError>(users)
             })
         })
         .await
