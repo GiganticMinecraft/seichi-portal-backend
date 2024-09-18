@@ -31,6 +31,7 @@ pub async fn create(form: Form) -> Result<(), InfraError> {
     Ok(())
 }
 
+#[tracing::instrument]
 pub async fn post_answer(
     form: &Form,
     user: &User,
