@@ -99,7 +99,7 @@ impl Webhook {
     #[tracing::instrument]
     pub async fn send(&self, color: Color) -> Result<(), InfraError> {
         let contents = SendContents {
-            username: "seichi-portal-backend".to_string(),
+            username: "seichi-portal".to_string(),
             embeds: vec![Embeds {
                 title: self.title.to_owned(),
                 color: color.to_color_code(),
