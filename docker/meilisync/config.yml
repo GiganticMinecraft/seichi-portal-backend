@@ -1,0 +1,19 @@
+plugins:
+  - meilisync.plugin.Plugin
+progress:
+  type: file
+source:
+  type: mysql
+  host: host.docker.internal # assuming your MySQL server is running on the same machine as `meilisync`
+  port: 3306
+  database: seichi_portal
+  user: root
+  password: root
+meilisearch:
+  api_url: http://host.docker.internal:7700/
+  api_key: '4361ea82fe7e29fc809c1de815a4a4057a583bf6a1ecb77b8cdcc0946c97bc9b'
+  insert_size: 1000
+  insert_interval: 10
+sync:
+  - table: form_meta_data
+    full: true

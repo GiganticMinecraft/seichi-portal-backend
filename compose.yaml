@@ -2,6 +2,7 @@ services:
   db:
     image: mariadb:10.11.9
     container_name: mariadb
+    command: --log-bin --binlog-format=ROW
     environment:
       - MYSQL_INITDB_SKIP_TZINFO=1
       - MARIADB_DATABASE=seichi_portal
@@ -15,6 +16,7 @@ services:
       - seichi_portal
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
     restart: always
   redis:
     image: redislabs/rejson:99.99.98
@@ -24,9 +26,30 @@ services:
     networks:
       - seichi_portal
     restart: always
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_ENV=development
+    networks:
+      - seichi_portal
+    volumes:
+      - meili_data:/data.ms
+    restart: always
+  meilisync:
+    platform: linux/x86_64
+    # meilisync の Docker イメージで stable を使用すると full sync ができないため、dev を使用する
+    # ref: https://github.com/long2ice/meilisync/issues/94#issuecomment-2270153002
+    image: long2ice/meilisync:dev
+    volumes:
+      - ./docker/meilisync/config.yml:/meilisync/config.yml
+    networks:
+      - seichi_portal
 networks:
   seichi_portal:
     name: seichi-portal-backend-network
     external: false
 volumes:
   mysql_data:
+  meili_data:
