@@ -13,12 +13,13 @@ use sea_orm::{
 
 use crate::database::{
     components::DatabaseComponents,
-    config::{MySQL, Redis, MYSQL, REDIS},
+    config::{MeiliSearch, MySQL, Redis, MEILISEARCH, MYSQL, REDIS},
 };
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
-    pub(crate) pool: DatabaseConnection,
+    pub(crate) rdb_pool: DatabaseConnection,
+    pub(crate) meilisearch_client: meilisearch_sdk::client::Client,
 }
 
 impl ConnectionPool {
@@ -34,15 +35,19 @@ impl ConnectionPool {
 
         let database_url = format!("mysql://{user}:{password}@{host}:{port}/{database}");
 
+        let MeiliSearch { host, api_key } = &*MEILISEARCH;
+
         Self {
-            pool: Database::connect(&database_url)
+            rdb_pool: Database::connect(&database_url)
                 .await
                 .unwrap_or_else(|_| panic!("Cannot establish connect to {database_url}.")),
+            meilisearch_client: meilisearch_sdk::client::Client::new(host, api_key.to_owned())
+                .unwrap_or_else(|_| panic!("Cannot establish connect to MeiliSearch.")),
         }
     }
 
     pub async fn migrate(&self) -> anyhow::Result<()> {
-        migration::Migrator::up(&self.pool, None).await?;
+        migration::Migrator::up(&self.rdb_pool, None).await?;
 
         Ok(())
     }
@@ -59,7 +64,7 @@ impl ConnectionPool {
         T: Send,
         E: std::error::Error + Send,
     {
-        self.pool
+        self.rdb_pool
             .transaction_with_config(callback, None, Some(AccessMode::ReadOnly))
             .await
     }
@@ -76,7 +81,7 @@ impl ConnectionPool {
         T: Send,
         E: std::error::Error + Send,
     {
-        self.pool
+        self.rdb_pool
             .transaction_with_config(callback, None, Some(AccessMode::ReadWrite))
             .await
     }
@@ -85,11 +90,12 @@ impl ConnectionPool {
 #[async_trait]
 impl DatabaseComponents for ConnectionPool {
     type ConcreteFormDatabase = Self;
+    type ConcreteSearchDatabase = Self;
     type ConcreteUserDatabase = Self;
     type TransactionAcrossComponents = DatabaseTransaction;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents> {
-        Ok(self.pool.begin().await?)
+        Ok(self.rdb_pool.begin().await?)
     }
 
     fn form(&self) -> &Self::ConcreteFormDatabase {
@@ -97,6 +103,10 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn user(&self) -> &Self::ConcreteUserDatabase {
+        self
+    }
+
+    fn search(&self) -> &Self::ConcreteSearchDatabase {
         self
     }
 }

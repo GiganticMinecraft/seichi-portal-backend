@@ -1,4 +1,5 @@
 pub mod form_repository_impl;
+mod search_repository_impl;
 mod user_repository_impl;
 
 use std::sync::Arc;
@@ -28,6 +29,7 @@ impl<Client: DatabaseComponents + 'static> Repository<Client> {
 
 impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Client> {
     type ConcreteFormRepository = Repository<Client>;
+    type ConcreteSearchRepository = Repository<Client>;
     type ConcreteUserRepository = Repository<Client>;
 
     fn form_repository(&self) -> &Self::ConcreteFormRepository {
@@ -35,6 +37,10 @@ impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Cli
     }
 
     fn user_repository(&self) -> &Self::ConcreteUserRepository {
+        &self.0
+    }
+
+    fn search_repository(&self) -> &Self::ConcreteSearchRepository {
         &self.0
     }
 }

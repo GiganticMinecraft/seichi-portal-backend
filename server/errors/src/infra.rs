@@ -32,6 +32,8 @@ pub enum InfraError {
     },
     #[error("Reqwest Error: {}", .cause)]
     Reqwest { cause: String },
+    #[error("MeiliSearch Error: {}", .cause)]
+    MeiliSearch { cause: String },
 }
 
 impl<E> From<sea_orm::TransactionError<E>> for InfraError
@@ -40,6 +42,14 @@ where
 {
     fn from(value: sea_orm::TransactionError<E>) -> Self {
         InfraError::DatabaseTransaction {
+            cause: value.to_string(),
+        }
+    }
+}
+
+impl From<meilisearch_sdk::errors::Error> for InfraError {
+    fn from(value: meilisearch_sdk::errors::Error) -> Self {
+        InfraError::MeiliSearch {
             cause: value.to_string(),
         }
     }
