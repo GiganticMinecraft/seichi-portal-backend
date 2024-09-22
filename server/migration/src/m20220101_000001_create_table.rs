@@ -14,8 +14,7 @@ impl MigrationTrait for Migration {
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS users(
-                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    uuid CHAR(36) NOT NULL UNIQUE KEY,
+                    id CHAR(36) NOT NULL PRIMARY KEY,
                     name VARCHAR(16) NOT NULL,
                     role ENUM('ADMINISTRATOR', 'STANDARD_USER') NOT NULL
                 )",
@@ -32,9 +31,9 @@ impl MigrationTrait for Migration {
                     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
                     answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    created_by INT NOT NULL,
+                    created_by CHAR(36) NOT NULL,
                     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_by INT NOT NULL,
+                    updated_by CHAR(36) NOT NULL,
                     FOREIGN KEY fk_form_meta_data_created_by(created_by) REFERENCES users(id),
                     FOREIGN KEY fk_form_meta_data_updated_by(updated_by) REFERENCES users(id)
                 )",
@@ -99,7 +98,7 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS answers(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id INT NOT NULL,
-                    user INT NOT NULL,
+                    user CHAR(36) NOT NULL,
                     title TEXT,
                     time_stamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY fk_answers_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
@@ -140,7 +139,7 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS form_answer_comments(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     answer_id INT NOT NULL,
-                    commented_by INT NOT NULL,
+                    commented_by CHAR(36) NOT NULL,
                     content TEXT NOT NULL,
                     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY fk_form_answer_comments_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,

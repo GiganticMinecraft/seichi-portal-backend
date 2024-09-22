@@ -43,10 +43,11 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 let form_id = execute_and_values(
                     "INSERT INTO form_meta_data (title, description, created_by, updated_by)
-                        SELECT ?, ?, users.id, users.id FROM users WHERE uuid = ?",
+                        VALUES (?, ?, ?, ?)",
                     [
                         title.title().to_owned().into(),
                         description.into_inner().into(),
+                        user.id.to_string().into(),
                         user.id.to_string().into(),
                     ],
                     txn,
@@ -482,7 +483,7 @@ impl FormDatabase for ConnectionPool {
                     [form_id.to_owned().into_inner().into()],
                     txn,
                 )
-                    .await?;
+                .await?;
 
                 let default_answer_title: Option<String> = default_answer_title_query_result
                     .first()
@@ -494,7 +495,7 @@ impl FormDatabase for ConnectionPool {
                 let default_answer_title = DefaultAnswerTitle {
                     default_answer_title,
                 }
-                    .unwrap_or_default();
+                .unwrap_or_default();
 
                 let embed_title = regex.find_iter(&default_answer_title.to_owned()).fold(
                     default_answer_title,
@@ -512,7 +513,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let id = execute_and_values(
-                    r"INSERT INTO answers (form_id, user, title) VALUES (?, (SELECT id FROM users WHERE uuid = ?), ?)",
+                    r"INSERT INTO answers (form_id, user, title) VALUES (?, ?, ?)",
                     [
                         form_id.to_owned().into_inner().into(),
                         id.to_owned().to_string().into(),
@@ -520,8 +521,8 @@ impl FormDatabase for ConnectionPool {
                     ],
                     txn,
                 )
-                    .await?
-                    .last_insert_id();
+                .await?
+                .last_insert_id();
 
                 let params = answers
                     .iter()
@@ -539,12 +540,13 @@ impl FormDatabase for ConnectionPool {
                     params.into_iter().map(|value| value.into()),
                     txn,
                 )
-                    .await?;
+                .await?;
 
                 Ok::<_, InfraError>(())
             })
-        }).await
-            .map_err(Into::into)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -561,7 +563,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_answer_query_result_opt = query_one_and_values(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id = ?",
                     [answer_id.into_inner().into()],
@@ -569,7 +571,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_comments = query_all_and_values(
-                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, commented_by FROM form_answer_comments
                         INNER JOIN users ON form_answer_comments.commented_by = users.id
                         WHERE answer_id = ?",
                     [answer_id.into_inner().into()],
@@ -605,7 +607,7 @@ impl FormDatabase for ConnectionPool {
                             timestamp: rs.try_get("", "timestamp")?,
                             commented_by: UserDto {
                                 name: rs.try_get("", "name")?,
-                                id: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                                id: uuid::Uuid::from_str(&rs.try_get::<String>("", "commented_by")?)?,
                                 role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             },
                         })
@@ -627,7 +629,7 @@ impl FormDatabase for ConnectionPool {
                     .map(|rs| {
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id.into_inner(),
-                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
@@ -652,7 +654,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let fetch_answers = query_all_and_values(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE form_id = ?
                         ORDER BY answers.time_stamp",
@@ -666,7 +668,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_comments = query_all_and_values(
-                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, commented_by FROM form_answer_comments
                         INNER JOIN users ON form_answer_comments.commented_by = users.id
                         WHERE answer_id IN (SELECT id FROM answers WHERE form_id = ?)",
                     [form_id.into_inner().into()],
@@ -713,7 +715,7 @@ impl FormDatabase for ConnectionPool {
                                     timestamp: rs.try_get("", "timestamp")?,
                                     commented_by: UserDto {
                                         name: rs.try_get("", "name")?,
-                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "commented_by")?)?,
                                         role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                                     },
                                 })
@@ -735,7 +737,7 @@ impl FormDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id,
-                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
@@ -757,7 +759,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let fetch_answers = query_all(
-                    r"SELECT form_id, answers.id AS answer_id, title, uuid, name, role, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
                     txn,
@@ -769,7 +771,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_comments = query_all(
-                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, uuid FROM form_answer_comments
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, commented_by FROM form_answer_comments
                         INNER JOIN users ON form_answer_comments.commented_by = users.id",
                     txn,
                 );
@@ -812,7 +814,7 @@ impl FormDatabase for ConnectionPool {
                                     timestamp: rs.try_get("", "timestamp")?,
                                     commented_by: UserDto {
                                         name: rs.try_get("", "name")?,
-                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "commented_by")?)?,
                                         role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                                     },
                                 })
@@ -834,7 +836,7 @@ impl FormDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(PostedAnswersDto {
                             id: answer_id,
-                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "uuid")?)?,
+                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
@@ -1089,15 +1091,15 @@ impl FormDatabase for ConnectionPool {
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError> {
         let params = [
             answer_id.into_inner().into(),
-            comment.content.to_owned().into(),
             comment.commented_by.id.to_string().into(),
+            comment.content.to_owned().into(),
         ];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
                     r"INSERT INTO form_answer_comments (answer_id, commented_by, content)
-                        SELECT ?, users.id, ? FROM users WHERE uuid = ?",
+                        VALUES (?, ?, ?)",
                     params,
                     txn,
                 )

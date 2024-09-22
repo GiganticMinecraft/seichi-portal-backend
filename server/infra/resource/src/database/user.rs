@@ -22,7 +22,7 @@ impl UserDatabase for ConnectionPool {
             .read_only_transaction(|txn| {
                 Box::pin(async move {
                     let query = query_one_and_values(
-                        "SELECT name, role FROM users WHERE uuid = ?",
+                        "SELECT name, role FROM users WHERE id = ?",
                         [uuid.to_string().into()],
                         txn,
                     )
@@ -54,7 +54,7 @@ impl UserDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    "INSERT INTO users (uuid, name, role) VALUES (?, ?, ?)
+                    "INSERT INTO users (id, name, role) VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE
                         name = VALUES(name)",
                     params,
@@ -73,7 +73,7 @@ impl UserDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    "UPDATE users SET role = ? WHERE uuid = ?",
+                    "UPDATE users SET role = ? WHERE id = ?",
                     [role.to_string().into(), uuid.to_string().into()],
                     txn,
                 )
@@ -89,14 +89,14 @@ impl UserDatabase for ConnectionPool {
     async fn fetch_all_users(&self) -> Result<Vec<User>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let query = query_all("SELECT uuid, name, role FROM users", txn).await?;
+                let query = query_all("SELECT id, name, role FROM users", txn).await?;
 
                 let users = query
                     .into_iter()
                     .map(|rs| {
                         Ok::<User, InfraError>(User {
                             name: rs.try_get("", "name")?,
-                            id: Uuid::parse_str(&rs.try_get::<String>("", "uuid")?)?,
+                            id: Uuid::parse_str(&rs.try_get::<String>("", "id")?)?,
                             role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                         })
                     })
