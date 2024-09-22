@@ -2,6 +2,8 @@ services:
   db:
     image: mariadb:10.11.9
     container_name: mariadb
+    # NOTE: binlog-format=ROW は meilisync で必要
+    # ref: https://www.meilisearch.com/docs/guides/database/meilisync_mysql#configure-mysql
     command: --log-bin --binlog-format=ROW
     environment:
       - MYSQL_INITDB_SKIP_TZINFO=1
