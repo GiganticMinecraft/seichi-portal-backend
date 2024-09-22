@@ -13,12 +13,13 @@ use sea_orm::{
 
 use crate::database::{
     components::DatabaseComponents,
-    config::{MySQL, Redis, MYSQL, REDIS},
+    config::{MeiliSearch, MySQL, Redis, MEILISEARCH, MYSQL, REDIS},
 };
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
     pub(crate) rdb_pool: DatabaseConnection,
+    pub(crate) meilisearch_client: meilisearch_sdk::client::Client,
 }
 
 impl ConnectionPool {
@@ -34,10 +35,14 @@ impl ConnectionPool {
 
         let database_url = format!("mysql://{user}:{password}@{host}:{port}/{database}");
 
+        let MeiliSearch { host, api_key } = &*MEILISEARCH;
+
         Self {
             rdb_pool: Database::connect(&database_url)
                 .await
                 .unwrap_or_else(|_| panic!("Cannot establish connect to {database_url}.")),
+            meilisearch_client: meilisearch_sdk::client::Client::new(host, api_key.to_owned())
+                .unwrap_or_else(|_| panic!("Cannot establish connect to MeiliSearch.")),
         }
     }
 
