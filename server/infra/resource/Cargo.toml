@@ -28,3 +28,4 @@ sha256 = "1.5.0"
 common = { path = "../../common" }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
+meilisearch-sdk = "0.27.1"
