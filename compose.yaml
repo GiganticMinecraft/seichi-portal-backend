@@ -29,7 +29,10 @@ services:
       - seichi_portal
     restart: always
   meilisearch:
-    image: getmeili/meilisearch:v1.10
+    # NOTE: meilisearch の公式 Docker イメージをそのまま使用すると、全文検索時に日本語の漢字と中国語の漢字が衝突するために検索できない場合があるため、
+    # 中国語のトークン化が無効化された日本語用の Docker イメージを使用する
+    # ref: https://github.com/meilisearch/meilisearch/pull/3882
+    image: getmeili/meilisearch:prototype-japanese-13
     ports:
       - "7700:7700"
     environment:
