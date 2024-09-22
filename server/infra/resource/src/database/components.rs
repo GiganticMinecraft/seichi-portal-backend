@@ -1,9 +1,11 @@
+use crate::dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
 use async_trait::async_trait;
+use domain::form::models::Answer;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, FormDescription, FormId, FormQuestionUpdateSchema, FormTitle,
-        FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
-        PostedAnswersUpdateSchema,
+        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
+        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit,
+        PostedAnswersSchema, PostedAnswersUpdateSchema,
     },
     user::models::{Role, User},
 };
@@ -11,17 +13,17 @@ use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
-
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteUserDatabase: UserDatabase;
+    type ConcreteSearchDatabase: SearchDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
+    fn search(&self) -> &Self::ConcreteSearchDatabase;
 }
 
 #[automock]
@@ -113,4 +115,14 @@ pub trait UserDatabase: Send + Sync {
         session_id: String,
     ) -> Result<Option<User>, InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait SearchDatabase: Send + Sync {
+    async fn search_users(&self, query: String) -> Result<Vec<User>, InfraError>;
+    async fn search_forms(&self, query: String) -> Result<Vec<Form>, InfraError>;
+    async fn search_labels_for_forms(&self, query: String) -> Result<Vec<Label>, InfraError>;
+    async fn search_labels_for_answers(&self, query: String) -> Result<Vec<Label>, InfraError>;
+    async fn search_answers(&self, query: String) -> Result<Vec<Answer>, InfraError>;
 }

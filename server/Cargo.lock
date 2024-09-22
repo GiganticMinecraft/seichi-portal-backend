@@ -1017,6 +1017,7 @@ dependencies = [
 name = "errors"
 version = "0.1.0"
 dependencies = [
+ "meilisearch-sdk",
  "redis",
  "reqwest",
  "sea-orm",
@@ -4225,6 +4226,7 @@ dependencies = [
  "chrono",
  "domain",
  "errors",
+ "futures",
  "types",
  "uuid",
 ]

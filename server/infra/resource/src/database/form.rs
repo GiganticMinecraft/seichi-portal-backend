@@ -101,7 +101,7 @@ impl FormDatabase for ConnectionPool {
                     .await?;
 
                 let labels = query_all(
-                    r"SELECT form_id, label_id, label FROM label_settings_for_forms
+                    r"SELECT form_id, label_id, name FROM label_settings_for_forms
                         INNER JOIN label_for_forms ON label_for_forms.id = label_id",
                     txn,
                 )
@@ -170,7 +170,7 @@ impl FormDatabase for ConnectionPool {
                     .await?;
 
                 let labels = query_all(
-                    r"SELECT form_id, label_id, label FROM label_settings_for_forms
+                    r"SELECT form_id, label_id, name FROM label_settings_for_forms
                         INNER JOIN label_for_forms ON label_for_forms.id = label_id",
                     txn,
                 )
@@ -250,7 +250,7 @@ impl FormDatabase for ConnectionPool {
                     .await?;
 
                 let labels = query_all_and_values(
-                    r"SELECT label_id, label FROM label_settings_for_forms
+                    r"SELECT label_id, name FROM label_settings_for_forms
                         INNER JOIN label_for_forms ON label_for_forms.id = label_id
                         WHERE form_id = ?",
                     [form_id.into_inner().into()],
@@ -294,7 +294,7 @@ impl FormDatabase for ConnectionPool {
                     .map(|rs| {
                         Ok::<LabelDto, InfraError>(LabelDto {
                             id: rs.try_get("", "label_id")?,
-                            name: rs.try_get("", "label")?,
+                            name: rs.try_get("", "name")?,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -579,7 +579,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_labels = query_all_and_values(
-                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    r"SELECT answer_id, label_id, name FROM label_settings_for_form_answers
                     INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id
                     WHERE answer_id = ?",
                     [answer_id.into_inner().into()],
@@ -676,7 +676,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_labels = query_all_and_values(
-                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    r"SELECT answer_id, label_id, name FROM label_settings_for_form_answers
                     INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id
                     WHERE answer_id IN (SELECT id FROM answers WHERE form_id = ?)",
                     [form_id.into_inner().into()],
@@ -777,7 +777,7 @@ impl FormDatabase for ConnectionPool {
                 );
 
                 let fetch_labels = query_all(
-                    r"SELECT answer_id, label_id, label FROM label_settings_for_form_answers
+                    r"SELECT answer_id, label_id, name FROM label_settings_for_form_answers
                     INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id",
                     txn,
                 );
@@ -1135,7 +1135,7 @@ impl FormDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    "INSERT INTO label_for_form_answers (label) VALUES (?)",
+                    "INSERT INTO label_for_form_answers (name) VALUES (?)",
                     params,
                     txn,
                 )
@@ -1152,14 +1152,14 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let labels_rs =
-                    query_all("SELECT id, label FROM label_for_form_answers", txn).await?;
+                    query_all("SELECT id, name FROM label_for_form_answers", txn).await?;
 
                 labels_rs
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(LabelDto {
                             id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "label")?,
+                            name: rs.try_get("", "name")?,
                         })
                     })
                     .collect::<Result<Vec<LabelDto>, _>>()
@@ -1192,7 +1192,7 @@ impl FormDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    "UPDATE label_for_form_answers SET label = ? WHERE id = ?",
+                    "UPDATE label_for_form_answers SET name = ? WHERE id = ?",
                     params,
                     txn,
                 )
@@ -1244,12 +1244,8 @@ impl FormDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
-                    "INSERT INTO label_for_forms (label) VALUES (?)",
-                    params,
-                    txn,
-                )
-                .await?;
+                execute_and_values("INSERT INTO label_for_forms (name) VALUES (?)", params, txn)
+                    .await?;
 
                 Ok::<_, InfraError>(())
             })
@@ -1261,14 +1257,14 @@ impl FormDatabase for ConnectionPool {
     async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = query_all("SELECT id, label FROM label_for_forms", txn).await?;
+                let labels_rs = query_all("SELECT id, name FROM label_for_forms", txn).await?;
 
                 labels_rs
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(LabelDto {
                             id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "label")?,
+                            name: rs.try_get("", "name")?,
                         })
                     })
                     .collect::<Result<Vec<LabelDto>, _>>()
@@ -1301,7 +1297,7 @@ impl FormDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    "UPDATE label_for_forms SET label = ? WHERE id = ?",
+                    "UPDATE label_for_forms SET name = ? WHERE id = ?",
                     params,
                     txn,
                 )

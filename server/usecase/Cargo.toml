@@ -9,3 +9,4 @@ errors = { path = "../errors" }
 types = { path = "../types" }
 uuid = { workspace = true }
 chrono = { workspace = true }
+futures = { workspace = true }
