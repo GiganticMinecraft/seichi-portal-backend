@@ -19,3 +19,15 @@ pub struct Redis {
 }
 
 pub static REDIS: Lazy<Redis> = Lazy::new(|| envy::prefixed("REDIS_").from_env::<Redis>().unwrap());
+
+#[derive(Deserialize, Debug)]
+pub struct MeiliSearch {
+    pub host: String,
+    pub api_key: Option<String>,
+}
+
+pub static MEILISEARCH: Lazy<MeiliSearch> = Lazy::new(|| {
+    envy::prefixed("MEILISEARCH_")
+        .from_env::<MeiliSearch>()
+        .unwrap()
+});
