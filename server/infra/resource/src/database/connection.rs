@@ -18,7 +18,7 @@ use crate::database::{
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
-    pub(crate) pool: DatabaseConnection,
+    pub(crate) rdb_pool: DatabaseConnection,
 }
 
 impl ConnectionPool {
@@ -35,14 +35,14 @@ impl ConnectionPool {
         let database_url = format!("mysql://{user}:{password}@{host}:{port}/{database}");
 
         Self {
-            pool: Database::connect(&database_url)
+            rdb_pool: Database::connect(&database_url)
                 .await
                 .unwrap_or_else(|_| panic!("Cannot establish connect to {database_url}.")),
         }
     }
 
     pub async fn migrate(&self) -> anyhow::Result<()> {
-        migration::Migrator::up(&self.pool, None).await?;
+        migration::Migrator::up(&self.rdb_pool, None).await?;
 
         Ok(())
     }
@@ -59,7 +59,7 @@ impl ConnectionPool {
         T: Send,
         E: std::error::Error + Send,
     {
-        self.pool
+        self.rdb_pool
             .transaction_with_config(callback, None, Some(AccessMode::ReadOnly))
             .await
     }
@@ -76,7 +76,7 @@ impl ConnectionPool {
         T: Send,
         E: std::error::Error + Send,
     {
-        self.pool
+        self.rdb_pool
             .transaction_with_config(callback, None, Some(AccessMode::ReadWrite))
             .await
     }
@@ -89,7 +89,7 @@ impl DatabaseComponents for ConnectionPool {
     type TransactionAcrossComponents = DatabaseTransaction;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents> {
-        Ok(self.pool.begin().await?)
+        Ok(self.rdb_pool.begin().await?)
     }
 
     fn form(&self) -> &Self::ConcreteFormDatabase {
