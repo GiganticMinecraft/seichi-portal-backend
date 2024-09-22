@@ -17,3 +17,14 @@ meilisearch:
 sync:
   - table: form_meta_data
     full: true
+  - table: real_answers
+    full: true
+  - table: form_answer_comments
+    full: true
+  - table: label_for_form_answers
+    full: true
+  - table: label_for_forms
+    full: true
+  - table: users
+    full: true
+
