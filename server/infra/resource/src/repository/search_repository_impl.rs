@@ -1,7 +1,6 @@
 use async_trait::async_trait;
-use domain::form::models::Answer;
 use domain::{
-    form::models::{Form, Label},
+    form::models::{Answer, Form, Label},
     repository::search_repository::SearchRepository,
     user::models::User,
 };

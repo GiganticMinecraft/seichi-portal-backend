@@ -1,17 +1,17 @@
-use crate::dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
 use async_trait::async_trait;
-use domain::form::models::Answer;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswersSchema, PostedAnswersUpdateSchema,
+        Answer, AnswerId, Comment, CommentId, Form, FormDescription, FormId,
+        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema,
+        OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
     },
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
+
+use crate::dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {

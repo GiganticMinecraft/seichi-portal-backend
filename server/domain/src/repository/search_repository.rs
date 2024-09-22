@@ -2,9 +2,8 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::models::Answer;
 use crate::{
-    form::models::{Form, Label},
+    form::models::{Answer, Form, Label},
     user::models::User,
 };
 

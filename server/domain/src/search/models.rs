@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::form::models::Answer;
 use crate::{
-    form::models::{Form, Label},
+    form::models::{Answer, Form, Label},
     user::models::User,
 };
 
