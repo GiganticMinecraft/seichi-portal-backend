@@ -9,7 +9,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::search::SearchUseCase;
 
-pub async fn full_search(
+pub async fn cross_search(
     State(repository): State<RealInfrastructureRepository>,
     Query(search_query): Query<SearchQuery>,
 ) -> impl IntoResponse {
@@ -23,7 +23,7 @@ pub async fn full_search(
             Json(json!({ "reason": "query is required" })),
         )
             .into_response(),
-        SearchQuery { query: Some(query) } => match search_use_case.full_search(query).await {
+        SearchQuery { query: Some(query) } => match search_use_case.cross_search(query).await {
             Ok(result) => (StatusCode::OK, Json(result)).into_response(),
             Err(err) => {
                 tracing::error!("{}", err);

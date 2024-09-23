@@ -1,4 +1,4 @@
-use domain::{repository::search_repository::SearchRepository, search::models::FullSearch};
+use domain::{repository::search_repository::SearchRepository, search::models::CrossSearchResult};
 use errors::Error;
 use futures::try_join;
 
@@ -7,7 +7,7 @@ pub struct SearchUseCase<'a, SearchRepo: SearchRepository> {
 }
 
 impl<R: SearchRepository> SearchUseCase<'_, R> {
-    pub async fn full_search(&self, query: String) -> Result<FullSearch, Error> {
+    pub async fn cross_search(&self, query: String) -> Result<CrossSearchResult, Error> {
         let (forms, users, label_for_forms, label_for_answers, answers) = try_join!(
             self.repository.search_forms(query.to_owned()),
             self.repository.search_users(query.to_owned()),
@@ -16,7 +16,7 @@ impl<R: SearchRepository> SearchUseCase<'_, R> {
             self.repository.search_answers(query.to_owned())
         )?;
 
-        Ok(FullSearch {
+        Ok(CrossSearchResult {
             forms,
             users,
             label_for_forms,

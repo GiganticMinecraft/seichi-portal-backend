@@ -25,7 +25,7 @@ use presentation::{
         update_form_handler,
     },
     health_check_handler::health_check,
-    search_handler::full_search,
+    search_handler::cross_search,
     user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
@@ -140,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/users/:uuid", patch(patch_user_role))
         .with_state(shared_repository.to_owned())
-        .route("/search", get(full_search))
+        .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .route("/session", post(start_session).delete(end_session))
