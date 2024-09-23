@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Serialize, Debug, PartialEq)]
-pub struct FullSearch {
+pub struct CrossSearchResult {
     pub forms: Vec<Form>,
     pub users: Vec<User>,
     pub answers: Vec<Answer>,
