@@ -51,6 +51,7 @@ services:
       - ./docker/meilisync/config.yml:/meilisync/config.yml
     networks:
       - seichi_portal
+    restart: always
 networks:
   seichi_portal:
     name: seichi-portal-backend-network
