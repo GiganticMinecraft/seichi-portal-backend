@@ -27,4 +27,5 @@ sync:
     full: true
   - table: users
     full: true
-
+  - table: form_answer_comments
+    full: true
