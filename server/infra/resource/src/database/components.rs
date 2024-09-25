@@ -120,9 +120,13 @@ pub trait UserDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait SearchDatabase: Send + Sync {
-    async fn search_users(&self, query: String) -> Result<Vec<User>, InfraError>;
-    async fn search_forms(&self, query: String) -> Result<Vec<Form>, InfraError>;
-    async fn search_labels_for_forms(&self, query: String) -> Result<Vec<Label>, InfraError>;
-    async fn search_labels_for_answers(&self, query: String) -> Result<Vec<Label>, InfraError>;
-    async fn search_answers(&self, query: String) -> Result<Vec<Answer>, InfraError>;
+    async fn search_users(&self, query: &str) -> Result<Vec<User>, InfraError>;
+    async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError>;
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, InfraError>;
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, InfraError>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<Answer>, InfraError>;
+    async fn search_comments(
+        &self,
+        query: &str,
+    ) -> Result<Vec<domain::search::models::Comment>, InfraError>;
 }

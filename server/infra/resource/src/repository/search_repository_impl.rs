@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::models::{Answer, Form, Label},
     repository::search_repository::SearchRepository,
+    search::models::Comment,
     user::models::User,
 };
 use errors::Error;
@@ -13,7 +14,7 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Client> {
-    async fn search_users(&self, query: String) -> Result<Vec<User>, Error> {
+    async fn search_users(&self, query: &str) -> Result<Vec<User>, Error> {
         self.client
             .search()
             .search_users(query)
@@ -21,7 +22,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_forms(&self, query: String) -> Result<Vec<Form>, Error> {
+    async fn search_forms(&self, query: &str) -> Result<Vec<Form>, Error> {
         self.client
             .search()
             .search_forms(query)
@@ -29,7 +30,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_labels_for_forms(&self, query: String) -> Result<Vec<Label>, Error> {
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, Error> {
         self.client
             .search()
             .search_labels_for_forms(query)
@@ -37,7 +38,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_labels_for_answers(&self, query: String) -> Result<Vec<Label>, Error> {
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, Error> {
         self.client
             .search()
             .search_labels_for_answers(query)
@@ -45,10 +46,18 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_answers(&self, query: String) -> Result<Vec<Answer>, Error> {
+    async fn search_answers(&self, query: &str) -> Result<Vec<Answer>, Error> {
         self.client
             .search()
             .search_answers(query)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, Error> {
+        self.client
+            .search()
+            .search_comments(query)
             .await
             .map_err(Into::into)
     }

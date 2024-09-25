@@ -4,15 +4,17 @@ use mockall::automock;
 
 use crate::{
     form::models::{Answer, Form, Label},
+    search::models::Comment,
     user::models::User,
 };
 
 #[automock]
 #[async_trait]
 pub trait SearchRepository: Send + Sync + 'static {
-    async fn search_users(&self, query: String) -> Result<Vec<User>, Error>;
-    async fn search_forms(&self, query: String) -> Result<Vec<Form>, Error>;
-    async fn search_labels_for_forms(&self, query: String) -> Result<Vec<Label>, Error>;
-    async fn search_labels_for_answers(&self, query: String) -> Result<Vec<Label>, Error>;
-    async fn search_answers(&self, query: String) -> Result<Vec<Answer>, Error>;
+    async fn search_users(&self, query: &str) -> Result<Vec<User>, Error>;
+    async fn search_forms(&self, query: &str) -> Result<Vec<Form>, Error>;
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, Error>;
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, Error>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<Answer>, Error>;
+    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, Error>;
 }

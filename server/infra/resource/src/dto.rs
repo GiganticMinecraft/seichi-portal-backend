@@ -174,6 +174,7 @@ impl TryFrom<UserDto> for User {
 }
 
 pub struct CommentDto {
+    pub answer_id: i32,
     pub comment_id: i32,
     pub content: String,
     pub timestamp: DateTime<Utc>,
@@ -185,6 +186,7 @@ impl TryFrom<CommentDto> for domain::form::models::Comment {
 
     fn try_from(
         CommentDto {
+            answer_id,
             comment_id,
             content,
             timestamp,
@@ -192,6 +194,7 @@ impl TryFrom<CommentDto> for domain::form::models::Comment {
         }: CommentDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Comment {
+            answer_id: answer_id.into(),
             comment_id: comment_id.into(),
             content,
             timestamp,
