@@ -11,12 +11,12 @@ use crate::database::{components::SearchDatabase, connection::ConnectionPool};
 
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
-    async fn search_users(&self, query: String) -> Result<Vec<User>, InfraError> {
+    async fn search_users(&self, query: &str) -> Result<Vec<User>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("users")
             .search()
-            .with_query(&query)
+            .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
             .execute::<User>()
             .await?
@@ -26,12 +26,12 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_forms(&self, query: String) -> Result<Vec<Form>, InfraError> {
+    async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("form_meta_data")
             .search()
-            .with_query(query.as_str())
+            .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
             .execute::<Form>()
             .await?
@@ -41,12 +41,12 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_labels_for_forms(&self, query: String) -> Result<Vec<Label>, InfraError> {
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("label_for_forms")
             .search()
-            .with_query(query.as_str())
+            .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
             .execute::<Label>()
             .await?
@@ -56,12 +56,12 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_labels_for_answers(&self, query: String) -> Result<Vec<Label>, InfraError> {
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("label_for_form_answers")
             .search()
-            .with_query(query.as_str())
+            .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
             .execute::<Label>()
             .await?
@@ -71,12 +71,12 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_answers(&self, query: String) -> Result<Vec<Answer>, InfraError> {
+    async fn search_answers(&self, query: &str) -> Result<Vec<Answer>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("real_answers")
             .search()
-            .with_query(query.as_str())
+            .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
             .execute::<Answer>()
             .await?
@@ -86,12 +86,12 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_comments(&self, query: String) -> Result<Vec<Comment>, InfraError> {
+    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("form_answer_comments")
             .search()
-            .with_query(query.as_str())
+            .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
             .execute::<Comment>()
             .await?
