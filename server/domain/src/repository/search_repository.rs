@@ -3,7 +3,8 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::models::{Answer, Comment, Form, Label},
+    form::models::{Answer, Form, Label},
+    search::models::Comment,
     user::models::User,
 };
 

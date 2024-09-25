@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Answer, Comment, Form, Label},
+    form::models::{Answer, Form, Label},
+    search::models::Comment,
     user::models::User,
 };
 use errors::infra::InfraError;

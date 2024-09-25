@@ -1,9 +1,18 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
-    form::models::{Answer, Comment, Form, Label},
+    form::models::{Answer, AnswerId, CommentId, Form, Label},
     user::models::User,
 };
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct Comment {
+    pub answer_id: AnswerId,
+    pub id: CommentId,
+    pub content: String,
+    pub commented_by: Uuid,
+}
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct CrossSearchResult {
