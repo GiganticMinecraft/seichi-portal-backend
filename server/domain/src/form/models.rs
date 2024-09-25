@@ -283,6 +283,7 @@ pub type CommentId = types::Id<Comment>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Comment {
+    pub answer_id: AnswerId,
     pub comment_id: CommentId,
     pub content: String,
     pub timestamp: DateTime<Utc>,

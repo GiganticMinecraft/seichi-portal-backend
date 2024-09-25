@@ -306,6 +306,7 @@ pub async fn post_form_comment(
     let comment = Comment {
         // NOTE: コメントはデータベースで insert した後に id が振られるのでデフォルト値を入れておく
         comment_id: Default::default(),
+        answer_id: comment_schema.answer_id,
         content: comment_schema.content,
         timestamp: chrono::Utc::now(),
         commented_by: user,

@@ -603,6 +603,7 @@ impl FormDatabase for ConnectionPool {
                     iter()
                     .map(|rs| {
                         Ok::<CommentDto, InfraError>(CommentDto {
+                            answer_id: rs.try_get("", "answer_id")?,
                             comment_id: rs.try_get("", "comment_id")?,
                             content: rs.try_get("", "content")?,
                             timestamp: rs.try_get("", "timestamp")?,
@@ -712,6 +713,7 @@ impl FormDatabase for ConnectionPool {
                             })
                             .map(|rs| {
                                 Ok::<CommentDto, InfraError>(CommentDto {
+                                    answer_id: rs.try_get("", "answer_id")?,
                                     comment_id: rs.try_get("", "comment_id")?,
                                     content: rs.try_get("", "content")?,
                                     timestamp: rs.try_get("", "timestamp")?,
@@ -812,6 +814,7 @@ impl FormDatabase for ConnectionPool {
                             })
                             .map(|rs| {
                                 Ok::<CommentDto, InfraError>(CommentDto {
+                                    answer_id: rs.try_get("", "answer_id")?,
                                     comment_id: rs.try_get("", "comment_id")?,
                                     content: rs.try_get("", "content")?,
                                     timestamp: rs.try_get("", "timestamp")?,
