@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Answer, Form, Label},
+    form::models::{Answer, Comment, Form, Label},
     user::models::User,
 };
 use errors::infra::InfraError;
@@ -79,6 +79,21 @@ impl SearchDatabase for ConnectionPool {
             .with_query(query.as_str())
             .with_attributes_to_highlight(Selectors::All)
             .execute::<Answer>()
+            .await?
+            .hits
+            .into_iter()
+            .map(|hit| hit.result)
+            .collect_vec())
+    }
+
+    async fn search_comments(&self, query: String) -> Result<Vec<Comment>, InfraError> {
+        Ok(self
+            .meilisearch_client
+            .index("form_answer_comments")
+            .search()
+            .with_query(query.as_str())
+            .with_attributes_to_highlight(Selectors::All)
+            .execute::<Comment>()
             .await?
             .hits
             .into_iter()

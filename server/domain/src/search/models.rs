@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    form::models::{Answer, Form, Label},
+    form::models::{Answer, Comment, Form, Label},
     user::models::User,
 };
 
@@ -12,6 +12,7 @@ pub struct CrossSearchResult {
     pub answers: Vec<Answer>,
     pub label_for_forms: Vec<Label>,
     pub label_for_answers: Vec<Label>,
+    pub comments: Vec<Comment>,
 }
 
 #[derive(Deserialize, Debug, PartialEq)]

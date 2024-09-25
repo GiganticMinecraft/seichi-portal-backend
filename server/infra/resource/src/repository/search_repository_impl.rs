@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Answer, Form, Label},
+    form::models::{Answer, Comment, Form, Label},
     repository::search_repository::SearchRepository,
     user::models::User,
 };
@@ -49,6 +49,14 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
         self.client
             .search()
             .search_answers(query)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn search_comments(&self, query: String) -> Result<Vec<Comment>, Error> {
+        self.client
+            .search()
+            .search_comments(query)
             .await
             .map_err(Into::into)
     }

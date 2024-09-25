@@ -125,4 +125,5 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_labels_for_forms(&self, query: String) -> Result<Vec<Label>, InfraError>;
     async fn search_labels_for_answers(&self, query: String) -> Result<Vec<Label>, InfraError>;
     async fn search_answers(&self, query: String) -> Result<Vec<Answer>, InfraError>;
+    async fn search_comments(&self, query: String) -> Result<Vec<Comment>, InfraError>;
 }
