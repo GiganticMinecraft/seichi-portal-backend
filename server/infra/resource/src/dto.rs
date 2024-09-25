@@ -136,6 +136,7 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
 }
 
 pub struct AnswerDto {
+    pub answer_id: i32,
     pub question_id: i32,
     pub answer: String,
 }
@@ -145,11 +146,13 @@ impl TryFrom<AnswerDto> for domain::form::models::Answer {
 
     fn try_from(
         AnswerDto {
+            answer_id,
             question_id,
             answer,
         }: AnswerDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Answer {
+            answer_id: answer_id.into(),
             question_id: question_id.into(),
             answer,
         })

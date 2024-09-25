@@ -592,6 +592,7 @@ impl FormDatabase for ConnectionPool {
                     .iter()
                     .map(|rs| {
                         Ok::<AnswerDto, DbErr>(AnswerDto {
+                            answer_id: rs.try_get("", "answer_id")?,
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         })
@@ -697,6 +698,7 @@ impl FormDatabase for ConnectionPool {
                             })
                             .map(|rs| {
                                 Ok::<AnswerDto, DbErr>(AnswerDto {
+                                    answer_id: rs.try_get("", "answer_id")?,
                                     question_id: rs.try_get("", "question_id")?,
                                     answer: rs.try_get("", "answer")?,
                                 })
@@ -796,6 +798,7 @@ impl FormDatabase for ConnectionPool {
                             })
                             .map(|rs| {
                                 Ok::<AnswerDto, DbErr>(AnswerDto {
+                                    answer_id: rs.try_get("", "answer_id")?,
                                     question_id: rs.try_get("", "question_id")?,
                                     answer: rs.try_get("", "answer")?,
                                 })

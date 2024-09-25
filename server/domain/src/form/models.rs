@@ -274,6 +274,7 @@ pub struct PostedAnswersUpdateSchema {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Answer {
+    pub answer_id: AnswerId,
     pub question_id: QuestionId,
     pub answer: String,
 }
