@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, Form, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema,
-        OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
+        PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -45,10 +45,40 @@ pub trait FormDatabase: Send + Sync {
     ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
-    async fn update(
+    async fn update_form_title(
         &self,
-        form_id: FormId,
-        form_update_targets: FormUpdateTargets,
+        form_id: &FormId,
+        form_title: &FormTitle,
+    ) -> Result<(), InfraError>;
+    async fn update_form_description(
+        &self,
+        form_id: &FormId,
+        form_description: &FormDescription,
+    ) -> Result<(), InfraError>;
+    async fn update_form_response_period(
+        &self,
+        form_id: &FormId,
+        response_period: &ResponsePeriod,
+    ) -> Result<(), InfraError>;
+    async fn update_form_webhook_url(
+        &self,
+        form_id: &FormId,
+        webhook_url: &WebhookUrl,
+    ) -> Result<(), InfraError>;
+    async fn update_form_default_answer_title(
+        &self,
+        form_id: &FormId,
+        default_answer_title: &DefaultAnswerTitle,
+    ) -> Result<(), InfraError>;
+    async fn update_form_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
+    ) -> Result<(), InfraError>;
+    async fn update_form_answer_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
     ) -> Result<(), InfraError>;
     async fn post_answer(
         &self,

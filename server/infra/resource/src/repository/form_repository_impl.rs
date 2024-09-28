@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
+        PostedAnswers, PostedAnswersSchema, PostedAnswersUpdateSchema, Question, ResponsePeriod,
+        SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -73,14 +74,88 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn update(
+    async fn update_title(&self, form_id: &FormId, title: &FormTitle) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_title(form_id, title)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_description(
         &self,
-        form_id: FormId,
-        form_update_targets: FormUpdateTargets,
+        form_id: &FormId,
+        description: &FormDescription,
     ) -> Result<(), Error> {
         self.client
             .form()
-            .update(form_id, form_update_targets)
+            .update_form_description(form_id, description)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_response_period(
+        &self,
+        form_id: &FormId,
+        response_period: &ResponsePeriod,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_response_period(form_id, response_period)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_webhook_url(
+        &self,
+        form_id: &FormId,
+        webhook_url: &WebhookUrl,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_webhook_url(form_id, webhook_url)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_default_answer_title(
+        &self,
+        form_id: &FormId,
+        default_answer_title: &DefaultAnswerTitle,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_default_answer_title(form_id, default_answer_title)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_visibility(form_id, visibility)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_answer_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_answer_visibility(form_id, visibility)
             .await
             .map_err(Into::into)
     }

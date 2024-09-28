@@ -4,9 +4,10 @@ use mockall::automock;
 
 use crate::{
     form::models::{
-        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
+        PostedAnswers, PostedAnswersSchema, PostedAnswersUpdateSchema, Question, ResponsePeriod,
+        SimpleForm, Visibility, WebhookUrl,
     },
     user::models::User,
 };
@@ -25,10 +26,36 @@ pub trait FormRepository: Send + Sync + 'static {
     async fn list(&self, offset_and_limit: OffsetAndLimit) -> Result<Vec<SimpleForm>, Error>;
     async fn get(&self, id: FormId) -> Result<Form, Error>;
     async fn delete(&self, id: FormId) -> Result<(), Error>;
-    async fn update(
+    async fn update_title(&self, form_id: &FormId, title: &FormTitle) -> Result<(), Error>;
+    async fn update_description(
         &self,
-        form_id: FormId,
-        form_update_targets: FormUpdateTargets,
+        form_id: &FormId,
+        description: &FormDescription,
+    ) -> Result<(), Error>;
+    async fn update_response_period(
+        &self,
+        form_id: &FormId,
+        response_period: &ResponsePeriod,
+    ) -> Result<(), Error>;
+    async fn update_webhook_url(
+        &self,
+        form_id: &FormId,
+        webhook_url: &WebhookUrl,
+    ) -> Result<(), Error>;
+    async fn update_default_answer_title(
+        &self,
+        form_id: &FormId,
+        default_answer_title: &DefaultAnswerTitle,
+    ) -> Result<(), Error>;
+    async fn update_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
+    ) -> Result<(), Error>;
+    async fn update_answer_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
     ) -> Result<(), Error>;
     async fn post_answer(&self, user: &User, answers: &PostedAnswersSchema) -> Result<(), Error>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<PostedAnswers>, Error>;

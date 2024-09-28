@@ -6,9 +6,9 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
-        FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
-        PostedAnswersUpdateSchema, ReplaceAnswerLabelSchema, Visibility::PRIVATE,
+        AnswerId, Comment, CommentId, CommentSchema, FormId, FormQuestionUpdateSchema, Label,
+        LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
+        ReplaceAnswerLabelSchema, Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
@@ -18,10 +18,12 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
 
+use crate::form_schemas::{CreateFormSchema, UpdateFormSchema};
+
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(form): Json<Form>,
+    Json(form): Json<CreateFormSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
@@ -131,13 +133,26 @@ pub async fn delete_form_handler(
 pub async fn update_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-    Json(targets): Json<FormUpdateTargets>,
+    Json(targets): Json<UpdateFormSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.update_form(form_id, targets).await {
+    match form_use_case
+        .update_form(
+            &form_id,
+            targets.title.as_ref(),
+            targets.description.as_ref(),
+            targets.has_response_period,
+            targets.response_period.as_ref(),
+            targets.webhook.as_ref(),
+            targets.default_answer_title.as_ref(),
+            targets.visibility.as_ref(),
+            targets.answer_visibility.as_ref(),
+        )
+        .await
+    {
         Ok(form) => (StatusCode::OK, Json(form)).into_response(),
         Err(err) => handle_error(err).into_response(),
     }

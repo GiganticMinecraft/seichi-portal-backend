@@ -31,26 +31,6 @@ pub struct OffsetAndLimit {
     pub limit: Option<i32>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct FormUpdateTargets {
-    #[serde(default)]
-    pub title: Option<FormTitle>,
-    #[serde(default)]
-    pub description: Option<FormDescription>,
-    #[serde(default)]
-    pub has_response_period: Option<bool>,
-    #[serde(default)]
-    pub response_period: Option<ResponsePeriod>,
-    #[serde(default)]
-    pub webhook: Option<WebhookUrl>,
-    #[serde(default)]
-    pub default_answer_title: Option<DefaultAnswerTitle>,
-    #[serde(default)]
-    pub visibility: Option<Visibility>,
-    #[serde(default)]
-    pub answer_visibility: Option<Visibility>,
-}
-
 #[derive(Serialize, Debug)]
 pub struct SimpleForm {
     pub id: FormId,
