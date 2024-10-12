@@ -3,7 +3,7 @@ use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod, Visibility, WebhookUrl,
+        PostedAnswersUpdateSchema, ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -83,7 +83,8 @@ pub trait FormDatabase: Send + Sync {
     async fn post_answer(
         &self,
         user: &User,
-        answer: &PostedAnswersSchema,
+        form_id: FormId,
+        answers: Vec<Answer>,
     ) -> Result<(), InfraError>;
     async fn get_answers(
         &self,

@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, ResponsePeriod, Visibility, WebhookUrl,
+        PostedAnswersUpdateSchema, ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -520,11 +520,12 @@ impl FormDatabase for ConnectionPool {
     async fn post_answer(
         &self,
         user: &User,
-        answer: &PostedAnswersSchema,
+        form_id: FormId,
+        answers: Vec<Answer>,
     ) -> Result<(), InfraError> {
         let User { id, .. } = user.to_owned();
-        let form_id = answer.form_id.to_owned();
-        let answers = answer.answers.to_owned();
+        let form_id = form_id.to_owned();
+        let answers = answers.to_owned();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {

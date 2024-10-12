@@ -1,10 +1,10 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, PostedAnswersSchema, PostedAnswersUpdateSchema, Question, ResponsePeriod,
-        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
+        PostedAnswers, PostedAnswersUpdateSchema, Question, ResponsePeriod, SimpleForm, Visibility,
+        Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -126,10 +126,11 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn post_answers(
         &self,
         user: &User,
-        answers: &PostedAnswersSchema,
+        form_id: FormId,
+        title: DefaultAnswerTitle,
+        answers: Vec<Answer>,
     ) -> Result<(), Error> {
-        let is_within_period = answers
-            .form_id
+        let is_within_period = form_id
             .resolve(self.repository)
             .await?
             .and_then(|form| {
@@ -147,7 +148,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .unwrap_or(true);
 
         if is_within_period {
-            self.repository.post_answer(user, answers).await
+            self.repository
+                .post_answer(user, form_id, title, answers)
+                .await
         } else {
             Err(Error::from(OutOfPeriod))
         }

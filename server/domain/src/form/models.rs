@@ -218,13 +218,6 @@ impl DefaultAnswerTitle {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PostedAnswersSchema {
-    pub form_id: FormId,
-    pub title: DefaultAnswerTitle,
-    pub answers: Vec<Answer>,
-}
-
 pub type AnswerId = types::Id<PostedAnswers>;
 
 #[async_trait]

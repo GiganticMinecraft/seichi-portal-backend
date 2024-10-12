@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, PostedAnswersSchema, PostedAnswersUpdateSchema, Question, ResponsePeriod,
-        SimpleForm, Visibility, WebhookUrl,
+        PostedAnswers, PostedAnswersUpdateSchema, Question, ResponsePeriod, SimpleForm, Visibility,
+        WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -161,13 +161,19 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn post_answer(&self, user: &User, answers: &PostedAnswersSchema) -> Result<(), Error> {
-        let form = self.get(answers.form_id).await?;
-        form_outgoing::post_answer(&form, user, answers).await?;
+    async fn post_answer(
+        &self,
+        user: &User,
+        form_id: FormId,
+        title: DefaultAnswerTitle,
+        answers: Vec<Answer>,
+    ) -> Result<(), Error> {
+        let form = self.get(form_id).await?;
+        form_outgoing::post_answer(&form, user, title, &answers).await?;
 
         self.client
             .form()
-            .post_answer(user, answers)
+            .post_answer(user, form_id, answers)
             .await
             .map_err(Into::into)
     }

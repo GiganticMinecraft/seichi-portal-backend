@@ -4,10 +4,10 @@ use mockall::automock;
 
 use crate::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, PostedAnswersSchema, PostedAnswersUpdateSchema, Question, ResponsePeriod,
-        SimpleForm, Visibility, WebhookUrl,
+        PostedAnswers, PostedAnswersUpdateSchema, Question, ResponsePeriod, SimpleForm, Visibility,
+        WebhookUrl,
     },
     user::models::User,
 };
@@ -57,7 +57,13 @@ pub trait FormRepository: Send + Sync + 'static {
         form_id: &FormId,
         visibility: &Visibility,
     ) -> Result<(), Error>;
-    async fn post_answer(&self, user: &User, answers: &PostedAnswersSchema) -> Result<(), Error>;
+    async fn post_answer(
+        &self,
+        user: &User,
+        form_id: FormId,
+        title: DefaultAnswerTitle,
+        answers: Vec<Answer>,
+    ) -> Result<(), Error>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<PostedAnswers>, Error>;
     async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<PostedAnswers>, Error>;
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error>;
