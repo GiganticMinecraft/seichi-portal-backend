@@ -5,13 +5,13 @@ use domain::form::models::{
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
-pub struct CreateFormSchema {
+pub struct FormCreateSchema {
     pub title: FormTitle,
     pub description: FormDescription,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct UpdateFormSchema {
+pub struct FormUpdateSchema {
     #[serde(default)]
     pub title: Option<FormTitle>,
     #[serde(default)]
@@ -31,7 +31,7 @@ pub struct UpdateFormSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct PostAnswersSchema {
+pub struct AnswersPostSchema {
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
     pub answers: Vec<Answer>,

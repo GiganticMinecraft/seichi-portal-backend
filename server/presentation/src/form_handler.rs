@@ -18,13 +18,13 @@ use serde_json::json;
 use usecase::form::FormUseCase;
 
 use crate::form_schemas::{
-    AnswerUpdateSchema, CreateFormSchema, PostAnswersSchema, UpdateFormSchema,
+    AnswerUpdateSchema, AnswersPostSchema, FormCreateSchema, FormUpdateSchema,
 };
 
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(form): Json<CreateFormSchema>,
+    Json(form): Json<FormCreateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
@@ -134,7 +134,7 @@ pub async fn delete_form_handler(
 pub async fn update_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-    Json(targets): Json<UpdateFormSchema>,
+    Json(targets): Json<FormUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
@@ -255,7 +255,7 @@ pub async fn get_answer_by_form_id_handler(
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(schema): Json<PostAnswersSchema>,
+    Json(schema): Json<AnswersPostSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
