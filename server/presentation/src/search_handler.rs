@@ -4,10 +4,12 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use domain::{repository::Repositories, search::models::SearchQuery};
+use domain::repository::Repositories;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::search::SearchUseCase;
+
+use crate::search_schemas::SearchQuery;
 
 pub async fn cross_search(
     State(repository): State<RealInfrastructureRepository>,

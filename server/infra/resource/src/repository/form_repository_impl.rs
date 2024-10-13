@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -73,26 +73,106 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn update(
-        &self,
-        form_id: FormId,
-        form_update_targets: FormUpdateTargets,
-    ) -> Result<(), Error> {
+    async fn update_title(&self, form_id: &FormId, title: &FormTitle) -> Result<(), Error> {
         self.client
             .form()
-            .update(form_id, form_update_targets)
+            .update_form_title(form_id, title)
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn post_answer(&self, user: &User, answers: &PostedAnswersSchema) -> Result<(), Error> {
-        let form = self.get(answers.form_id).await?;
-        form_outgoing::post_answer(&form, user, answers).await?;
+    async fn update_description(
+        &self,
+        form_id: &FormId,
+        description: &FormDescription,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_description(form_id, description)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_response_period(
+        &self,
+        form_id: &FormId,
+        response_period: &ResponsePeriod,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_response_period(form_id, response_period)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_webhook_url(
+        &self,
+        form_id: &FormId,
+        webhook_url: &WebhookUrl,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_webhook_url(form_id, webhook_url)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_default_answer_title(
+        &self,
+        form_id: &FormId,
+        default_answer_title: &DefaultAnswerTitle,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_default_answer_title(form_id, default_answer_title)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_visibility(form_id, visibility)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_answer_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
+    ) -> Result<(), Error> {
+        self.client
+            .form()
+            .update_form_answer_visibility(form_id, visibility)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn post_answer(
+        &self,
+        user: &User,
+        form_id: FormId,
+        title: DefaultAnswerTitle,
+        answers: Vec<Answer>,
+    ) -> Result<(), Error> {
+        let form = self.get(form_id).await?;
+        form_outgoing::post_answer(&form, user, title, &answers).await?;
 
         self.client
             .form()
-            .post_answer(user, answers)
+            .post_answer(user, form_id, answers)
             .await
             .map_err(Into::into)
     }
@@ -135,27 +215,31 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+        title: Option<String>,
     ) -> Result<(), Error> {
         self.client
             .form()
-            .update_answer_meta(answer_id, posted_answers_update_schema)
+            .update_answer_meta(answer_id, title)
             .await
             .map_err(Into::into)
     }
 
-    async fn create_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
+    async fn create_questions(
+        &self,
+        form_id: FormId,
+        questions: Vec<Question>,
+    ) -> Result<(), Error> {
         self.client
             .form()
-            .create_questions(questions)
+            .create_questions(form_id, questions)
             .await
             .map_err(Into::into)
     }
 
-    async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
+    async fn put_questions(&self, form_id: FormId, questions: Vec<Question>) -> Result<(), Error> {
         self.client
             .form()
-            .put_questions(questions)
+            .put_questions(form_id, questions)
             .await
             .map_err(Into::into)
     }
@@ -197,10 +281,10 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error> {
+    async fn create_label_for_answers(&self, label_name: String) -> Result<(), Error> {
         self.client
             .form()
-            .create_label_for_answers(label)
+            .create_label_for_answers(label_name)
             .await
             .map_err(Into::into)
     }
@@ -242,10 +326,10 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
+    async fn create_label_for_forms(&self, label_name: String) -> Result<(), Error> {
         self.client
             .form()
-            .create_label_for_forms(label)
+            .create_label_for_forms(label_name)
             .await
             .map_err(Into::into)
     }

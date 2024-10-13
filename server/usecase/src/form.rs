@@ -1,9 +1,9 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, Form, FormDescription, FormId, FormQuestionUpdateSchema,
-        FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers,
-        PostedAnswersSchema, PostedAnswersUpdateSchema, Question, SimpleForm, Visibility::PUBLIC,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -17,6 +17,7 @@ use errors::{
     },
     Error,
 };
+use futures::future::{join_all, OptionFuture};
 use types::Resolver;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
@@ -59,21 +60,76 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.get_questions(form_id).await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_form(
         &self,
-        form_id: FormId,
-        form_update_targets: FormUpdateTargets,
+        form_id: &FormId,
+        title: Option<&FormTitle>,
+        description: Option<&FormDescription>,
+        has_response_period: Option<bool>,
+        response_period: Option<&ResponsePeriod>,
+        webhook: Option<&WebhookUrl>,
+        default_answer_title: Option<&DefaultAnswerTitle>,
+        visibility: Option<&Visibility>,
+        answer_visibility: Option<&Visibility>,
     ) -> Result<(), Error> {
-        self.repository.update(form_id, form_update_targets).await
+        let update_title: OptionFuture<_> = title
+            .map(|title| self.repository.update_title(form_id, title))
+            .into();
+        let update_description: OptionFuture<_> = description
+            .map(|description| self.repository.update_description(form_id, description))
+            .into();
+        let update_response_period: OptionFuture<_> = if has_response_period.unwrap_or(false) {
+            response_period
+                .map(|response_period| {
+                    self.repository
+                        .update_response_period(form_id, response_period)
+                })
+                .into()
+        } else {
+            None.into()
+        };
+        let update_webhook: OptionFuture<_> = webhook
+            .map(|webhook| self.repository.update_webhook_url(form_id, webhook))
+            .into();
+        let update_default_answer_title: OptionFuture<_> = default_answer_title
+            .map(|default_answer_title| {
+                self.repository
+                    .update_default_answer_title(form_id, default_answer_title)
+            })
+            .into();
+        let update_visibility: OptionFuture<_> = visibility
+            .map(|visibility| self.repository.update_visibility(form_id, visibility))
+            .into();
+        let update_answer_visibility: OptionFuture<_> = answer_visibility
+            .map(|visibility| {
+                self.repository
+                    .update_answer_visibility(form_id, visibility)
+            })
+            .into();
+
+        join_all(vec![
+            update_title,
+            update_description,
+            update_response_period,
+            update_webhook,
+            update_default_answer_title,
+            update_visibility,
+            update_answer_visibility,
+        ])
+        .await;
+
+        Ok(())
     }
 
     pub async fn post_answers(
         &self,
         user: &User,
-        answers: &PostedAnswersSchema,
+        form_id: FormId,
+        title: DefaultAnswerTitle,
+        answers: Vec<Answer>,
     ) -> Result<(), Error> {
-        let is_within_period = answers
-            .form_id
+        let is_within_period = form_id
             .resolve(self.repository)
             .await?
             .and_then(|form| {
@@ -91,7 +147,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .unwrap_or(true);
 
         if is_within_period {
-            self.repository.post_answer(user, answers).await
+            self.repository
+                .post_answer(user, form_id, title, answers)
+                .await
         } else {
             Err(Error::from(OutOfPeriod))
         }
@@ -119,22 +177,25 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+        title: Option<String>,
     ) -> Result<(), Error> {
-        self.repository
-            .update_answer_meta(answer_id, posted_answers_update_schema)
-            .await
+        self.repository.update_answer_meta(answer_id, title).await
     }
 
     pub async fn create_questions(
         &self,
-        questions: &FormQuestionUpdateSchema,
+        form_id: FormId,
+        questions: Vec<Question>,
     ) -> Result<(), Error> {
-        self.repository.create_questions(questions).await
+        self.repository.create_questions(form_id, questions).await
     }
 
-    pub async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
-        self.repository.put_questions(questions).await
+    pub async fn put_questions(
+        &self,
+        form_id: FormId,
+        questions: Vec<Question>,
+    ) -> Result<(), Error> {
+        self.repository.put_questions(form_id, questions).await
     }
 
     pub async fn post_comment(&self, comment: Comment, answer_id: AnswerId) -> Result<(), Error> {
@@ -167,8 +228,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.delete_comment(comment_id).await
     }
 
-    pub async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error> {
-        self.repository.create_label_for_answers(label).await
+    pub async fn create_label_for_answers(&self, label_name: String) -> Result<(), Error> {
+        self.repository.create_label_for_answers(label_name).await
     }
 
     pub async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error> {
@@ -193,8 +254,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .await
     }
 
-    pub async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
-        self.repository.create_label_for_forms(label).await
+    pub async fn create_label_for_forms(&self, label_name: String) -> Result<(), Error> {
+        self.repository.create_label_for_forms(label_name).await
     }
 
     pub async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {

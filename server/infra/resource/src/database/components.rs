@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, Form, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, FormUpdateTargets, Label, LabelId, LabelSchema,
-        OffsetAndLimit, PostedAnswersSchema, PostedAnswersUpdateSchema,
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
+        FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
+        WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -45,15 +45,46 @@ pub trait FormDatabase: Send + Sync {
     ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
-    async fn update(
+    async fn update_form_title(
         &self,
-        form_id: FormId,
-        form_update_targets: FormUpdateTargets,
+        form_id: &FormId,
+        form_title: &FormTitle,
+    ) -> Result<(), InfraError>;
+    async fn update_form_description(
+        &self,
+        form_id: &FormId,
+        form_description: &FormDescription,
+    ) -> Result<(), InfraError>;
+    async fn update_form_response_period(
+        &self,
+        form_id: &FormId,
+        response_period: &ResponsePeriod,
+    ) -> Result<(), InfraError>;
+    async fn update_form_webhook_url(
+        &self,
+        form_id: &FormId,
+        webhook_url: &WebhookUrl,
+    ) -> Result<(), InfraError>;
+    async fn update_form_default_answer_title(
+        &self,
+        form_id: &FormId,
+        default_answer_title: &DefaultAnswerTitle,
+    ) -> Result<(), InfraError>;
+    async fn update_form_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
+    ) -> Result<(), InfraError>;
+    async fn update_form_answer_visibility(
+        &self,
+        form_id: &FormId,
+        visibility: &Visibility,
     ) -> Result<(), InfraError>;
     async fn post_answer(
         &self,
         user: &User,
-        answer: &PostedAnswersSchema,
+        form_id: FormId,
+        answers: Vec<Answer>,
     ) -> Result<(), InfraError>;
     async fn get_answers(
         &self,
@@ -67,17 +98,22 @@ pub trait FormDatabase: Send + Sync {
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+        title: Option<String>,
     ) -> Result<(), InfraError>;
     async fn create_questions(
         &self,
-        questions: &FormQuestionUpdateSchema,
+        form_id: FormId,
+        questions: Vec<Question>,
     ) -> Result<(), InfraError>;
-    async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), InfraError>;
+    async fn put_questions(
+        &self,
+        form_id: FormId,
+        questions: Vec<Question>,
+    ) -> Result<(), InfraError>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
-    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), InfraError>;
+    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
     async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError>;
     async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError>;
     async fn edit_label_for_answers(&self, label: &Label) -> Result<(), InfraError>;
@@ -86,7 +122,7 @@ pub trait FormDatabase: Send + Sync {
         answer_id: AnswerId,
         label_ids: Vec<LabelId>,
     ) -> Result<(), InfraError>;
-    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), InfraError>;
+    async fn create_label_for_forms(&self, label_name: String) -> Result<(), InfraError>;
     async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError>;
     async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), InfraError>;
     async fn edit_label_for_forms(&self, label: &Label) -> Result<(), InfraError>;

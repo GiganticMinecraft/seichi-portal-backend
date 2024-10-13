@@ -23,9 +23,3 @@ pub struct CrossSearchResult {
     pub label_for_answers: Vec<Label>,
     pub comments: Vec<Comment>,
 }
-
-#[derive(Deserialize, Debug, PartialEq)]
-pub struct SearchQuery {
-    #[serde(default)]
-    pub query: Option<String>,
-}

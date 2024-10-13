@@ -31,26 +31,6 @@ pub struct OffsetAndLimit {
     pub limit: Option<i32>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct FormUpdateTargets {
-    #[serde(default)]
-    pub title: Option<FormTitle>,
-    #[serde(default)]
-    pub description: Option<FormDescription>,
-    #[serde(default)]
-    pub has_response_period: Option<bool>,
-    #[serde(default)]
-    pub response_period: Option<ResponsePeriod>,
-    #[serde(default)]
-    pub webhook: Option<WebhookUrl>,
-    #[serde(default)]
-    pub default_answer_title: Option<DefaultAnswerTitle>,
-    #[serde(default)]
-    pub visibility: Option<Visibility>,
-    #[serde(default)]
-    pub answer_visibility: Option<Visibility>,
-}
-
 #[derive(Serialize, Debug)]
 pub struct SimpleForm {
     pub id: FormId,
@@ -59,12 +39,6 @@ pub struct SimpleForm {
     pub response_period: ResponsePeriod,
     pub labels: Vec<Label>,
     pub answer_visibility: Visibility,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct FormQuestionUpdateSchema {
-    pub form_id: FormId,
-    pub questions: Vec<Question>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -238,13 +212,6 @@ impl DefaultAnswerTitle {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PostedAnswersSchema {
-    pub form_id: FormId,
-    pub title: DefaultAnswerTitle,
-    pub answers: Vec<Answer>,
-}
-
 pub type AnswerId = types::Id<PostedAnswers>;
 
 #[async_trait]
@@ -266,12 +233,6 @@ pub struct PostedAnswers {
     pub labels: Vec<Label>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct PostedAnswersUpdateSchema {
-    #[serde(default)]
-    pub title: Option<String>,
-}
-
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Answer {
     pub answer_id: AnswerId,
@@ -290,12 +251,6 @@ pub struct Comment {
     pub commented_by: User,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CommentSchema {
-    pub answer_id: AnswerId,
-    pub content: String,
-}
-
 pub type LabelId = types::Id<Label>;
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -303,16 +258,6 @@ pub type LabelId = types::Id<Label>;
 pub struct Label {
     pub id: LabelId,
     pub name: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct LabelSchema {
-    pub name: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ReplaceAnswerLabelSchema {
-    pub labels: Vec<LabelId>,
 }
 
 #[cfg(test)]

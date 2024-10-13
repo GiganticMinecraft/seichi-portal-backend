@@ -6,9 +6,7 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, CommentSchema, Form, FormId, FormQuestionUpdateSchema,
-        FormUpdateTargets, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswersSchema,
-        PostedAnswersUpdateSchema, ReplaceAnswerLabelSchema, Visibility::PRIVATE,
+        AnswerId, Comment, CommentId, FormId, Label, LabelId, OffsetAndLimit, Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
@@ -18,10 +16,15 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
 
+use crate::form_schemas::{
+    AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
+    FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
+};
+
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(form): Json<Form>,
+    Json(form): Json<FormCreateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
@@ -131,13 +134,26 @@ pub async fn delete_form_handler(
 pub async fn update_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-    Json(targets): Json<FormUpdateTargets>,
+    Json(targets): Json<FormUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.update_form(form_id, targets).await {
+    match form_use_case
+        .update_form(
+            &form_id,
+            targets.title.as_ref(),
+            targets.description.as_ref(),
+            targets.has_response_period,
+            targets.response_period.as_ref(),
+            targets.webhook.as_ref(),
+            targets.default_answer_title.as_ref(),
+            targets.visibility.as_ref(),
+            targets.answer_visibility.as_ref(),
+        )
+        .await
+    {
         Ok(form) => (StatusCode::OK, Json(form)).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -239,13 +255,16 @@ pub async fn get_answer_by_form_id_handler(
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(schema): Json<PostedAnswersSchema>,
+    Json(schema): Json<AnswersPostSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.post_answers(&user, &schema).await {
+    match form_use_case
+        .post_answers(&user, schema.form_id, schema.title, schema.answers)
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -254,13 +273,16 @@ pub async fn post_answer_handler(
 pub async fn update_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(answer_id): Path<AnswerId>,
-    Json(schema): Json<PostedAnswersUpdateSchema>,
+    Json(schema): Json<AnswerUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.update_answer_meta(answer_id, &schema).await {
+    match form_use_case
+        .update_answer_meta(answer_id, schema.title)
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -274,7 +296,10 @@ pub async fn create_question_handler(
         repository: repository.form_repository(),
     };
 
-    match form_use_case.create_questions(&questions).await {
+    match form_use_case
+        .create_questions(questions.form_id, questions.questions)
+        .await
+    {
         Ok(_) => (StatusCode::CREATED, Json(json!({"id": questions.form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -288,7 +313,10 @@ pub async fn put_question_handler(
         repository: repository.form_repository(),
     };
 
-    match form_use_case.put_questions(&questions).await {
+    match form_use_case
+        .put_questions(questions.form_id, questions.questions)
+        .await
+    {
         Ok(_) => (StatusCode::OK, Json(json!({"id": questions.form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -297,7 +325,7 @@ pub async fn put_question_handler(
 pub async fn post_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(comment_schema): Json<CommentSchema>,
+    Json(comment_schema): Json<CommentPostSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
@@ -343,7 +371,7 @@ pub async fn create_label_for_answers(
         repository: repository.form_repository(),
     };
 
-    match form_use_case.create_label_for_answers(&label).await {
+    match form_use_case.create_label_for_answers(label.name).await {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -423,7 +451,7 @@ pub async fn create_label_for_forms(
         repository: repository.form_repository(),
     };
 
-    match form_use_case.create_label_for_forms(&label).await {
+    match form_use_case.create_label_for_forms(label.name).await {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
