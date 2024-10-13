@@ -260,11 +260,6 @@ pub struct Label {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ReplaceAnswerLabelSchema {
-    pub labels: Vec<LabelId>,
-}
-
 #[cfg(test)]
 mod test {
     use proptest::{prop_assert_eq, proptest};

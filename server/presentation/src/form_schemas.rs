@@ -1,5 +1,5 @@
 use domain::form::models::{
-    Answer, AnswerId, DefaultAnswerTitle, FormDescription, FormId, FormTitle, Question,
+    Answer, AnswerId, DefaultAnswerTitle, FormDescription, FormId, FormTitle, LabelId, Question,
     ResponsePeriod, Visibility, WebhookUrl,
 };
 use serde::Deserialize;
@@ -58,4 +58,9 @@ pub struct CommentPostSchema {
 #[derive(Deserialize, Debug)]
 pub struct LabelSchema {
     pub name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ReplaceAnswerLabelSchema {
+    pub labels: Vec<LabelId>,
 }
