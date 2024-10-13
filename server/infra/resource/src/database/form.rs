@@ -1,5 +1,21 @@
 use std::str::FromStr;
 
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use domain::{
+    form::models::{
+        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
+        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, Question, ResponsePeriod,
+        Visibility, WebhookUrl,
+    },
+    user::models::{Role, User},
+};
+use errors::infra::{InfraError, InfraError::FormNotFound};
+use futures::{future::try_join, try_join};
+use itertools::Itertools;
+use regex::Regex;
+use sea_orm::DbErr;
+
 use crate::{
     database::{
         components::FormDatabase,
@@ -13,22 +29,6 @@ use crate::{
         UserDto,
     },
 };
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use domain::form::models::Question;
-use domain::{
-    form::models::{
-        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        ResponsePeriod, Visibility, WebhookUrl,
-    },
-    user::models::{Role, User},
-};
-use errors::infra::{InfraError, InfraError::FormNotFound};
-use futures::{future::try_join, try_join};
-use itertools::Itertools;
-use regex::Regex;
-use sea_orm::DbErr;
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
@@ -1005,10 +1005,11 @@ impl FormDatabase for ConnectionPool {
             .map_err(Into::into)
     }
 
-    async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), InfraError> {
-        let form_id = questions.form_id.to_owned();
-        let questions = questions.questions.to_owned();
-
+    async fn put_questions(
+        &self,
+        form_id: FormId,
+        questions: Vec<Question>,
+    ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| Box::pin(async move {
             let current_form_question_ids = query_all_and_values(
                 r"SELECT question_id FROM form_questions WHERE form_id = ?",

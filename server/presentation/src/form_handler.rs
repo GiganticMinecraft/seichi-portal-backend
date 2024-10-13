@@ -308,13 +308,16 @@ pub async fn create_question_handler(
 
 pub async fn put_question_handler(
     State(repository): State<RealInfrastructureRepository>,
-    Json(questions): Json<domain::form::models::FormQuestionUpdateSchema>,
+    Json(questions): Json<FormQuestionUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.put_questions(&questions).await {
+    match form_use_case
+        .put_questions(questions.form_id, questions.questions)
+        .await
+    {
         Ok(_) => (StatusCode::OK, Json(json!({"id": questions.form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }

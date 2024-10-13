@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, Question,
-        ResponsePeriod, Visibility, WebhookUrl,
+        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, Question, ResponsePeriod,
+        Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -105,7 +105,11 @@ pub trait FormDatabase: Send + Sync {
         form_id: FormId,
         questions: Vec<Question>,
     ) -> Result<(), InfraError>;
-    async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), InfraError>;
+    async fn put_questions(
+        &self,
+        form_id: FormId,
+        questions: Vec<Question>,
+    ) -> Result<(), InfraError>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;

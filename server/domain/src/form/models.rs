@@ -41,12 +41,6 @@ pub struct SimpleForm {
     pub answer_visibility: Visibility,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct FormQuestionUpdateSchema {
-    pub form_id: FormId,
-    pub questions: Vec<Question>,
-}
-
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Clone, Getters, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]

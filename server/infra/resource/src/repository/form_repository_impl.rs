@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers, Question,
+        ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -236,10 +236,10 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
+    async fn put_questions(&self, form_id: FormId, questions: Vec<Question>) -> Result<(), Error> {
         self.client
             .form()
-            .put_questions(questions)
+            .put_questions(form_id, questions)
             .await
             .map_err(Into::into)
     }

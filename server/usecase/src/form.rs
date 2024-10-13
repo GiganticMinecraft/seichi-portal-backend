@@ -2,9 +2,8 @@ use chrono::Utc;
 use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, Question, ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC,
-        WebhookUrl,
+        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers, Question,
+        ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -191,8 +190,12 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.create_questions(form_id, questions).await
     }
 
-    pub async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {
-        self.repository.put_questions(questions).await
+    pub async fn put_questions(
+        &self,
+        form_id: FormId,
+        questions: Vec<Question>,
+    ) -> Result<(), Error> {
+        self.repository.put_questions(form_id, questions).await
     }
 
     pub async fn post_comment(&self, comment: Comment, answer_id: AnswerId) -> Result<(), Error> {
