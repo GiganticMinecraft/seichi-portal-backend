@@ -228,8 +228,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.delete_comment(comment_id).await
     }
 
-    pub async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error> {
-        self.repository.create_label_for_answers(label).await
+    pub async fn create_label_for_answers(&self, label_name: String) -> Result<(), Error> {
+        self.repository.create_label_for_answers(label_name).await
     }
 
     pub async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error> {

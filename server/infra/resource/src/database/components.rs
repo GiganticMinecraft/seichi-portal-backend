@@ -113,7 +113,7 @@ pub trait FormDatabase: Send + Sync {
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
-    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), InfraError>;
+    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
     async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError>;
     async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError>;
     async fn edit_label_for_answers(&self, label: &Label) -> Result<(), InfraError>;

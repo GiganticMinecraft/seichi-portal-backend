@@ -281,10 +281,10 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error> {
+    async fn create_label_for_answers(&self, label_name: String) -> Result<(), Error> {
         self.client
             .form()
-            .create_label_for_answers(label)
+            .create_label_for_answers(label_name)
             .await
             .map_err(Into::into)
     }

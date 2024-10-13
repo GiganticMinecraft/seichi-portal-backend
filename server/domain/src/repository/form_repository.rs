@@ -80,7 +80,7 @@ pub trait FormRepository: Send + Sync + 'static {
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<Question>, Error>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), Error>;
-    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), Error>;
+    async fn create_label_for_answers(&self, label_name: String) -> Result<(), Error>;
     async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error>;
     async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), Error>;
     async fn edit_label_for_answers(&self, label: &Label) -> Result<(), Error>;

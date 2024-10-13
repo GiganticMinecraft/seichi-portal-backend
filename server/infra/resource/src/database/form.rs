@@ -1190,8 +1190,8 @@ impl FormDatabase for ConnectionPool {
         .map_err(Into::into)
     }
 
-    async fn create_label_for_answers(&self, label: &LabelSchema) -> Result<(), InfraError> {
-        let params = [label.name.to_owned().into()];
+    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError> {
+        let params = [label_name.to_owned().into()];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {

@@ -6,7 +6,7 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, FormId, Label, LabelId, LabelSchema, OffsetAndLimit,
+        AnswerId, Comment, CommentId, FormId, Label, LabelId, OffsetAndLimit,
         ReplaceAnswerLabelSchema, Visibility::PRIVATE,
     },
     repository::Repositories,
@@ -19,7 +19,7 @@ use usecase::form::FormUseCase;
 
 use crate::form_schemas::{
     AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
-    FormQuestionUpdateSchema, FormUpdateSchema,
+    FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema,
 };
 
 pub async fn create_form_handler(
@@ -372,7 +372,7 @@ pub async fn create_label_for_answers(
         repository: repository.form_repository(),
     };
 
-    match form_use_case.create_label_for_answers(&label).await {
+    match form_use_case.create_label_for_answers(label.name).await {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -446,7 +446,7 @@ pub async fn replace_answer_labels(
 
 pub async fn create_label_for_forms(
     State(repository): State<RealInfrastructureRepository>,
-    Json(label): Json<LabelSchema>,
+    Json(label): Json<domain::form::models::LabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
