@@ -7,8 +7,7 @@ use axum::{
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, CommentSchema, FormId, FormQuestionUpdateSchema, Label,
-        LabelId, LabelSchema, OffsetAndLimit, PostedAnswersUpdateSchema, ReplaceAnswerLabelSchema,
-        Visibility::PRIVATE,
+        LabelId, LabelSchema, OffsetAndLimit, ReplaceAnswerLabelSchema, Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
@@ -18,7 +17,9 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
 
-use crate::form_schemas::{CreateFormSchema, PostAnswersSchema, UpdateFormSchema};
+use crate::form_schemas::{
+    AnswerUpdateSchema, CreateFormSchema, PostAnswersSchema, UpdateFormSchema,
+};
 
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
@@ -272,13 +273,16 @@ pub async fn post_answer_handler(
 pub async fn update_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(answer_id): Path<AnswerId>,
-    Json(schema): Json<PostedAnswersUpdateSchema>,
+    Json(schema): Json<AnswerUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.update_answer_meta(answer_id, &schema).await {
+    match form_use_case
+        .update_answer_meta(answer_id, schema.title)
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }

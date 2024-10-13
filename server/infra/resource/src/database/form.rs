@@ -6,7 +6,7 @@ use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswersUpdateSchema, ResponsePeriod, Visibility, WebhookUrl,
+        ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -917,9 +917,9 @@ impl FormDatabase for ConnectionPool {
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+        title: Option<String>,
     ) -> Result<(), InfraError> {
-        let title = posted_answers_update_schema.title.to_owned();
+        let title = title.to_owned();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {

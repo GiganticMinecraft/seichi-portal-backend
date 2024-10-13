@@ -3,8 +3,8 @@ use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, PostedAnswersUpdateSchema, Question, ResponsePeriod, SimpleForm, Visibility,
-        Visibility::PUBLIC, WebhookUrl,
+        PostedAnswers, Question, ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC,
+        WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -178,11 +178,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+        title: Option<String>,
     ) -> Result<(), Error> {
-        self.repository
-            .update_answer_meta(answer_id, posted_answers_update_schema)
-            .await
+        self.repository.update_answer_meta(answer_id, title).await
     }
 
     pub async fn create_questions(

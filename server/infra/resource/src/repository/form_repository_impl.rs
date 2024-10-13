@@ -3,8 +3,7 @@ use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, PostedAnswersUpdateSchema, Question, ResponsePeriod, SimpleForm, Visibility,
-        WebhookUrl,
+        PostedAnswers, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -216,11 +215,11 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+        title: Option<String>,
     ) -> Result<(), Error> {
         self.client
             .form()
-            .update_answer_meta(answer_id, posted_answers_update_schema)
+            .update_answer_meta(answer_id, title)
             .await
             .map_err(Into::into)
     }

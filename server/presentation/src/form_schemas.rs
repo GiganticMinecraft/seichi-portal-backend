@@ -36,3 +36,9 @@ pub struct PostAnswersSchema {
     pub title: DefaultAnswerTitle,
     pub answers: Vec<Answer>,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct AnswerUpdateSchema {
+    #[serde(default)]
+    pub title: Option<String>,
+}

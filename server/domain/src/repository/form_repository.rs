@@ -6,8 +6,7 @@ use crate::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
         FormQuestionUpdateSchema, FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit,
-        PostedAnswers, PostedAnswersUpdateSchema, Question, ResponsePeriod, SimpleForm, Visibility,
-        WebhookUrl,
+        PostedAnswers, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     user::models::User,
 };
@@ -70,7 +69,7 @@ pub trait FormRepository: Send + Sync + 'static {
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        posted_answers_update_schema: &PostedAnswersUpdateSchema,
+        title: Option<String>,
     ) -> Result<(), Error>;
     async fn create_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error>;
     async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error>;

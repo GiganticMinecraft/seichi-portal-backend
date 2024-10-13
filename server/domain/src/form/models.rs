@@ -239,12 +239,6 @@ pub struct PostedAnswers {
     pub labels: Vec<Label>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct PostedAnswersUpdateSchema {
-    #[serde(default)]
-    pub title: Option<String>,
-}
-
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Answer {
     pub answer_id: AnswerId,
