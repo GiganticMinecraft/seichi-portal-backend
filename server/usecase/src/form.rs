@@ -185,9 +185,10 @@ impl<R: FormRepository> FormUseCase<'_, R> {
 
     pub async fn create_questions(
         &self,
-        questions: &FormQuestionUpdateSchema,
+        form_id: FormId,
+        questions: Vec<Question>,
     ) -> Result<(), Error> {
-        self.repository.create_questions(questions).await
+        self.repository.create_questions(form_id, questions).await
     }
 
     pub async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error> {

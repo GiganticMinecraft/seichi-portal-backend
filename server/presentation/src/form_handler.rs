@@ -6,8 +6,8 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, CommentSchema, FormId, FormQuestionUpdateSchema, Label,
-        LabelId, LabelSchema, OffsetAndLimit, ReplaceAnswerLabelSchema, Visibility::PRIVATE,
+        AnswerId, Comment, CommentId, CommentSchema, FormId, Label, LabelId, LabelSchema,
+        OffsetAndLimit, ReplaceAnswerLabelSchema, Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
@@ -18,7 +18,8 @@ use serde_json::json;
 use usecase::form::FormUseCase;
 
 use crate::form_schemas::{
-    AnswerUpdateSchema, AnswersPostSchema, FormCreateSchema, FormUpdateSchema,
+    AnswerUpdateSchema, AnswersPostSchema, FormCreateSchema, FormQuestionUpdateSchema,
+    FormUpdateSchema,
 };
 
 pub async fn create_form_handler(
@@ -296,7 +297,10 @@ pub async fn create_question_handler(
         repository: repository.form_repository(),
     };
 
-    match form_use_case.create_questions(&questions).await {
+    match form_use_case
+        .create_questions(questions.form_id, questions.questions)
+        .await
+    {
         Ok(_) => (StatusCode::CREATED, Json(json!({"id": questions.form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -304,7 +308,7 @@ pub async fn create_question_handler(
 
 pub async fn put_question_handler(
     State(repository): State<RealInfrastructureRepository>,
-    Json(questions): Json<FormQuestionUpdateSchema>,
+    Json(questions): Json<domain::form::models::FormQuestionUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),

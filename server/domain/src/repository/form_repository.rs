@@ -71,7 +71,11 @@ pub trait FormRepository: Send + Sync + 'static {
         answer_id: AnswerId,
         title: Option<String>,
     ) -> Result<(), Error>;
-    async fn create_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error>;
+    async fn create_questions(
+        &self,
+        form_id: FormId,
+        questions: Vec<Question>,
+    ) -> Result<(), Error>;
     async fn put_questions(&self, questions: &FormQuestionUpdateSchema) -> Result<(), Error>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<Question>, Error>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error>;
