@@ -261,11 +261,6 @@ pub struct Label {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct LabelSchema {
-    pub name: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct ReplaceAnswerLabelSchema {
     pub labels: Vec<LabelId>,
 }

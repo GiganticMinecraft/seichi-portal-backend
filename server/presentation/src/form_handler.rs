@@ -446,13 +446,13 @@ pub async fn replace_answer_labels(
 
 pub async fn create_label_for_forms(
     State(repository): State<RealInfrastructureRepository>,
-    Json(label): Json<domain::form::models::LabelSchema>,
+    Json(label): Json<LabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.create_label_for_forms(&label).await {
+    match form_use_case.create_label_for_forms(label.name).await {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(err) => handle_error(err).into_response(),
     }

@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers, Question,
-        ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -326,10 +326,10 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
+    async fn create_label_for_forms(&self, label_name: String) -> Result<(), Error> {
         self.client
             .form()
-            .create_label_for_forms(label)
+            .create_label_for_forms(label_name)
             .await
             .map_err(Into::into)
     }

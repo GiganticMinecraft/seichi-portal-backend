@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
-        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, Question, ResponsePeriod,
-        Visibility, WebhookUrl,
+        FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
+        WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -1300,8 +1300,8 @@ impl FormDatabase for ConnectionPool {
         .map_err(Into::into)
     }
 
-    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), InfraError> {
-        let params = [label.name.to_owned().into()];
+    async fn create_label_for_forms(&self, label_name: String) -> Result<(), InfraError> {
+        let params = [label_name.to_owned().into()];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {

@@ -2,8 +2,8 @@ use chrono::Utc;
 use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers, Question,
-        ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
+        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -254,8 +254,8 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .await
     }
 
-    pub async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error> {
-        self.repository.create_label_for_forms(label).await
+    pub async fn create_label_for_forms(&self, label_name: String) -> Result<(), Error> {
+        self.repository.create_label_for_forms(label_name).await
     }
 
     pub async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {

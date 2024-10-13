@@ -5,8 +5,8 @@ use mockall::automock;
 use crate::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, LabelSchema, OffsetAndLimit, PostedAnswers, Question,
-        ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        SimpleForm, Visibility, WebhookUrl,
     },
     user::models::User,
 };
@@ -89,7 +89,7 @@ pub trait FormRepository: Send + Sync + 'static {
         answer_id: AnswerId,
         label_ids: Vec<LabelId>,
     ) -> Result<(), Error>;
-    async fn create_label_for_forms(&self, label: &LabelSchema) -> Result<(), Error>;
+    async fn create_label_for_forms(&self, name: String) -> Result<(), Error>;
     async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error>;
     async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), Error>;
     async fn edit_label_for_forms(&self, label: &Label) -> Result<(), Error>;

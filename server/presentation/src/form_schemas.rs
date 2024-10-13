@@ -2,7 +2,7 @@ use domain::form::models::{
     Answer, AnswerId, DefaultAnswerTitle, FormDescription, FormId, FormTitle, Question,
     ResponsePeriod, Visibility, WebhookUrl,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct FormCreateSchema {
@@ -55,7 +55,7 @@ pub struct CommentPostSchema {
     pub content: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct LabelSchema {
     pub name: String,
 }
