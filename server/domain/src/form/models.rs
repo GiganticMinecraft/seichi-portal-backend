@@ -251,12 +251,6 @@ pub struct Comment {
     pub commented_by: User,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CommentSchema {
-    pub answer_id: AnswerId,
-    pub content: String,
-}
-
 pub type LabelId = types::Id<Label>;
 
 #[cfg_attr(test, derive(Arbitrary))]

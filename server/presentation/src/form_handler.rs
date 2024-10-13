@@ -6,8 +6,8 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, CommentSchema, FormId, Label, LabelId, LabelSchema,
-        OffsetAndLimit, ReplaceAnswerLabelSchema, Visibility::PRIVATE,
+        AnswerId, Comment, CommentId, FormId, Label, LabelId, LabelSchema, OffsetAndLimit,
+        ReplaceAnswerLabelSchema, Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
@@ -18,8 +18,8 @@ use serde_json::json;
 use usecase::form::FormUseCase;
 
 use crate::form_schemas::{
-    AnswerUpdateSchema, AnswersPostSchema, FormCreateSchema, FormQuestionUpdateSchema,
-    FormUpdateSchema,
+    AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
+    FormQuestionUpdateSchema, FormUpdateSchema,
 };
 
 pub async fn create_form_handler(
@@ -326,7 +326,7 @@ pub async fn put_question_handler(
 pub async fn post_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(comment_schema): Json<CommentSchema>,
+    Json(comment_schema): Json<CommentPostSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),

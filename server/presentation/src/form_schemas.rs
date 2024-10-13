@@ -1,6 +1,6 @@
 use domain::form::models::{
-    Answer, DefaultAnswerTitle, FormDescription, FormId, FormTitle, Question, ResponsePeriod,
-    Visibility, WebhookUrl,
+    Answer, AnswerId, DefaultAnswerTitle, FormDescription, FormId, FormTitle, Question,
+    ResponsePeriod, Visibility, WebhookUrl,
 };
 use serde::Deserialize;
 
@@ -47,4 +47,10 @@ pub struct AnswerUpdateSchema {
 pub struct FormQuestionUpdateSchema {
     pub form_id: FormId,
     pub questions: Vec<Question>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct CommentPostSchema {
+    pub answer_id: AnswerId,
+    pub content: String,
 }
