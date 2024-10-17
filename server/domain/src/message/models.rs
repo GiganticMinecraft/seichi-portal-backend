@@ -25,9 +25,7 @@ impl Message {
         body: String,
     ) -> Result<Self, DomainError> {
         if posted_user.role == StandardUser && related_answer.user.id != posted_user.id {
-            return Err(DomainError::Forbidden {
-                reason: "You cannot access to this message.".to_string(),
-            });
+            return Err(DomainError::Forbidden);
         }
 
         Ok(Self {
