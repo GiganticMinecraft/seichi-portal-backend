@@ -2221,6 +2221,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "types",
  "usecase",
  "uuid",
 ]
@@ -4062,6 +4063,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "serde",
+ "uuid",
 ]
 
 [[package]]

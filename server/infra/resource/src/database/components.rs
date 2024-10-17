@@ -5,6 +5,7 @@ use domain::{
         FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
         WebhookUrl,
     },
+    message::models::Message,
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
@@ -21,12 +22,14 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteUserDatabase: UserDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
+    type ConcreteMessageDatabase: MessageDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
+    fn message(&self) -> &Self::ConcreteMessageDatabase;
 }
 
 #[automock]
@@ -174,4 +177,10 @@ pub trait SearchDatabase: Send + Sync {
         &self,
         query: &str,
     ) -> Result<Vec<domain::search::models::Comment>, InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait MessageDatabase: Send + Sync {
+    async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
 }

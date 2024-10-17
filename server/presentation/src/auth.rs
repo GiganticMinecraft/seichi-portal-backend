@@ -61,6 +61,7 @@ pub async fn auth(
         (&Method::POST, "/forms/answers"),
         (&Method::POST, "/forms/answers/comment"),
         (&Method::GET, "/users"),
+        (&Method::POST, "/messages"),
     ];
 
     // NOTE: 動的パスを指定する場合は、正規表現を埋め込む

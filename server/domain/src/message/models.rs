@@ -1,19 +1,41 @@
 use chrono::{DateTime, Utc};
+use derive_getters::Getters;
+use errors::domain::DomainError;
 
-use crate::{form::models::AnswerId, user::models::User};
+use crate::{
+    form::models::PostedAnswers,
+    user::models::{Role::StandardUser, User},
+};
 
 pub type MessageId = types::Id<Message>;
 
-#[derive(Debug)]
+#[derive(Getters, Debug)]
 pub struct Message {
-    pub id: MessageId,
-    pub related_answer_id: AnswerId,
-    pub contents: Vec<MessageContent>,
+    id: MessageId,
+    related_answer: PostedAnswers,
+    posted_user: User,
+    body: String,
+    timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug)]
-pub struct MessageContent {
-    pub posted_user: User,
-    pub body: String,
-    pub timestamp: DateTime<Utc>,
+impl Message {
+    pub fn new(
+        related_answer: PostedAnswers,
+        posted_user: User,
+        body: String,
+    ) -> Result<Self, DomainError> {
+        if posted_user.role == StandardUser && related_answer.user.id != posted_user.id {
+            return Err(DomainError::Forbidden {
+                reason: "You cannot access to this message.".to_string(),
+            });
+        }
+
+        Ok(Self {
+            id: MessageId::new(),
+            related_answer,
+            posted_user,
+            body,
+            timestamp: Utc::now(),
+        })
+    }
 }
