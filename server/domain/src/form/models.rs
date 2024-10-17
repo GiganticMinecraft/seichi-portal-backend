@@ -14,7 +14,7 @@ use types::Resolver;
 
 use crate::{repository::form_repository::FormRepository, user::models::User};
 
-pub type FormId = types::Id<Form>;
+pub type FormId = types::IntegerId<Form>;
 
 #[async_trait]
 impl<Repo: FormRepository + Sized + Sync> Resolver<Form, Error, Repo> for FormId {
@@ -80,7 +80,7 @@ pub struct FormDescription {
     description: Option<String>,
 }
 
-pub type QuestionId = types::Id<Question>;
+pub type QuestionId = types::IntegerId<Question>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(TypedBuilder, Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
@@ -212,7 +212,7 @@ impl DefaultAnswerTitle {
     }
 }
 
-pub type AnswerId = types::Id<PostedAnswers>;
+pub type AnswerId = types::IntegerId<PostedAnswers>;
 
 #[async_trait]
 impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Error, Repo> for AnswerId {
@@ -239,7 +239,7 @@ pub struct Answer {
     pub answer: String,
 }
 
-pub type CommentId = types::Id<Comment>;
+pub type CommentId = types::IntegerId<Comment>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Comment {
@@ -250,7 +250,7 @@ pub struct Comment {
     pub commented_by: User,
 }
 
-pub type LabelId = types::Id<Label>;
+pub type LabelId = types::IntegerId<Label>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
