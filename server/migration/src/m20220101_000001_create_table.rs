@@ -204,7 +204,7 @@ impl MigrationTrait for Migration {
                     body TEXT NOT NULL,
                     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY fk_message_related_answer_id(related_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
-                    FOREIGN KEY fk_message_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+                    FOREIGN KEY fk_message_posted_user(posted_user) REFERENCES users(id)
                     )",
             ))
             .await?;
