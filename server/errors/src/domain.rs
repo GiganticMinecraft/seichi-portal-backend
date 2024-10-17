@@ -7,6 +7,6 @@ pub enum DomainError {
         #[from]
         source: strum::ParseError,
     },
-    #[error("Forbidden: {}", .reason)]
-    Forbidden { reason: String },
+    #[error("Access to forbidden resource.")]
+    Forbidden,
 }

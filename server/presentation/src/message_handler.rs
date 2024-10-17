@@ -1,5 +1,6 @@
 use axum::{extract::State, response::IntoResponse, Extension, Json};
 use domain::{message::models::Message, repository::Repositories, user::models::User};
+use errors::domain::DomainError;
 use errors::Error;
 use reqwest::StatusCode;
 use resource::repository::RealInfrastructureRepository;
@@ -42,6 +43,16 @@ pub async fn post_message_handler(
 
     let new_message = match Message::new(answer, user, message.body) {
         Ok(new_message) => new_message,
+        Err(DomainError::Forbidden) => {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "errorCode": "FORBIDDEN",
+                    "reason": "You cannot access to this message."
+                })),
+            )
+                .into_response();
+        }
         Err(err) => {
             return handle_error(Into::into(err)).into_response();
         }
