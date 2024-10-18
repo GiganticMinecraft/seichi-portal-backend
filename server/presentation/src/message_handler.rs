@@ -1,7 +1,6 @@
 use axum::{extract::State, response::IntoResponse, Extension, Json};
 use domain::{message::models::Message, repository::Repositories, user::models::User};
-use errors::domain::DomainError;
-use errors::Error;
+use errors::{domain::DomainError, Error};
 use reqwest::StatusCode;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
