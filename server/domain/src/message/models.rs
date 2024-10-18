@@ -36,13 +36,30 @@ impl Message {
             timestamp: Utc::now(),
         })
     }
+
+    pub(crate) fn reconstruct(
+        id: MessageId,
+        related_answer: PostedAnswers,
+        posted_user: User,
+        body: String,
+        timestamp: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            related_answer,
+            posted_user,
+            body,
+            timestamp,
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use uuid::Uuid;
+
     use super::*;
     use crate::user::models::Role;
-    use uuid::Uuid;
 
     #[test]
     fn should_reject_message_from_unrelated_user() {
