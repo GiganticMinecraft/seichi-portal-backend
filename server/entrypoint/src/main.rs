@@ -25,7 +25,7 @@ use presentation::{
         update_form_handler,
     },
     health_check_handler::health_check,
-    message_handler::post_message_handler,
+    message_handler::{get_messages_handler, post_message_handler},
     search_handler::cross_search,
     user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
 };
@@ -144,6 +144,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
         .route("/messages", post(post_message_handler))
+        .with_state(shared_repository.to_owned())
+        .route("/messages/:answer_id", get(get_messages_handler))
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .route("/session", post(start_session).delete(end_session))

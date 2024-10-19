@@ -1,12 +1,29 @@
-use domain::{message::models::Message, repository::message_repository::MessageRepository};
-use errors::Error;
+use domain::{
+    form::models::AnswerId,
+    message::models::Message,
+    repository::{form_repository::FormRepository, message_repository::MessageRepository},
+};
+use errors::{usecase::UseCaseError, Error};
 
-pub struct MessageUseCase<'a, MessageRepo: MessageRepository> {
-    pub repository: &'a MessageRepo,
+pub struct MessageUseCase<'a, MessageRepo: MessageRepository, FormRepo: FormRepository> {
+    pub message_repository: &'a MessageRepo,
+    pub form_repository: &'a FormRepo,
 }
 
-impl<R: MessageRepository> MessageUseCase<'_, R> {
+impl<MR: MessageRepository, FR: FormRepository> MessageUseCase<'_, MR, FR> {
     pub async fn post_message(&self, message: &Message) -> Result<(), Error> {
-        self.repository.post_message(message).await
+        self.message_repository.post_message(message).await
+    }
+
+    pub async fn get_message(&self, answer_id: AnswerId) -> Result<Vec<Message>, Error> {
+        let answers = self
+            .form_repository
+            .get_answers(answer_id)
+            .await?
+            .ok_or(UseCaseError::AnswerNotFound)?;
+
+        self.message_repository
+            .fetch_messages_by_answer_id(&answers)
+            .await
     }
 }

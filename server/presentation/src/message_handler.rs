@@ -1,5 +1,11 @@
-use axum::{extract::State, response::IntoResponse, Extension, Json};
-use domain::{message::models::Message, repository::Repositories, user::models::User};
+use axum::{
+    extract::{Path, State},
+    response::IntoResponse,
+    Extension, Json,
+};
+use domain::{
+    form::models::AnswerId, message::models::Message, repository::Repositories, user::models::User,
+};
 use errors::{domain::DomainError, Error};
 use reqwest::StatusCode;
 use resource::repository::RealInfrastructureRepository;
@@ -15,9 +21,11 @@ pub async fn post_message_handler(
     Json(message): Json<PostedMessageSchema>,
 ) -> impl IntoResponse {
     let message_use_case = MessageUseCase {
-        repository: repository.message_repository(),
+        message_repository: repository.message_repository(),
+        form_repository: repository.form_repository(),
     };
 
+    // TODO: ここで related_answer_id を取得しているのはおかしいかもしれない
     let related_answer = message
         .related_answer_id
         .resolve(repository.form_repository())
@@ -40,7 +48,7 @@ pub async fn post_message_handler(
         }
     };
 
-    let new_message = match Message::new(answer, user, message.body) {
+    let new_message = match Message::try_new(answer, user, message.body) {
         Ok(new_message) => new_message,
         Err(DomainError::Forbidden) => {
             return (
@@ -59,6 +67,21 @@ pub async fn post_message_handler(
 
     match message_use_case.post_message(&new_message).await {
         Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn get_messages_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+) -> impl IntoResponse {
+    let message_use_case = MessageUseCase {
+        message_repository: repository.message_repository(),
+        form_repository: repository.form_repository(),
+    };
+
+    match message_use_case.get_message(answer_id).await {
+        Ok(messages) => (StatusCode::OK, Json(json!(messages))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }

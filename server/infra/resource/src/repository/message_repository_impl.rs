@@ -1,5 +1,8 @@
 use async_trait::async_trait;
-use domain::{message::models::Message, repository::message_repository::MessageRepository};
+use domain::{
+    form::models::PostedAnswers, message::models::Message,
+    repository::message_repository::MessageRepository,
+};
 use errors::Error;
 
 use crate::{
@@ -15,5 +18,18 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
             .post_message(message)
             .await
             .map_err(Into::into)
+    }
+
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answers: &PostedAnswers,
+    ) -> Result<Vec<Message>, Error> {
+        self.client
+            .message()
+            .fetch_messages_by_answer_id(answers)
+            .await?
+            .into_iter()
+            .map(|dto| Ok(dto.try_into()?))
+            .collect::<Result<Vec<_>, _>>()
     }
 }

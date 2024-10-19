@@ -11,9 +11,9 @@ use domain::{
 use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
-
+use domain::form::models::FormAnswer;
 use crate::dto::{
-    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto,
+    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
     QuestionDto, SimpleFormDto,
 };
 
@@ -183,4 +183,8 @@ pub trait SearchDatabase: Send + Sync {
 #[async_trait]
 pub trait MessageDatabase: Send + Sync {
     async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answers: &FormAnswer,
+    ) -> Result<Vec<MessageDto>, InfraError>;
 }

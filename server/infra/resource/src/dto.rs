@@ -280,3 +280,35 @@ impl TryFrom<LabelDto> for domain::form::models::Label {
         })
     }
 }
+
+pub struct MessageDto {
+    pub id: Uuid,
+    pub related_answer: PostedAnswersDto,
+    pub posted_user: UserDto,
+    pub body: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+impl TryFrom<MessageDto> for domain::message::models::Message {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        MessageDto {
+            id,
+            related_answer,
+            posted_user,
+            body,
+            timestamp,
+        }: MessageDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(unsafe {
+            domain::message::models::Message::from_raw_parts(
+                id.into(),
+                related_answer.try_into()?,
+                posted_user.try_into()?,
+                body,
+                timestamp,
+            )
+        })
+    }
+}
