@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
-        WebhookUrl,
+        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        Visibility, WebhookUrl,
     },
     message::models::Message,
     user::models::{Role, User},
@@ -12,7 +12,7 @@ use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
+use crate::dto::{FormDto, LabelDto, MessageDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -174,4 +174,8 @@ pub trait SearchDatabase: Send + Sync {
 #[async_trait]
 pub trait MessageDatabase: Send + Sync {
     async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answers: &PostedAnswers,
+    ) -> Result<Vec<MessageDto>, InfraError>;
 }

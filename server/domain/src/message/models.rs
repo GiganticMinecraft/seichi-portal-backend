@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use errors::domain::DomainError;
+use serde::Serialize;
 
 use crate::{
     form::models::PostedAnswers,
@@ -9,7 +10,7 @@ use crate::{
 
 pub type MessageId = types::Id<Message>;
 
-#[derive(Getters, Debug)]
+#[derive(Serialize, Getters, Debug)]
 pub struct Message {
     id: MessageId,
     related_answer: PostedAnswers,
@@ -19,7 +20,7 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new(
+    pub fn try_new(
         related_answer: PostedAnswers,
         posted_user: User,
         body: String,
@@ -37,7 +38,51 @@ impl Message {
         })
     }
 
-    pub(crate) fn reconstruct(
+    /// [`Message`] の各フィールドの値を受け取り、[`Message`] を生成します。
+    ///
+    /// # Examples
+    /// ```
+    /// use chrono::{DateTime, Utc};
+    /// use domain::{
+    ///     form::models::{AnswerId, PostedAnswers},
+    ///     message::models::{Message, MessageId},
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let user = User {
+    ///     name: "user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// let related_answer = PostedAnswers {
+    ///     id: 1.into(),
+    ///     user: user.to_owned(),
+    ///     timestamp: Utc::now(),
+    ///     form_id: Default::default(),
+    ///     title: Default::default(),
+    ///     answers: vec![],
+    ///     comments: vec![],
+    ///     labels: vec![],
+    /// };
+    ///
+    /// let message = unsafe {
+    ///     Message::from_raw_parts(
+    ///         MessageId::new(),
+    ///         related_answer,
+    ///         user,
+    ///         "test message".to_string(),
+    ///         Utc::now(),
+    ///     )
+    /// };
+    /// ```
+    ///
+    /// # Safety
+    /// この関数は [`Message`] のバリデーションをスキップするため、
+    /// データベースからすでにバリデーションされているデータを読み出すときなど、
+    /// データの信頼性が保証されている場合にのみ使用してください。
+    pub unsafe fn from_raw_parts(
         id: MessageId,
         related_answer: PostedAnswers,
         posted_user: User,
@@ -86,7 +131,7 @@ mod test {
             labels: vec![],
         };
 
-        let message = Message::new(answer, message_posted_user, "test message".to_string());
+        let message = Message::try_new(answer, message_posted_user, "test message".to_string());
 
         assert!(message.is_err());
     }
@@ -110,7 +155,7 @@ mod test {
             labels: vec![],
         };
 
-        let message = Message::new(answer, user, "test message".to_string());
+        let message = Message::try_new(answer, user, "test message".to_string());
 
         assert!(message.is_ok());
     }
@@ -140,7 +185,7 @@ mod test {
             labels: vec![],
         };
 
-        let message = Message::new(answer, message_posted_user, "test message".to_string());
+        let message = Message::try_new(answer, message_posted_user, "test message".to_string());
 
         assert!(message.is_ok());
     }
