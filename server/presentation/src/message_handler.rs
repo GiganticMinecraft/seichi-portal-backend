@@ -7,13 +7,16 @@ use domain::{
     form::models::AnswerId, message::models::Message, repository::Repositories, user::models::User,
 };
 use errors::{domain::DomainError, Error};
+use itertools::Itertools;
 use reqwest::StatusCode;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use types::Resolver;
 use usecase::message::MessageUseCase;
 
-use crate::message_schemas::PostedMessageSchema;
+use crate::message_schemas::{
+    GetMessageResponseSchema, MessageContentSchema, PostedMessageSchema, SenderSchema,
+};
 
 pub async fn post_message_handler(
     Extension(user): Extension<User>,
@@ -81,7 +84,24 @@ pub async fn get_messages_handler(
     };
 
     match message_use_case.get_message(answer_id).await {
-        Ok(messages) => (StatusCode::OK, Json(json!(messages))).into_response(),
+        Ok(messages) => {
+            let response_schema = GetMessageResponseSchema {
+                messages: messages
+                    .into_iter()
+                    .map(|message| MessageContentSchema {
+                        body: message.body().to_owned(),
+                        sender: SenderSchema {
+                            uuid: message.posted_user().id.to_string(),
+                            name: message.posted_user().name.to_owned(),
+                            role: message.posted_user().role.to_string(),
+                        },
+                        timestamp: message.timestamp().to_owned(),
+                    })
+                    .collect_vec(),
+            };
+
+            (StatusCode::OK, Json(json!(response_schema))).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }
