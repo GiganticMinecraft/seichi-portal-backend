@@ -4,7 +4,7 @@ use errors::domain::DomainError;
 
 use crate::{
     form::models::PostedAnswers,
-    user::models::{Role::StandardUser, User},
+    user::models::{Role::Administrator, User},
 };
 
 pub type MessageId = types::Id<Message>;
@@ -19,22 +19,26 @@ pub struct Message {
 }
 
 impl Message {
+    pub fn can_create(related_answer: &PostedAnswers, posted_user: &User) -> bool {
+        posted_user.role == Administrator || related_answer.user.id == posted_user.id
+    }
+
     pub fn try_new(
         related_answer: PostedAnswers,
         posted_user: User,
         body: String,
     ) -> Result<Self, DomainError> {
-        if posted_user.role == StandardUser && related_answer.user.id != posted_user.id {
-            return Err(DomainError::Forbidden);
+        if Self::can_create(&related_answer, &posted_user) {
+            Ok(Self {
+                id: MessageId::new(),
+                related_answer,
+                posted_user,
+                body,
+                timestamp: Utc::now(),
+            })
+        } else {
+            Err(DomainError::Forbidden)
         }
-
-        Ok(Self {
-            id: MessageId::new(),
-            related_answer,
-            posted_user,
-            body,
-            timestamp: Utc::now(),
-        })
     }
 
     /// [`Message`] の各フィールドの値を受け取り、[`Message`] を生成します。
@@ -103,7 +107,7 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::user::models::Role;
+    use crate::user::models::{Role, Role::StandardUser};
 
     #[test]
     fn should_reject_message_from_unrelated_user() {
