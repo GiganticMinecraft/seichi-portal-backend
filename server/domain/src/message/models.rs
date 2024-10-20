@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use errors::domain::DomainError;
-use serde::Serialize;
 
 use crate::{
     form::models::PostedAnswers,
@@ -10,7 +9,7 @@ use crate::{
 
 pub type MessageId = types::Id<Message>;
 
-#[derive(Serialize, Getters, Debug)]
+#[derive(Getters, Debug)]
 pub struct Message {
     id: MessageId,
     related_answer: PostedAnswers,
