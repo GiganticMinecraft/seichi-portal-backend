@@ -11,7 +11,7 @@ impl Actions for Create {}
 impl Actions for Read {}
 
 /// `guard_target` を保持し、[User] が `guard_target` に対してアクセス可能かどうかを判定するための構造体
-pub struct AuthorizationGuard<T, A: Actions> {
+pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
     guard_target: T,
     _phantom_data: std::marker::PhantomData<A>,
 }
