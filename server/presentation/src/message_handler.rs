@@ -10,8 +10,7 @@ use errors::{domain::DomainError, Error};
 use reqwest::StatusCode;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
-use types::Resolver;
-use usecase::message::MessageUseCase;
+use usecase::{form::FormUseCase, message::MessageUseCase};
 
 use crate::message_schemas::{
     GetMessageResponseSchema, MessageContentSchema, PostedMessageSchema, SenderSchema,
@@ -27,24 +26,12 @@ pub async fn post_message_handler(
         form_repository: repository.form_repository(),
     };
 
-    // TODO: ここで related_answer_id を取得しているのはおかしいかもしれない
-    let related_answer = message
-        .related_answer_id
-        .resolve(repository.form_repository())
-        .await;
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
 
-    let answer = match related_answer {
-        Ok(Some(related_answer)) => related_answer,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "errorCode": "NOT_FOUND",
-                    "reason": "Answer not found."
-                })),
-            )
-                .into_response();
-        }
+    let answer = match form_use_case.get_answers(message.related_answer_id).await {
+        Ok(related_answer) => related_answer,
         Err(err) => {
             return handle_error(err).into_response();
         }
