@@ -27,7 +27,7 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
 //      - 永続化データ詰め込み(Create) -> 詰め込みデータ読み取り(Read)
 //      - 永続化データ詰め込み(Create) -> (詰め込みデータ読み取り(Read) ->) 詰め込みデータ削除(Delete)
 //  という3つの操作以外は望ましくない(実装されるべきではない)と考えているためです。
-//  Delete から Read へ変換することができる仮定すると、 データの削除操作の実装において
+//  Delete から Read へ変換することができると仮定すると、 データの削除操作の実装において
 //  Read 権限を保持しているかつ、Delete 権限を持たないユーザーが居る場合に
 //  AuthorizationGuard<T, Delete> から誤って `.into_read()` 関数を呼び出すことで
 //  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
