@@ -2,6 +2,7 @@ use domain::{
     form::models::AnswerId,
     message::models::Message,
     repository::{form_repository::FormRepository, message_repository::MessageRepository},
+    types::authorization_guard::{AuthorizationGuard, Read},
 };
 use errors::{usecase::UseCaseError, Error};
 
@@ -15,7 +16,10 @@ impl<MR: MessageRepository, FR: FormRepository> MessageUseCase<'_, MR, FR> {
         self.message_repository.post_message(message).await
     }
 
-    pub async fn get_message(&self, answer_id: AnswerId) -> Result<Vec<Message>, Error> {
+    pub async fn get_message(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
         let answers = self
             .form_repository
             .get_answers(answer_id)
