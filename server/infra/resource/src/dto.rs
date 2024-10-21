@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use domain::{
     form::models::{FormSettings, ResponsePeriod},
+    types::authorization_guard::{AuthorizationGuard, Read},
     user::models::{Role, User},
 };
 use uuid::Uuid;
@@ -289,7 +290,7 @@ pub struct MessageDto {
     pub timestamp: DateTime<Utc>,
 }
 
-impl TryFrom<MessageDto> for domain::message::models::Message {
+impl TryFrom<MessageDto> for AuthorizationGuard<domain::message::models::Message, Read> {
     type Error = errors::domain::DomainError;
 
     fn try_from(

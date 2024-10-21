@@ -4,6 +4,7 @@ use errors::domain::DomainError;
 
 use crate::{
     form::models::PostedAnswers,
+    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create, Read},
     user::models::{Role::Administrator, User},
 };
 
@@ -18,27 +19,32 @@ pub struct Message {
     timestamp: DateTime<Utc>,
 }
 
-impl Message {
-    pub fn can_create(related_answer: &PostedAnswers, posted_user: &User) -> bool {
-        posted_user.role == Administrator || related_answer.user.id == posted_user.id
+impl AuthorizationGuardDefinitions<Message> for Message {
+    fn can_create(&self, actor: &User) -> bool {
+        self.posted_user.role == Administrator || self.related_answer.user.id == actor.id
     }
 
+    fn can_read(&self, actor: &User) -> bool {
+        self.posted_user.role == Administrator || self.related_answer.user.id == actor.id
+    }
+}
+
+impl Message {
     pub fn try_new(
         related_answer: PostedAnswers,
         posted_user: User,
         body: String,
-    ) -> Result<Self, DomainError> {
-        if Self::can_create(&related_answer, &posted_user) {
-            Ok(Self {
+    ) -> Result<AuthorizationGuard<Self, Create>, DomainError> {
+        AuthorizationGuard::try_new(
+            &posted_user.to_owned(),
+            Self {
                 id: MessageId::new(),
                 related_answer,
                 posted_user,
                 body,
                 timestamp: Utc::now(),
-            })
-        } else {
-            Err(DomainError::Forbidden)
-        }
+            },
+        )
     }
 
     /// [`Message`] の各フィールドの値を受け取り、[`Message`] を生成します。
@@ -91,14 +97,14 @@ impl Message {
         posted_user: User,
         body: String,
         timestamp: DateTime<Utc>,
-    ) -> Self {
-        Self {
+    ) -> AuthorizationGuard<Self, Read> {
+        AuthorizationGuard::new_unchecked(Self {
             id,
             related_answer,
             posted_user,
             body,
             timestamp,
-        }
+        })
     }
 }
 
@@ -107,7 +113,7 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::user::models::{Role, Role::StandardUser};
+    use crate::user::models::Role::StandardUser;
 
     #[test]
     fn should_reject_message_from_unrelated_user() {
@@ -168,7 +174,7 @@ mod test {
         let message_posted_user = User {
             name: "message_posted_user".to_string(),
             id: Uuid::new_v4(),
-            role: Role::Administrator,
+            role: Administrator,
         };
 
         let answer_posted_user = User {
