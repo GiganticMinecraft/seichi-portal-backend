@@ -27,6 +27,10 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     fn can_read(&self, actor: &User) -> bool {
         self.posted_user.role == Administrator || self.related_answer.user.id == actor.id
     }
+
+    fn can_delete(&self, actor: &User) -> bool {
+        self.related_answer.user.id == actor.id
+    }
 }
 
 impl Message {
