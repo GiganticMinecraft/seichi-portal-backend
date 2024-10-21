@@ -105,6 +105,7 @@ impl Message {
             body,
             timestamp,
         })
+        .into_read()
     }
 }
 
