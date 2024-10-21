@@ -18,8 +18,8 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
 
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
     /// [`AuthorizationGuardDefinitions::can_create`] の条件で新しい [`AuthorizationGuard`] の作成を試みます。
-    pub(crate) fn try_new(user: &User, guard_target: T) -> Result<Self, DomainError> {
-        if guard_target.can_create(user) {
+    pub(crate) fn try_new(actor: &User, guard_target: T) -> Result<Self, DomainError> {
+        if guard_target.can_create(actor) {
             Ok(Self {
                 guard_target,
                 _phantom_data: std::marker::PhantomData,
@@ -45,8 +45,8 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
         }
     }
 
-    pub fn try_read(&self, user: &User) -> Result<&T, DomainError> {
-        if self.guard_target.can_read(user) {
+    pub fn try_read(&self, actor: &User) -> Result<&T, DomainError> {
+        if self.guard_target.can_read(actor) {
             Ok(&self.guard_target)
         } else {
             Err(DomainError::Forbidden)
