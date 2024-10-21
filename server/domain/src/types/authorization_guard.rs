@@ -6,11 +6,15 @@ pub trait Actions {}
 
 pub struct Create;
 pub struct Read;
+pub struct Delete;
 
 impl Actions for Create {}
 impl Actions for Read {}
+impl Actions for Delete {}
 
-/// `guard_target` を保持し、[User] が `guard_target` に対してアクセス可能かどうかを判定するための構造体
+/// [`User`] の `guard_target` に対するアクセスを制御するための定義を提供します。
+///
+/// この定義は、`guard_target` によってアクセス権が異なるデータの操作を制御することのみを想定しています。
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
     guard_target: T,
     _phantom_data: std::marker::PhantomData<A>,
@@ -59,36 +63,60 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
             Err(DomainError::Forbidden)
         }
     }
+
+    /// [`AuthorizationGuard`] の Action を [`Delete`] に変換します。
+    pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
+        AuthorizationGuard {
+            guard_target: self.guard_target,
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
 }
 
-/// `actor` が `guard_target` に対して操作可能かどうかを判定するためのトレイト
-///
-/// # Examples
-/// ```
-/// use domain::{
-///     message::models::{Message, MessageId},
-///     types::authorization_guard::AuthorizationGuardDefinitions,
-///     user::models::{Role, User},
-/// };
-/// use uuid::Uuid;
-///
-/// struct MessageGuard {
-///     pub _value: String,
-/// }
-///
-/// impl AuthorizationGuardDefinitions<Message> for MessageGuard {
-///     fn can_create(&self, user: &User) -> bool {
-///         user.role == Role::Administrator
-///     }
-///
-///     fn can_read(&self, user: &User) -> bool {
-///         user.role == Role::Administrator || user.role == Role::StandardUser
-///     }
-/// }
-/// ```
+impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
+    /// `actor` が `guard_target` を削除するための情報を取得することを試みます。
+    pub fn try_delete(&self, actor: &User) -> Result<&T, DomainError> {
+        if self.guard_target.can_delete(actor) {
+            Ok(&self.guard_target)
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
 pub trait AuthorizationGuardDefinitions<T> {
+    /// `actor` が `guard_target` に対して操作可能かどうかを判定するためのトレイト
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     message::models::{Message, MessageId},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// struct MessageGuard {
+    ///     pub _value: String,
+    /// }
+    ///
+    /// impl AuthorizationGuardDefinitions<Message> for MessageGuard {
+    ///     fn can_create(&self, user: &User) -> bool {
+    ///         user.role == Role::Administrator
+    ///     }
+    ///
+    ///     fn can_read(&self, user: &User) -> bool {
+    ///         user.role == Role::Administrator || user.role == Role::StandardUser
+    ///     }
+    ///
+    ///     fn can_delete(&self, actor: &User) -> bool {
+    ///         actor.role == Role::Administrator
+    ///     }
+    /// }
+    /// ```
     fn can_create(&self, actor: &User) -> bool;
     fn can_read(&self, actor: &User) -> bool;
+    fn can_delete(&self, actor: &User) -> bool;
 }
 
 #[cfg(test)]
@@ -113,6 +141,10 @@ mod test {
 
             fn can_read(&self, user: &User) -> bool {
                 user.role == Role::Administrator || user.role == Role::StandardUser
+            }
+
+            fn can_delete(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator
             }
         }
 
