@@ -16,7 +16,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
 
-use crate::form_schemas::{
+use crate::schemas::form::form_request_schemas::{
     AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
     FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
 };
