@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
-        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
-        FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, FormAnswerContent, FormDescription,
+        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
         WebhookUrl,
     },
     user::models::{Role, User},
@@ -24,7 +24,7 @@ use crate::{
             query_one, query_one_and_values, ConnectionPool,
         },
     },
-    dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto},
+    dto::{FormAnswerDto, FormDto, LabelDto, QuestionDto, SimpleFormDto},
 };
 
 #[async_trait]
@@ -518,7 +518,7 @@ impl FormDatabase for ConnectionPool {
         &self,
         user: &User,
         form_id: FormId,
-        answers: Vec<AnswerContent>,
+        answers: Vec<FormAnswerContent>,
     ) -> Result<(), InfraError> {
         let User { id, .. } = user.to_owned();
         let form_id = form_id.to_owned();
@@ -600,10 +600,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_answers(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<Option<PostedAnswersDto>, InfraError> {
+    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answer_query_result_opt = query_one_and_values(
@@ -616,7 +613,7 @@ impl FormDatabase for ConnectionPool {
 
                 answer_query_result_opt
                     .map(|rs| {
-                        Ok::<_, InfraError>(PostedAnswersDto {
+                        Ok::<_, InfraError>(FormAnswerDto {
                             id: answer_id.into_inner(),
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
@@ -636,7 +633,7 @@ impl FormDatabase for ConnectionPool {
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,
-    ) -> Result<Vec<PostedAnswersDto>, InfraError> {
+    ) -> Result<Vec<FormAnswerDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = query_all_and_values(
@@ -651,7 +648,7 @@ impl FormDatabase for ConnectionPool {
                 answers
                     .iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(PostedAnswersDto {
+                        Ok::<_, InfraError>(FormAnswerDto {
                             id: rs.try_get("", "answer_id")?,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
@@ -668,7 +665,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
+    async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = query_all(
@@ -681,7 +678,7 @@ impl FormDatabase for ConnectionPool {
                 answers
                     .iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(PostedAnswersDto {
+                        Ok::<_, InfraError>(FormAnswerDto {
                             id: rs.try_get("", "answer_id")?,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,

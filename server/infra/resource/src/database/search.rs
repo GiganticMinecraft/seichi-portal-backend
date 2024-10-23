@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{AnswerContent, Form, Label},
+    form::models::{Form, FormAnswerContent, Label},
     search::models::Comment,
     user::models::User,
 };
@@ -72,14 +72,14 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerContent>, InfraError> {
+    async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("real_answers")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<AnswerContent>()
+            .execute::<FormAnswerContent>()
             .await?
             .hits
             .into_iter()

@@ -4,9 +4,9 @@ use mockall::automock;
 
 use crate::{
     form::models::{
-        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription,
-        FormId, FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
-        SimpleForm, Visibility, WebhookUrl,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
+        FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question,
+        ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     user::models::User,
 };
@@ -61,11 +61,11 @@ pub trait FormRepository: Send + Sync + 'static {
         user: &User,
         form_id: FormId,
         title: DefaultAnswerTitle,
-        answers: Vec<AnswerContent>,
+        answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error>;
-    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<PostedAnswers>, Error>;
-    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<PostedAnswers>, Error>;
-    async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error>;
+    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswer>, Error>;
+    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<FormAnswer>, Error>;
+    async fn get_all_answers(&self) -> Result<Vec<FormAnswer>, Error>;
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,

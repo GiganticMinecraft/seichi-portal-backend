@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
         FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
         WebhookUrl,
     },
@@ -11,7 +11,7 @@ use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto};
+use crate::dto::{FormAnswerDto, FormDto, LabelDto, QuestionDto, SimpleFormDto};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -84,17 +84,14 @@ pub trait FormDatabase: Send + Sync {
         &self,
         user: &User,
         form_id: FormId,
-        answers: Vec<AnswerContent>,
+        answers: Vec<FormAnswerContent>,
     ) -> Result<(), InfraError>;
-    async fn get_answers(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<Option<PostedAnswersDto>, InfraError>;
+    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError>;
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,
-    ) -> Result<Vec<PostedAnswersDto>, InfraError>;
-    async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError>;
+    ) -> Result<Vec<FormAnswerDto>, InfraError>;
+    async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError>;
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
@@ -160,7 +157,7 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError>;
     async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, InfraError>;
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, InfraError>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerContent>, InfraError>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError>;
     async fn search_comments(
         &self,
         query: &str,

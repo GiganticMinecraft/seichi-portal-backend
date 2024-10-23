@@ -135,23 +135,23 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
     }
 }
 
-pub struct AnswerContentDto {
+pub struct FormAnswerContentDto {
     pub answer_id: i32,
     pub question_id: i32,
     pub answer: String,
 }
 
-impl TryFrom<AnswerContentDto> for domain::form::models::AnswerContent {
+impl TryFrom<FormAnswerContentDto> for domain::form::models::FormAnswerContent {
     type Error = errors::domain::DomainError;
 
     fn try_from(
-        AnswerContentDto {
+        FormAnswerContentDto {
             answer_id,
             question_id,
             answer,
-        }: AnswerContentDto,
+        }: FormAnswerContentDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::AnswerContent {
+        Ok(domain::form::models::FormAnswerContent {
             answer_id: answer_id.into(),
             question_id: question_id.into(),
             answer,
@@ -203,7 +203,7 @@ impl TryFrom<CommentDto> for domain::form::models::Comment {
     }
 }
 
-pub struct PostedAnswersDto {
+pub struct FormAnswerDto {
     pub id: i32,
     pub user_name: String,
     pub uuid: Uuid,
@@ -213,11 +213,11 @@ pub struct PostedAnswersDto {
     pub title: Option<String>,
 }
 
-impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
+impl TryFrom<FormAnswerDto> for domain::form::models::FormAnswer {
     type Error = errors::domain::DomainError;
 
     fn try_from(
-        PostedAnswersDto {
+        FormAnswerDto {
             id,
             user_name,
             uuid,
@@ -225,9 +225,9 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             timestamp,
             form_id,
             title,
-        }: PostedAnswersDto,
+        }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::PostedAnswers {
+        Ok(domain::form::models::FormAnswer {
             id: id.into(),
             user: User {
                 name: user_name,

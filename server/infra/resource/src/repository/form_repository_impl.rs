@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription,
-        FormId, FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
-        SimpleForm, Visibility, WebhookUrl,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
+        FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question,
+        ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -165,7 +165,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         user: &User,
         form_id: FormId,
         title: DefaultAnswerTitle,
-        answers: Vec<AnswerContent>,
+        answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         let form = self.get(form_id).await?;
         form_outgoing::post_answer(&form, user, title, &answers).await?;
@@ -178,7 +178,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<PostedAnswers>, Error> {
+    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswer>, Error> {
         self.client
             .form()
             .get_answers(answer_id)
@@ -187,7 +187,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .transpose()
     }
 
-    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<PostedAnswers>, Error> {
+    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<FormAnswer>, Error> {
         self.client
             .form()
             .get_answers_by_form_id(form_id)
@@ -196,19 +196,19 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
                 answers
                     .into_iter()
                     .map(|posted_answers_dto| posted_answers_dto.try_into())
-                    .collect::<Result<Vec<PostedAnswers>, _>>()
+                    .collect::<Result<Vec<FormAnswer>, _>>()
             })?
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
+    async fn get_all_answers(&self) -> Result<Vec<FormAnswer>, Error> {
         stream::iter(self.client.form().get_all_answers().await?)
             .then(|posted_answers_dto| async { Ok(posted_answers_dto.try_into()?) })
-            .collect::<Vec<Result<PostedAnswers, _>>>()
+            .collect::<Vec<Result<FormAnswer, _>>>()
             .await
             .into_iter()
-            .collect::<Result<Vec<PostedAnswers>, _>>()
+            .collect::<Result<Vec<FormAnswer>, _>>()
     }
 
     #[tracing::instrument(skip(self))]

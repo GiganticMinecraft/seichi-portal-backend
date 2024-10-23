@@ -1,9 +1,9 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription,
-        FormId, FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
-        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
+        FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question,
+        ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -127,7 +127,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         user: &User,
         form_id: FormId,
         title: DefaultAnswerTitle,
-        answers: Vec<AnswerContent>,
+        answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         let is_within_period = form_id
             .resolve(self.repository)
@@ -155,7 +155,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         }
     }
 
-    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<PostedAnswers, Error> {
+    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<FormAnswer, Error> {
         if let Some(posted_answers) = self.repository.get_answers(answer_id).await? {
             Ok(posted_answers)
         } else {
@@ -163,14 +163,11 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         }
     }
 
-    pub async fn get_answers_by_form_id(
-        &self,
-        form_id: FormId,
-    ) -> Result<Vec<PostedAnswers>, Error> {
+    pub async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<FormAnswer>, Error> {
         self.repository.get_answers_by_form_id(form_id).await
     }
 
-    pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
+    pub async fn get_all_answers(&self) -> Result<Vec<FormAnswer>, Error> {
         self.repository.get_all_answers().await
     }
 

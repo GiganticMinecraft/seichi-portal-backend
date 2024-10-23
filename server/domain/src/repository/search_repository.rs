@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::models::{AnswerContent, Form, Label},
+    form::models::{Form, FormAnswerContent, Label},
     search::models::Comment,
     user::models::User,
 };
@@ -15,6 +15,6 @@ pub trait SearchRepository: Send + Sync + 'static {
     async fn search_forms(&self, query: &str) -> Result<Vec<Form>, Error>;
     async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, Error>;
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, Error>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerContent>, Error>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, Error>;
     async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, Error>;
 }
