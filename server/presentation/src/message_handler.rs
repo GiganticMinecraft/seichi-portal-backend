@@ -73,7 +73,7 @@ pub async fn get_messages_handler(
         form_repository: repository.form_repository(),
     };
 
-    match message_use_case.get_message(answer_id).await {
+    match message_use_case.get_messages(answer_id).await {
         Ok(messages) => {
             let messages_read_result = messages
                 .into_iter()

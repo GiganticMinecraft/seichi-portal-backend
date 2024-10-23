@@ -16,7 +16,7 @@ impl<MR: MessageRepository, FR: FormRepository> MessageUseCase<'_, MR, FR> {
         self.message_repository.post_message(message).await
     }
 
-    pub async fn get_message(
+    pub async fn get_messages(
         &self,
         answer_id: AnswerId,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
