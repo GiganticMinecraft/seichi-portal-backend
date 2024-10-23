@@ -228,13 +228,11 @@ pub struct PostedAnswers {
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
-    pub answers: Vec<Answer>,
-    pub comments: Vec<Comment>,
-    pub labels: Vec<Label>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct Answer {
+pub struct AnswerContent {
+    pub answer_id: AnswerId,
     pub question_id: QuestionId,
     pub answer: String,
 }
@@ -248,6 +246,16 @@ pub struct Comment {
     pub content: String,
     pub timestamp: DateTime<Utc>,
     pub commented_by: User,
+}
+
+pub type AnswerLabelId = types::Id<AnswerLabel>;
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct AnswerLabel {
+    pub id: AnswerLabelId,
+    pub answer_id: AnswerId,
+    pub name: String,
 }
 
 pub type LabelId = types::Id<Label>;

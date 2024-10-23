@@ -4,14 +4,14 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
+        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, FormDescription, FormId,
         FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
         WebhookUrl,
     },
     user::models::{Role, User},
 };
 use errors::infra::{InfraError, InfraError::FormNotFound};
-use futures::{future::try_join, try_join};
+use futures::future::try_join;
 use itertools::Itertools;
 use regex::Regex;
 use sea_orm::DbErr;
@@ -24,10 +24,7 @@ use crate::{
             query_one, query_one_and_values, ConnectionPool,
         },
     },
-    dto::{
-        AnswerDto, CommentDto, FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto,
-        UserDto,
-    },
+    dto::{FormDto, LabelDto, PostedAnswersDto, QuestionDto, SimpleFormDto},
 };
 
 #[async_trait]
@@ -521,7 +518,7 @@ impl FormDatabase for ConnectionPool {
         &self,
         user: &User,
         form_id: FormId,
-        answers: Vec<Answer>,
+        answers: Vec<AnswerContent>,
     ) -> Result<(), InfraError> {
         let User { id, .. } = user.to_owned();
         let form_id = form_id.to_owned();
@@ -609,75 +606,13 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<Option<PostedAnswersDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let fetch_real_answers = query_all_and_values(
-                    "SELECT answer_id, question_id, answer FROM real_answers WHERE answer_id = ?",
-                    [answer_id.into_inner().into()],
-                    txn,
-                );
-
-                let fetch_answer_query_result_opt = query_one_and_values(
+                let answer_query_result_opt = query_one_and_values(
                     r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id = ?",
                     [answer_id.into_inner().into()],
                     txn,
-                );
-
-                let fetch_comments = query_all_and_values(
-                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, commented_by FROM form_answer_comments
-                        INNER JOIN users ON form_answer_comments.commented_by = users.id
-                        WHERE answer_id = ?",
-                    [answer_id.into_inner().into()],
-                    txn,
-                );
-
-                let fetch_labels = query_all_and_values(
-                    r"SELECT answer_id, label_id, name FROM label_settings_for_form_answers
-                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id
-                    WHERE answer_id = ?",
-                    [answer_id.into_inner().into()],
-                    txn,
-                );
-
-                let (answer_query_result_opt, real_answers, comments, labels) = try_join!(fetch_answer_query_result_opt, fetch_real_answers, fetch_comments, fetch_labels)?;
-
-                let answers = real_answers
-                    .iter()
-                    .map(|rs| {
-                        Ok::<AnswerDto, DbErr>(AnswerDto {
-                            question_id: rs.try_get("", "question_id")?,
-                            answer: rs.try_get("", "answer")?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let comments = comments.
-                    iter()
-                    .map(|rs| {
-                        Ok::<CommentDto, InfraError>(CommentDto {
-                            answer_id: rs.try_get("", "answer_id")?,
-                            comment_id: rs.try_get("", "comment_id")?,
-                            content: rs.try_get("", "content")?,
-                            timestamp: rs.try_get("", "timestamp")?,
-                            commented_by: UserDto {
-                                name: rs.try_get("", "name")?,
-                                id: uuid::Uuid::from_str(&rs.try_get::<String>("", "commented_by")?)?,
-                                role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
-                            },
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let labels = labels
-                    .iter()
-                    .map(|rs| {
-                        Ok::<LabelDto, InfraError>(LabelDto {
-                            id: rs.try_get("", "label_id")?,
-                            name: rs.try_get("", "label")?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
+                ).await?;
 
                 answer_query_result_opt
                     .map(|rs| {
@@ -688,10 +623,7 @@ impl FormDatabase for ConnectionPool {
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
-                            title: rs.try_get("", "title")?,
-                            answers,
-                            comments,
-                            labels,
+                            title: rs.try_get("", "title")?
                         })
                     })
                     .transpose()
@@ -707,100 +639,26 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<Vec<PostedAnswersDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let fetch_answers = query_all_and_values(
+                let answers = query_all_and_values(
                     r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE form_id = ?
                         ORDER BY answers.time_stamp",
                     [form_id.into_inner().into()],
                     txn,
-                );
-
-                let fetch_real_answers = query_all(
-                    "SELECT answer_id, question_id, answer FROM real_answers",
-                    txn,
-                );
-
-                let fetch_comments = query_all_and_values(
-                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, commented_by FROM form_answer_comments
-                        INNER JOIN users ON form_answer_comments.commented_by = users.id
-                        WHERE answer_id IN (SELECT id FROM answers WHERE form_id = ?)",
-                    [form_id.into_inner().into()],
-                    txn,
-                );
-
-                let fetch_labels = query_all_and_values(
-                    r"SELECT answer_id, label_id, name FROM label_settings_for_form_answers
-                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id
-                    WHERE answer_id IN (SELECT id FROM answers WHERE form_id = ?)",
-                    [form_id.into_inner().into()],
-                    txn,
-                );
-
-                let (answers, real_answers, comments, labels) = try_join!(fetch_answers, fetch_real_answers, fetch_comments, fetch_labels)?;
+                ).await?;
 
                 answers
                     .iter()
                     .map(|rs| {
-                        let answer_id: i32 = rs.try_get("", "answer_id")?;
-                        let answers = real_answers
-                            .iter()
-                            .filter(|rs| {
-                                rs.try_get::<i32>("", "answer_id")
-                                    .is_ok_and(|id| id == answer_id)
-                            })
-                            .map(|rs| {
-                                Ok::<AnswerDto, DbErr>(AnswerDto {
-                                    question_id: rs.try_get("", "question_id")?,
-                                    answer: rs.try_get("", "answer")?,
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-
-                        let comments = comments
-                            .iter()
-                            .filter(|rs| {
-                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
-                            })
-                            .map(|rs| {
-                                Ok::<CommentDto, InfraError>(CommentDto {
-                                    answer_id: rs.try_get("", "answer_id")?,
-                                    comment_id: rs.try_get("", "comment_id")?,
-                                    content: rs.try_get("", "content")?,
-                                    timestamp: rs.try_get("", "timestamp")?,
-                                    commented_by: UserDto {
-                                        name: rs.try_get("", "name")?,
-                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "commented_by")?)?,
-                                        role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
-                                    },
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-
-                        let labels = labels
-                            .iter()
-                            .filter(|rs| {
-                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
-                            })
-                            .map(|rs| {
-                                Ok::<LabelDto, InfraError>(LabelDto {
-                                    id: rs.try_get("", "label_id")?,
-                                    name: rs.try_get("", "label")?,
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-
                         Ok::<_, InfraError>(PostedAnswersDto {
-                            id: answer_id,
+                            id: rs.try_get("", "answer_id")?,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
-                            answers,
-                            comments,
-                            labels,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -813,94 +671,24 @@ impl FormDatabase for ConnectionPool {
     async fn get_all_answers(&self) -> Result<Vec<PostedAnswersDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let fetch_answers = query_all(
+                let answers = query_all(
                     r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.time_stamp",
                     txn,
-                );
-
-                let fetch_real_answers = query_all(
-                    "SELECT answer_id, question_id, answer FROM real_answers",
-                    txn,
-                );
-
-                let fetch_comments = query_all(
-                    r"SELECT form_answer_comments.id AS comment_id, answer_id, content, timestamp, name, role, commented_by FROM form_answer_comments
-                        INNER JOIN users ON form_answer_comments.commented_by = users.id",
-                    txn,
-                );
-
-                let fetch_labels = query_all(
-                    r"SELECT answer_id, label_id, name FROM label_settings_for_form_answers
-                    INNER JOIN label_for_form_answers ON label_for_form_answers.id = label_id",
-                    txn,
-                );
-
-                let (answers, real_answers, comments, labels) = try_join!(fetch_answers, fetch_real_answers, fetch_comments, fetch_labels)?;
+                ).await?;
 
                 answers
                     .iter()
                     .map(|rs| {
-                        let answer_id: i32 = rs.try_get("", "answer_id")?;
-                        let answers = real_answers
-                            .iter()
-                            .filter(|rs| {
-                                rs.try_get::<i32>("", "answer_id")
-                                    .is_ok_and(|id| id == answer_id)
-                            })
-                            .map(|rs| {
-                                Ok::<AnswerDto, DbErr>(AnswerDto {
-                                    question_id: rs.try_get("", "question_id")?,
-                                    answer: rs.try_get("", "answer")?,
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-
-                        let comments = comments
-                            .iter()
-                            .filter(|rs| {
-                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
-                            })
-                            .map(|rs| {
-                                Ok::<CommentDto, InfraError>(CommentDto {
-                                    answer_id: rs.try_get("", "answer_id")?,
-                                    comment_id: rs.try_get("", "comment_id")?,
-                                    content: rs.try_get("", "content")?,
-                                    timestamp: rs.try_get("", "timestamp")?,
-                                    commented_by: UserDto {
-                                        name: rs.try_get("", "name")?,
-                                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "commented_by")?)?,
-                                        role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
-                                    },
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-
-                        let labels = labels
-                            .iter()
-                            .filter(|rs| {
-                                rs.try_get::<i32>("", "answer_id").is_ok_and(|id| id == answer_id)
-                            })
-                            .map(|rs| {
-                                Ok::<LabelDto, InfraError>(LabelDto {
-                                    id: rs.try_get("", "label_id")?,
-                                    name: rs.try_get("", "label")?,
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-
                         Ok::<_, InfraError>(PostedAnswersDto {
-                            id: answer_id,
+                            id: rs.try_get("", "answer_id")?,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
-                            answers,
-                            comments,
-                            labels,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()

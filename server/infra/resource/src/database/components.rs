@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
+        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription,
+        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
         WebhookUrl,
     },
     user::models::{Role, User},
@@ -84,7 +84,7 @@ pub trait FormDatabase: Send + Sync {
         &self,
         user: &User,
         form_id: FormId,
-        answers: Vec<Answer>,
+        answers: Vec<AnswerContent>,
     ) -> Result<(), InfraError>;
     async fn get_answers(
         &self,
@@ -160,7 +160,7 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError>;
     async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, InfraError>;
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, InfraError>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<Answer>, InfraError>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerContent>, InfraError>;
     async fn search_comments(
         &self,
         query: &str,

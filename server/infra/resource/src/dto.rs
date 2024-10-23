@@ -135,21 +135,24 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
     }
 }
 
-pub struct AnswerDto {
+pub struct AnswerContentDto {
+    pub answer_id: i32,
     pub question_id: i32,
     pub answer: String,
 }
 
-impl TryFrom<AnswerDto> for domain::form::models::Answer {
+impl TryFrom<AnswerContentDto> for domain::form::models::AnswerContent {
     type Error = errors::domain::DomainError;
 
     fn try_from(
-        AnswerDto {
+        AnswerContentDto {
+            answer_id,
             question_id,
             answer,
-        }: AnswerDto,
+        }: AnswerContentDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Answer {
+        Ok(domain::form::models::AnswerContent {
+            answer_id: answer_id.into(),
             question_id: question_id.into(),
             answer,
         })
@@ -208,9 +211,6 @@ pub struct PostedAnswersDto {
     pub timestamp: DateTime<Utc>,
     pub form_id: i32,
     pub title: Option<String>,
-    pub answers: Vec<AnswerDto>,
-    pub comments: Vec<CommentDto>,
-    pub labels: Vec<LabelDto>,
 }
 
 impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
@@ -225,9 +225,6 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             timestamp,
             form_id,
             title,
-            answers,
-            comments,
-            labels,
         }: PostedAnswersDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::PostedAnswers {
@@ -240,18 +237,6 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             timestamp,
             form_id: form_id.into(),
             title: title.into(),
-            answers: answers
-                .into_iter()
-                .map(|answer| answer.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
-            comments: comments
-                .into_iter()
-                .map(|comment| comment.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
-            labels: labels
-                .into_iter()
-                .map(|label| label.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
         })
     }
 }

@@ -1,8 +1,8 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription,
+        FormId, FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
         SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
@@ -127,7 +127,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         user: &User,
         form_id: FormId,
         title: DefaultAnswerTitle,
-        answers: Vec<Answer>,
+        answers: Vec<AnswerContent>,
     ) -> Result<(), Error> {
         let is_within_period = form_id
             .resolve(self.repository)

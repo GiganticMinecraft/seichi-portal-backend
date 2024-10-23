@@ -1,5 +1,5 @@
 use domain::{
-    form::models::{Answer, Comment, DefaultAnswerTitle, Form, PostedAnswers},
+    form::models::{AnswerContent, Comment, DefaultAnswerTitle, Form, PostedAnswers},
     user::models::User,
 };
 use errors::infra::InfraError;
@@ -36,7 +36,7 @@ pub async fn post_answer(
     form: &Form,
     user: &User,
     title: DefaultAnswerTitle,
-    answers: &Vec<Answer>,
+    answers: &Vec<AnswerContent>,
 ) -> Result<(), InfraError> {
     if let Some(url) = form.settings.webhook_url.to_owned() {
         Webhook::new(url, "回答が送信されました".to_string())

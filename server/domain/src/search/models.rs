@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    form::models::{Answer, AnswerId, CommentId, Form, Label},
+    form::models::{AnswerContent, AnswerId, CommentId, Form, Label},
     user::models::User,
 };
 
@@ -18,7 +18,7 @@ pub struct Comment {
 pub struct CrossSearchResult {
     pub forms: Vec<Form>,
     pub users: Vec<User>,
-    pub answers: Vec<Answer>,
+    pub answers: Vec<AnswerContent>,
     pub label_for_forms: Vec<Label>,
     pub label_for_answers: Vec<Label>,
     pub comments: Vec<Comment>,

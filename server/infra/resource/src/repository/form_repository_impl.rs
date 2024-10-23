@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
+        AnswerContent, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription,
+        FormId, FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
         SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
@@ -165,7 +165,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         user: &User,
         form_id: FormId,
         title: DefaultAnswerTitle,
-        answers: Vec<Answer>,
+        answers: Vec<AnswerContent>,
     ) -> Result<(), Error> {
         let form = self.get(form_id).await?;
         form_outgoing::post_answer(&form, user, title, &answers).await?;
