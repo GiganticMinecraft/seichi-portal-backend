@@ -12,13 +12,17 @@ use domain::{
     user::models::{Role::StandardUser, User},
 };
 use errors::{infra::InfraError, usecase::UseCaseError, Error};
+use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
 
-use crate::schemas::form::form_request_schemas::{
-    AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
-    FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
+use crate::schemas::form::{
+    form_request_schemas::{
+        AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
+        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
+    },
+    form_response_schemas::FormAnswer,
 };
 
 pub async fn create_form_handler(
@@ -181,7 +185,21 @@ pub async fn get_all_answers(
     };
 
     match form_use_case.get_all_answers().await {
-        Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),
+        Ok(answers) => {
+            let response = answers
+                .into_iter()
+                .map(|answer_dto| {
+                    FormAnswer::new(
+                        answer_dto.form_answer,
+                        answer_dto.contents,
+                        answer_dto.comments,
+                        answer_dto.labels,
+                    )
+                })
+                .collect_vec();
+
+            (StatusCode::OK, Json(json!(response))).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }

@@ -24,7 +24,10 @@ use crate::{
             query_one, query_one_and_values, ConnectionPool,
         },
     },
-    dto::{FormAnswerDto, FormDto, LabelDto, QuestionDto, SimpleFormDto},
+    dto::{
+        AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto,
+        QuestionDto, SimpleFormDto, UserDto,
+    },
 };
 
 #[async_trait]
@@ -630,6 +633,38 @@ impl FormDatabase for ConnectionPool {
             .map_err(Into::into)
     }
 
+    #[tracing::instrument]
+    async fn get_answer_contents(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<FormAnswerContentDto>, InfraError> {
+        let answer_id = answer_id.into_inner();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let contents = query_all_and_values(
+                    r"SELECT question_id, answer FROM real_answers WHERE answer_id = ?",
+                    [answer_id.into()],
+                    txn,
+                )
+                .await?;
+
+                contents
+                    .iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>(FormAnswerContentDto {
+                            answer_id,
+                            question_id: rs.try_get("", "question_id")?,
+                            answer: rs.try_get("", "answer")?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,
@@ -931,6 +966,37 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
+    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let comments = query_all_and_values(
+                    r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
+                    INNER JOIN users ON form_answer_comments.commented_by = users.id
+                    WHERE answer_id = ?",
+                        [answer_id.into_inner().into()],
+                    txn
+                ).await?;
+
+                comments.into_iter().map(|rs| {
+                    Ok::<_, InfraError>(CommentDto {
+                        answer_id: rs.try_get("", "answer_id")?,
+                        comment_id: rs.try_get("", "id")?,
+                        content: rs.try_get("", "content")?,
+                        timestamp: rs.try_get("", "time_stamp")?,
+                        commented_by: UserDto {
+                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("", "commented_by")?,
+                            role: Role::from_str(rs.try_get::<String>("", "role")?.as_str())?,
+                        },
+                    })
+                }).collect::<Result<Vec<_>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError> {
         let params = [
             answer_id.into_inner().into(),
@@ -1006,6 +1072,39 @@ impl FormDatabase for ConnectionPool {
                         })
                     })
                     .collect::<Result<Vec<LabelDto>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn get_labels_for_answers_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AnswerLabelDto>, InfraError> {
+        let answer_id = answer_id.into_inner();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let labels_rs = query_all_and_values(
+                    r"SELECT id, name FROM label_for_form_answers
+                    INNER JOIN label_settings_for_form_answers ON label_for_form_answers.id = label_settings_for_form_answers.label_id
+                    WHERE answer_id = ?",
+                    [answer_id.into()],
+                    txn,
+                )
+                .await?;
+
+                labels_rs
+                    .into_iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>(AnswerLabelDto {
+                            id: rs.try_get("", "label_id")?,
+                            answer_id,
+                            name: rs.try_get("", "name")?,
+                        })
+                    })
+                    .collect::<Result<Vec<AnswerLabelDto>, _>>()
             })
         })
         .await

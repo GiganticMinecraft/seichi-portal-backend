@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question,
-        ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
+        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit,
+        Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::User,
@@ -187,6 +187,24 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .transpose()
     }
 
+    #[tracing::instrument(skip(self))]
+    async fn get_answer_contents(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<FormAnswerContent>, Error> {
+        self.client
+            .form()
+            .get_answer_contents(answer_id)
+            .await
+            .map(|answer_contents| {
+                answer_contents
+                    .into_iter()
+                    .map(|answer_content_dto| answer_content_dto.try_into())
+                    .collect::<Result<Vec<FormAnswerContent>, _>>()
+            })?
+            .map_err(Into::into)
+    }
+
     async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<FormAnswer>, Error> {
         self.client
             .form()
@@ -258,6 +276,20 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
+    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<Comment>, Error> {
+        self.client
+            .form()
+            .get_comments(answer_id)
+            .await
+            .map(|comments| {
+                comments
+                    .into_iter()
+                    .map(|comment_dto| comment_dto.try_into())
+                    .collect::<Result<Vec<Comment>, _>>()
+            })?
+            .map_err(Into::into)
+    }
+
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error> {
         let posted_answers = answer_id.resolve(self).await?.ok_or(AnswerNotFount {
             id: answer_id.into_inner(),
@@ -296,6 +328,24 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .into_iter()
             .collect::<Result<Vec<Label>, _>>()
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_labels_for_answers_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AnswerLabel>, Error> {
+        self.client
+            .form()
+            .get_labels_for_answers_by_answer_id(answer_id)
+            .await
+            .map(|labels| {
+                labels
+                    .into_iter()
+                    .map(|label_dto| label_dto.try_into())
+                    .collect::<Result<Vec<AnswerLabel>, _>>()
+            })?
+            .map_err(Into::into)
     }
 
     async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), Error> {

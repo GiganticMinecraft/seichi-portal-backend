@@ -17,8 +17,13 @@ use errors::{
     },
     Error,
 };
-use futures::future::{join_all, OptionFuture};
+use futures::{
+    future::{join_all, OptionFuture},
+    stream, try_join, StreamExt,
+};
 use types::Resolver;
+
+use crate::dto::AnswerDto;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
     pub repository: &'a FormRepo,
@@ -167,8 +172,29 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.get_answers_by_form_id(form_id).await
     }
 
-    pub async fn get_all_answers(&self) -> Result<Vec<FormAnswer>, Error> {
-        self.repository.get_all_answers().await
+    pub async fn get_all_answers(&self) -> Result<Vec<AnswerDto>, Error> {
+        stream::iter(self.repository.get_all_answers().await?)
+            .then(|form_answer| async {
+                let fetch_contents = self.repository.get_answer_contents(form_answer.id);
+                let fetch_labels = self
+                    .repository
+                    .get_labels_for_answers_by_answer_id(form_answer.id);
+                let fetch_comments = self.repository.get_comments(form_answer.id);
+
+                let (contents, labels, comments) =
+                    try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+                Ok(AnswerDto {
+                    form_answer,
+                    contents,
+                    labels,
+                    comments,
+                })
+            })
+            .collect::<Vec<Result<AnswerDto, Error>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn update_answer_meta(

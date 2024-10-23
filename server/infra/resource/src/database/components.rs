@@ -11,7 +11,10 @@ use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::dto::{FormAnswerDto, FormDto, LabelDto, QuestionDto, SimpleFormDto};
+use crate::dto::{
+    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto,
+    QuestionDto, SimpleFormDto,
+};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -87,6 +90,10 @@ pub trait FormDatabase: Send + Sync {
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), InfraError>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError>;
+    async fn get_answer_contents(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<FormAnswerContentDto>, InfraError>;
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,
@@ -108,10 +115,15 @@ pub trait FormDatabase: Send + Sync {
         questions: Vec<Question>,
     ) -> Result<(), InfraError>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
+    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
     async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
     async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError>;
+    async fn get_labels_for_answers_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AnswerLabelDto>, InfraError>;
     async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError>;
     async fn edit_label_for_answers(&self, label: &Label) -> Result<(), InfraError>;
     async fn replace_answer_labels(
