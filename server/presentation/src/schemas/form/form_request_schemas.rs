@@ -64,3 +64,9 @@ pub struct LabelSchema {
 pub struct ReplaceAnswerLabelSchema {
     pub labels: Vec<LabelId>,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct PostedMessageSchema {
+    pub related_answer_id: AnswerId,
+    pub body: String,
+}

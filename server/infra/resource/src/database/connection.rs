@@ -90,7 +90,6 @@ impl ConnectionPool {
 #[async_trait]
 impl DatabaseComponents for ConnectionPool {
     type ConcreteFormDatabase = Self;
-    type ConcreteMessageDatabase = Self;
     type ConcreteSearchDatabase = Self;
     type ConcreteUserDatabase = Self;
     type TransactionAcrossComponents = DatabaseTransaction;
@@ -108,10 +107,6 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn search(&self) -> &Self::ConcreteSearchDatabase {
-        self
-    }
-
-    fn message(&self) -> &Self::ConcreteMessageDatabase {
         self
     }
 }

@@ -2,10 +2,11 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
-        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit,
-        Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message,
+        OffsetAndLimit, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
+    types::authorization_guard::{AuthorizationGuard, Read},
     user::models::User,
 };
 use errors::{infra::InfraError::AnswerNotFount, Error};
@@ -419,5 +420,26 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .replace_form_labels(form_id, label_ids)
             .await
             .map_err(Into::into)
+    }
+
+    async fn post_message(&self, message: &Message) -> Result<(), Error> {
+        self.client
+            .form()
+            .post_message(message)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answers: &FormAnswer,
+    ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
+        self.client
+            .form()
+            .fetch_messages_by_answer_id(answers)
+            .await?
+            .into_iter()
+            .map(|dto| Ok(dto.try_into()?))
+            .collect::<Result<Vec<_>, _>>()
     }
 }

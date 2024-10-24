@@ -11,7 +11,7 @@ use domain::{
     repository::Repositories,
     user::models::{Role::StandardUser, User},
 };
-use errors::{infra::InfraError, usecase::UseCaseError, Error};
+use errors::{domain::DomainError, infra::InfraError, usecase::UseCaseError, Error};
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -20,9 +20,12 @@ use usecase::form::FormUseCase;
 use crate::schemas::form::{
     form_request_schemas::{
         AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
-        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
+        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, PostedMessageSchema,
+        ReplaceAnswerLabelSchema,
     },
-    form_response_schemas::FormAnswer,
+    form_response_schemas::{
+        FormAnswer, GetMessageResponseSchema, MessageContentSchema, SenderSchema,
+    },
 };
 
 pub async fn create_form_handler(
@@ -560,6 +563,77 @@ pub async fn replace_form_labels(
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn post_message_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Json(message): Json<PostedMessageSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .post_message(user, message.body, message.related_answer_id)
+        .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn get_messages_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_messages(answer_id).await {
+        Ok(messages) => {
+            let messages_read_result = messages
+                .into_iter()
+                .map(|message_guard| {
+                    message_guard
+                        .try_read(&user)
+                        .map(|message| MessageContentSchema {
+                            body: message.body().to_owned(),
+                            sender: SenderSchema {
+                                uuid: message.posted_user().id.to_string(),
+                                name: message.posted_user().name.to_owned(),
+                                role: message.posted_user().role.to_string(),
+                            },
+                            timestamp: message.timestamp().to_owned(),
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>();
+
+            let response_schema = match messages_read_result {
+                Ok(message_content_schemas) => GetMessageResponseSchema {
+                    messages: message_content_schemas,
+                },
+                Err(DomainError::Forbidden) => {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({
+                            "errorCode": "FORBIDDEN",
+                            "reason": "You cannot access to this message."
+                        })),
+                    )
+                        .into_response();
+                }
+                Err(err) => {
+                    return handle_error(Into::into(err)).into_response();
+                }
+            };
+
+            (StatusCode::OK, Json(json!(response_schema))).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }

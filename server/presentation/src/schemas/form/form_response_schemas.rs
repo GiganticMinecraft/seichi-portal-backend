@@ -114,3 +114,22 @@ impl FormAnswer {
         }
     }
 }
+
+#[derive(Serialize, Debug)]
+pub struct GetMessageResponseSchema {
+    pub messages: Vec<MessageContentSchema>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct MessageContentSchema {
+    pub body: String,
+    pub sender: SenderSchema,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct SenderSchema {
+    pub uuid: String,
+    pub name: String,
+    pub role: String,
+}

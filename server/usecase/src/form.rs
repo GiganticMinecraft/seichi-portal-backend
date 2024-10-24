@@ -2,10 +2,11 @@ use chrono::Utc;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
-        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, SimpleForm,
-        Visibility, Visibility::PUBLIC, WebhookUrl,
+        FormId, FormTitle, Label, LabelId, Message, OffsetAndLimit, Question, ResponsePeriod,
+        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
+    types::authorization_guard::{AuthorizationGuard, Read},
     user::models::{
         Role::{Administrator, StandardUser},
         User,
@@ -336,5 +337,36 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository
             .replace_form_labels(form_id, label_ids)
             .await
+    }
+
+    pub async fn post_message(
+        &self,
+        actor: User,
+        message_body: String,
+        answer_id: AnswerId,
+    ) -> Result<(), Error> {
+        match self.repository.get_answers(answer_id).await? {
+            Some(form_answer) => {
+                let message = Message::try_new(form_answer, actor.to_owned(), message_body)?;
+
+                self.repository
+                    .post_message(message.into_read().try_read(&actor)?)
+                    .await
+            }
+            None => Err(Error::from(AnswerNotFound)),
+        }
+    }
+
+    pub async fn get_messages(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
+        let answers = self
+            .repository
+            .get_answers(answer_id)
+            .await?
+            .ok_or(AnswerNotFound)?;
+
+        self.repository.fetch_messages_by_answer_id(&answers).await
     }
 }

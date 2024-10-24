@@ -290,7 +290,7 @@ pub struct MessageDto {
     pub timestamp: DateTime<Utc>,
 }
 
-impl TryFrom<MessageDto> for AuthorizationGuard<domain::message::models::Message, Read> {
+impl TryFrom<MessageDto> for AuthorizationGuard<domain::form::models::Message, Read> {
     type Error = errors::domain::DomainError;
 
     fn try_from(
@@ -303,7 +303,7 @@ impl TryFrom<MessageDto> for AuthorizationGuard<domain::message::models::Message
         }: MessageDto,
     ) -> Result<Self, Self::Error> {
         Ok(unsafe {
-            domain::message::models::Message::from_raw_parts(
+            domain::form::models::Message::from_raw_parts(
                 id.into(),
                 related_answer.try_into()?,
                 posted_user.try_into()?,

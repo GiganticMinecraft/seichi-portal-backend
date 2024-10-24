@@ -2,10 +2,9 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question,
+        FormDescription, FormId, FormTitle, Label, LabelId, Message, OffsetAndLimit, Question,
         ResponsePeriod, Visibility, WebhookUrl,
     },
-    message::models::Message,
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
@@ -22,14 +21,12 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteUserDatabase: UserDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
-    type ConcreteMessageDatabase: MessageDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
-    fn message(&self) -> &Self::ConcreteMessageDatabase;
 }
 
 #[automock]
@@ -143,6 +140,11 @@ pub trait FormDatabase: Send + Sync {
         form_id: FormId,
         label_ids: Vec<LabelId>,
     ) -> Result<(), InfraError>;
+    async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answers: &FormAnswer,
+    ) -> Result<Vec<MessageDto>, InfraError>;
 }
 
 #[automock]
@@ -177,14 +179,4 @@ pub trait SearchDatabase: Send + Sync {
         &self,
         query: &str,
     ) -> Result<Vec<domain::search::models::Comment>, InfraError>;
-}
-
-#[automock]
-#[async_trait]
-pub trait MessageDatabase: Send + Sync {
-    async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
-    async fn fetch_messages_by_answer_id(
-        &self,
-        answers: &FormAnswer,
-    ) -> Result<Vec<MessageDto>, InfraError>;
 }
