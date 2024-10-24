@@ -4,9 +4,9 @@ use mockall::automock;
 
 use crate::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
-        SimpleForm, Visibility, WebhookUrl,
+        AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
+        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit,
+        Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     user::models::User,
 };
@@ -61,11 +61,15 @@ pub trait FormRepository: Send + Sync + 'static {
         user: &User,
         form_id: FormId,
         title: DefaultAnswerTitle,
-        answers: Vec<Answer>,
+        answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error>;
-    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<PostedAnswers>, Error>;
-    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<PostedAnswers>, Error>;
-    async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error>;
+    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswer>, Error>;
+    async fn get_answer_contents(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<FormAnswerContent>, Error>;
+    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<FormAnswer>, Error>;
+    async fn get_all_answers(&self) -> Result<Vec<FormAnswer>, Error>;
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
@@ -78,10 +82,15 @@ pub trait FormRepository: Send + Sync + 'static {
     ) -> Result<(), Error>;
     async fn put_questions(&self, form_id: FormId, questions: Vec<Question>) -> Result<(), Error>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<Question>, Error>;
+    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<Comment>, Error>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), Error>;
     async fn create_label_for_answers(&self, label_name: String) -> Result<(), Error>;
     async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error>;
+    async fn get_labels_for_answers_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AnswerLabel>, Error>;
     async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), Error>;
     async fn edit_label_for_answers(&self, label: &Label) -> Result<(), Error>;
     async fn replace_answer_labels(

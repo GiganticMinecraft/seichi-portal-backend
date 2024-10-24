@@ -135,21 +135,24 @@ impl TryFrom<SimpleFormDto> for domain::form::models::SimpleForm {
     }
 }
 
-pub struct AnswerDto {
+pub struct FormAnswerContentDto {
+    pub answer_id: i32,
     pub question_id: i32,
     pub answer: String,
 }
 
-impl TryFrom<AnswerDto> for domain::form::models::Answer {
+impl TryFrom<FormAnswerContentDto> for domain::form::models::FormAnswerContent {
     type Error = errors::domain::DomainError;
 
     fn try_from(
-        AnswerDto {
+        FormAnswerContentDto {
+            answer_id,
             question_id,
             answer,
-        }: AnswerDto,
+        }: FormAnswerContentDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Answer {
+        Ok(domain::form::models::FormAnswerContent {
+            answer_id: answer_id.into(),
             question_id: question_id.into(),
             answer,
         })
@@ -200,7 +203,7 @@ impl TryFrom<CommentDto> for domain::form::models::Comment {
     }
 }
 
-pub struct PostedAnswersDto {
+pub struct FormAnswerDto {
     pub id: i32,
     pub user_name: String,
     pub uuid: Uuid,
@@ -208,16 +211,13 @@ pub struct PostedAnswersDto {
     pub timestamp: DateTime<Utc>,
     pub form_id: i32,
     pub title: Option<String>,
-    pub answers: Vec<AnswerDto>,
-    pub comments: Vec<CommentDto>,
-    pub labels: Vec<LabelDto>,
 }
 
-impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
+impl TryFrom<FormAnswerDto> for domain::form::models::FormAnswer {
     type Error = errors::domain::DomainError;
 
     fn try_from(
-        PostedAnswersDto {
+        FormAnswerDto {
             id,
             user_name,
             uuid,
@@ -225,12 +225,9 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             timestamp,
             form_id,
             title,
-            answers,
-            comments,
-            labels,
-        }: PostedAnswersDto,
+        }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::PostedAnswers {
+        Ok(domain::form::models::FormAnswer {
             id: id.into(),
             user: User {
                 name: user_name,
@@ -240,18 +237,30 @@ impl TryFrom<PostedAnswersDto> for domain::form::models::PostedAnswers {
             timestamp,
             form_id: form_id.into(),
             title: title.into(),
-            answers: answers
-                .into_iter()
-                .map(|answer| answer.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
-            comments: comments
-                .into_iter()
-                .map(|comment| comment.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
-            labels: labels
-                .into_iter()
-                .map(|label| label.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+pub struct AnswerLabelDto {
+    pub id: i32,
+    pub answer_id: i32,
+    pub name: String,
+}
+
+impl TryFrom<AnswerLabelDto> for domain::form::models::AnswerLabel {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        AnswerLabelDto {
+            id,
+            answer_id,
+            name,
+        }: AnswerLabelDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(domain::form::models::AnswerLabel {
+            id: id.into(),
+            answer_id: answer_id.into(),
+            name,
         })
     }
 }

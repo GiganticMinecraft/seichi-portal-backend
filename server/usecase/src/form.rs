@@ -1,9 +1,9 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        Answer, AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormDescription, FormId,
-        FormTitle, Label, LabelId, OffsetAndLimit, PostedAnswers, Question, ResponsePeriod,
-        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
+        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, SimpleForm,
+        Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -17,8 +17,13 @@ use errors::{
     },
     Error,
 };
-use futures::future::{join_all, OptionFuture};
+use futures::{
+    future::{join_all, OptionFuture},
+    stream, try_join, StreamExt,
+};
 use types::Resolver;
+
+use crate::dto::AnswerDto;
 
 pub struct FormUseCase<'a, FormRepo: FormRepository> {
     pub repository: &'a FormRepo,
@@ -127,7 +132,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         user: &User,
         form_id: FormId,
         title: DefaultAnswerTitle,
-        answers: Vec<Answer>,
+        answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         let is_within_period = form_id
             .resolve(self.repository)
@@ -155,23 +160,76 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         }
     }
 
-    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<PostedAnswers, Error> {
-        if let Some(posted_answers) = self.repository.get_answers(answer_id).await? {
-            Ok(posted_answers)
+    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<AnswerDto, Error> {
+        if let Some(form_answer) = self.repository.get_answers(answer_id).await? {
+            let fetch_contents = self.repository.get_answer_contents(answer_id);
+            let fetch_labels = self
+                .repository
+                .get_labels_for_answers_by_answer_id(answer_id);
+            let fetch_comments = self.repository.get_comments(answer_id);
+
+            let (contents, labels, comments) =
+                try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+            Ok(AnswerDto {
+                form_answer,
+                contents,
+                labels,
+                comments,
+            })
         } else {
             Err(Error::from(AnswerNotFound))
         }
     }
 
-    pub async fn get_answers_by_form_id(
-        &self,
-        form_id: FormId,
-    ) -> Result<Vec<PostedAnswers>, Error> {
-        self.repository.get_answers_by_form_id(form_id).await
+    pub async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerDto>, Error> {
+        stream::iter(self.repository.get_answers_by_form_id(form_id).await?)
+            .then(|form_answer| async {
+                let fetch_contents = self.repository.get_answer_contents(form_answer.id);
+                let fetch_labels = self
+                    .repository
+                    .get_labels_for_answers_by_answer_id(form_answer.id);
+                let fetch_comments = self.repository.get_comments(form_answer.id);
+
+                let (contents, labels, comments) =
+                    try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+                Ok(AnswerDto {
+                    form_answer,
+                    contents,
+                    labels,
+                    comments,
+                })
+            })
+            .collect::<Vec<Result<AnswerDto, Error>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
     }
 
-    pub async fn get_all_answers(&self) -> Result<Vec<PostedAnswers>, Error> {
-        self.repository.get_all_answers().await
+    pub async fn get_all_answers(&self) -> Result<Vec<AnswerDto>, Error> {
+        stream::iter(self.repository.get_all_answers().await?)
+            .then(|form_answer| async {
+                let fetch_contents = self.repository.get_answer_contents(form_answer.id);
+                let fetch_labels = self
+                    .repository
+                    .get_labels_for_answers_by_answer_id(form_answer.id);
+                let fetch_comments = self.repository.get_comments(form_answer.id);
+
+                let (contents, labels, comments) =
+                    try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+                Ok(AnswerDto {
+                    form_answer,
+                    contents,
+                    labels,
+                    comments,
+                })
+            })
+            .collect::<Vec<Result<AnswerDto, Error>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn update_answer_meta(

@@ -12,13 +12,17 @@ use domain::{
     user::models::{Role::StandardUser, User},
 };
 use errors::{infra::InfraError, usecase::UseCaseError, Error};
+use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
 
-use crate::form_schemas::{
-    AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
-    FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
+use crate::schemas::form::{
+    form_request_schemas::{
+        AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
+        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
+    },
+    form_response_schemas::FormAnswer,
 };
 
 pub async fn create_form_handler(
@@ -181,7 +185,21 @@ pub async fn get_all_answers(
     };
 
     match form_use_case.get_all_answers().await {
-        Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),
+        Ok(answers) => {
+            let response = answers
+                .into_iter()
+                .map(|answer_dto| {
+                    FormAnswer::new(
+                        answer_dto.form_answer,
+                        answer_dto.contents,
+                        answer_dto.comments,
+                        answer_dto.labels,
+                    )
+                })
+                .collect_vec();
+
+            (StatusCode::OK, Json(json!(response))).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }
@@ -195,13 +213,13 @@ pub async fn get_answer_handler(
         repository: repository.form_repository(),
     };
 
-    let posted_answers = match form_use_case.get_answers(answer_id).await {
+    let answer_dto = match form_use_case.get_answers(answer_id).await {
         Ok(answer) => answer,
         Err(err) => return handle_error(err).into_response(),
     };
 
     if user.role == StandardUser {
-        let form = match form_use_case.get_form(posted_answers.form_id).await {
+        let form = match form_use_case.get_form(answer_dto.form_answer.form_id).await {
             Ok(form) => form,
             Err(err) => return handle_error(err).into_response(),
         };
@@ -218,7 +236,16 @@ pub async fn get_answer_handler(
         }
     }
 
-    (StatusCode::OK, Json(posted_answers)).into_response()
+    (
+        StatusCode::OK,
+        Json(json!(FormAnswer::new(
+            answer_dto.form_answer,
+            answer_dto.contents,
+            answer_dto.comments,
+            answer_dto.labels
+        ))),
+    )
+        .into_response()
 }
 
 pub async fn get_answer_by_form_id_handler(
@@ -247,7 +274,21 @@ pub async fn get_answer_by_form_id_handler(
     }
 
     match form_use_case.get_answers_by_form_id(form_id).await {
-        Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),
+        Ok(answers) => {
+            let response = answers
+                .into_iter()
+                .map(|answer_dto| {
+                    FormAnswer::new(
+                        answer_dto.form_answer,
+                        answer_dto.contents,
+                        answer_dto.comments,
+                        answer_dto.labels,
+                    )
+                })
+                .collect_vec();
+
+            (StatusCode::OK, Json(response)).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }

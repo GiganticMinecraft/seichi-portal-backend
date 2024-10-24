@@ -212,29 +212,27 @@ impl DefaultAnswerTitle {
     }
 }
 
-pub type AnswerId = types::Id<PostedAnswers>;
+pub type AnswerId = types::Id<FormAnswer>;
 
 #[async_trait]
-impl<Repo: FormRepository + Sized + Sync> Resolver<PostedAnswers, Error, Repo> for AnswerId {
-    async fn resolve(&self, repo: &Repo) -> Result<Option<PostedAnswers>, Error> {
+impl<Repo: FormRepository + Sized + Sync> Resolver<FormAnswer, Error, Repo> for AnswerId {
+    async fn resolve(&self, repo: &Repo) -> Result<Option<FormAnswer>, Error> {
         repo.get_answers(self.to_owned()).await
     }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct PostedAnswers {
+pub struct FormAnswer {
     pub id: AnswerId,
     pub user: User,
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
-    pub answers: Vec<Answer>,
-    pub comments: Vec<Comment>,
-    pub labels: Vec<Label>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct Answer {
+pub struct FormAnswerContent {
+    pub answer_id: AnswerId,
     pub question_id: QuestionId,
     pub answer: String,
 }
@@ -248,6 +246,16 @@ pub struct Comment {
     pub content: String,
     pub timestamp: DateTime<Utc>,
     pub commented_by: User,
+}
+
+pub type AnswerLabelId = types::Id<AnswerLabel>;
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct AnswerLabel {
+    pub id: AnswerLabelId,
+    pub answer_id: AnswerId,
+    pub name: String,
 }
 
 pub type LabelId = types::Id<Label>;
