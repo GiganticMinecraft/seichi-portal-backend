@@ -1087,7 +1087,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let labels_rs = query_all_and_values(
-                    r"SELECT id, name FROM label_for_form_answers
+                    r"SELECT label_for_form_answers.id AS label_id, name FROM label_for_form_answers
                     INNER JOIN label_settings_for_form_answers ON label_for_form_answers.id = label_settings_for_form_answers.label_id
                     WHERE answer_id = ?",
                     [answer_id.into()],
