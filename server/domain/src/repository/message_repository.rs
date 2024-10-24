@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::models::PostedAnswers,
+    form::models::FormAnswer,
     message::models::Message,
     types::authorization_guard::{AuthorizationGuard, Read},
 };
@@ -14,6 +14,6 @@ pub trait MessageRepository: Send + Sync + 'static {
     async fn post_message(&self, message: &Message) -> Result<(), Error>;
     async fn fetch_messages_by_answer_id(
         &self,
-        answers: &PostedAnswers,
+        answers: &FormAnswer,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error>;
 }

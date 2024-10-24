@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
-        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
-        WebhookUrl,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
+        FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question,
+        ResponsePeriod, Visibility, WebhookUrl,
     },
     message::models::Message,
     user::models::{Role, User},
@@ -11,7 +11,7 @@ use domain::{
 use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
-use domain::form::models::FormAnswer;
+
 use crate::dto::{
     AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
     QuestionDto, SimpleFormDto,

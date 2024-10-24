@@ -212,7 +212,7 @@ impl DefaultAnswerTitle {
     }
 }
 
-pub type AnswerId = types::Id<FormAnswer>;
+pub type AnswerId = types::IntegerId<FormAnswer>;
 
 #[async_trait]
 impl<Repo: FormRepository + Sized + Sync> Resolver<FormAnswer, Error, Repo> for AnswerId {

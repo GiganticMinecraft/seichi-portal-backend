@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::PostedAnswers,
+    form::models::FormAnswer,
     message::models::Message,
     repository::message_repository::MessageRepository,
     types::authorization_guard::{AuthorizationGuard, Read},
@@ -24,7 +24,7 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
 
     async fn fetch_messages_by_answer_id(
         &self,
-        answers: &PostedAnswers,
+        answers: &FormAnswer,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
         self.client
             .message()

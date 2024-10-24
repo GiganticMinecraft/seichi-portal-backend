@@ -3,7 +3,7 @@ use derive_getters::Getters;
 use errors::domain::DomainError;
 
 use crate::{
-    form::models::PostedAnswers,
+    form::models::FormAnswer,
     types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create, Read},
     user::models::{Role::Administrator, User},
 };
@@ -13,7 +13,7 @@ pub type MessageId = types::Id<Message>;
 #[derive(Getters, Debug)]
 pub struct Message {
     id: MessageId,
-    related_answer: PostedAnswers,
+    related_answer: FormAnswer,
     posted_user: User,
     body: String,
     timestamp: DateTime<Utc>,
@@ -35,7 +35,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
 
 impl Message {
     pub fn try_new(
-        related_answer: PostedAnswers,
+        related_answer: FormAnswer,
         posted_user: User,
         body: String,
     ) -> Result<AuthorizationGuard<Self, Create>, DomainError> {
@@ -57,7 +57,7 @@ impl Message {
     /// ```
     /// use chrono::{DateTime, Utc};
     /// use domain::{
-    ///     form::models::{AnswerId, PostedAnswers},
+    ///     form::models::{AnswerId, FormAnswer},
     ///     message::models::{Message, MessageId},
     ///     user::models::{Role, User},
     /// };
@@ -69,15 +69,12 @@ impl Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = PostedAnswers {
+    /// let related_answer = FormAnswer {
     ///     id: 1.into(),
     ///     user: user.to_owned(),
     ///     timestamp: Utc::now(),
     ///     form_id: Default::default(),
     ///     title: Default::default(),
-    ///     answers: vec![],
-    ///     comments: vec![],
-    ///     labels: vec![],
     /// };
     ///
     /// let message = unsafe {
@@ -97,7 +94,7 @@ impl Message {
     /// データの信頼性が保証されている場合にのみ使用してください。
     pub unsafe fn from_raw_parts(
         id: MessageId,
-        related_answer: PostedAnswers,
+        related_answer: FormAnswer,
         posted_user: User,
         body: String,
         timestamp: DateTime<Utc>,
@@ -134,15 +131,12 @@ mod test {
             role: StandardUser,
         };
 
-        let answer = PostedAnswers {
+        let answer = FormAnswer {
             id: Default::default(),
             user: answer_posted_user,
             timestamp: Utc::now(),
             form_id: Default::default(),
             title: Default::default(),
-            answers: vec![],
-            comments: vec![],
-            labels: vec![],
         };
 
         let message = Message::try_new(answer, message_posted_user, "test message".to_string());
@@ -158,15 +152,12 @@ mod test {
             role: StandardUser,
         };
 
-        let answer = PostedAnswers {
+        let answer = FormAnswer {
             id: Default::default(),
             user: user.to_owned(),
             timestamp: Utc::now(),
             form_id: Default::default(),
             title: Default::default(),
-            answers: vec![],
-            comments: vec![],
-            labels: vec![],
         };
 
         let message = Message::try_new(answer, user, "test message".to_string());
@@ -188,15 +179,12 @@ mod test {
             role: StandardUser,
         };
 
-        let answer = PostedAnswers {
+        let answer = FormAnswer {
             id: Default::default(),
             user: answer_posted_user,
             timestamp: Utc::now(),
             form_id: Default::default(),
             title: Default::default(),
-            answers: vec![],
-            comments: vec![],
-            labels: vec![],
         };
 
         let message = Message::try_new(answer, message_posted_user, "test message".to_string());

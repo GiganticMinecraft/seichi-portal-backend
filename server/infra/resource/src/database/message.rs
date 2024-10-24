@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use domain::{form::models::PostedAnswers, message::models::Message, user::models::Role};
+use domain::{form::models::FormAnswer, message::models::Message, user::models::Role};
 use errors::infra::InfraError;
 use itertools::Itertools;
 
@@ -11,7 +11,7 @@ use crate::{
         components::MessageDatabase,
         connection::{execute_and_values, query_all_and_values, ConnectionPool},
     },
-    dto::{AnswerDto, CommentDto, LabelDto, MessageDto, PostedAnswersDto, UserDto},
+    dto::{FormAnswerDto, MessageDto, UserDto},
 };
 
 #[async_trait]
@@ -44,7 +44,7 @@ impl MessageDatabase for ConnectionPool {
     #[tracing::instrument(skip(self))]
     async fn fetch_messages_by_answer_id(
         &self,
-        answers: &PostedAnswers,
+        answers: &FormAnswer,
     ) -> Result<Vec<MessageDto>, InfraError> {
         let answer_id = answers.id.into_inner().to_owned();
 
@@ -88,7 +88,7 @@ impl MessageDatabase for ConnectionPool {
             .into_iter()
             .map(|(user, message_id, body, timestamp)| MessageDto {
                 id: message_id,
-                related_answer: PostedAnswersDto {
+                related_answer: FormAnswerDto {
                     id: answers.id.into_inner().to_owned(),
                     user_name: answers.user.name.to_owned(),
                     uuid: answers.user.id,
@@ -96,37 +96,6 @@ impl MessageDatabase for ConnectionPool {
                     timestamp: answers.timestamp,
                     form_id: answers.form_id.into_inner().to_owned(),
                     title: answers.title.default_answer_title.to_owned(),
-                    answers: answers
-                        .answers
-                        .iter()
-                        .map(|answer| AnswerDto {
-                            question_id: answer.question_id.into_inner().to_owned(),
-                            answer: answer.answer.to_owned(),
-                        })
-                        .collect_vec(),
-                    comments: answers
-                        .comments
-                        .iter()
-                        .map(|comment| CommentDto {
-                            answer_id: comment.answer_id.into_inner().to_owned(),
-                            comment_id: comment.comment_id.into_inner().to_owned(),
-                            content: comment.content.to_owned(),
-                            timestamp: comment.timestamp,
-                            commented_by: UserDto {
-                                name: comment.commented_by.name.to_owned(),
-                                id: comment.commented_by.id,
-                                role: comment.commented_by.role.to_owned(),
-                            },
-                        })
-                        .collect_vec(),
-                    labels: answers
-                        .labels
-                        .iter()
-                        .map(|label| LabelDto {
-                            id: label.id.into_inner().to_owned(),
-                            name: label.name.to_owned(),
-                        })
-                        .collect_vec(),
                 },
                 posted_user: user,
                 body,

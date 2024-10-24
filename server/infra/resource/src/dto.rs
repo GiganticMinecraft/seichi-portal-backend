@@ -284,7 +284,7 @@ impl TryFrom<LabelDto> for domain::form::models::Label {
 
 pub struct MessageDto {
     pub id: Uuid,
-    pub related_answer: PostedAnswersDto,
+    pub related_answer: FormAnswerDto,
     pub posted_user: UserDto,
     pub body: String,
     pub timestamp: DateTime<Utc>,
