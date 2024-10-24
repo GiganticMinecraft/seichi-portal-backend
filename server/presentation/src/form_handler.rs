@@ -274,7 +274,21 @@ pub async fn get_answer_by_form_id_handler(
     }
 
     match form_use_case.get_answers_by_form_id(form_id).await {
-        Ok(answers) => (StatusCode::OK, Json(answers)).into_response(),
+        Ok(answers) => {
+            let response = answers
+                .into_iter()
+                .map(|answer_dto| {
+                    FormAnswer::new(
+                        answer_dto.form_answer,
+                        answer_dto.contents,
+                        answer_dto.comments,
+                        answer_dto.labels,
+                    )
+                })
+                .collect_vec();
+
+            (StatusCode::OK, Json(response)).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }

@@ -1,9 +1,9 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question,
-        ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
+        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, SimpleForm,
+        Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     user::models::{
@@ -182,8 +182,29 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         }
     }
 
-    pub async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<FormAnswer>, Error> {
-        self.repository.get_answers_by_form_id(form_id).await
+    pub async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerDto>, Error> {
+        stream::iter(self.repository.get_answers_by_form_id(form_id).await?)
+            .then(|form_answer| async {
+                let fetch_contents = self.repository.get_answer_contents(form_answer.id);
+                let fetch_labels = self
+                    .repository
+                    .get_labels_for_answers_by_answer_id(form_answer.id);
+                let fetch_comments = self.repository.get_comments(form_answer.id);
+
+                let (contents, labels, comments) =
+                    try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+                Ok(AnswerDto {
+                    form_answer,
+                    contents,
+                    labels,
+                    comments,
+                })
+            })
+            .collect::<Vec<Result<AnswerDto, Error>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn get_all_answers(&self) -> Result<Vec<AnswerDto>, Error> {
