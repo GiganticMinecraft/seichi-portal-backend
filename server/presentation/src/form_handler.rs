@@ -213,13 +213,13 @@ pub async fn get_answer_handler(
         repository: repository.form_repository(),
     };
 
-    let posted_answers = match form_use_case.get_answers(answer_id).await {
+    let answer_dto = match form_use_case.get_answers(answer_id).await {
         Ok(answer) => answer,
         Err(err) => return handle_error(err).into_response(),
     };
 
     if user.role == StandardUser {
-        let form = match form_use_case.get_form(posted_answers.form_id).await {
+        let form = match form_use_case.get_form(answer_dto.form_answer.form_id).await {
             Ok(form) => form,
             Err(err) => return handle_error(err).into_response(),
         };
@@ -236,7 +236,16 @@ pub async fn get_answer_handler(
         }
     }
 
-    (StatusCode::OK, Json(posted_answers)).into_response()
+    (
+        StatusCode::OK,
+        Json(json!(FormAnswer::new(
+            answer_dto.form_answer,
+            answer_dto.contents,
+            answer_dto.comments,
+            answer_dto.labels
+        ))),
+    )
+        .into_response()
 }
 
 pub async fn get_answer_by_form_id_handler(

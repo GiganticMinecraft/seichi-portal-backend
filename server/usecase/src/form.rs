@@ -160,9 +160,23 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         }
     }
 
-    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<FormAnswer, Error> {
-        if let Some(posted_answers) = self.repository.get_answers(answer_id).await? {
-            Ok(posted_answers)
+    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<AnswerDto, Error> {
+        if let Some(form_answer) = self.repository.get_answers(answer_id).await? {
+            let fetch_contents = self.repository.get_answer_contents(answer_id);
+            let fetch_labels = self
+                .repository
+                .get_labels_for_answers_by_answer_id(answer_id);
+            let fetch_comments = self.repository.get_comments(answer_id);
+
+            let (contents, labels, comments) =
+                try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+            Ok(AnswerDto {
+                form_answer,
+                contents,
+                labels,
+                comments,
+            })
         } else {
             Err(Error::from(AnswerNotFound))
         }
