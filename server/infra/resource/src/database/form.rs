@@ -1371,6 +1371,7 @@ impl FormDatabase for ConnectionPool {
             .collect_vec())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn fetch_message(
         &self,
         message_id: &MessageId,
@@ -1429,6 +1430,7 @@ impl FormDatabase for ConnectionPool {
         .map_err(Into::into)
     }
 
+    #[tracing::instrument(skip(self))]
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
