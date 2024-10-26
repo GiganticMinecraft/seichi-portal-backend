@@ -2,8 +2,8 @@ use chrono::Utc;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
-        FormId, FormTitle, Label, LabelId, Message, OffsetAndLimit, Question, ResponsePeriod,
-        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
+        FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit, Question,
+        ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     types::authorization_guard::{AuthorizationGuard, Read},
@@ -14,7 +14,8 @@ use domain::{
 };
 use errors::{
     usecase::UseCaseError::{
-        AnswerNotFound, DoNotHavePermissionToPostFormComment, FormNotFound, OutOfPeriod,
+        AnswerNotFound, DoNotHavePermissionToPostFormComment, FormNotFound, MessageNotFound,
+        OutOfPeriod,
     },
     Error,
 };
@@ -368,5 +369,17 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .ok_or(AnswerNotFound)?;
 
         self.repository.fetch_messages_by_answer_id(&answers).await
+    }
+
+    pub async fn delete_message(&self, actor: &User, message_id: &MessageId) -> Result<(), Error> {
+        let message = self
+            .repository
+            .fetch_message(message_id)
+            .await?
+            .ok_or(MessageNotFound)?;
+
+        self.repository
+            .delete_message(actor, message.into_delete())
+            .await
     }
 }

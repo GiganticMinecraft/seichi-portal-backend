@@ -2,14 +2,14 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
-        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message,
+        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId,
         OffsetAndLimit, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
-    types::authorization_guard::{AuthorizationGuard, Read},
+    types::authorization_guard::{AuthorizationGuard, Delete, Read},
     user::models::User,
 };
-use errors::{infra::InfraError::AnswerNotFount, Error};
+use errors::{domain::DomainError, infra::InfraError::AnswerNotFount, Error};
 use futures::{stream, stream::StreamExt};
 use outgoing::form_outgoing;
 use types::Resolver;
@@ -441,5 +441,32 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .into_iter()
             .map(|dto| Ok(dto.try_into()?))
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn fetch_message(
+        &self,
+        message_id: &MessageId,
+    ) -> Result<Option<AuthorizationGuard<Message, Read>>, Error> {
+        self.client
+            .form()
+            .fetch_message(message_id)
+            .await?
+            .map(|dto| Ok::<_, DomainError>(dto.try_into())?)
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    async fn delete_message(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Delete>,
+    ) -> Result<(), Error> {
+        let message_id = message.try_delete(actor)?.id().to_owned();
+
+        self.client
+            .form()
+            .delete_message(message_id)
+            .await
+            .map_err(Into::into)
     }
 }

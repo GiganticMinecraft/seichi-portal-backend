@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, Message, OffsetAndLimit, Question,
-        ResponsePeriod, Visibility, WebhookUrl,
+        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
+        Question, ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -145,6 +145,9 @@ pub trait FormDatabase: Send + Sync {
         &self,
         answers: &FormAnswer,
     ) -> Result<Vec<MessageDto>, InfraError>;
+    async fn fetch_message(&self, message_id: &MessageId)
+        -> Result<Option<MessageDto>, InfraError>;
+    async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError>;
 }
 
 #[automock]

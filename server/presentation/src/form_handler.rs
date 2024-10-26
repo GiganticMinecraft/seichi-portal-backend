@@ -6,7 +6,8 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, FormId, Label, LabelId, OffsetAndLimit, Visibility::PRIVATE,
+        AnswerId, Comment, CommentId, FormId, Label, LabelId, MessageId, OffsetAndLimit,
+        Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
@@ -638,6 +639,21 @@ pub async fn get_messages_handler(
     }
 }
 
+pub async fn delete_message_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path(message_id): Path<MessageId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.delete_message(&user, &message_id).await {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub fn handle_error(err: Error) -> impl IntoResponse {
     match err {
         Error::Infra {
@@ -677,6 +693,16 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             Json(json!({
                 "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
                 "reason": "Do not have permission to post form comment."
+            })),
+        )
+            .into_response(),
+        Error::UseCase {
+            source: UseCaseError::MessageNotFound,
+        } => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "MESSAGE_NOT_FOUND",
+                "reason": "Message not found"
             })),
         )
             .into_response(),

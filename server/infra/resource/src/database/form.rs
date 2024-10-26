@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, Message, OffsetAndLimit, Question,
-        ResponsePeriod, Visibility, WebhookUrl,
+        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
+        Question, ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -1371,5 +1371,78 @@ impl FormDatabase for ConnectionPool {
                 timestamp,
             })
             .collect_vec())
+    }
+
+    async fn fetch_message(
+        &self,
+        message_id: &MessageId,
+    ) -> Result<Option<MessageDto>, InfraError> {
+        let message_id = message_id.into_inner();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rs = query_one_and_values(
+                    r"SELECT posted_user, message_senders.name, message_senders.role, body, timestamp,
+                    answers.id AS answer_id,
+                    time_stamp,
+                    form_id,
+                    user AS respondent_id,
+                    respondents.name AS respondent_name,
+                    respondents.role AS respondent_role
+                    FROM messages
+                    INNER JOIN answers ON related_answer_id = answers.id
+                    INNER JOIN users AS message_senders ON message_senders.id = messages.posted_user
+                    INNER JOIN users AS respondents ON respondents.id = answers.user
+                    WHERE messages.id = ?",
+                    [message_id.to_string().into()],
+                    txn,
+                )
+                .await?;
+
+                rs.map(|rs| {
+                    let user = Ok::<_, InfraError>(UserDto {
+                        name: rs.try_get("", "name")?,
+                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "posted_user")?)?,
+                        role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                    })?;
+
+                    let related_answer = Ok::<_, InfraError>(FormAnswerDto {
+                        id: rs.try_get("", "answer_id")?,
+                        user_name: rs.try_get("", "respondent_name")?,
+                        uuid: rs.try_get("", "respondent_id")?,
+                        user_role: Role::from_str(&rs.try_get::<String>("", "respondent_role")?)?,
+                        timestamp: rs.try_get("", "time_stamp")?,
+                        form_id: rs.try_get("", "form_id")?,
+                        title: rs.try_get("", "title")?,
+                    })?;
+
+                    Ok::<_, InfraError>(MessageDto {
+                        id: message_id.to_owned(),
+                        related_answer,
+                        posted_user: user,
+                        body: rs.try_get("", "body")?,
+                        timestamp: rs.try_get("", "timestamp")?,
+                    })
+                })
+                .transpose()
+            })
+        }).await.map_err(Into::into)
+    }
+
+    async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "DELETE FROM messages WHERE id = ?",
+                    [message_id.to_string().into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
     }
 }
