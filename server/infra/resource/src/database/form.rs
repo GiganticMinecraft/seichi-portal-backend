@@ -1289,16 +1289,16 @@ impl FormDatabase for ConnectionPool {
     async fn post_message(&self, message: &Message) -> Result<(), InfraError> {
         let id = message.id().to_string().to_owned();
         let related_answer_id = message.related_answer().id.into_inner().to_owned();
-        let posted_user = message.posted_user().id.to_string().to_owned();
+        let sender = message.sender().id.to_string().to_owned();
         let body = message.body().to_owned();
         let timestamp = message.timestamp().to_owned();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(r"INSERT INTO messages (id, related_answer_id, posted_user, body, timestamp) VALUES (?, ?, ?, ?, ?)", [
+                execute_and_values(r"INSERT INTO messages (id, related_answer_id, sender, body, timestamp) VALUES (?, ?, ?, ?, ?)", [
                     id.into(),
                     related_answer_id.into(),
-                    posted_user.into(),
+                    sender.into(),
                     body.into(),
                     timestamp.into(),
                 ], txn).await?;
@@ -1321,8 +1321,8 @@ impl FormDatabase for ConnectionPool {
             .read_only_transaction(|txn| {
                 Box::pin(async move {
                     let rs = query_all_and_values(
-                        r"SELECT id, posted_user, name, role, body, timestamp FROM messages
-                    INNER JOIN ON users.id = messages.posted_user
+                        r"SELECT id, sender, name, role, body, timestamp FROM messages
+                    INNER JOIN ON users.id = messages.sender
                     WHERE related_answer_id = ?",
                         [answer_id.into()],
                         txn,
@@ -1334,9 +1334,7 @@ impl FormDatabase for ConnectionPool {
                             .map(|rs| {
                                 let user = Ok::<_, InfraError>(UserDto {
                                     name: rs.try_get("", "name")?,
-                                    id: uuid::Uuid::from_str(
-                                        &rs.try_get::<String>("", "posted_user")?,
-                                    )?,
+                                    id: uuid::Uuid::from_str(&rs.try_get::<String>("", "sender")?)?,
                                     role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                                 });
 
@@ -1366,7 +1364,7 @@ impl FormDatabase for ConnectionPool {
                     form_id: answers.form_id.into_inner().to_owned(),
                     title: answers.title.default_answer_title.to_owned(),
                 },
-                posted_user: user,
+                sender: user,
                 body,
                 timestamp,
             })
@@ -1382,7 +1380,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rs = query_one_and_values(
-                    r"SELECT posted_user, message_senders.name, message_senders.role, body, timestamp,
+                    r"SELECT sender, message_senders.name, message_senders.role, body, timestamp,
                     answers.id AS answer_id,
                     time_stamp,
                     form_id,
@@ -1391,7 +1389,7 @@ impl FormDatabase for ConnectionPool {
                     respondents.role AS respondent_role
                     FROM messages
                     INNER JOIN answers ON related_answer_id = answers.id
-                    INNER JOIN users AS message_senders ON message_senders.id = messages.posted_user
+                    INNER JOIN users AS message_senders ON message_senders.id = messages.sender
                     INNER JOIN users AS respondents ON respondents.id = answers.user
                     WHERE messages.id = ?",
                     [message_id.to_string().into()],
@@ -1402,7 +1400,7 @@ impl FormDatabase for ConnectionPool {
                 rs.map(|rs| {
                     let user = Ok::<_, InfraError>(UserDto {
                         name: rs.try_get("", "name")?,
-                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "posted_user")?)?,
+                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "sender")?)?,
                         role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                     })?;
 
@@ -1419,14 +1417,16 @@ impl FormDatabase for ConnectionPool {
                     Ok::<_, InfraError>(MessageDto {
                         id: message_id.to_owned(),
                         related_answer,
-                        posted_user: user,
+                        sender: user,
                         body: rs.try_get("", "body")?,
                         timestamp: rs.try_get("", "timestamp")?,
                     })
                 })
                 .transpose()
             })
-        }).await.map_err(Into::into)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError> {

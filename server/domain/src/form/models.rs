@@ -277,18 +277,18 @@ pub type MessageId = types::Id<Message>;
 pub struct Message {
     id: MessageId,
     related_answer: FormAnswer,
-    posted_user: User,
+    sender: User,
     body: String,
     timestamp: DateTime<Utc>,
 }
 
 impl AuthorizationGuardDefinitions<Message> for Message {
     fn can_create(&self, actor: &User) -> bool {
-        self.posted_user.role == Administrator || self.related_answer.user.id == actor.id
+        self.sender.role == Administrator || self.related_answer.user.id == actor.id
     }
 
     fn can_read(&self, actor: &User) -> bool {
-        self.posted_user.role == Administrator || self.related_answer.user.id == actor.id
+        self.sender.role == Administrator || self.related_answer.user.id == actor.id
     }
 
     fn can_delete(&self, actor: &User) -> bool {
@@ -299,15 +299,15 @@ impl AuthorizationGuardDefinitions<Message> for Message {
 impl Message {
     pub fn try_new(
         related_answer: FormAnswer,
-        posted_user: User,
+        sender: User,
         body: String,
     ) -> Result<AuthorizationGuard<Self, Create>, DomainError> {
         AuthorizationGuard::try_new(
-            &posted_user.to_owned(),
+            &sender.to_owned(),
             Self {
                 id: MessageId::new(),
                 related_answer,
-                posted_user,
+                sender,
                 body,
                 timestamp: Utc::now(),
             },
@@ -357,14 +357,14 @@ impl Message {
     pub unsafe fn from_raw_parts(
         id: MessageId,
         related_answer: FormAnswer,
-        posted_user: User,
+        sender: User,
         body: String,
         timestamp: DateTime<Utc>,
     ) -> AuthorizationGuard<Self, Read> {
         AuthorizationGuard::new_unchecked(Self {
             id,
             related_answer,
-            posted_user,
+            sender,
             body,
             timestamp,
         })
@@ -410,8 +410,8 @@ mod test {
 
     #[test]
     fn should_reject_message_from_unrelated_user() {
-        let message_posted_user = User {
-            name: "message_posted_user".to_string(),
+        let message_sender = User {
+            name: "message_sender".to_string(),
             id: Uuid::new_v4(),
             role: StandardUser,
         };
@@ -430,7 +430,7 @@ mod test {
             title: Default::default(),
         };
 
-        let message = Message::try_new(answer, message_posted_user, "test message".to_string());
+        let message = Message::try_new(answer, message_sender, "test message".to_string());
 
         assert!(message.is_err());
     }
@@ -458,8 +458,8 @@ mod test {
 
     #[test]
     fn should_accept_message_from_administrator() {
-        let message_posted_user = User {
-            name: "message_posted_user".to_string(),
+        let message_sender = User {
+            name: "message_sender".to_string(),
             id: Uuid::new_v4(),
             role: Administrator,
         };
@@ -478,7 +478,7 @@ mod test {
             title: Default::default(),
         };
 
-        let message = Message::try_new(answer, message_posted_user, "test message".to_string());
+        let message = Message::try_new(answer, message_sender, "test message".to_string());
 
         assert!(message.is_ok());
     }

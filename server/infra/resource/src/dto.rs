@@ -285,7 +285,7 @@ impl TryFrom<LabelDto> for domain::form::models::Label {
 pub struct MessageDto {
     pub id: Uuid,
     pub related_answer: FormAnswerDto,
-    pub posted_user: UserDto,
+    pub sender: UserDto,
     pub body: String,
     pub timestamp: DateTime<Utc>,
 }
@@ -297,7 +297,7 @@ impl TryFrom<MessageDto> for AuthorizationGuard<domain::form::models::Message, R
         MessageDto {
             id,
             related_answer,
-            posted_user,
+            sender,
             body,
             timestamp,
         }: MessageDto,
@@ -306,7 +306,7 @@ impl TryFrom<MessageDto> for AuthorizationGuard<domain::form::models::Message, R
             domain::form::models::Message::from_raw_parts(
                 id.into(),
                 related_answer.try_into()?,
-                posted_user.try_into()?,
+                sender.try_into()?,
                 body,
                 timestamp,
             )

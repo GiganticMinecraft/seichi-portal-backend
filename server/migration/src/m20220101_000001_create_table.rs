@@ -200,11 +200,11 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS messages(
                     id UUID NOT NULL PRIMARY KEY,
                     related_answer_id INT NOT NULL,
-                    posted_user CHAR(36) NOT NULL,
+                    sender CHAR(36) NOT NULL,
                     body TEXT NOT NULL,
                     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY fk_message_related_answer_id(related_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
-                    FOREIGN KEY fk_message_posted_user(posted_user) REFERENCES users(id)
+                    FOREIGN KEY fk_message_sender(sender) REFERENCES users(id)
                     )",
             ))
             .await?;

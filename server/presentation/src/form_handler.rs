@@ -605,9 +605,9 @@ pub async fn get_messages_handler(
                         .map(|message| MessageContentSchema {
                             body: message.body().to_owned(),
                             sender: SenderSchema {
-                                uuid: message.posted_user().id.to_string(),
-                                name: message.posted_user().name.to_owned(),
-                                role: message.posted_user().role.to_string(),
+                                uuid: message.sender().id.to_string(),
+                                name: message.sender().name.to_owned(),
+                                role: message.sender().role.to_string(),
                             },
                             timestamp: message.timestamp().to_owned(),
                         })
