@@ -430,13 +430,13 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn fetch_messages_by_answer_id(
+    async fn fetch_messages_by_answer(
         &self,
         answers: &FormAnswer,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
         self.client
             .form()
-            .fetch_messages_by_answer_id(answers)
+            .fetch_messages_answer(answers)
             .await?
             .into_iter()
             .map(|dto| Ok(dto.try_into()?))

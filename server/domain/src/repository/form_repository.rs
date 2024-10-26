@@ -109,7 +109,7 @@ pub trait FormRepository: Send + Sync + 'static {
         label_ids: Vec<LabelId>,
     ) -> Result<(), Error>;
     async fn post_message(&self, message: &Message) -> Result<(), Error>;
-    async fn fetch_messages_by_answer_id(
+    async fn fetch_messages_by_answer(
         &self,
         answers: &FormAnswer,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error>;

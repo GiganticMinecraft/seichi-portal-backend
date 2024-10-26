@@ -1311,7 +1311,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn fetch_messages_by_answer_id(
+    async fn fetch_messages_answer(
         &self,
         answers: &FormAnswer,
     ) -> Result<Vec<MessageDto>, InfraError> {

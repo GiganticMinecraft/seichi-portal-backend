@@ -368,7 +368,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .await?
             .ok_or(AnswerNotFound)?;
 
-        self.repository.fetch_messages_by_answer_id(&answers).await
+        self.repository.fetch_messages_by_answer(&answers).await
     }
 
     pub async fn delete_message(&self, actor: &User, message_id: &MessageId) -> Result<(), Error> {
