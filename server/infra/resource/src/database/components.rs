@@ -141,6 +141,11 @@ pub trait FormDatabase: Send + Sync {
         label_ids: Vec<LabelId>,
     ) -> Result<(), InfraError>;
     async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
+    async fn update_message_body(
+        &self,
+        message_id: MessageId,
+        body: String,
+    ) -> Result<(), InfraError>;
     async fn fetch_messages_answer(
         &self,
         answers: &FormAnswer,

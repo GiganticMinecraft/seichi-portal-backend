@@ -23,6 +23,7 @@ use presentation::{
         get_messages_handler, get_questions_handler, post_answer_handler, post_form_comment,
         post_message_handler, public_form_list_handler, put_question_handler,
         replace_answer_labels, replace_form_labels, update_answer_handler, update_form_handler,
+        update_message_handler,
     },
     health_check_handler::health_check,
     search_handler::cross_search,
@@ -146,7 +147,10 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/messages/:answer_id", get(get_messages_handler))
         .with_state(shared_repository.to_owned())
-        .route("/messages/:message_id", delete(delete_form_comment_handler))
+        .route(
+            "/messages/:message_id",
+            delete(delete_form_comment_handler).patch(update_message_handler),
+        )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .route("/session", post(start_session).delete(end_session))

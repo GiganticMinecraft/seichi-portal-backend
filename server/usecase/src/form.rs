@@ -371,6 +371,23 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         self.repository.fetch_messages_by_answer(&answers).await
     }
 
+    pub async fn update_message_body(
+        &self,
+        actor: &User,
+        message_id: &MessageId,
+        body: String,
+    ) -> Result<(), Error> {
+        let message = self
+            .repository
+            .fetch_message(message_id)
+            .await?
+            .ok_or(MessageNotFound)?;
+
+        self.repository
+            .update_message_body(actor, message.into_update(), body)
+            .await
+    }
+
     pub async fn delete_message(&self, actor: &User, message_id: &MessageId) -> Result<(), Error> {
         let message = self
             .repository

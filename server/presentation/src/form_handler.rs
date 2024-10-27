@@ -21,8 +21,8 @@ use usecase::form::FormUseCase;
 use crate::schemas::form::{
     form_request_schemas::{
         AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
-        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, PostedMessageSchema,
-        ReplaceAnswerLabelSchema,
+        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, MessageUpdateSchema,
+        PostedMessageSchema, ReplaceAnswerLabelSchema,
     },
     form_response_schemas::{
         FormAnswer, GetMessageResponseSchema, MessageContentSchema, SenderSchema,
@@ -579,6 +579,25 @@ pub async fn post_message_handler(
 
     match form_use_case
         .post_message(user, message.body, message.related_answer_id)
+        .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn update_message_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path(message_id): Path<MessageId>,
+    Json(body_schema): Json<MessageUpdateSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .update_message_body(&user, &message_id, body_schema.body)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),

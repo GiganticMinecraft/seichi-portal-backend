@@ -6,7 +6,7 @@ use domain::{
         OffsetAndLimit, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
-    types::authorization_guard::{AuthorizationGuard, Delete, Read},
+    types::authorization_guard::{AuthorizationGuard, Delete, Read, Update},
     user::models::User,
 };
 use errors::{domain::DomainError, infra::InfraError::AnswerNotFount, Error};
@@ -443,6 +443,22 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .collect::<Result<Vec<_>, _>>()
     }
 
+    async fn update_message_body(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Update>,
+        content: String,
+    ) -> Result<(), Error> {
+        message
+            .try_update(actor, |message: &Message| {
+                let message_id = message.id().to_owned();
+
+                self.client.form().update_message_body(message_id, content)
+            })
+            .await?
+            .map_err(Into::into)
+    }
+
     async fn fetch_message(
         &self,
         message_id: &MessageId,
@@ -461,12 +477,13 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         actor: &User,
         message: AuthorizationGuard<Message, Delete>,
     ) -> Result<(), Error> {
-        let message_id = message.try_delete(actor)?.id().to_owned();
+        message
+            .try_delete(actor, |message: &Message| {
+                let message_id = message.id().to_owned();
 
-        self.client
-            .form()
-            .delete_message(message_id)
-            .await
+                self.client.form().delete_message(message_id)
+            })
+            .await?
             .map_err(Into::into)
     }
 }

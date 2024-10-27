@@ -1311,6 +1311,28 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument(skip(self))]
+    async fn update_message_body(
+        &self,
+        message_id: MessageId,
+        body: String,
+    ) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "UPDATE messages SET body = ? WHERE id = ?",
+                    [body.into(), message_id.into_inner().into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn fetch_messages_answer(
         &self,
         answers: &FormAnswer,

@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use errors::domain::DomainError;
 
 use crate::user::models::User;
@@ -5,13 +7,13 @@ use crate::user::models::User;
 pub trait Actions {}
 
 pub struct Create;
-pub struct Update;
 pub struct Read;
+pub struct Update;
 pub struct Delete;
 
 impl Actions for Create {}
-impl Actions for Update {}
 impl Actions for Read {}
+impl Actions for Update {}
 impl Actions for Delete {}
 
 /// [`User`] の `guard_target` に対するアクセスを制御するための定義を提供します。
@@ -79,9 +81,13 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
 
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
     /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
-    pub fn try_update<R>(&self, actor: &User, f: fn(&T) -> R) -> Result<R, DomainError> {
+    pub async fn try_update<R, F, Fut>(&self, actor: &User, f: F) -> Result<R, DomainError>
+    where
+        Fut: Future<Output = R>,
+        F: FnOnce(&T) -> Fut,
+    {
         if self.guard_target.can_update(actor) {
-            Ok(f(&self.guard_target))
+            Ok(f(&self.guard_target).await)
         } else {
             Err(DomainError::Forbidden)
         }
@@ -132,10 +138,14 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
 }
 
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
-    /// `actor` が `guard_target` を削除するための情報を取得することを試みます。
-    pub fn try_delete(&self, actor: &User) -> Result<&T, DomainError> {
+    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
+    pub async fn try_delete<R, F, Fut>(&self, actor: &User, f: F) -> Result<R, DomainError>
+    where
+        F: FnOnce(&T) -> Fut,
+        Fut: Future<Output = R>,
+    {
         if self.guard_target.can_delete(actor) {
-            Ok(&self.guard_target)
+            Ok(f(&self.guard_target).await)
         } else {
             Err(DomainError::Forbidden)
         }
@@ -161,11 +171,11 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 ///         actor.role == Role::Administrator
 ///     }
 ///
-///     fn can_update(&self, actor: &User) -> bool {
+///     fn can_read(&self, actor: &User) -> bool {
 ///         self.user.id == actor.id
 ///     }
 ///
-///     fn can_read(&self, actor: &User) -> bool {
+///     fn can_update(&self, actor: &User) -> bool {
 ///         self.user.id == actor.id
 ///     }
 ///
@@ -176,8 +186,8 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 /// ```
 pub trait AuthorizationGuardDefinitions<T> {
     fn can_create(&self, actor: &User) -> bool;
-    fn can_update(&self, actor: &User) -> bool;
     fn can_read(&self, actor: &User) -> bool;
+    fn can_update(&self, actor: &User) -> bool;
     fn can_delete(&self, actor: &User) -> bool;
 }
 
@@ -201,12 +211,12 @@ mod test {
                 actor.role == Role::Administrator
             }
 
-            fn can_update(&self, actor: &User) -> bool {
-                actor.role == Role::Administrator
-            }
-
             fn can_read(&self, actor: &User) -> bool {
                 actor.role == Role::Administrator || actor.role == Role::StandardUser
+            }
+
+            fn can_update(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator
             }
 
             fn can_delete(&self, actor: &User) -> bool {

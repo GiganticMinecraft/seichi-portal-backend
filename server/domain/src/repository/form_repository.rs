@@ -8,7 +8,7 @@ use crate::{
         FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId,
         OffsetAndLimit, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
-    types::authorization_guard::{AuthorizationGuard, Delete, Read},
+    types::authorization_guard::{AuthorizationGuard, Delete, Read, Update},
     user::models::User,
 };
 
@@ -113,6 +113,12 @@ pub trait FormRepository: Send + Sync + 'static {
         &self,
         answers: &FormAnswer,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error>;
+    async fn update_message_body(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Update>,
+        body: String,
+    ) -> Result<(), Error>;
     async fn fetch_message(
         &self,
         message_id: &MessageId,

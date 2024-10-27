@@ -70,3 +70,8 @@ pub struct PostedMessageSchema {
     pub related_answer_id: AnswerId,
     pub body: String,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct MessageUpdateSchema {
+    pub body: String,
+}
