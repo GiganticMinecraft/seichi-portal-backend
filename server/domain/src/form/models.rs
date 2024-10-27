@@ -287,6 +287,10 @@ impl AuthorizationGuardDefinitions<Message> for Message {
         self.sender.role == Administrator || self.related_answer.user.id == actor.id
     }
 
+    fn can_update(&self, actor: &User) -> bool {
+        self.related_answer.user.id == actor.id
+    }
+
     fn can_read(&self, actor: &User) -> bool {
         self.sender.role == Administrator || self.related_answer.user.id == actor.id
     }

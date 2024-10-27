@@ -5,10 +5,12 @@ use crate::user::models::User;
 pub trait Actions {}
 
 pub struct Create;
+pub struct Update;
 pub struct Read;
 pub struct Delete;
 
 impl Actions for Create {}
+impl Actions for Update {}
 impl Actions for Read {}
 impl Actions for Delete {}
 
@@ -20,20 +22,20 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
     _phantom_data: std::marker::PhantomData<A>,
 }
 
-// NOTE: 実装時点(2024/10/21)では、AuthorizationGuard の Action は Create から Read への変換、
-//  Read から Delete への変換のみ変換されると定義しています。
+// NOTE: 実装時点(2024/10/27)では、AuthorizationGuard の Action は以下のようにのみ変換することができます
+//    - Create -> Read
+//    - Create -> Update
+//    - Update <-> Read
+//    - Update または Read -> Delete
 //  これは、データのライフサイクルを考えた時に
-//      - データの新規作成(Create)
-//      - 永続化データ詰め込み(Create) -> 詰め込みデータ読み取り(Read)
-//      - 永続化データ詰め込み(Create) -> (詰め込みデータ読み取り(Read) ->) 詰め込みデータ削除(Delete)
-//  という3つの操作以外は望ましくない(実装されるべきではない)と考えているためです。
-//  Delete から Read へ変換することができると仮定すると、 データの削除操作の実装において
+//    - データの新規作成(Create) -> データ読み取り(Read) <-> データ更新(Update) -> データ削除(Delete)
+//  という順序のみ操作が行われるはずであるからです。
+//
+//  仮に Delete から Read へ変換することができるとすると、 データの削除操作の実装において
 //  Read 権限を保持しているかつ、Delete 権限を持たないユーザーが居る場合に
 //  AuthorizationGuard<T, Delete> から誤って `.into_read()` 関数を呼び出すことで
 //  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
-//
-//  これは、データの削除を担当する repository の関数において、
-//  AuthorizationGuard<T, Delete> を引数に受け取る関数が定義されることを想定しています。
+//  このような事故を防ぐために、AuthorizationGuard の Action の変換は上記のように限定されています。
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
     /// [`AuthorizationGuardDefinitions::can_create`] の条件で新しい [`AuthorizationGuard`] の作成を試みます。
     pub(crate) fn try_new(actor: &User, guard_target: T) -> Result<Self, DomainError> {
@@ -66,6 +68,40 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
             _phantom_data: std::marker::PhantomData,
         }
     }
+
+    pub fn into_update(self) -> AuthorizationGuard<T, Update> {
+        AuthorizationGuard {
+            guard_target: self.guard_target,
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
+    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
+    pub fn try_update<R>(&self, actor: &User, f: fn(&T) -> R) -> Result<R, DomainError> {
+        if self.guard_target.can_update(actor) {
+            Ok(f(&self.guard_target))
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
+    /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
+    pub fn into_read(self) -> AuthorizationGuard<T, Read> {
+        AuthorizationGuard {
+            guard_target: self.guard_target,
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
+
+    /// [`AuthorizationGuard`] の Action を [`Delete`] に変換します。
+    pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
+        AuthorizationGuard {
+            guard_target: self.guard_target,
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
 }
 
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
@@ -75,6 +111,14 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
             Ok(&self.guard_target)
         } else {
             Err(DomainError::Forbidden)
+        }
+    }
+
+    /// [`AuthorizationGuard`] の Action を [`Update`] に変換します。
+    pub fn into_update(self) -> AuthorizationGuard<T, Update> {
+        AuthorizationGuard {
+            guard_target: self.guard_target,
+            _phantom_data: std::marker::PhantomData,
         }
     }
 
@@ -98,12 +142,11 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
     }
 }
 
-/// `actor` が `guard_target` に対して操作可能かどうかを判定するためのトレイト
+/// `actor` が `guard_target` に対して操作可能かどうかを定義するためのトレイト
 ///
 /// # Examples
 /// ```
 /// use domain::{
-///     message::models::{Message, MessageId},
 ///     types::authorization_guard::AuthorizationGuardDefinitions,
 ///     user::models::{Role, User},
 /// };
@@ -118,6 +161,10 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 ///         actor.role == Role::Administrator
 ///     }
 ///
+///     fn can_update(&self, actor: &User) -> bool {
+///         self.user.id == actor.id
+///     }
+///
 ///     fn can_read(&self, actor: &User) -> bool {
 ///         self.user.id == actor.id
 ///     }
@@ -129,6 +176,7 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 /// ```
 pub trait AuthorizationGuardDefinitions<T> {
     fn can_create(&self, actor: &User) -> bool;
+    fn can_update(&self, actor: &User) -> bool;
     fn can_read(&self, actor: &User) -> bool;
     fn can_delete(&self, actor: &User) -> bool;
 }
@@ -149,12 +197,16 @@ mod test {
         }
 
         impl AuthorizationGuardDefinitions<AuthorizationGuardTestStruct> for AuthorizationGuardTestStruct {
-            fn can_create(&self, user: &User) -> bool {
-                user.role == Role::Administrator
+            fn can_create(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator
             }
 
-            fn can_read(&self, user: &User) -> bool {
-                user.role == Role::Administrator || user.role == Role::StandardUser
+            fn can_update(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator
+            }
+
+            fn can_read(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator || actor.role == Role::StandardUser
             }
 
             fn can_delete(&self, actor: &User) -> bool {
