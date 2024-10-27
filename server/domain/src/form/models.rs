@@ -292,7 +292,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     }
 
     fn can_delete(&self, actor: &User) -> bool {
-        self.related_answer.user.id == actor.id
+        self.sender.role == Administrator || self.related_answer.user.id == actor.id
     }
 }
 
