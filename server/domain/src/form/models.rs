@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
-use errors::{domain::DomainError, Error};
+use errors::Error;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
@@ -284,11 +284,11 @@ pub struct Message {
 
 impl AuthorizationGuardDefinitions<Message> for Message {
     fn can_create(&self, actor: &User) -> bool {
-        self.sender.role == Administrator || self.related_answer.user.id == actor.id
+        actor.role == Administrator || self.related_answer.user.id == self.sender.id
     }
 
     fn can_read(&self, actor: &User) -> bool {
-        self.sender.role == Administrator || self.related_answer.user.id == actor.id
+        actor.role == Administrator || self.sender.id == actor.id
     }
 
     fn can_update(&self, actor: &User) -> bool {
@@ -300,22 +300,21 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     }
 }
 
+impl From<Message> for AuthorizationGuard<Message, Create> {
+    fn from(value: Message) -> Self {
+        AuthorizationGuard::new(value)
+    }
+}
+
 impl Message {
-    pub fn try_new(
-        related_answer: FormAnswer,
-        sender: User,
-        body: String,
-    ) -> Result<AuthorizationGuard<Self, Create>, DomainError> {
-        AuthorizationGuard::try_new(
-            &sender.to_owned(),
-            Self {
-                id: MessageId::new(),
-                related_answer,
-                sender,
-                body,
-                timestamp: Utc::now(),
-            },
-        )
+    pub fn new(related_answer: FormAnswer, sender: User, body: String) -> Self {
+        Self {
+            id: MessageId::new(),
+            related_answer,
+            sender,
+            body,
+            timestamp: Utc::now(),
+        }
     }
 
     /// [`Message`] の各フィールドの値を受け取り、[`Message`] を生成します。
@@ -365,7 +364,7 @@ impl Message {
         body: String,
         timestamp: DateTime<Utc>,
     ) -> AuthorizationGuard<Self, Read> {
-        AuthorizationGuard::new_unchecked(Self {
+        AuthorizationGuard::new(Self {
             id,
             related_answer,
             sender,
@@ -412,8 +411,8 @@ mod test {
         }
     }
 
-    #[test]
-    fn should_reject_message_from_unrelated_user() {
+    #[tokio::test]
+    async fn should_reject_message_from_unrelated_user() {
         let message_sender = User {
             name: "message_sender".to_string(),
             id: Uuid::new_v4(),
@@ -434,13 +433,21 @@ mod test {
             title: Default::default(),
         };
 
-        let message = Message::try_new(answer, message_sender, "test message".to_string());
+        let message: AuthorizationGuard<Message, Create> = Message::new(
+            answer,
+            message_sender.to_owned(),
+            "test message".to_string(),
+        )
+        .into();
 
-        assert!(message.is_err());
+        assert!(message
+            .try_create(&message_sender, |_| async {})
+            .await
+            .is_err());
     }
 
-    #[test]
-    fn should_accept_message_from_answer_posted_user() {
+    #[tokio::test]
+    async fn should_accept_message_from_answer_posted_user() {
         let user = User {
             name: "user".to_string(),
             id: Uuid::new_v4(),
@@ -455,13 +462,14 @@ mod test {
             title: Default::default(),
         };
 
-        let message = Message::try_new(answer, user, "test message".to_string());
+        let message: AuthorizationGuard<Message, Create> =
+            Message::new(answer, user.to_owned(), "test message".to_string()).into();
 
-        assert!(message.is_ok());
+        assert!(message.try_create(&user, |_| async {}).await.is_ok());
     }
 
-    #[test]
-    fn should_accept_message_from_administrator() {
+    #[tokio::test]
+    async fn should_accept_message_from_administrator() {
         let message_sender = User {
             name: "message_sender".to_string(),
             id: Uuid::new_v4(),
@@ -482,8 +490,16 @@ mod test {
             title: Default::default(),
         };
 
-        let message = Message::try_new(answer, message_sender, "test message".to_string());
+        let message: AuthorizationGuard<Message, Create> = Message::new(
+            answer,
+            message_sender.to_owned(),
+            "test message".to_string(),
+        )
+        .into();
 
-        assert!(message.is_ok());
+        assert!(message
+            .try_create(&message_sender, |_| async {})
+            .await
+            .is_ok());
     }
 }

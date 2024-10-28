@@ -348,11 +348,9 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     ) -> Result<(), Error> {
         match self.repository.get_answers(answer_id).await? {
             Some(form_answer) => {
-                let message = Message::try_new(form_answer, actor.to_owned(), message_body)?;
+                let message = Message::new(form_answer, actor.to_owned(), message_body);
 
-                self.repository
-                    .post_message(message.into_read().try_read(&actor)?)
-                    .await
+                self.repository.post_message(&actor, message.into()).await
             }
             None => Err(Error::from(AnswerNotFound)),
         }

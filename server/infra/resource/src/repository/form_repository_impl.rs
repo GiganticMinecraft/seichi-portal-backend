@@ -6,7 +6,7 @@ use domain::{
         OffsetAndLimit, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
-    types::authorization_guard::{AuthorizationGuard, Delete, Read, Update},
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::User,
 };
 use errors::{domain::DomainError, infra::InfraError::AnswerNotFount, Error};
@@ -422,11 +422,16 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn post_message(&self, message: &Message) -> Result<(), Error> {
-        self.client
-            .form()
-            .post_message(message)
-            .await
+    async fn post_message(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Create>,
+    ) -> Result<(), Error> {
+        message
+            .try_create(actor, |message: &Message| {
+                self.client.form().post_message(message)
+            })
+            .await?
             .map_err(Into::into)
     }
 

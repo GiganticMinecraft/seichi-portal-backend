@@ -4,7 +4,7 @@ use errors::domain::DomainError;
 
 use crate::user::models::User;
 
-pub trait Actions {}
+pub trait Actions: private::Sealed {}
 
 pub struct Create;
 pub struct Read;
@@ -15,6 +15,15 @@ impl Actions for Create {}
 impl Actions for Read {}
 impl Actions for Update {}
 impl Actions for Delete {}
+
+mod private {
+    pub trait Sealed {}
+
+    impl Sealed for super::Create {}
+    impl Sealed for super::Read {}
+    impl Sealed for super::Update {}
+    impl Sealed for super::Delete {}
+}
 
 /// [`User`] の `guard_target` に対するアクセスを制御するための定義を提供します。
 ///
@@ -39,27 +48,23 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
 //  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
 //  このような事故を防ぐために、AuthorizationGuard の Action の変換は上記のように限定されています。
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
-    /// [`AuthorizationGuardDefinitions::can_create`] の条件で新しい [`AuthorizationGuard`] の作成を試みます。
-    pub(crate) fn try_new(actor: &User, guard_target: T) -> Result<Self, DomainError> {
-        if guard_target.can_create(actor) {
-            Ok(Self {
-                guard_target,
-                _phantom_data: std::marker::PhantomData,
-            })
-        } else {
-            Err(DomainError::Forbidden)
-        }
-    }
-
-    /// [`AuthorizationGuard`] の [`Create`] Action を持つ新しい [`AuthorizationGuard`] を作成権限を確認せずに作成します。
-    ///
-    /// # Safety
-    /// この関数は Actor の作成権限を確認しないので、すでに永続化されたデータを読み出すときなど
-    /// 作成権限を確認する必要がない場合にのみ使用してください。
-    pub(crate) unsafe fn new_unchecked(guard_target: T) -> Self {
+    pub(crate) fn new(guard_target: T) -> Self {
         Self {
             guard_target,
             _phantom_data: std::marker::PhantomData,
+        }
+    }
+
+    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作 `f` を試みます。
+    pub async fn try_create<'a, R, F, Fut>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
+    where
+        Fut: Future<Output = R>,
+        F: FnOnce(&'a T) -> Fut,
+    {
+        if self.guard_target.can_create(actor) {
+            Ok(f(&self.guard_target).await)
+        } else {
+            Err(DomainError::Forbidden)
         }
     }
 
@@ -200,8 +205,8 @@ mod test {
         user::models::{Role, User},
     };
 
-    #[test]
-    fn authorization_guard_test() {
+    #[tokio::test]
+    async fn authorization_guard_test() {
         struct AuthorizationGuardTestStruct {
             pub _value: String,
         }
@@ -236,25 +241,18 @@ mod test {
             role: Role::StandardUser,
         };
 
-        let guard_by_admin = AuthorizationGuard::try_new(
-            &admin,
-            AuthorizationGuardTestStruct {
-                _value: "test".to_string(),
-            },
-        );
+        let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        });
 
-        let guard_by_standard_user = AuthorizationGuard::try_new(
-            &standard_user,
-            AuthorizationGuardTestStruct {
-                _value: "test".to_string(),
-            },
-        );
+        assert!(&guard.try_create(&admin, |_| async {}).await.is_ok());
+        assert!(&guard
+            .try_create(&standard_user, |_| async {})
+            .await
+            .is_err());
 
-        assert!(&guard_by_admin.is_ok());
-        assert!(&guard_by_standard_user.is_err());
-
-        let read_guard = guard_by_admin.unwrap().into_read();
-        assert!(&read_guard.try_read(&admin).is_ok());
-        assert!(&read_guard.try_read(&standard_user).is_ok())
+        let guard = guard.into_read();
+        assert!(&guard.try_read(&admin).is_ok());
+        assert!(&guard.try_read(&standard_user).is_ok())
     }
 }
