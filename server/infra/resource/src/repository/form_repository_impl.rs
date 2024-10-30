@@ -427,12 +427,11 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         actor: &User,
         message: AuthorizationGuard<Message, Create>,
     ) -> Result<(), Error> {
-        message
+        Ok(message
             .try_create(actor, |message: &Message| {
                 self.client.form().post_message(message)
-            })
-            .await?
-            .map_err(Into::into)
+            })?
+            .await?)
     }
 
     async fn fetch_messages_by_answer(
