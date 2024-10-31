@@ -486,8 +486,8 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
                 let message_id = message.id().to_owned();
 
                 self.client.form().delete_message(message_id)
-            })
-            .await?
+            })?
+            .await
             .map_err(Into::into)
     }
 }

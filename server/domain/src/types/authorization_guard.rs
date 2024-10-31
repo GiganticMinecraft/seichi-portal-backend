@@ -143,13 +143,12 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
 
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
     /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
-    pub async fn try_delete<R, F, Fut>(&self, actor: &User, f: F) -> Result<R, DomainError>
+    pub fn try_delete<'a, R, F>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
     where
-        F: FnOnce(&T) -> Fut,
-        Fut: Future<Output = R>,
+        F: FnOnce(&'a T) -> R,
     {
         if self.guard_target.can_delete(actor) {
-            Ok(f(&self.guard_target).await)
+            Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
         }
