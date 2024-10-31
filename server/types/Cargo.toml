@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = []
-arbitrary = ["proptest", "proptest-derive"]
+arbitrary = ["proptest", "proptest-derive", "common"]
 
 [dependencies]
 deriving_via = { workspace = true }
@@ -14,3 +14,4 @@ proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
 uuid = { version = "1.10.0", features = ["v4"] }
+common = { path = "../common", optional = true }

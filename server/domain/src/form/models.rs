@@ -201,7 +201,7 @@ impl TryFrom<String> for Visibility {
     }
 }
 
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(test, derive(Arbitrary, Clone))]
 #[derive(DerivingVia, Default, Debug, PartialEq)]
 #[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
 pub struct DefaultAnswerTitle {
@@ -225,10 +225,12 @@ impl<Repo: FormRepository + Sized + Sync> Resolver<FormAnswer, Error, Repo> for 
     }
 }
 
+#[cfg_attr(test, derive(Arbitrary, Clone))]
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct FormAnswer {
     pub id: AnswerId,
     pub user: User,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
@@ -273,12 +275,14 @@ pub struct Label {
 
 pub type MessageId = types::Id<Message>;
 
+#[cfg_attr(test, derive(Arbitrary, Clone))]
 #[derive(Getters, Debug)]
 pub struct Message {
     id: MessageId,
     related_answer: FormAnswer,
     sender: User,
     body: String,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     timestamp: DateTime<Utc>,
 }
 
@@ -377,10 +381,9 @@ impl Message {
 
 #[cfg(test)]
 mod test {
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{prop_assert, prop_assert_eq, prop_assume, proptest};
     use serde_json::json;
     use test_case::test_case;
-    use uuid::Uuid;
 
     use super::*;
     use crate::user::models::Role::StandardUser;
@@ -411,95 +414,51 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn should_reject_message_from_unrelated_user() {
-        let message_sender = User {
-            name: "message_sender".to_string(),
-            id: Uuid::new_v4(),
-            role: StandardUser,
-        };
+    proptest! {
+        #[test]
+        fn should_reject_message_from_unrelated_user(message_sender: User, form_answer: FormAnswer) {
+            prop_assume!(message_sender.role == StandardUser);
+            prop_assume!(form_answer.user.id != message_sender.id);
 
-        let answer_posted_user = User {
-            name: "answer_posted_user".to_string(),
-            id: Uuid::new_v4(),
-            role: StandardUser,
-        };
+            let message: AuthorizationGuard<Message, Create> = Message::new(
+                form_answer.to_owned(),
+                message_sender.to_owned(),
+                "test message".to_string(),
+            ).into();
 
-        let answer = FormAnswer {
-            id: Default::default(),
-            user: answer_posted_user,
-            timestamp: Utc::now(),
-            form_id: Default::default(),
-            title: Default::default(),
-        };
+            let create_result = message.try_create(&message_sender, |_| {});
 
-        let message: AuthorizationGuard<Message, Create> = Message::new(
-            answer,
-            message_sender.to_owned(),
-            "test message".to_string(),
-        )
-        .into();
-
-        assert!(message
-            .try_create(&message_sender, |_| async {})
-            .await
-            .is_err());
+            prop_assert!(create_result.is_err());
+        }
     }
 
-    #[tokio::test]
-    async fn should_accept_message_from_answer_posted_user() {
-        let user = User {
-            name: "user".to_string(),
-            id: Uuid::new_v4(),
-            role: StandardUser,
-        };
+    proptest! {
+        #[test]
+        fn should_accept_message_from_answer_posted_user(message: Message) {
+            let message = Message {
+                sender: User {
+                    role: StandardUser,
+                    ..message.related_answer.user.to_owned()
+                },
+                ..message
+            };
 
-        let answer = FormAnswer {
-            id: Default::default(),
-            user: user.to_owned(),
-            timestamp: Utc::now(),
-            form_id: Default::default(),
-            title: Default::default(),
-        };
+            let message_guard: AuthorizationGuard<Message, Create> = message.to_owned().into();
+            let create_result = message_guard.try_create(message.sender(), |_| {});
 
-        let message: AuthorizationGuard<Message, Create> =
-            Message::new(answer, user.to_owned(), "test message".to_string()).into();
-
-        assert!(message.try_create(&user, |_| async {}).await.is_ok());
+            prop_assert!(create_result.is_ok());
+        }
     }
 
-    #[tokio::test]
-    async fn should_accept_message_from_administrator() {
-        let message_sender = User {
-            name: "message_sender".to_string(),
-            id: Uuid::new_v4(),
-            role: Administrator,
-        };
+    proptest! {
+        #[test]
+        fn should_accept_message_from_administrator(message_sender: User, message: Message) {
+            prop_assume!(message_sender.role == Administrator);
 
-        let answer_posted_user = User {
-            name: "answer_posted_user".to_string(),
-            id: Uuid::new_v4(),
-            role: StandardUser,
-        };
+            let message_guard: AuthorizationGuard<Message, Create> = message.into();
+            let create_result = message_guard.try_create(&message_sender, |_| {});
 
-        let answer = FormAnswer {
-            id: Default::default(),
-            user: answer_posted_user,
-            timestamp: Utc::now(),
-            form_id: Default::default(),
-            title: Default::default(),
-        };
-
-        let message: AuthorizationGuard<Message, Create> = Message::new(
-            answer,
-            message_sender.to_owned(),
-            "test message".to_string(),
-        )
-        .into();
-
-        assert!(message
-            .try_create(&message_sender, |_| async {})
-            .await
-            .is_ok());
+            prop_assert!(create_result.is_ok());
+        }
     }
 }
