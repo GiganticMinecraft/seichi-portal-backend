@@ -13,5 +13,5 @@ proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
-uuid = { version = "1.10.0", features = ["v4"] }
+uuid = { workspace = true }
 common = { path = "../common", optional = true }
