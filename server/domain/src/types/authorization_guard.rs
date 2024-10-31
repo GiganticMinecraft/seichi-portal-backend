@@ -196,61 +196,58 @@ pub trait AuthorizationGuardDefinitions<T> {
 
 #[cfg(test)]
 mod test {
-    // use uuid::Uuid;
-    //
-    // use crate::{
-    //     types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions},
-    //     user::models::{Role, User},
-    // };
+    use uuid::Uuid;
 
-    // #[tokio::test]
-    // async fn authorization_guard_test() {
-    //     struct AuthorizationGuardTestStruct {
-    //         pub _value: String,
-    //     }
-    //
-    //     impl AuthorizationGuardDefinitions<AuthorizationGuardTestStruct> for AuthorizationGuardTestStruct {
-    //         fn can_create(&self, actor: &User) -> bool {
-    //             actor.role == Role::Administrator
-    //         }
-    //
-    //         fn can_read(&self, actor: &User) -> bool {
-    //             actor.role == Role::Administrator || actor.role == Role::StandardUser
-    //         }
-    //
-    //         fn can_update(&self, actor: &User) -> bool {
-    //             actor.role == Role::Administrator
-    //         }
-    //
-    //         fn can_delete(&self, actor: &User) -> bool {
-    //             actor.role == Role::Administrator
-    //         }
-    //     }
-    //
-    //     let admin = User {
-    //         name: "admin".to_string(),
-    //         id: Uuid::new_v4(),
-    //         role: Role::Administrator,
-    //     };
-    //
-    //     let standard_user = User {
-    //         name: "standard_user".to_string(),
-    //         id: Uuid::new_v4(),
-    //         role: Role::StandardUser,
-    //     };
-    //
-    //     let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
-    //         _value: "test".to_string(),
-    //     });
-    //
-    //     assert!(&guard.try_create(&admin, |_| async {}).await.is_ok());
-    //     assert!(&guard
-    //         .try_create(&standard_user, |_| async {})
-    //         .await
-    //         .is_err());
-    //
-    //     let guard = guard.into_read();
-    //     assert!(&guard.try_read(&admin).is_ok());
-    //     assert!(&guard.try_read(&standard_user).is_ok())
-    // }
+    use crate::{
+        types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions},
+        user::models::{Role, User},
+    };
+
+    #[test]
+    fn authorization_guard_test() {
+        struct AuthorizationGuardTestStruct {
+            pub _value: String,
+        }
+
+        impl AuthorizationGuardDefinitions<AuthorizationGuardTestStruct> for AuthorizationGuardTestStruct {
+            fn can_create(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator
+            }
+
+            fn can_read(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator || actor.role == Role::StandardUser
+            }
+
+            fn can_update(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator
+            }
+
+            fn can_delete(&self, actor: &User) -> bool {
+                actor.role == Role::Administrator
+            }
+        }
+
+        let admin = User {
+            name: "admin".to_string(),
+            id: Uuid::new_v4(),
+            role: Role::Administrator,
+        };
+
+        let standard_user = User {
+            name: "standard_user".to_string(),
+            id: Uuid::new_v4(),
+            role: Role::StandardUser,
+        };
+
+        let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        });
+
+        assert!(&guard.try_create(&admin, |_| {}).is_ok());
+        assert!(&guard.try_create(&standard_user, |_| {}).is_err());
+
+        let guard = guard.into_read();
+        assert!(&guard.try_read(&admin).is_ok());
+        assert!(&guard.try_read(&standard_user).is_ok())
+    }
 }
