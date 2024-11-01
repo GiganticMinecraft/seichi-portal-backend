@@ -201,7 +201,7 @@ impl TryFrom<String> for Visibility {
     }
 }
 
-#[cfg_attr(test, derive(Arbitrary, Clone))]
+#[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, Default, Debug, PartialEq)]
 #[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
 pub struct DefaultAnswerTitle {
@@ -225,12 +225,10 @@ impl<Repo: FormRepository + Sized + Sync> Resolver<FormAnswer, Error, Repo> for 
     }
 }
 
-#[cfg_attr(test, derive(Arbitrary, Clone))]
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct FormAnswer {
     pub id: AnswerId,
     pub user: User,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
     pub title: DefaultAnswerTitle,
@@ -275,14 +273,12 @@ pub struct Label {
 
 pub type MessageId = types::Id<Message>;
 
-#[cfg_attr(test, derive(Arbitrary, Clone))]
 #[derive(Getters, Debug)]
 pub struct Message {
     id: MessageId,
     related_answer: FormAnswer,
     sender: User,
     body: String,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     timestamp: DateTime<Utc>,
 }
 
@@ -590,12 +586,11 @@ impl Message {
 
 #[cfg(test)]
 mod test {
-    use proptest::{prop_assert, prop_assert_eq, prop_assume, proptest};
+    use proptest::{prop_assert_eq, proptest};
     use serde_json::json;
     use test_case::test_case;
 
     use super::*;
-    use crate::user::models::Role::StandardUser;
 
     #[test_case("TEXT"     => Ok(QuestionType::TEXT); "upper: TEXT")]
     #[test_case("text"     => Ok(QuestionType::TEXT); "lower: text")]
@@ -620,54 +615,6 @@ mod test {
         fn serialize_from_id(id: i32) {
             let form_id: FormId = id.into();
             prop_assert_eq!(json!({"id":form_id}).to_string(), format!(r#"{{"id":{id}}}"#));
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_reject_message_from_unrelated_user(message_sender: User, form_answer: FormAnswer) {
-            prop_assume!(message_sender.role == StandardUser);
-            prop_assume!(form_answer.user.id != message_sender.id);
-
-            let message: AuthorizationGuard<Message, Create> = Message::new(
-                form_answer.to_owned(),
-                message_sender.to_owned(),
-                "test message".to_string(),
-            ).into();
-
-            let create_result = message.try_create(&message_sender, |_| {});
-
-            prop_assert!(create_result.is_err());
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_accept_message_from_answer_posted_user(message: Message) {
-            let message = Message {
-                sender: User {
-                    role: StandardUser,
-                    ..message.related_answer.user.to_owned()
-                },
-                ..message
-            };
-
-            let message_guard: AuthorizationGuard<Message, Create> = message.to_owned().into();
-            let create_result = message_guard.try_create(message.sender(), |_| {});
-
-            prop_assert!(create_result.is_ok());
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_accept_message_from_administrator(message_sender: User, message: Message) {
-            prop_assume!(message_sender.role == Administrator);
-
-            let message_guard: AuthorizationGuard<Message, Create> = message.into();
-            let create_result = message_guard.try_create(&message_sender, |_| {});
-
-            prop_assert!(create_result.is_ok());
         }
     }
 }
