@@ -443,8 +443,15 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .fetch_messages_answer(answers)
             .await?
             .into_iter()
-            .map(|dto| Ok(dto.try_into()?))
+            .map(|dto| {
+                Ok::<Message, DomainError>(dto.try_into()?).map(|message| {
+                    let message: AuthorizationGuard<Message, Create> = message.into();
+
+                    message.into_read()
+                })
+            })
             .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     async fn update_message_body(
@@ -471,7 +478,13 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .form()
             .fetch_message(message_id)
             .await?
-            .map(|dto| Ok::<_, DomainError>(dto.try_into())?)
+            .map(|dto| {
+                Ok::<Message, DomainError>(dto.try_into()?).map(|message| {
+                    let message: AuthorizationGuard<Message, Create> = message.into();
+
+                    message.into_read()
+                })
+            })
             .transpose()
             .map_err(Into::into)
     }

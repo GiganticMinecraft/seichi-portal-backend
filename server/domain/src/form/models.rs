@@ -14,7 +14,7 @@ use types::Resolver;
 
 use crate::{
     repository::form_repository::FormRepository,
-    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create, Read},
+    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create},
     user::models::{Role::Administrator, User},
 };
 
@@ -551,36 +551,28 @@ impl Message {
     ///     title: Default::default(),
     /// };
     ///
-    /// let message = unsafe {
-    ///     Message::from_raw_parts(
-    ///         MessageId::new(),
-    ///         related_answer,
-    ///         user,
-    ///         "test message".to_string(),
-    ///         Utc::now(),
-    ///     )
-    /// };
+    /// let message = Message::from_raw_parts(
+    ///     MessageId::new(),
+    ///     related_answer,
+    ///     user,
+    ///     "test message".to_string(),
+    ///     Utc::now(),
+    /// );
     /// ```
-    ///
-    /// # Safety
-    /// この関数は [`Message`] のバリデーションをスキップするため、
-    /// データベースからすでにバリデーションされているデータを読み出すときなど、
-    /// データの信頼性が保証されている場合にのみ使用してください。
-    pub unsafe fn from_raw_parts(
+    pub fn from_raw_parts(
         id: MessageId,
         related_answer: FormAnswer,
         sender: User,
         body: String,
         timestamp: DateTime<Utc>,
-    ) -> AuthorizationGuard<Self, Read> {
-        AuthorizationGuard::new(Self {
+    ) -> Self {
+        Self {
             id,
             related_answer,
             sender,
             body,
             timestamp,
-        })
-        .into_read()
+        }
     }
 }
 
