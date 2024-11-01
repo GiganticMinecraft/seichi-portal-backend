@@ -287,19 +287,221 @@ pub struct Message {
 }
 
 impl AuthorizationGuardDefinitions<Message> for Message {
+    /// [`Message`] の作成権限があるかどうかを判定します。
+    ///
+    /// 作成権限は以下の条件のどちらかを満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    /// - [`actor`] が関連する回答の回答者である場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{FormAnswer, Message},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let respondent = User {
+    ///     name: "respondent".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// let related_answer = FormAnswer {
+    ///     id: Default::default(),
+    ///     user: respondent.to_owned(),
+    ///     timestamp: Default::default(),
+    ///     form_id: Default::default(),
+    ///     title: Default::default(),
+    /// };
+    ///
+    /// let message = Message::new(
+    ///     related_answer,
+    ///     respondent.to_owned(),
+    ///     "test message".to_string(),
+    /// );
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let unrelated_standard_user = User {
+    ///     name: "unrelated_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// assert!(message.can_create(&respondent));
+    /// assert!(message.can_create(&administrator));
+    /// assert!(!message.can_create(&unrelated_standard_user));
+    /// ```
     fn can_create(&self, actor: &User) -> bool {
         actor.role == Administrator
             || (actor.id == self.sender.id && self.related_answer.user.id == self.sender.id)
     }
 
+    /// [`Message`] の読み取り権限があるかどうかを判定します。
+    ///
+    /// 読み取り権限は以下の条件のどちらかを満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    /// - [`actor`] が関連する回答の回答者である場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{FormAnswer, Message},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let respondent = User {
+    ///     name: "respondent".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// let related_answer = FormAnswer {
+    ///     id: Default::default(),
+    ///     user: respondent.to_owned(),
+    ///     timestamp: Default::default(),
+    ///     form_id: Default::default(),
+    ///     title: Default::default(),
+    /// };
+    ///
+    /// let message = Message::new(
+    ///     related_answer,
+    ///     respondent.to_owned(),
+    ///     "test message".to_string(),
+    /// );
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let unrelated_standard_user = User {
+    ///     name: "unrelated_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// assert!(message.can_read(&respondent));
+    /// assert!(message.can_read(&administrator));
+    /// assert!(!message.can_read(&unrelated_standard_user));
+    /// ```
     fn can_read(&self, actor: &User) -> bool {
         actor.role == Administrator || self.related_answer.user.id == actor.id
     }
 
+    /// [`Message`] の更新権限があるかどうかを判定します。
+    ///
+    /// 更新権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] がメッセージの送信者の場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{FormAnswer, Message},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let respondent = User {
+    ///     name: "respondent".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// let related_answer = FormAnswer {
+    ///     id: Default::default(),
+    ///     user: respondent.to_owned(),
+    ///     timestamp: Default::default(),
+    ///     form_id: Default::default(),
+    ///     title: Default::default(),
+    /// };
+    ///
+    /// let message = Message::new(
+    ///     related_answer,
+    ///     respondent.to_owned(),
+    ///     "test message".to_string(),
+    /// );
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let unrelated_standard_user = User {
+    ///     name: "unrelated_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// assert!(message.can_update(&respondent));
+    /// assert!(!message.can_update(&administrator));
+    /// assert!(!message.can_update(&unrelated_standard_user));
+    /// ```
     fn can_update(&self, actor: &User) -> bool {
         self.sender.id == actor.id
     }
 
+    /// [`Message`] の削除権限があるかどうかを判定します。
+    ///
+    /// 削除権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] がメッセージの送信者の場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{FormAnswer, Message},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let respondent = User {
+    ///     name: "respondent".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// let related_answer = FormAnswer {
+    ///     id: Default::default(),
+    ///     user: respondent.to_owned(),
+    ///     timestamp: Default::default(),
+    ///     form_id: Default::default(),
+    ///     title: Default::default(),
+    /// };
+    ///
+    /// let message = Message::new(
+    ///     related_answer,
+    ///     respondent.to_owned(),
+    ///     "test message".to_string(),
+    /// );
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let unrelated_standard_user = User {
+    ///     name: "unrelated_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    /// assert!(message.can_delete(&respondent));
+    /// assert!(!message.can_delete(&administrator));
+    /// assert!(!message.can_delete(&unrelated_standard_user));
+    /// ```
     fn can_delete(&self, actor: &User) -> bool {
         self.sender.id == actor.id
     }
