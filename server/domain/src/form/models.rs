@@ -403,6 +403,9 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// 更新権限は以下の条件を満たしている場合に与えられます。
     /// - [`actor`] がメッセージの送信者の場合
     ///
+    /// [`actor`] が [`Administrator`] である場合に更新権限が与えられないのは、
+    /// メッセージの送信者が意図しない更新が行われることを防ぐためです。
+    ///
     /// # Examples
     /// ```
     /// use domain::{
