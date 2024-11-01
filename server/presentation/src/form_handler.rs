@@ -581,7 +581,14 @@ pub async fn post_message_handler(
         .post_message(user, message.body, message.related_answer_id)
         .await
     {
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => (
+            StatusCode::CREATED,
+            [(
+                header::LOCATION,
+                HeaderValue::from_str(message.related_answer_id.to_string().as_str()).unwrap(),
+            )],
+        )
+            .into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
