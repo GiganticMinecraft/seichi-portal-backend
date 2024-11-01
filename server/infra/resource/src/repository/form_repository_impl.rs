@@ -465,8 +465,8 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
                 let message_id = message.id().to_owned();
 
                 self.client.form().update_message_body(message_id, content)
-            })
-            .await?
+            })?
+            .await
             .map_err(Into::into)
     }
 

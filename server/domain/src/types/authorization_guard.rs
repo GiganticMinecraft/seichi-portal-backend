@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use errors::domain::DomainError;
 
 use crate::user::models::User;
@@ -85,13 +83,12 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
 
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
     /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
-    pub async fn try_update<R, F, Fut>(&self, actor: &User, f: F) -> Result<R, DomainError>
+    pub fn try_update<'a, R, F>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
     where
-        Fut: Future<Output = R>,
-        F: FnOnce(&T) -> Fut,
+        F: FnOnce(&'a T) -> R,
     {
         if self.guard_target.can_update(actor) {
-            Ok(f(&self.guard_target).await)
+            Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
         }
@@ -248,6 +245,14 @@ mod test {
 
         let guard = guard.into_read();
         assert!(&guard.try_read(&admin).is_ok());
-        assert!(&guard.try_read(&standard_user).is_ok())
+        assert!(&guard.try_read(&standard_user).is_ok());
+
+        let guard = guard.into_update();
+        assert!(&guard.try_update(&admin, |_| {}).is_ok());
+        assert!(&guard.try_update(&standard_user, |_| {}).is_err());
+
+        let guard = guard.into_delete();
+        assert!(&guard.try_delete(&admin, |_| {}).is_ok());
+        assert!(&guard.try_delete(&standard_user, |_| {}).is_err());
     }
 }
