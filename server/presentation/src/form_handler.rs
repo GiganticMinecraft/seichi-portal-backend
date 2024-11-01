@@ -600,7 +600,7 @@ pub async fn update_message_handler(
         .update_message_body(&user, &message_id, body_schema.body)
         .await
     {
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
@@ -668,7 +668,7 @@ pub async fn delete_message_handler(
     };
 
     match form_use_case.delete_message(&user, &message_id).await {
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
