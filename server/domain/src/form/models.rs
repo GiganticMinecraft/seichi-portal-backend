@@ -293,7 +293,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     }
 
     fn can_read(&self, actor: &User) -> bool {
-        actor.role == Administrator || self.sender.id == actor.id
+        actor.role == Administrator || self.related_answer.user.id == actor.id
     }
 
     fn can_update(&self, actor: &User) -> bool {
@@ -301,7 +301,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     }
 
     fn can_delete(&self, actor: &User) -> bool {
-        self.related_answer.user.id == actor.id
+        self.sender.id == actor.id
     }
 }
 
