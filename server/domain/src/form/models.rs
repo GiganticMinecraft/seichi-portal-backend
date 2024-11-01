@@ -288,7 +288,8 @@ pub struct Message {
 
 impl AuthorizationGuardDefinitions<Message> for Message {
     fn can_create(&self, actor: &User) -> bool {
-        actor.role == Administrator || self.related_answer.user.id == self.sender.id
+        actor.role == Administrator
+            || (actor.id == self.sender.id && self.related_answer.user.id == self.sender.id)
     }
 
     fn can_read(&self, actor: &User) -> bool {
