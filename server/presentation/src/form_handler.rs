@@ -571,6 +571,7 @@ pub async fn replace_form_labels(
 pub async fn post_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
     Json(message): Json<PostedMessageSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
@@ -578,14 +579,14 @@ pub async fn post_message_handler(
     };
 
     match form_use_case
-        .post_message(user, message.body, message.related_answer_id)
+        .post_message(user, message.body, answer_id)
         .await
     {
         Ok(_) => (
             StatusCode::CREATED,
             [(
                 header::LOCATION,
-                HeaderValue::from_str(message.related_answer_id.to_string().as_str()).unwrap(),
+                HeaderValue::from_str(answer_id.to_string().as_str()).unwrap(),
             )],
         )
             .into_response(),
