@@ -372,6 +372,7 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     pub async fn update_message_body(
         &self,
         actor: &User,
+        answer_id: &AnswerId,
         message_id: &MessageId,
         body: String,
     ) -> Result<(), Error> {
@@ -381,17 +382,30 @@ impl<R: FormRepository> FormUseCase<'_, R> {
             .await?
             .ok_or(MessageNotFound)?;
 
+        if &message.try_read(actor)?.related_answer().id != answer_id {
+            return Err(Error::from(MessageNotFound));
+        }
+
         self.repository
             .update_message_body(actor, message.into_update(), body)
             .await
     }
 
-    pub async fn delete_message(&self, actor: &User, message_id: &MessageId) -> Result<(), Error> {
+    pub async fn delete_message(
+        &self,
+        actor: &User,
+        answer_id: &AnswerId,
+        message_id: &MessageId,
+    ) -> Result<(), Error> {
         let message = self
             .repository
             .fetch_message(message_id)
             .await?
             .ok_or(MessageNotFound)?;
+
+        if &message.try_read(actor)?.related_answer().id != answer_id {
+            return Err(Error::from(MessageNotFound));
+        }
 
         self.repository
             .delete_message(actor, message.into_delete())

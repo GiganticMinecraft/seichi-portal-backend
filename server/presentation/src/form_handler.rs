@@ -597,7 +597,7 @@ pub async fn post_message_handler(
 pub async fn update_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(message_id): Path<MessageId>,
+    Path((answer_id, message_id)): Path<(AnswerId, MessageId)>,
     Json(body_schema): Json<MessageUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
@@ -605,7 +605,7 @@ pub async fn update_message_handler(
     };
 
     match form_use_case
-        .update_message_body(&user, &message_id, body_schema.body)
+        .update_message_body(&user, &answer_id, &message_id, body_schema.body)
         .await
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
@@ -669,13 +669,16 @@ pub async fn get_messages_handler(
 pub async fn delete_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(message_id): Path<MessageId>,
+    Path((answer_id, message_id)): Path<(AnswerId, MessageId)>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
         repository: repository.form_repository(),
     };
 
-    match form_use_case.delete_message(&user, &message_id).await {
+    match form_use_case
+        .delete_message(&user, &answer_id, &message_id)
+        .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
