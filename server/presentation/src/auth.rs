@@ -61,7 +61,6 @@ pub async fn auth(
         (&Method::POST, "/forms/answers"),
         (&Method::POST, "/forms/answers/comment"),
         (&Method::GET, "/users"),
-        (&Method::POST, "/messages"),
     ];
 
     // NOTE: 動的パスを指定する場合は、正規表現を埋め込む
@@ -69,9 +68,10 @@ pub async fn auth(
         (&Method::GET, "/forms/[^/]+/questions"),
         (&Method::GET, "/forms/[^/]+/answers"),
         (&Method::GET, "/forms/answers/[^/]+"),
-        (&Method::GET, "/messages/[^/]+"),
-        (&Method::PATCH, "/messages/[^/]+"),
-        (&Method::DELETE, "/messages/[^/]+"),
+        (&Method::GET, "/forms/answers/[^/]+/messages"),
+        (&Method::POST, "/forms/answers/[^/]+/messages"),
+        (&Method::PATCH, "/forms/answers/[^/]+/messages/[^/]+"),
+        (&Method::DELETE, "/forms/answers/[^/]+/messages/[^/]+"),
     ];
 
     let is_not_allow_dynamic_endpoint = !dynamic_endpoints_allowed_for_standard_users

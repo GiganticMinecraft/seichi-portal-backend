@@ -143,12 +143,13 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
-        .route("/messages", post(post_message_handler))
-        .with_state(shared_repository.to_owned())
-        .route("/messages/:answer_id", get(get_messages_handler))
+        .route(
+            "/forms/answers/:answer_id/messages",
+            get(get_messages_handler).post(post_message_handler),
+        )
         .with_state(shared_repository.to_owned())
         .route(
-            "/messages/:message_id",
+            "/forms/answers/:answer_id/messages/:message_id",
             delete(delete_form_comment_handler).patch(update_message_handler),
         )
         .with_state(shared_repository.to_owned())
