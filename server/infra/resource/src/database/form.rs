@@ -1343,8 +1343,8 @@ impl FormDatabase for ConnectionPool {
             .read_only_transaction(|txn| {
                 Box::pin(async move {
                     let rs = query_all_and_values(
-                        r"SELECT id, sender, name, role, body, timestamp FROM messages
-                    INNER JOIN ON users.id = messages.sender
+                        r"SELECT messages.id AS message_id, sender, name, role, body, timestamp FROM messages
+                    INNER JOIN users ON users.id = messages.sender
                     WHERE related_answer_id = ?",
                         [answer_id.into()],
                         txn,
@@ -1362,7 +1362,7 @@ impl FormDatabase for ConnectionPool {
 
                                 Ok::<_, InfraError>((
                                     user?,
-                                    uuid::Uuid::from_str(&rs.try_get::<String>("", "id")?)?,
+                                    uuid::Uuid::from_str(&rs.try_get::<String>("", "message_id")?)?,
                                     rs.try_get::<String>("", "body")?,
                                     rs.try_get::<DateTime<Utc>>("", "timestamp")?,
                                 ))
