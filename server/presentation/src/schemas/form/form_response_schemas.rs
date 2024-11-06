@@ -117,11 +117,6 @@ impl FormAnswer {
 }
 
 #[derive(Serialize, Debug)]
-pub struct GetMessageResponseSchema {
-    pub messages: Vec<MessageContentSchema>,
-}
-
-#[derive(Serialize, Debug)]
 pub struct MessageContentSchema {
     pub id: Uuid,
     pub body: String,

@@ -24,9 +24,7 @@ use crate::schemas::form::{
         FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, MessageUpdateSchema,
         PostedMessageSchema, ReplaceAnswerLabelSchema,
     },
-    form_response_schemas::{
-        FormAnswer, GetMessageResponseSchema, MessageContentSchema, SenderSchema,
-    },
+    form_response_schemas::{FormAnswer, MessageContentSchema, SenderSchema},
 };
 
 pub async fn create_form_handler(
@@ -643,9 +641,7 @@ pub async fn get_messages_handler(
                 .collect::<Result<Vec<_>, _>>();
 
             let response_schema = match messages_read_result {
-                Ok(message_content_schemas) => GetMessageResponseSchema {
-                    messages: message_content_schemas,
-                },
+                Ok(message_content_schemas) => message_content_schemas,
                 Err(DomainError::Forbidden) => {
                     return (
                         StatusCode::FORBIDDEN,
