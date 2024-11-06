@@ -440,7 +440,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
         self.client
             .form()
-            .fetch_messages_answer(answers)
+            .fetch_messages_by_form_answer(answers)
             .await?
             .into_iter()
             .map(|dto| {

@@ -146,7 +146,7 @@ pub trait FormDatabase: Send + Sync {
         message_id: MessageId,
         body: String,
     ) -> Result<(), InfraError>;
-    async fn fetch_messages_answer(
+    async fn fetch_messages_by_form_answer(
         &self,
         answers: &FormAnswer,
     ) -> Result<Vec<MessageDto>, InfraError>;
