@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde::Serialize;
+use uuid::Uuid;
 
 #[derive(Serialize, Debug)]
 pub(crate) enum Role {
@@ -122,6 +123,7 @@ pub struct GetMessageResponseSchema {
 
 #[derive(Serialize, Debug)]
 pub struct MessageContentSchema {
+    pub id: Uuid,
     pub body: String,
     pub sender: SenderSchema,
     pub timestamp: DateTime<Utc>,

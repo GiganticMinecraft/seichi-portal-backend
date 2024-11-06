@@ -630,6 +630,7 @@ pub async fn get_messages_handler(
                     message_guard
                         .try_read(&user)
                         .map(|message| MessageContentSchema {
+                            id: message.id().into_inner(),
                             body: message.body().to_owned(),
                             sender: SenderSchema {
                                 uuid: message.sender().id.to_string(),
