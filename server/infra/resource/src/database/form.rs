@@ -623,7 +623,7 @@ impl FormDatabase for ConnectionPool {
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
                             form_id: rs.try_get("", "form_id")?,
-                            title: rs.try_get("", "title")?
+                            title: rs.try_get("", "title")?,
                         })
                     })
                     .transpose()
@@ -973,8 +973,8 @@ impl FormDatabase for ConnectionPool {
                     r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
                     WHERE answer_id = ?",
-                        [answer_id.into_inner().into()],
-                    txn
+                    [answer_id.into_inner().into()],
+                    txn,
                 ).await?;
 
                 comments.into_iter().map(|rs| {
@@ -992,8 +992,8 @@ impl FormDatabase for ConnectionPool {
                 }).collect::<Result<Vec<_>, _>>()
             })
         })
-        .await
-        .map_err(Into::into)
+            .await
+            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -1093,7 +1093,7 @@ impl FormDatabase for ConnectionPool {
                     [answer_id.into()],
                     txn,
                 )
-                .await?;
+                    .await?;
 
                 labels_rs
                     .into_iter()
@@ -1107,8 +1107,8 @@ impl FormDatabase for ConnectionPool {
                     .collect::<Result<Vec<AnswerLabelDto>, _>>()
             })
         })
-        .await
-        .map_err(Into::into)
+            .await
+            .map_err(Into::into)
     }
 
     async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError> {
@@ -1305,7 +1305,6 @@ impl FormDatabase for ConnectionPool {
 
                 Ok::<_, InfraError>(())
             })
-
         }).await
             .map_err(Into::into)
     }
@@ -1349,7 +1348,7 @@ impl FormDatabase for ConnectionPool {
                         [answer_id.into()],
                         txn,
                     )
-                    .await?;
+                        .await?;
 
                     Ok::<_, InfraError>(
                         rs.into_iter()
@@ -1430,7 +1429,7 @@ impl FormDatabase for ConnectionPool {
                     let related_answer = Ok::<_, InfraError>(FormAnswerDto {
                         id: rs.try_get("", "answer_id")?,
                         user_name: rs.try_get("", "respondent_name")?,
-                        uuid: rs.try_get("", "respondent_id")?,
+                        uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "respondent_id")?)?,
                         user_role: Role::from_str(&rs.try_get::<String>("", "respondent_role")?)?,
                         timestamp: rs.try_get("", "time_stamp")?,
                         form_id: rs.try_get("", "form_id")?,
