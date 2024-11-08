@@ -733,6 +733,16 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        Error::Domain {
+            source: DomainError::Forbidden,
+        } => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "FORBIDDEN",
+                "reason": "You do not have permission to access this resource."
+            })),
+        )
+            .into_response(),
         _ => {
             tracing::error!("{}", err);
             (
