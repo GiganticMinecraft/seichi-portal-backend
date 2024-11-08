@@ -346,13 +346,14 @@ impl<R: FormRepository> FormUseCase<'_, R> {
         message_body: String,
         answer_id: AnswerId,
     ) -> Result<(), Error> {
-        match self.repository.get_answers(answer_id).await? {
-            Some(form_answer) => {
-                let message = Message::new(form_answer, actor.to_owned(), message_body);
+        let form_answer = match self.repository.get_answers(answer_id).await? {
+            Some(form_answer) => form_answer,
+            None => return Err(Error::from(AnswerNotFound)),
+        };
 
-                self.repository.post_message(&actor, message.into()).await
-            }
-            None => Err(Error::from(AnswerNotFound)),
+        match Message::try_new(form_answer, actor.to_owned(), message_body) {
+            Ok(message) => self.repository.post_message(&actor, message.into()).await,
+            Err(error) => Err(Error::from(error)),
         }
     }
 

@@ -743,6 +743,16 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        Error::Domain {
+            source: DomainError::EmptyMessageBody,
+        } => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "EMPTY_MESSAGE_BODY",
+                "reason": "Message body is empty."
+            })),
+        )
+            .into_response(),
         _ => {
             tracing::error!("{}", err);
             (

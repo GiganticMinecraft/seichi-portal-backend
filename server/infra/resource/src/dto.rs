@@ -301,12 +301,14 @@ impl TryFrom<MessageDto> for domain::form::models::Message {
             timestamp,
         }: MessageDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Message::from_raw_parts(
-            id.into(),
-            related_answer.try_into()?,
-            sender.try_into()?,
-            body,
-            timestamp,
-        ))
+        unsafe {
+            Ok(domain::form::models::Message::from_raw_parts(
+                id.into(),
+                related_answer.try_into()?,
+                sender.try_into()?,
+                body,
+                timestamp,
+            ))
+        }
     }
 }

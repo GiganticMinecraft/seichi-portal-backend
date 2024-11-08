@@ -9,4 +9,6 @@ pub enum DomainError {
     },
     #[error("Access to forbidden resource.")]
     Forbidden,
+    #[error("Empty message body.")]
+    EmptyMessageBody,
 }
