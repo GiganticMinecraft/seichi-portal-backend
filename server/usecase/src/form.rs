@@ -2,10 +2,11 @@ use chrono::Utc;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
-        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, SimpleForm,
-        Visibility, Visibility::PUBLIC, WebhookUrl,
+        FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit, Question,
+        ResponsePeriod, SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     repository::form_repository::FormRepository,
+    types::authorization_guard::{AuthorizationGuard, Read},
     user::models::{
         Role::{Administrator, StandardUser},
         User,
@@ -13,7 +14,8 @@ use domain::{
 };
 use errors::{
     usecase::UseCaseError::{
-        AnswerNotFound, DoNotHavePermissionToPostFormComment, FormNotFound, OutOfPeriod,
+        AnswerNotFound, DoNotHavePermissionToPostFormComment, FormNotFound, MessageNotFound,
+        OutOfPeriod,
     },
     Error,
 };
@@ -335,6 +337,79 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     ) -> Result<(), Error> {
         self.repository
             .replace_form_labels(form_id, label_ids)
+            .await
+    }
+
+    pub async fn post_message(
+        &self,
+        actor: User,
+        message_body: String,
+        answer_id: AnswerId,
+    ) -> Result<(), Error> {
+        let form_answer = match self.repository.get_answers(answer_id).await? {
+            Some(form_answer) => form_answer,
+            None => return Err(Error::from(AnswerNotFound)),
+        };
+
+        match Message::try_new(form_answer, actor.to_owned(), message_body) {
+            Ok(message) => self.repository.post_message(&actor, message.into()).await,
+            Err(error) => Err(Error::from(error)),
+        }
+    }
+
+    pub async fn get_messages(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
+        let answers = self
+            .repository
+            .get_answers(answer_id)
+            .await?
+            .ok_or(AnswerNotFound)?;
+
+        self.repository.fetch_messages_by_answer(&answers).await
+    }
+
+    pub async fn update_message_body(
+        &self,
+        actor: &User,
+        answer_id: &AnswerId,
+        message_id: &MessageId,
+        body: String,
+    ) -> Result<(), Error> {
+        let message = self
+            .repository
+            .fetch_message(message_id)
+            .await?
+            .ok_or(MessageNotFound)?;
+
+        if &message.try_read(actor)?.related_answer().id != answer_id {
+            return Err(Error::from(MessageNotFound));
+        }
+
+        self.repository
+            .update_message_body(actor, message.into_update(), body)
+            .await
+    }
+
+    pub async fn delete_message(
+        &self,
+        actor: &User,
+        answer_id: &AnswerId,
+        message_id: &MessageId,
+    ) -> Result<(), Error> {
+        let message = self
+            .repository
+            .fetch_message(message_id)
+            .await?
+            .ok_or(MessageNotFound)?;
+
+        if &message.try_read(actor)?.related_answer().id != answer_id {
+            return Err(Error::from(MessageNotFound));
+        }
+
+        self.repository
+            .delete_message(actor, message.into_delete())
             .await
     }
 }

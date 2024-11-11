@@ -1,6 +1,6 @@
 pub mod form_repository_impl;
-mod search_repository_impl;
-mod user_repository_impl;
+pub mod search_repository_impl;
+pub mod user_repository_impl;
 
 use std::sync::Arc;
 

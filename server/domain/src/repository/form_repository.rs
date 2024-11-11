@@ -5,9 +5,10 @@ use mockall::automock;
 use crate::{
     form::models::{
         AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
-        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit,
-        Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId,
+        OffsetAndLimit, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::User,
 };
 
@@ -106,5 +107,29 @@ pub trait FormRepository: Send + Sync + 'static {
         &self,
         form_id: FormId,
         label_ids: Vec<LabelId>,
+    ) -> Result<(), Error>;
+    async fn post_message(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Create>,
+    ) -> Result<(), Error>;
+    async fn fetch_messages_by_answer(
+        &self,
+        answers: &FormAnswer,
+    ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error>;
+    async fn update_message_body(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Update>,
+        body: String,
+    ) -> Result<(), Error>;
+    async fn fetch_message(
+        &self,
+        message_id: &MessageId,
+    ) -> Result<Option<AuthorizationGuard<Message, Read>>, Error>;
+    async fn delete_message(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Delete>,
     ) -> Result<(), Error>;
 }

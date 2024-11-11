@@ -6,12 +6,13 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, FormId, Label, LabelId, OffsetAndLimit, Visibility::PRIVATE,
+        AnswerId, Comment, CommentId, FormId, Label, LabelId, MessageId, OffsetAndLimit,
+        Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
 };
-use errors::{infra::InfraError, usecase::UseCaseError, Error};
+use errors::{domain::DomainError, infra::InfraError, usecase::UseCaseError, Error};
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -20,9 +21,10 @@ use usecase::form::FormUseCase;
 use crate::schemas::form::{
     form_request_schemas::{
         AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
-        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, ReplaceAnswerLabelSchema,
+        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, MessageUpdateSchema,
+        PostedMessageSchema, ReplaceAnswerLabelSchema,
     },
-    form_response_schemas::FormAnswer,
+    form_response_schemas::{FormAnswer, MessageContentSchema, SenderSchema},
 };
 
 pub async fn create_form_handler(
@@ -564,6 +566,121 @@ pub async fn replace_form_labels(
     }
 }
 
+pub async fn post_message_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+    Json(message): Json<PostedMessageSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .post_message(user, message.body, answer_id)
+        .await
+    {
+        Ok(_) => (
+            StatusCode::CREATED,
+            [(
+                header::LOCATION,
+                HeaderValue::from_str(answer_id.to_string().as_str()).unwrap(),
+            )],
+        )
+            .into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn update_message_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path((answer_id, message_id)): Path<(AnswerId, MessageId)>,
+    Json(body_schema): Json<MessageUpdateSchema>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .update_message_body(&user, &answer_id, &message_id, body_schema.body)
+        .await
+    {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn get_messages_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path(answer_id): Path<AnswerId>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case.get_messages(answer_id).await {
+        Ok(messages) => {
+            let messages_read_result = messages
+                .into_iter()
+                .map(|message_guard| {
+                    message_guard
+                        .try_read(&user)
+                        .map(|message| MessageContentSchema {
+                            id: message.id().into_inner(),
+                            body: message.body().to_owned(),
+                            sender: SenderSchema {
+                                uuid: message.sender().id.to_string(),
+                                name: message.sender().name.to_owned(),
+                                role: message.sender().role.to_string(),
+                            },
+                            timestamp: message.timestamp().to_owned(),
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>();
+
+            let response_schema = match messages_read_result {
+                Ok(message_content_schemas) => message_content_schemas,
+                Err(DomainError::Forbidden) => {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({
+                            "errorCode": "FORBIDDEN",
+                            "reason": "You cannot access to this message."
+                        })),
+                    )
+                        .into_response();
+                }
+                Err(err) => {
+                    return handle_error(Into::into(err)).into_response();
+                }
+            };
+
+            (StatusCode::OK, Json(json!(response_schema))).into_response()
+        }
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn delete_message_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path((answer_id, message_id)): Path<(AnswerId, MessageId)>,
+) -> impl IntoResponse {
+    let form_use_case = FormUseCase {
+        repository: repository.form_repository(),
+    };
+
+    match form_use_case
+        .delete_message(&user, &answer_id, &message_id)
+        .await
+    {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
 pub fn handle_error(err: Error) -> impl IntoResponse {
     match err {
         Error::Infra {
@@ -603,6 +720,36 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
             Json(json!({
                 "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
                 "reason": "Do not have permission to post form comment."
+            })),
+        )
+            .into_response(),
+        Error::UseCase {
+            source: UseCaseError::MessageNotFound,
+        } => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "MESSAGE_NOT_FOUND",
+                "reason": "Message not found"
+            })),
+        )
+            .into_response(),
+        Error::Domain {
+            source: DomainError::Forbidden,
+        } => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "FORBIDDEN",
+                "reason": "You do not have permission to access this resource."
+            })),
+        )
+            .into_response(),
+        Error::Domain {
+            source: DomainError::EmptyMessageBody,
+        } => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "EMPTY_MESSAGE_BODY",
+                "reason": "Message body is empty."
             })),
         )
             .into_response(),

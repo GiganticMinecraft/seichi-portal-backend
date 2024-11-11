@@ -708,6 +708,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "serde",
+ "uuid",
 ]
 
 [[package]]
@@ -901,6 +902,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "test-case",
+ "tokio",
  "typed-builder",
  "types",
  "uuid",
@@ -2221,6 +2223,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "types",
  "usecase",
  "uuid",
 ]
@@ -4058,10 +4061,12 @@ name = "types"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "common",
  "deriving_via",
  "proptest",
  "proptest-derive",
  "serde",
+ "uuid",
 ]
 
 [[package]]

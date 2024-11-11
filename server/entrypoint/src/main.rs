@@ -17,12 +17,13 @@ use presentation::{
     form_handler::{
         create_form_handler, create_label_for_answers, create_label_for_forms,
         create_question_handler, delete_form_comment_handler, delete_form_handler,
-        delete_label_for_answers, delete_label_for_forms, edit_label_for_answers,
-        edit_label_for_forms, form_list_handler, get_all_answers, get_answer_by_form_id_handler,
-        get_answer_handler, get_form_handler, get_labels_for_answers, get_labels_for_forms,
-        get_questions_handler, post_answer_handler, post_form_comment, public_form_list_handler,
+        delete_label_for_answers, delete_label_for_forms, delete_message_handler,
+        edit_label_for_answers, edit_label_for_forms, form_list_handler, get_all_answers,
+        get_answer_by_form_id_handler, get_answer_handler, get_form_handler,
+        get_labels_for_answers, get_labels_for_forms, get_messages_handler, get_questions_handler,
+        post_answer_handler, post_form_comment, post_message_handler, public_form_list_handler,
         put_question_handler, replace_answer_labels, replace_form_labels, update_answer_handler,
-        update_form_handler,
+        update_form_handler, update_message_handler,
     },
     health_check_handler::health_check,
     search_handler::cross_search,
@@ -141,6 +142,16 @@ async fn main() -> anyhow::Result<()> {
         .route("/users/:uuid", patch(patch_user_role))
         .with_state(shared_repository.to_owned())
         .route("/search", get(cross_search))
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/forms/answers/:answer_id/messages",
+            get(get_messages_handler).post(post_message_handler),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/forms/answers/:answer_id/messages/:message_id",
+            delete(delete_message_handler).patch(update_message_handler),
+        )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .route("/session", post(start_session).delete(end_session))

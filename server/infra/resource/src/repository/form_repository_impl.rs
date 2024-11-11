@@ -2,13 +2,14 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
-        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, OffsetAndLimit,
-        Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId,
+        OffsetAndLimit, Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::User,
 };
-use errors::{infra::InfraError::AnswerNotFount, Error};
+use errors::{domain::DomainError, infra::InfraError::AnswerNotFount, Error};
 use futures::{stream, stream::StreamExt};
 use outgoing::form_outgoing;
 use types::Resolver;
@@ -417,6 +418,88 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         self.client
             .form()
             .replace_form_labels(form_id, label_ids)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn post_message(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Create>,
+    ) -> Result<(), Error> {
+        Ok(message
+            .try_create(actor, |message: &Message| {
+                self.client.form().post_message(message)
+            })?
+            .await?)
+    }
+
+    async fn fetch_messages_by_answer(
+        &self,
+        answers: &FormAnswer,
+    ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
+        self.client
+            .form()
+            .fetch_messages_by_form_answer(answers)
+            .await?
+            .into_iter()
+            .map(|dto| {
+                Ok::<Message, DomainError>(dto.try_into()?).map(|message| {
+                    let message: AuthorizationGuard<Message, Create> = message.into();
+
+                    message.into_read()
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    async fn update_message_body(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Update>,
+        content: String,
+    ) -> Result<(), Error> {
+        message
+            .try_update(actor, |message: &Message| {
+                let message_id = message.id().to_owned();
+
+                self.client.form().update_message_body(message_id, content)
+            })?
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_message(
+        &self,
+        message_id: &MessageId,
+    ) -> Result<Option<AuthorizationGuard<Message, Read>>, Error> {
+        self.client
+            .form()
+            .fetch_message(message_id)
+            .await?
+            .map(|dto| {
+                Ok::<Message, DomainError>(dto.try_into()?).map(|message| {
+                    let message: AuthorizationGuard<Message, Create> = message.into();
+
+                    message.into_read()
+                })
+            })
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    async fn delete_message(
+        &self,
+        actor: &User,
+        message: AuthorizationGuard<Message, Delete>,
+    ) -> Result<(), Error> {
+        message
+            .try_delete(actor, |message: &Message| {
+                let message_id = message.id().to_owned();
+
+                self.client.form().delete_message(message_id)
+            })?
             .await
             .map_err(Into::into)
     }

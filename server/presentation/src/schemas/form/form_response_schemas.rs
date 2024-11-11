@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde::Serialize;
+use uuid::Uuid;
 
 #[derive(Serialize, Debug)]
 pub(crate) enum Role {
@@ -113,4 +114,19 @@ impl FormAnswer {
             labels: labels.into_iter().map(Into::into).collect_vec(),
         }
     }
+}
+
+#[derive(Serialize, Debug)]
+pub struct MessageContentSchema {
+    pub id: Uuid,
+    pub body: String,
+    pub sender: SenderSchema,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct SenderSchema {
+    pub uuid: String,
+    pub name: String,
+    pub role: String,
 }

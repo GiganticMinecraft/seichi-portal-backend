@@ -10,3 +10,4 @@ envy = { workspace = true }
 once_cell = { workspace = true }
 proptest = { workspace = true }
 serde = { workspace = true }
+uuid = { workspace = true }

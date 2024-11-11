@@ -10,4 +10,6 @@ pub enum UseCaseError {
     AnswerNotFound,
     #[error("Form Not found.")]
     FormNotFound,
+    #[error("Message Not found.")]
+    MessageNotFound,
 }

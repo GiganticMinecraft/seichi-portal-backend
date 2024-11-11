@@ -194,6 +194,21 @@ impl MigrationTrait for Migration {
             ))
             .await?;
 
+        connection
+            .execute(Statement::from_string(
+                DatabaseBackend::MySql,
+                r"CREATE TABLE IF NOT EXISTS messages(
+                    id UUID NOT NULL PRIMARY KEY,
+                    related_answer_id INT NOT NULL,
+                    sender CHAR(36) NOT NULL,
+                    body TEXT NOT NULL,
+                    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY fk_message_related_answer_id(related_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+                    FOREIGN KEY fk_message_sender(sender) REFERENCES users(id)
+                    )",
+            ))
+            .await?;
+
         Ok(())
     }
 
@@ -215,7 +230,8 @@ impl MigrationTrait for Migration {
                         real_answers,
                         default_answer_titles,
                         form_answer_comments,
-                        form_answer_label_settings;
+                        form_answer_label_settings,
+                        messages;
                     ",
             ))
             .await?;

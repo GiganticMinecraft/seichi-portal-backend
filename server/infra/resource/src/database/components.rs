@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
-        FormId, FormTitle, Label, LabelId, OffsetAndLimit, Question, ResponsePeriod, Visibility,
-        WebhookUrl,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
+        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
+        Question, ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -12,7 +12,7 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::dto::{
-    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto,
+    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
     QuestionDto, SimpleFormDto,
 };
 
@@ -140,6 +140,19 @@ pub trait FormDatabase: Send + Sync {
         form_id: FormId,
         label_ids: Vec<LabelId>,
     ) -> Result<(), InfraError>;
+    async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
+    async fn update_message_body(
+        &self,
+        message_id: MessageId,
+        body: String,
+    ) -> Result<(), InfraError>;
+    async fn fetch_messages_by_form_answer(
+        &self,
+        answers: &FormAnswer,
+    ) -> Result<Vec<MessageDto>, InfraError>;
+    async fn fetch_message(&self, message_id: &MessageId)
+        -> Result<Option<MessageDto>, InfraError>;
+    async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError>;
 }
 
 #[automock]
