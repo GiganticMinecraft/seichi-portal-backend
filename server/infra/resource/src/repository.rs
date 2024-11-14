@@ -1,4 +1,5 @@
 pub mod form_repository_impl;
+pub mod notification_repository_impl;
 pub mod search_repository_impl;
 pub mod user_repository_impl;
 
@@ -29,10 +30,15 @@ impl<Client: DatabaseComponents + 'static> Repository<Client> {
 
 impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Client> {
     type ConcreteFormRepository = Repository<Client>;
+    type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
     type ConcreteUserRepository = Repository<Client>;
 
     fn form_repository(&self) -> &Self::ConcreteFormRepository {
+        &self.0
+    }
+
+    fn notification_repository(&self) -> &Self::ConcreteNotificationRepository {
         &self.0
     }
 

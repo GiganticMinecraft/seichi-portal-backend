@@ -5,6 +5,7 @@ use domain::{
         FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
         Question, ResponsePeriod, Visibility, WebhookUrl,
     },
+    notification::models::Notification,
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
@@ -20,6 +21,7 @@ use crate::dto::{
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteUserDatabase: UserDatabase;
+    type ConcreteNotificationDatabase: NotificationDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
@@ -27,6 +29,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
+    fn notification(&self) -> &Self::ConcreteNotificationDatabase;
 }
 
 #[automock]
@@ -187,4 +190,10 @@ pub trait SearchDatabase: Send + Sync {
         &self,
         query: &str,
     ) -> Result<Vec<domain::search::models::Comment>, InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait NotificationDatabase: Send + Sync {
+    async fn create(&self, notification: &Notification) -> Result<(), InfraError>;
 }
