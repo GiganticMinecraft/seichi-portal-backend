@@ -56,7 +56,10 @@ impl<R: FormRepository> FormUseCase<'_, R> {
     }
 
     pub async fn get_form(&self, form_id: FormId) -> Result<Form, Error> {
-        self.repository.get(form_id).await
+        self.repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))
     }
 
     pub async fn delete_form(&self, form_id: FormId) -> Result<(), Error> {

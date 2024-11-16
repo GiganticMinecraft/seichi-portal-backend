@@ -23,7 +23,7 @@ pub type FormId = types::IntegerId<Form>;
 #[async_trait]
 impl<Repo: FormRepository + Sized + Sync> Resolver<Form, Error, Repo> for FormId {
     async fn resolve(&self, repo: &Repo) -> Result<Option<Form>, Error> {
-        repo.get(self.to_owned()).await.map(Some)
+        repo.get(self.to_owned()).await
     }
 }
 

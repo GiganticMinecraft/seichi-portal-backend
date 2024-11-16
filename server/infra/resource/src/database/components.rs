@@ -46,7 +46,7 @@ pub trait FormDatabase: Send + Sync {
         &self,
         offset_and_limit: OffsetAndLimit,
     ) -> Result<Vec<SimpleFormDto>, InfraError>;
-    async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError>;
+    async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update_form_title(
         &self,
