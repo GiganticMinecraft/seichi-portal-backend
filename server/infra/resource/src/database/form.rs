@@ -220,7 +220,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get(&self, form_id: FormId) -> Result<FormDto, InfraError> {
+    async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let form_query = query_all_and_values(
@@ -235,9 +235,10 @@ impl FormDatabase for ConnectionPool {
                 )
                     .await?;
 
-                let form = form_query.first().ok_or(FormNotFound {
-                    id: form_id.into_inner(),
-                })?;
+                let form = match form_query.first() {
+                    Some(form) => form,
+                    None => return Ok(None),
+                };
 
                 let questions = query_all_and_values(
                     r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
@@ -303,7 +304,7 @@ impl FormDatabase for ConnectionPool {
                 let start_at: Option<DateTime<Utc>> = form.try_get("", "start_at")?;
                 let end_at: Option<DateTime<Utc>> = form.try_get("", "end_at")?;
 
-                Ok::<_, InfraError>(FormDto {
+                Ok::<_, InfraError>(Some(FormDto {
                     id: form_id.into_inner(),
                     title: form.try_get("", "form_title")?,
                     description: form.try_get("", "description")?,
@@ -318,7 +319,7 @@ impl FormDatabase for ConnectionPool {
                     visibility: form.try_get("", "visibility")?,
                     answer_visibility: form.try_get("", "answer_visibility")?,
                     labels,
-                })
+                }))
             })
         }).await
             .map_err(Into::into)

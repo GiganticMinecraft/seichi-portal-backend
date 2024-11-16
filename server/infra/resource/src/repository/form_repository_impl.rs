@@ -29,11 +29,15 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         user: User,
     ) -> Result<FormId, Error> {
         let form_id = self.client.form().create(title, description, user).await?;
-        let form = self.client.form().get(form_id).await?;
 
-        form_outgoing::create(form.try_into()?).await?;
+        match self.client.form().get(form_id).await? {
+            None => Ok(form_id),
+            Some(form) => {
+                form_outgoing::create(form.try_into()?).await?;
 
-        Ok(form_id)
+                Ok(form_id)
+            }
+        }
     }
 
     async fn public_list(
@@ -59,18 +63,22 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get(&self, id: FormId) -> Result<Form, Error> {
+    async fn get(&self, id: FormId) -> Result<Option<Form>, Error> {
         let form = self.client.form().get(id).await?;
-        form.try_into().map_err(Into::into)
+        form.map(TryInto::try_into).transpose().map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
     async fn delete(&self, id: FormId) -> Result<(), Error> {
         let form = self.client.form().get(id).await?;
 
-        form_outgoing::delete(form.try_into()?).await?;
-
-        self.client.form().delete(id).await.map_err(Into::into)
+        match form {
+            None => Ok(()),
+            Some(form) => {
+                form_outgoing::delete(form.try_into()?).await?;
+                self.client.form().delete(id).await.map_err(Into::into)
+            }
+        }
     }
 
     #[tracing::instrument(skip(self))]
@@ -168,14 +176,17 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         title: DefaultAnswerTitle,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let form = self.get(form_id).await?;
-        form_outgoing::post_answer(&form, user, title, &answers).await?;
-
-        self.client
-            .form()
-            .post_answer(user, form_id, answers)
-            .await
-            .map_err(Into::into)
+        match self.get(form_id).await? {
+            None => Ok(()),
+            Some(form) => {
+                form_outgoing::post_answer(&form, user, title, &answers).await?;
+                self.client
+                    .form()
+                    .post_answer(user, form_id, answers)
+                    .await
+                    .map_err(Into::into)
+            }
+        }
     }
 
     #[tracing::instrument(skip(self))]
@@ -295,15 +306,19 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         let posted_answers = answer_id.resolve(self).await?.ok_or(AnswerNotFount {
             id: answer_id.into_inner(),
         })?;
-        let form = self.get(posted_answers.form_id).await?;
 
-        form_outgoing::post_comment(&form, comment, &posted_answers).await?;
+        match self.get(posted_answers.form_id).await? {
+            None => Ok(()),
+            Some(form) => {
+                form_outgoing::post_comment(&form, comment, &posted_answers).await?;
 
-        self.client
-            .form()
-            .post_comment(answer_id, comment)
-            .await
-            .map_err(Into::into)
+                self.client
+                    .form()
+                    .post_comment(answer_id, comment)
+                    .await
+                    .map_err(Into::into)
+            }
+        }
     }
 
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), Error> {
