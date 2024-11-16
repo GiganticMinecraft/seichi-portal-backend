@@ -3,6 +3,7 @@ use domain::{
     form::models::{FormSettings, ResponsePeriod},
     user::models::{Role, User},
 };
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -310,5 +311,62 @@ impl TryFrom<MessageDto> for domain::form::models::Message {
                 timestamp,
             ))
         }
+    }
+}
+
+#[derive(Debug, EnumString, Display)]
+pub enum NotificationSourceTypeDto {
+    #[strum(serialize = "MESSAGE")]
+    Message,
+}
+
+pub struct NotificationSourceInformationDto {
+    pub source_type: NotificationSourceTypeDto,
+    pub source_id: Uuid,
+}
+
+impl TryFrom<NotificationSourceInformationDto>
+    for domain::notification::models::NotificationSource
+{
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        NotificationSourceInformationDto {
+            source_type,
+            source_id,
+        }: NotificationSourceInformationDto,
+    ) -> Result<Self, Self::Error> {
+        match source_type {
+            NotificationSourceTypeDto::Message => Ok(
+                domain::notification::models::NotificationSource::Message(source_id.into()),
+            ),
+        }
+    }
+}
+
+pub struct NotificationDto {
+    pub id: Uuid,
+    pub source: NotificationSourceInformationDto,
+    pub recipient: UserDto,
+    pub is_read: bool,
+}
+
+impl TryFrom<NotificationDto> for domain::notification::models::Notification {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        NotificationDto {
+            id,
+            source,
+            recipient,
+            is_read,
+        }: NotificationDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(domain::notification::models::Notification::from_raw_parts(
+            id.into(),
+            source.try_into()?,
+            recipient.try_into()?,
+            is_read,
+        ))
     }
 }

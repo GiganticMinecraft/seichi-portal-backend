@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::dto::{
     AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
-    QuestionDto, SimpleFormDto,
+    NotificationDto, QuestionDto, SimpleFormDto,
 };
 
 #[async_trait]
@@ -196,4 +196,8 @@ pub trait SearchDatabase: Send + Sync {
 #[async_trait]
 pub trait NotificationDatabase: Send + Sync {
     async fn create(&self, notification: &Notification) -> Result<(), InfraError>;
+    async fn fetch_by_recipient(
+        &self,
+        recipient_id: Uuid,
+    ) -> Result<Vec<NotificationDto>, InfraError>;
 }

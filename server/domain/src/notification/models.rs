@@ -5,7 +5,7 @@ use crate::{form::models::MessageId, user::models::User};
 
 #[derive(Deserialize, Debug)]
 pub enum NotificationSource {
-    Message { message_id: MessageId },
+    Message(MessageId),
 }
 
 pub type NotificationId = types::Id<Notification>;
@@ -25,6 +25,20 @@ impl Notification {
             source,
             recipient,
             is_read: false,
+        }
+    }
+
+    pub fn from_raw_parts(
+        id: NotificationId,
+        source: NotificationSource,
+        recipient: User,
+        is_read: bool,
+    ) -> Self {
+        Self {
+            id,
+            source,
+            recipient,
+            is_read,
         }
     }
 }

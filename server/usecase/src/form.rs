@@ -376,9 +376,7 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         match Message::try_new(form_answer, actor.to_owned(), message_body) {
             Ok(message) => {
                 let notification = Notification::new(
-                    NotificationSource::Message {
-                        message_id: message.id().to_owned(),
-                    },
+                    NotificationSource::Message(message.id().to_owned()),
                     message.related_answer().user.to_owned(),
                 );
 
