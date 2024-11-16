@@ -7,7 +7,10 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::notification::NotificationUseCase;
 
-use crate::schemas::notification::notification_response_schemas::NotificationResponse;
+use crate::{
+    error_handler::handle_error,
+    schemas::notification::notification_response_schemas::NotificationResponse,
+};
 
 pub async fn fetch_by_recipient_id(
     Extension(user): Extension<User>,
@@ -37,11 +40,8 @@ pub async fn fetch_by_recipient_id(
                 })
                 .collect_vec();
 
-            (StatusCode::OK, Json(json!(notification_response)))
+            (StatusCode::OK, Json(json!(notification_response))).into_response()
         }
-        Err(_err) => {
-            // TODO: 今のエラーハンドリングでは非効率すぎるので、解決してから書く
-            todo!()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }
