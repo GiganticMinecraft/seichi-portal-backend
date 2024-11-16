@@ -17,6 +17,8 @@ use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::Uuid;
 
+use crate::error_handler::handle_error;
+
 pub async fn get_my_user_info(Extension(user): Extension<User>) -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -39,15 +41,8 @@ pub async fn patch_user_role(
     };
 
     match user_use_case.patch_user_role(uuid, role.role).await {
-        Ok(_) => (StatusCode::OK).into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -60,14 +55,7 @@ pub async fn user_list(
 
     match user_use_case.fetch_all_users().await {
         Ok(users) => (StatusCode::OK, Json(json!(users))).into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -108,14 +96,7 @@ pub async fn start_session(
                     )],
                 )
                     .into_response(),
-                Err(err) => {
-                    tracing::error!("{}", err);
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "reason": "unknown error" })),
-                    )
-                        .into_response()
-                }
+                Err(err) => handle_error(err).into_response(),
             }
         }
         Ok(None) => {
@@ -125,14 +106,7 @@ pub async fn start_session(
             )
         }
         .into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -162,13 +136,6 @@ pub async fn end_session(
             )],
         )
             .into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }

@@ -12,19 +12,22 @@ use domain::{
     repository::Repositories,
     user::models::{Role::StandardUser, User},
 };
-use errors::{domain::DomainError, infra::InfraError, usecase::UseCaseError, Error};
+use errors::domain::DomainError;
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::form::FormUseCase;
 
-use crate::schemas::form::{
-    form_request_schemas::{
-        AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
-        FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, MessageUpdateSchema,
-        PostedMessageSchema, ReplaceAnswerLabelSchema,
+use crate::{
+    error_handler::handle_error,
+    schemas::form::{
+        form_request_schemas::{
+            AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
+            FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, MessageUpdateSchema,
+            PostedMessageSchema, ReplaceAnswerLabelSchema,
+        },
+        form_response_schemas::{FormAnswer, MessageContentSchema, SenderSchema},
     },
-    form_response_schemas::{FormAnswer, MessageContentSchema, SenderSchema},
 };
 
 pub async fn create_form_handler(
@@ -49,14 +52,7 @@ pub async fn create_form_handler(
             Json(json!({ "id": id })),
         )
             .into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -70,14 +66,7 @@ pub async fn public_form_list_handler(
 
     match form_use_case.public_form_list(offset_and_limit).await {
         Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -91,14 +80,7 @@ pub async fn form_list_handler(
 
     match form_use_case.form_list(offset_and_limit).await {
         Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -112,14 +94,7 @@ pub async fn get_form_handler(
 
     match form_use_case.get_form(form_id).await {
         Ok(form) => (StatusCode::OK, Json(form)).into_response(),
-        Err(err) => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "reason": "unknown error" })),
-            )
-                .into_response()
-        }
+        Err(err) => handle_error(err).into_response(),
     }
 }
 
@@ -678,91 +653,5 @@ pub async fn delete_message_handler(
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => handle_error(err).into_response(),
-    }
-}
-
-pub fn handle_error(err: Error) -> impl IntoResponse {
-    match err {
-        Error::Infra {
-            source: InfraError::FormNotFound { .. },
-        } => (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "FORM_NOT_FOUND",
-                "reason": "FORM NOT FOUND"
-            })),
-        )
-            .into_response(),
-        Error::UseCase {
-            source: UseCaseError::AnswerNotFound,
-        } => (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "ANSWER_NOT_FOUND",
-                "reason": "Answer not found"
-            })),
-        )
-            .into_response(),
-        Error::UseCase {
-            source: UseCaseError::OutOfPeriod,
-        } => (
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "errorCode": "OUT_OF_PERIOD",
-                "reason": "Posted form is out of period."
-            })),
-        )
-            .into_response(),
-        Error::UseCase {
-            source: UseCaseError::DoNotHavePermissionToPostFormComment,
-        } => (
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
-                "reason": "Do not have permission to post form comment."
-            })),
-        )
-            .into_response(),
-        Error::UseCase {
-            source: UseCaseError::MessageNotFound,
-        } => (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "MESSAGE_NOT_FOUND",
-                "reason": "Message not found"
-            })),
-        )
-            .into_response(),
-        Error::Domain {
-            source: DomainError::Forbidden,
-        } => (
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "errorCode": "FORBIDDEN",
-                "reason": "You do not have permission to access this resource."
-            })),
-        )
-            .into_response(),
-        Error::Domain {
-            source: DomainError::EmptyMessageBody,
-        } => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "EMPTY_MESSAGE_BODY",
-                "reason": "Message body is empty."
-            })),
-        )
-            .into_response(),
-        _ => {
-            tracing::error!("{}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "unknown error"
-                })),
-            )
-                .into_response()
-        }
     }
 }
