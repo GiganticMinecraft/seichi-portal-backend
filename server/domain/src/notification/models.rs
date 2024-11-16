@@ -19,6 +19,26 @@ pub struct Notification {
 }
 
 impl Notification {
+    /// [`Notification`] を新しく作成します。
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::MessageId,
+    ///     notification::models::{Notification, NotificationSource},
+    ///     user::models::User,
+    /// };
+    ///
+    /// let source = NotificationSource::Message(MessageId::new());
+    /// let recipient = User {
+    ///     id: Default::default(),
+    ///     name: "Alice".to_string(),
+    ///     role: Default::default(),
+    /// };
+    /// let notification = Notification::new(source, recipient);
+    ///
+    /// assert!(!notification.is_read());
+    /// ```
     pub fn new(source: NotificationSource, recipient: User) -> Self {
         Self {
             id: NotificationId::new(),
