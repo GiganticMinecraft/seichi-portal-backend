@@ -48,7 +48,34 @@ impl Notification {
         }
     }
 
-    pub fn from_raw_parts(
+    /// [`Notification`] の各フィールドを指定して新しく作成します。
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::MessageId,
+    ///     notification::models::{Notification, NotificationId, NotificationSource},
+    ///     user::models::User,
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let id = NotificationId::new();
+    ///
+    /// let source = NotificationSource::Message(MessageId::new());
+    /// let recipient = User {
+    ///     id: Uuid::new_v4(),
+    ///     name: "Alice".to_string(),
+    ///     role: Default::default(),
+    /// };
+    ///
+    /// let notification = unsafe { Notification::from_raw_parts(id, source, recipient, false) };
+    /// ```
+    ///
+    /// # Safety
+    /// この関数は [`Notification`] のバリデーションをスキップするため、
+    /// データベースからすでにバリデーションされているデータを読み出すときなど、
+    /// データの信頼性が保証されている場合にのみ使用してください。
+    pub unsafe fn from_raw_parts(
         id: NotificationId,
         source: NotificationSource,
         recipient: User,

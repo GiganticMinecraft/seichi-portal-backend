@@ -362,11 +362,13 @@ impl TryFrom<NotificationDto> for domain::notification::models::Notification {
             is_read,
         }: NotificationDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::notification::models::Notification::from_raw_parts(
-            id.into(),
-            source.try_into()?,
-            recipient.try_into()?,
-            is_read,
-        ))
+        unsafe {
+            Ok(domain::notification::models::Notification::from_raw_parts(
+                id.into(),
+                source.try_into()?,
+                recipient.try_into()?,
+                is_read,
+            ))
+        }
     }
 }
