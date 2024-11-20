@@ -5,7 +5,7 @@ use domain::{
         FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
         Question, ResponsePeriod, Visibility, WebhookUrl,
     },
-    notification::models::Notification,
+    notification::models::{Notification, NotificationId},
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
@@ -200,4 +200,12 @@ pub trait NotificationDatabase: Send + Sync {
         &self,
         recipient_id: Uuid,
     ) -> Result<Vec<NotificationDto>, InfraError>;
+    async fn fetch_by_notification_ids(
+        &self,
+        notification_ids: Vec<NotificationId>,
+    ) -> Result<Vec<NotificationDto>, InfraError>;
+    async fn update_read_status(
+        &self,
+        notification_id_with_is_read: Vec<(NotificationId, bool)>,
+    ) -> Result<(), InfraError>;
 }

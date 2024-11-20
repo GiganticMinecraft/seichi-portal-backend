@@ -2,6 +2,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, 
 use domain::{
     notification::models::NotificationSource, repository::Repositories, user::models::User,
 };
+use errors::Error;
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -9,7 +10,10 @@ use usecase::notification::NotificationUseCase;
 
 use crate::{
     error_handler::handle_error,
-    schemas::notification::notification_response_schemas::NotificationResponse,
+    schemas::notification::{
+        notification_request_schemas::NotificationUpdateReadStateSchema,
+        notification_response_schemas::NotificationResponse,
+    },
 };
 
 pub async fn fetch_by_recipient_id(
@@ -41,6 +45,56 @@ pub async fn fetch_by_recipient_id(
                 .collect_vec();
 
             (StatusCode::OK, Json(json!(notification_response))).into_response()
+        }
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn update_read_state(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Json(update_targets): Json<Vec<NotificationUpdateReadStateSchema>>,
+) -> impl IntoResponse {
+    let notification_usecase = NotificationUseCase {
+        repository: repository.notification_repository(),
+    };
+
+    let update_targets = update_targets
+        .into_iter()
+        .map(|update_target| (update_target.notification_id, update_target.is_read))
+        .collect_vec();
+
+    match notification_usecase
+        .update_notification_read_status(&user, update_targets)
+        .await
+    {
+        Ok(updated_notifications) => {
+            let notification_response = updated_notifications
+                .into_iter()
+                .map(|notification| {
+                    notification.try_read(&user).map(|notification| {
+                        let (source_type, source_id) = match notification.source() {
+                            NotificationSource::Message(message_id) => {
+                                ("MESSAGE".to_string(), message_id.to_string())
+                            }
+                        };
+
+                        NotificationResponse {
+                            id: notification.id().to_owned(),
+                            source_type,
+                            source_id,
+                            is_read: notification.is_read().to_owned(),
+                        }
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>();
+
+            match notification_response {
+                Ok(notification_response) => {
+                    (StatusCode::OK, Json(json!(notification_response))).into_response()
+                }
+                Err(err) => handle_error(Error::from(err)).into_response(),
+            }
         }
         Err(err) => handle_error(err).into_response(),
     }

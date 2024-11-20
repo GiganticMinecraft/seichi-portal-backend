@@ -77,6 +77,14 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        UseCaseError::NotificationNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "NOTIFICATION_NOT_FOUND",
+                "reason": "Notification not found"
+            })),
+        )
+            .into_response(),
     }
 }
 

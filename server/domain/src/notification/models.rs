@@ -1,7 +1,11 @@
 use derive_getters::Getters;
 use serde::Deserialize;
 
-use crate::{form::models::MessageId, user::models::User};
+use crate::{
+    form::models::MessageId,
+    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create},
+    user::models::User,
+};
 
 #[derive(Deserialize, Debug)]
 pub enum NotificationSource {
@@ -87,5 +91,29 @@ impl Notification {
             recipient,
             is_read,
         }
+    }
+}
+
+impl AuthorizationGuardDefinitions<Notification> for Notification {
+    fn can_create(&self, actor: &User) -> bool {
+        self.recipient().id == actor.id
+    }
+
+    fn can_read(&self, actor: &User) -> bool {
+        self.recipient().id == actor.id
+    }
+
+    fn can_update(&self, actor: &User) -> bool {
+        self.recipient().id == actor.id
+    }
+
+    fn can_delete(&self, actor: &User) -> bool {
+        self.recipient().id == actor.id
+    }
+}
+
+impl From<Notification> for AuthorizationGuard<Notification, Create> {
+    fn from(value: Notification) -> Self {
+        AuthorizationGuard::new(value)
     }
 }

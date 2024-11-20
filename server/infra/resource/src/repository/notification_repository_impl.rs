@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use domain::{
-    notification::models::Notification, repository::notification_repository::NotificationRepository,
+    notification::models::{Notification, NotificationId},
+    repository::notification_repository::NotificationRepository,
+    types::authorization_guard::{AuthorizationGuard, Create, Read, Update},
+    user::models::User,
 };
 use errors::Error;
 use uuid::Uuid;
@@ -31,6 +34,47 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<_>, _>>()
             })?
+            .map_err(Into::into)
+    }
+
+    async fn fetch_by_notification_ids(
+        &self,
+        notification_ids: Vec<NotificationId>,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
+        self.client
+            .notification()
+            .fetch_by_notification_ids(notification_ids)
+            .await?
+            .into_iter()
+            .map(TryInto::<Notification>::try_into)
+            .map(|notification| {
+                notification
+                    .map(Into::into)
+                    .map(AuthorizationGuard::<_, Create>::into_read)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    async fn update_read_status(
+        &self,
+        actor: &User,
+        notifications: Vec<(AuthorizationGuard<Notification, Update>, bool)>,
+    ) -> Result<(), Error> {
+        let update_targets = notifications
+            .into_iter()
+            .map(|(notification, is_read)| {
+                notification.try_update(actor, |notification| {
+                    (notification.id().to_owned(), is_read)
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::<Error>::into)?;
+
+        self.client
+            .notification()
+            .update_read_status(update_targets)
+            .await
             .map_err(Into::into)
     }
 }
