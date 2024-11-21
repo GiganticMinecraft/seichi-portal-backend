@@ -6,13 +6,14 @@ use domain::{
     user::models::Role,
 };
 use errors::infra::InfraError;
+use sea_orm::Value;
 use types::Id;
 use uuid::Uuid;
 
 use crate::{
     database::{
         components::NotificationDatabase,
-        connection::{batch_insert, execute_and_values, query_all_and_values, ConnectionPool},
+        connection::{execute_and_values, query_all_and_values, ConnectionPool},
     },
     dto::{NotificationDto, NotificationSourceInformationDto, NotificationSourceTypeDto, UserDto},
 };
@@ -55,7 +56,7 @@ impl NotificationDatabase for ConnectionPool {
                 FROM notifications
                 INNER JOIN users ON notifications.recipient_id = users.id
                 WHERE recipient_id = ?",
-                [recipient_id.into()],
+                [recipient_id.to_string().into()],
                 txn,
             ).await?;
 
@@ -93,14 +94,14 @@ impl NotificationDatabase for ConnectionPool {
                         WHERE notifications.id IN (?{})",
                         ", ?".repeat(notification_ids.len() - 1)
                     )
-                    .as_str(),
+                        .as_str(),
                     notification_ids
                         .into_iter()
                         .map(Id::into_inner)
                         .map(Into::into),
                     txn,
                 )
-                .await?;
+                    .await?;
 
                 rs.into_iter()
                     .map(|rs| {
@@ -129,8 +130,8 @@ impl NotificationDatabase for ConnectionPool {
                     .collect::<Result<Vec<_>, _>>()
             })
         })
-        .await
-        .map_err(Into::into)
+            .await
+            .map_err(Into::into)
     }
 
     async fn update_read_status(
@@ -139,14 +140,28 @@ impl NotificationDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                batch_insert(
-                    r"INSERT INTO notifications (id, is_read) VALUES (?, ?) ON DUPLICATE KEY UPDATE is_read = VALUES(is_read)",
-                        notification_id_with_is_read.into_iter().flat_map(|(id, is_read)| [id.to_string().into(), is_read.into()]),
-                    txn,
-                ).await?;
+                let placeholders = vec!["?"; notification_id_with_is_read.len()].join(", ");
+
+                let query = format!(
+                    r"UPDATE notifications
+                                SET is_read = ELT(FIELD(id, {placeholders}), {placeholders})
+                                WHERE id IN ({placeholders})"
+                );
+
+                let (notification_ids, is_reads): (Vec<Value>, Vec<Value>) =
+                    notification_id_with_is_read
+                        .into_iter()
+                        .map(|(id, is_read)| (id.into_inner().to_string().into(), is_read.into()))
+                        .unzip();
+
+                let params = [notification_ids.to_owned(), is_reads, notification_ids].concat();
+
+                execute_and_values(&query, params, txn).await?;
 
                 Ok::<_, InfraError>(())
             })
-        }).await.map_err(Into::into)
+        })
+        .await
+        .map_err(Into::into)
     }
 }

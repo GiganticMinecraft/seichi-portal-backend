@@ -215,8 +215,8 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS notifications(
                     id UUID NOT NULL PRIMARY KEY,
                     source_type ENUM('MESSAGE') NOT NULL,
+                    source_id UUID NOT NULL,
                     recipient_id CHAR(36) NOT NULL,
-                    related_id UUID NOT NULL,
                     is_read BOOL DEFAULT FALSE NOT NULL,
                     FOREIGN KEY fk_notification_recipient_id(recipient_id) REFERENCES users(id)
                     )",
