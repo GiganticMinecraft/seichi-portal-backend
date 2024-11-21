@@ -218,7 +218,7 @@ impl MigrationTrait for Migration {
                     recipient_id CHAR(36) NOT NULL,
                     related_id UUID NOT NULL,
                     is_read BOOL DEFAULT FALSE NOT NULL,
-                    FOREIGN KEY fk_notification_recipient(recipient) REFERENCES users(id)
+                    FOREIGN KEY fk_notification_recipient_id(recipient_id) REFERENCES users(id)
                     )",
             ))
             .await?;
