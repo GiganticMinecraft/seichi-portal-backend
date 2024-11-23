@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-pub async fn fetch_by_recipient_id(
+pub async fn fetch_by_request_user(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
