@@ -1,3 +1,5 @@
 * @rito528
 *.rs @LoliGothick
-Cargo.toml @LoliGothick
+# Renovate に automerge してほしいので以下のファイルは owner を設定しない
+Cargo.toml
+compose.yaml
