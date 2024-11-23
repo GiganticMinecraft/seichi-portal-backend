@@ -11,7 +11,10 @@ use crate::{
 #[async_trait]
 pub trait NotificationRepository: Send + Sync + 'static {
     async fn create(&self, notification: &Notification) -> Result<(), Error>;
-    async fn fetch_by_recipient_id(&self, recipient_id: Uuid) -> Result<Vec<Notification>, Error>;
+    async fn fetch_by_recipient_id(
+        &self,
+        recipient_id: Uuid,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error>;
     async fn fetch_by_notification_ids(
         &self,
         notification_ids: Vec<NotificationId>,

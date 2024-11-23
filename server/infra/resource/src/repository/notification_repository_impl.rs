@@ -6,6 +6,7 @@ use domain::{
     user::models::User,
 };
 use errors::Error;
+use itertools::Itertools;
 use uuid::Uuid;
 
 use crate::{
@@ -23,7 +24,10 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
             .map_err(Into::into)
     }
 
-    async fn fetch_by_recipient_id(&self, recipient_id: Uuid) -> Result<Vec<Notification>, Error> {
+    async fn fetch_by_recipient_id(
+        &self,
+        recipient_id: Uuid,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
         self.client
             .notification()
             .fetch_by_recipient(recipient_id)
@@ -31,9 +35,11 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
             .map(|notifications| {
                 notifications
                     .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<_>, _>>()
-            })?
+                    .flat_map(TryInto::<Notification>::try_into)
+                    .map(Into::<AuthorizationGuard<Notification, Create>>::into)
+                    .map(AuthorizationGuard::<_, Create>::into_read)
+                    .collect_vec()
+            })
             .map_err(Into::into)
     }
 

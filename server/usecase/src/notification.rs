@@ -15,7 +15,7 @@ impl<R: NotificationRepository> NotificationUseCase<'_, R> {
     pub async fn fetch_notifications(
         &self,
         recipient_id: Uuid,
-    ) -> Result<Vec<Notification>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
         self.repository.fetch_by_recipient_id(recipient_id).await
     }
 
