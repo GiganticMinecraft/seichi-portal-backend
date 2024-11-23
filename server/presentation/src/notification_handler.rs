@@ -1,7 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, Json};
-use domain::{
-    notification::models::NotificationSource, repository::Repositories, user::models::User,
-};
+use domain::{repository::Repositories, user::models::User};
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -30,20 +28,9 @@ pub async fn fetch_by_request_user(
             notifications
                 .into_iter()
                 .map(|notification| {
-                    notification.try_read(&user).map(|notification| {
-                        let (source_type, source_id) = match notification.source() {
-                            NotificationSource::Message(message_id) => {
-                                ("MESSAGE".to_string(), message_id.to_string())
-                            }
-                        };
-
-                        NotificationResponse {
-                            id: notification.id().to_owned(),
-                            source_type,
-                            source_id,
-                            is_read: notification.is_read().to_owned(),
-                        }
-                    })
+                    notification
+                        .try_read(&user)
+                        .map(NotificationResponse::from_notification_ref)
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(Into::into)
@@ -78,20 +65,9 @@ pub async fn update_read_state(
             updated_notifications
                 .into_iter()
                 .map(|notification| {
-                    notification.try_read(&user).map(|notification| {
-                        let (source_type, source_id) = match notification.source() {
-                            NotificationSource::Message(message_id) => {
-                                ("MESSAGE".to_string(), message_id.to_string())
-                            }
-                        };
-
-                        NotificationResponse {
-                            id: notification.id().to_owned(),
-                            source_type,
-                            source_id,
-                            is_read: notification.is_read().to_owned(),
-                        }
-                    })
+                    notification
+                        .try_read(&user)
+                        .map(NotificationResponse::from_notification_ref)
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(Into::into)
