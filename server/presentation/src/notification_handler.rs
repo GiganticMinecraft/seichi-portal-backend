@@ -71,12 +71,11 @@ pub async fn update_read_state(
         .map(|update_target| (update_target.notification_id, update_target.is_read))
         .collect_vec();
 
-    match notification_usecase
+    let notification_response_or_error = notification_usecase
         .update_notification_read_status(&user, update_targets)
         .await
-    {
-        Ok(updated_notifications) => {
-            let notification_response = updated_notifications
+        .and_then(|updated_notifications| {
+            updated_notifications
                 .into_iter()
                 .map(|notification| {
                     notification.try_read(&user).map(|notification| {
@@ -94,14 +93,13 @@ pub async fn update_read_state(
                         }
                     })
                 })
-                .collect::<Result<Vec<_>, _>>();
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Into::into)
+        });
 
-            match notification_response {
-                Ok(notification_response) => {
-                    (StatusCode::OK, Json(json!(notification_response))).into_response()
-                }
-                Err(err) => handle_error(Error::from(err)).into_response(),
-            }
+    match notification_response_or_error {
+        Ok(notification_response) => {
+            (StatusCode::OK, Json(json!(notification_response))).into_response()
         }
         Err(err) => handle_error(err).into_response(),
     }
