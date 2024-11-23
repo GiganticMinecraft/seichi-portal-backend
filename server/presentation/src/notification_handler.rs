@@ -2,7 +2,6 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, 
 use domain::{
     notification::models::NotificationSource, repository::Repositories, user::models::User,
 };
-use errors::{domain::DomainError, Error};
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -24,34 +23,35 @@ pub async fn fetch_by_recipient_id(
         repository: repository.notification_repository(),
     };
 
-    match notification_usecase.fetch_notifications(user.id).await {
-        Ok(notifications) => {
-            let notification_response = notifications
+    let notification_response_or_error = notification_usecase
+        .fetch_notifications(user.id)
+        .await
+        .and_then(|notifications| {
+            notifications
                 .into_iter()
                 .map(|notification| {
-                    let notification = notification.try_read(&user)?;
+                    notification.try_read(&user).map(|notification| {
+                        let (source_type, source_id) = match notification.source() {
+                            NotificationSource::Message(message_id) => {
+                                ("MESSAGE".to_string(), message_id.to_string())
+                            }
+                        };
 
-                    let notification_source = match notification.source() {
-                        NotificationSource::Message(message_id) => {
-                            ("Message".to_string(), message_id.to_string())
+                        NotificationResponse {
+                            id: notification.id().to_owned(),
+                            source_type,
+                            source_id,
+                            is_read: notification.is_read().to_owned(),
                         }
-                    };
-
-                    Ok(NotificationResponse {
-                        id: notification.id().to_owned(),
-                        source_type: notification_source.0,
-                        source_id: notification_source.1,
-                        is_read: notification.is_read().to_owned(),
                     })
                 })
-                .collect::<Result<Vec<_>, DomainError>>();
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Into::into)
+        });
 
-            match notification_response {
-                Ok(notification_responses) => {
-                    (StatusCode::OK, Json(json!(notification_responses))).into_response()
-                }
-                Err(err) => handle_error(Error::from(err)).into_response(),
-            }
+    match notification_response_or_error {
+        Ok(notification_response) => {
+            (StatusCode::OK, Json(json!(notification_response))).into_response()
         }
         Err(err) => handle_error(err).into_response(),
     }
