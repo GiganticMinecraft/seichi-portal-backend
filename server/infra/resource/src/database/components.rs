@@ -5,6 +5,7 @@ use domain::{
         FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
         Question, ResponsePeriod, Visibility, WebhookUrl,
     },
+    notification::models::{Notification, NotificationId},
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
@@ -13,13 +14,14 @@ use uuid::Uuid;
 
 use crate::dto::{
     AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
-    QuestionDto, SimpleFormDto,
+    NotificationDto, QuestionDto, SimpleFormDto,
 };
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteUserDatabase: UserDatabase;
+    type ConcreteNotificationDatabase: NotificationDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
@@ -27,6 +29,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
+    fn notification(&self) -> &Self::ConcreteNotificationDatabase;
 }
 
 #[automock]
@@ -187,4 +190,22 @@ pub trait SearchDatabase: Send + Sync {
         &self,
         query: &str,
     ) -> Result<Vec<domain::search::models::Comment>, InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait NotificationDatabase: Send + Sync {
+    async fn create(&self, notification: &Notification) -> Result<(), InfraError>;
+    async fn fetch_by_recipient(
+        &self,
+        recipient_id: Uuid,
+    ) -> Result<Vec<NotificationDto>, InfraError>;
+    async fn fetch_by_notification_ids(
+        &self,
+        notification_ids: Vec<NotificationId>,
+    ) -> Result<Vec<NotificationDto>, InfraError>;
+    async fn update_read_status(
+        &self,
+        notification_id_with_is_read: Vec<(NotificationId, bool)>,
+    ) -> Result<(), InfraError>;
 }

@@ -6,10 +6,12 @@ pub enum UseCaseError {
     OutOfPeriod,
     #[error("Do not have permission to post form comment.")]
     DoNotHavePermissionToPostFormComment,
-    #[error("Answer Not found.")]
+    #[error("Answer not found.")]
     AnswerNotFound,
-    #[error("Form Not found.")]
+    #[error("Form not found.")]
     FormNotFound,
-    #[error("Message Not found.")]
+    #[error("Message not found.")]
     MessageNotFound,
+    #[error("Notification not found.")]
+    NotificationNotFound,
 }

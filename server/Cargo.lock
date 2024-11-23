@@ -2609,6 +2609,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha256",
+ "strum",
+ "strum_macros",
  "tracing",
  "types",
  "uuid",

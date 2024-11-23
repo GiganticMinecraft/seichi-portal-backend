@@ -273,7 +273,7 @@ pub struct Label {
 
 pub type MessageId = types::Id<Message>;
 
-#[derive(Getters, Debug)]
+#[derive(Getters, PartialEq, Debug)]
 pub struct Message {
     id: MessageId,
     related_answer: FormAnswer,

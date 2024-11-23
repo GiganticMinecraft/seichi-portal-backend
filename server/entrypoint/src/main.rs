@@ -26,6 +26,7 @@ use presentation::{
         update_form_handler, update_message_handler,
     },
     health_check_handler::health_check,
+    notification_handler::{fetch_by_request_user, update_read_state},
     search_handler::cross_search,
     user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
 };
@@ -151,6 +152,11 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/forms/answers/:answer_id/messages/:message_id",
             delete(delete_message_handler).patch(update_message_handler),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/notifications",
+            get(fetch_by_request_user).patch(update_read_state),
         )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))

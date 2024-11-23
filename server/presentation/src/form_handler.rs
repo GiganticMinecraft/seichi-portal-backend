@@ -36,7 +36,8 @@ pub async fn create_form_handler(
     Json(form): Json<FormCreateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -61,7 +62,8 @@ pub async fn public_form_list_handler(
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.public_form_list(offset_and_limit).await {
@@ -75,7 +77,8 @@ pub async fn form_list_handler(
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.form_list(offset_and_limit).await {
@@ -89,7 +92,8 @@ pub async fn get_form_handler(
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.get_form(form_id).await {
@@ -103,7 +107,8 @@ pub async fn delete_form_handler(
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.delete_form(form_id).await {
@@ -118,7 +123,8 @@ pub async fn update_form_handler(
     Json(targets): Json<FormUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -145,7 +151,8 @@ pub async fn get_questions_handler(
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.get_questions(form_id).await {
@@ -158,7 +165,8 @@ pub async fn get_all_answers(
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.get_all_answers().await {
@@ -187,7 +195,8 @@ pub async fn get_answer_handler(
     Path(answer_id): Path<AnswerId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     let answer_dto = match form_use_case.get_answers(answer_id).await {
@@ -231,7 +240,8 @@ pub async fn get_answer_by_form_id_handler(
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     if user.role == StandardUser {
@@ -276,7 +286,8 @@ pub async fn post_answer_handler(
     Json(schema): Json<AnswersPostSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -294,7 +305,8 @@ pub async fn update_answer_handler(
     Json(schema): Json<AnswerUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -311,7 +323,8 @@ pub async fn create_question_handler(
     Json(questions): Json<FormQuestionUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -328,7 +341,8 @@ pub async fn put_question_handler(
     Json(questions): Json<FormQuestionUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -346,7 +360,8 @@ pub async fn post_form_comment(
     Json(comment_schema): Json<CommentPostSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     let comment = Comment {
@@ -372,7 +387,8 @@ pub async fn delete_form_comment_handler(
     Path(comment_id): Path<CommentId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.delete_comment(comment_id).await {
@@ -386,7 +402,8 @@ pub async fn create_label_for_answers(
     Json(label): Json<LabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.create_label_for_answers(label.name).await {
@@ -399,7 +416,8 @@ pub async fn get_labels_for_answers(
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.get_labels_for_answers().await {
@@ -413,7 +431,8 @@ pub async fn delete_label_for_answers(
     Path(label_id): Path<LabelId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.delete_label_for_answers(label_id).await {
@@ -428,7 +447,8 @@ pub async fn edit_label_for_answers(
     Json(label): Json<LabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -449,7 +469,8 @@ pub async fn replace_answer_labels(
     Json(label_ids): Json<ReplaceAnswerLabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -466,7 +487,8 @@ pub async fn create_label_for_forms(
     Json(label): Json<LabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.create_label_for_forms(label.name).await {
@@ -479,7 +501,8 @@ pub async fn get_labels_for_forms(
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.get_labels_for_forms().await {
@@ -493,7 +516,8 @@ pub async fn delete_label_for_forms(
     Path(label_id): Path<LabelId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.delete_label_for_forms(label_id).await {
@@ -508,7 +532,8 @@ pub async fn edit_label_for_forms(
     Json(label): Json<LabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -529,7 +554,8 @@ pub async fn replace_form_labels(
     Json(label_ids): Json<ReplaceAnswerLabelSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -548,7 +574,8 @@ pub async fn post_message_handler(
     Json(message): Json<PostedMessageSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -574,7 +601,8 @@ pub async fn update_message_handler(
     Json(body_schema): Json<MessageUpdateSchema>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
@@ -592,7 +620,8 @@ pub async fn get_messages_handler(
     Path(answer_id): Path<AnswerId>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case.get_messages(answer_id).await {
@@ -644,7 +673,8 @@ pub async fn delete_message_handler(
     Path((answer_id, message_id)): Path<(AnswerId, MessageId)>,
 ) -> impl IntoResponse {
     let form_use_case = FormUseCase {
-        repository: repository.form_repository(),
+        form_repository: repository.form_repository(),
+        notification_repository: repository.notification_repository(),
     };
 
     match form_use_case
