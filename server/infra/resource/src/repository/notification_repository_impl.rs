@@ -28,38 +28,32 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
         &self,
         recipient_id: Uuid,
     ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
-        self.client
+        Ok(self
+            .client
             .notification()
             .fetch_by_recipient(recipient_id)
-            .await
-            .map(|notifications| {
-                notifications
-                    .into_iter()
-                    .flat_map(TryInto::<Notification>::try_into)
-                    .map(Into::<AuthorizationGuard<Notification, Create>>::into)
-                    .map(AuthorizationGuard::<_, Create>::into_read)
-                    .collect_vec()
-            })
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .flat_map(TryInto::<Notification>::try_into)
+            .map(Into::<AuthorizationGuard<Notification, Create>>::into)
+            .map(AuthorizationGuard::<_, Create>::into_read)
+            .collect_vec())
     }
 
     async fn fetch_by_notification_ids(
         &self,
         notification_ids: Vec<NotificationId>,
     ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
-        self.client
+        Ok(self
+            .client
             .notification()
             .fetch_by_notification_ids(notification_ids)
             .await?
             .into_iter()
-            .map(TryInto::<Notification>::try_into)
-            .map(|notification| {
-                notification
-                    .map(Into::into)
-                    .map(AuthorizationGuard::<_, Create>::into_read)
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+            .flat_map(TryInto::<Notification>::try_into)
+            .map(Into::into)
+            .map(AuthorizationGuard::<_, Create>::into_read)
+            .collect_vec())
     }
 
     async fn update_read_status(
