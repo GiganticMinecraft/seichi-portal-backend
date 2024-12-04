@@ -1023,7 +1023,7 @@ dependencies = [
  "reqwest",
  "sea-orm",
  "strum",
- "thiserror 1.0.69",
+ "thiserror 2.0.4",
  "uuid",
 ]
 
