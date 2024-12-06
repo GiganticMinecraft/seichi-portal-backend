@@ -40,7 +40,7 @@ itertools = "0.13.0"
 chrono = { version = "0.4.38" }
 futures = "0.3.31"
 uuid = { version = "1.11.0", features = ["v4", "v7"] }
-deriving_via = "1.6.3"
+deriving_via = "2.0.0"
 reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tls", "json"] }
 num-traits = "0.2.19"
 regex = "1.11.1"
