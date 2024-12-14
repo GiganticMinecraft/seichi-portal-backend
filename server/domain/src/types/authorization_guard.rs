@@ -191,6 +191,12 @@ pub trait AuthorizationGuardDefinitions<T> {
     fn can_delete(&self, actor: &User) -> bool;
 }
 
+impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Create> {
+    fn from(guard_target: T) -> Self {
+        AuthorizationGuard::new(guard_target)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use uuid::Uuid;
