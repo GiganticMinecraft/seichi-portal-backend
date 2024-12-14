@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 #[cfg(feature = "arbitrary")]
 use common::test_utils::arbitrary_uuid_v7;
 use deriving_via::DerivingVia;
@@ -35,9 +34,4 @@ impl<T> Id<T> {
     pub fn new() -> Self {
         Self(Uuid::now_v7(), std::marker::PhantomData)
     }
-}
-
-#[async_trait]
-pub trait Resolver<T, Error, Repo> {
-    async fn resolve(&self, repo: &Repo) -> Result<Option<T>, Error>;
 }

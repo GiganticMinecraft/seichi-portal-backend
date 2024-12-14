@@ -1,31 +1,21 @@
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
-use errors::{domain::DomainError, Error};
+use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use typed_builder::TypedBuilder;
-use types::Resolver;
 
 use crate::{
-    repository::form_repository::FormRepository,
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role::Administrator, User},
 };
 
 pub type FormId = types::IntegerId<Form>;
-
-#[async_trait]
-impl<Repo: FormRepository + Sized + Sync> Resolver<Form, Error, Repo> for FormId {
-    async fn resolve(&self, repo: &Repo) -> Result<Option<Form>, Error> {
-        repo.get(self.to_owned()).await
-    }
-}
 
 #[derive(Deserialize, Debug)]
 pub struct OffsetAndLimit {
@@ -217,13 +207,6 @@ impl DefaultAnswerTitle {
 }
 
 pub type AnswerId = types::IntegerId<FormAnswer>;
-
-#[async_trait]
-impl<Repo: FormRepository + Sized + Sync> Resolver<FormAnswer, Error, Repo> for AnswerId {
-    async fn resolve(&self, repo: &Repo) -> Result<Option<FormAnswer>, Error> {
-        repo.get_answers(self.to_owned()).await
-    }
-}
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct FormAnswer {

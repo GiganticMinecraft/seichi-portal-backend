@@ -26,7 +26,6 @@ use futures::{
     future::{join_all, OptionFuture},
     stream, try_join, StreamExt,
 };
-use types::Resolver;
 
 use crate::dto::AnswerDto;
 
@@ -146,23 +145,22 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         title: DefaultAnswerTitle,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let is_within_period = form_id
-            .resolve(self.form_repository)
-            .await?
-            .and_then(|form| {
-                let response_period = form.settings.response_period;
+        let is_within_period =
+            self.form_repository
+                .get(form_id)
+                .await?
+                .and_then(|form| {
+                    let response_period = form.settings.response_period;
 
-                response_period
-                    .start_at
-                    .zip(response_period.end_at)
-                    .map(|(start_at, end_at)| {
-                        let now = Utc::now();
-                        now >= start_at && now <= end_at
-                    })
-            })
-            // Note: Noneの場合はフォームが存在していないかそもそも回答期間が無いフォーム
-            .unwrap_or(true);
-
+                    response_period.start_at.zip(response_period.end_at).map(
+                        |(start_at, end_at)| {
+                            let now = Utc::now();
+                            now >= start_at && now <= end_at
+                        },
+                    )
+                })
+                // Note: Noneの場合はフォームが存在していないかそもそも回答期間が無いフォーム
+                .unwrap_or(true);
         if is_within_period {
             self.form_repository
                 .post_answer(user, form_id, title, answers)
@@ -276,14 +274,15 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         let can_post_comment = match comment.commented_by.role {
             Administrator => true,
             StandardUser => {
-                let answer = answer_id
-                    .resolve(self.form_repository)
+                let answer = self
+                    .form_repository
+                    .get_answers(answer_id)
                     .await?
                     .ok_or(AnswerNotFound)?;
 
-                let form = answer
-                    .form_id
-                    .resolve(self.form_repository)
+                let form = self
+                    .form_repository
+                    .get(answer.form_id)
                     .await?
                     .ok_or(FormNotFound)?;
 
