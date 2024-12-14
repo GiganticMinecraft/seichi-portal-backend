@@ -29,8 +29,8 @@ pub async fn fetch_by_request_user(
                 .into_iter()
                 .map(|notification| {
                     notification
-                        .try_read(&user)
-                        .map(NotificationResponse::from_notification_ref)
+                        .try_into_read(&user)
+                        .map(Into::<NotificationResponse>::into)
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(Into::into)
@@ -66,8 +66,8 @@ pub async fn update_read_state(
                 .into_iter()
                 .map(|notification| {
                     notification
-                        .try_read(&user)
-                        .map(NotificationResponse::from_notification_ref)
+                        .try_into_read(&user)
+                        .map(Into::<NotificationResponse>::into)
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(Into::into)

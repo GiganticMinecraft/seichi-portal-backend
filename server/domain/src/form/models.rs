@@ -14,7 +14,7 @@ use types::Resolver;
 
 use crate::{
     repository::form_repository::FormRepository,
-    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create},
+    types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role::Administrator, User},
 };
 
@@ -510,12 +510,6 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// ```
     fn can_delete(&self, actor: &User) -> bool {
         self.sender.id == actor.id
-    }
-}
-
-impl From<Message> for AuthorizationGuard<Message, Create> {
-    fn from(value: Message) -> Self {
-        AuthorizationGuard::new(value)
     }
 }
 

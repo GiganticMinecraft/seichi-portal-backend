@@ -112,10 +112,19 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
 }
 
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
-    /// `actor` が `guard_target` を取得することを試みます。
+    /// `actor` が `guard_target` の参照を取得することを試みます。
     pub fn try_read(&self, actor: &User) -> Result<&T, DomainError> {
         if self.guard_target.can_read(actor) {
             Ok(&self.guard_target)
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
+    /// `actor` が `guard_target` を取得することを試みます。
+    pub fn try_into_read(self, actor: &User) -> Result<T, DomainError> {
+        if self.guard_target.can_read(actor) {
+            Ok(self.guard_target)
         } else {
             Err(DomainError::Forbidden)
         }
@@ -189,6 +198,12 @@ pub trait AuthorizationGuardDefinitions<T> {
     fn can_read(&self, actor: &User) -> bool;
     fn can_update(&self, actor: &User) -> bool;
     fn can_delete(&self, actor: &User) -> bool;
+}
+
+impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Create> {
+    fn from(guard_target: T) -> Self {
+        AuthorizationGuard::new(guard_target)
+    }
 }
 
 #[cfg(test)]

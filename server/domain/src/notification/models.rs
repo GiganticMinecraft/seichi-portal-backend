@@ -2,8 +2,7 @@ use derive_getters::Getters;
 use serde::Deserialize;
 
 use crate::{
-    form::models::MessageId,
-    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create},
+    form::models::MessageId, types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::User,
 };
 
@@ -109,11 +108,5 @@ impl AuthorizationGuardDefinitions<Notification> for Notification {
 
     fn can_delete(&self, actor: &User) -> bool {
         self.recipient().id == actor.id
-    }
-}
-
-impl From<Notification> for AuthorizationGuard<Notification, Create> {
-    fn from(value: Notification) -> Self {
-        AuthorizationGuard::new(value)
     }
 }
