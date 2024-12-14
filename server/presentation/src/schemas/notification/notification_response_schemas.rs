@@ -9,8 +9,8 @@ pub struct NotificationResponse {
     pub is_read: bool,
 }
 
-impl NotificationResponse {
-    pub fn from_notification_ref(notification: &Notification) -> Self {
+impl From<Notification> for NotificationResponse {
+    fn from(notification: Notification) -> Self {
         let (source_type, source_id) = match notification.source() {
             NotificationSource::Message(message_id) => {
                 ("MESSAGE".to_string(), message_id.to_string())
