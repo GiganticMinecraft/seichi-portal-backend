@@ -12,33 +12,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          -
-            docker-platform: linux/amd64
+          - docker-platform: linux/amd64
             cross-target: x86_64-unknown-linux-gnu
-          -
-            docker-platform: linux/arm64/v8
+          - docker-platform: linux/arm64/v8
             cross-target: aarch64-unknown-linux-gnu
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@master
-      -
-        name: Setup rust toolchain
+      - name: Setup rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.75.0
+          toolchain: 1.82.0
           target: ${{ matrix.cross-target }}
           override: true
-      -
-        name: Build binary using cross
+      - name: Build binary using cross
         uses: actions-rs/cargo@v1
         with:
           use-cross: true
           command: build
           args: --manifest-path server/Cargo.toml --target ${{ matrix.cross-target }} --release
-      -
-        name: Upload artifact to collect in next job
+      - name: Upload artifact to collect in next job
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.cross-target }}
@@ -51,42 +45,34 @@ jobs:
     env:
       image_name: seichi-portal-backend
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@master
-      -
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: x86_64-unknown-linux-gnu
           path: docker/artifacts/x86_64-unknown-linux-gnu
-      -
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: aarch64-unknown-linux-gnu
           path: docker/artifacts/aarch64-unknown-linux-gnu
-      -
-        name: Set up QEMU
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      -
-        name: Login to GitHub Container Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      -
-        id: prepare_image_id
+      - id: prepare_image_id
         name: Prepare image id's components
         run: |
           image_id=ghcr.io/${{ github.repository_owner }}/${{ env.image_name }}
           echo "lowercase_id=$(echo $image_id | tr '[A-Z]' '[a-z]')" >> $GITHUB_OUTPUT
           echo "short-ref=$(git rev-parse --short "$GITHUB_SHA")" >> $GITHUB_OUTPUT
           echo "branch=$(echo ${GITHUB_REF#refs/heads/} | tr / -)" >> $GITHUB_OUTPUT
-      -
-        name: Build and push
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: docker
