@@ -215,30 +215,31 @@ mod test {
         user::models::{Role, User},
     };
 
+    #[derive(Clone, PartialEq, Debug)]
+    struct AuthorizationGuardTestStruct {
+        pub _value: String,
+    }
+
+    impl AuthorizationGuardDefinitions<AuthorizationGuardTestStruct> for AuthorizationGuardTestStruct {
+        fn can_create(&self, actor: &User) -> bool {
+            actor.role == Role::Administrator
+        }
+
+        fn can_read(&self, actor: &User) -> bool {
+            actor.role == Role::Administrator || actor.role == Role::StandardUser
+        }
+
+        fn can_update(&self, actor: &User) -> bool {
+            actor.role == Role::Administrator
+        }
+
+        fn can_delete(&self, actor: &User) -> bool {
+            actor.role == Role::Administrator
+        }
+    }
+
     #[test]
     fn authorization_guard_test() {
-        struct AuthorizationGuardTestStruct {
-            pub _value: String,
-        }
-
-        impl AuthorizationGuardDefinitions<AuthorizationGuardTestStruct> for AuthorizationGuardTestStruct {
-            fn can_create(&self, actor: &User) -> bool {
-                actor.role == Role::Administrator
-            }
-
-            fn can_read(&self, actor: &User) -> bool {
-                actor.role == Role::Administrator || actor.role == Role::StandardUser
-            }
-
-            fn can_update(&self, actor: &User) -> bool {
-                actor.role == Role::Administrator
-            }
-
-            fn can_delete(&self, actor: &User) -> bool {
-                actor.role == Role::Administrator
-            }
-        }
-
         let admin = User {
             name: "admin".to_string(),
             id: Uuid::new_v4(),
@@ -269,5 +270,31 @@ mod test {
         let guard = guard.into_delete();
         assert!(&guard.try_delete(&admin, |_| {}).is_ok());
         assert!(&guard.try_delete(&standard_user, |_| {}).is_err());
+    }
+
+    #[test]
+    fn verify_same_data_for_try_read_and_try_into_read() {
+        let user = User {
+            name: "user".to_string(),
+            id: Uuid::new_v4(),
+            role: Role::Administrator,
+        };
+
+        let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        });
+
+        let read_guard = guard.into_read();
+
+        let from_into_read = read_guard.try_read(&user);
+        assert!(from_into_read.is_ok());
+
+        let from_into_read = from_into_read.unwrap().to_owned();
+
+        let read_into = read_guard.try_into_read(&user);
+
+        assert!(read_into.is_ok());
+
+        assert_eq!(from_into_read, read_into.unwrap());
     }
 }
