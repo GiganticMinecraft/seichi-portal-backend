@@ -12,7 +12,6 @@ use domain::{
 use errors::{domain::DomainError, infra::InfraError::AnswerNotFount, Error};
 use futures::{stream, stream::StreamExt};
 use outgoing::form_outgoing;
-use types::Resolver;
 
 use crate::{
     database::components::{DatabaseComponents, FormDatabase},
@@ -303,7 +302,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), Error> {
-        let posted_answers = answer_id.resolve(self).await?.ok_or(AnswerNotFount {
+        let posted_answers = self.get_answers(answer_id).await?.ok_or(AnswerNotFount {
             id: answer_id.into_inner(),
         })?;
 
