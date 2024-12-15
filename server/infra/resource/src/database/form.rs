@@ -242,16 +242,6 @@ impl FormDatabase for ConnectionPool {
                     None => return Ok(None),
                 };
 
-                let questions = query_all_and_values(
-                    r"SELECT question_id, form_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
-                    [form_id.into_inner().into()],
-                    txn,
-                )
-                    .await?;
-
-                let choices = query_all(r"SELECT question_id, choice FROM form_choices", txn)
-                    .await?;
-
                 let labels = query_all_and_values(
                     r"SELECT label_id, name FROM label_settings_for_forms
                         INNER JOIN label_for_forms ON label_for_forms.id = label_id
@@ -260,38 +250,6 @@ impl FormDatabase for ConnectionPool {
                     txn,
                 )
                     .await?;
-
-                let questions = questions
-                    .into_iter()
-                    .map(|rs| {
-                        let question_id: i32 = rs.try_get("", "question_id")?;
-
-                        let choices = choices
-                            .iter()
-                            .filter_map(|rs| {
-                                let choice_question_id: i32 = rs.try_get("", "question_id").ok()?;
-
-                                if choice_question_id == question_id {
-                                    let choice: Result<String, _> = rs.try_get("", "choice");
-
-                                    choice.ok()
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect_vec();
-
-                        Ok(QuestionDto {
-                            id: Some(question_id),
-                            form_id: rs.try_get("", "form_id")?,
-                            title: rs.try_get("", "title")?,
-                            description: rs.try_get("", "description")?,
-                            question_type: rs.try_get("", "question_type")?,
-                            choices,
-                            is_required: rs.try_get("", "is_required")?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, DbErr>>()?;
 
                 let labels = labels
                     .iter()
@@ -311,7 +269,6 @@ impl FormDatabase for ConnectionPool {
                     id: form_id.into_inner(),
                     title: form.try_get("", "form_title")?,
                     description: form.try_get("", "description")?,
-                    questions,
                     metadata: (
                         form.try_get("", "created_at")?,
                         form.try_get("", "updated_at")?,

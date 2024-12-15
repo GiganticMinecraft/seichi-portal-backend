@@ -183,7 +183,9 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         match self.get(form_id).await? {
             None => Ok(()),
             Some(form) => {
-                form_outgoing::post_answer(&form, user, title, &answers).await?;
+                let questions = self.get_questions(form_id).await?;
+
+                form_outgoing::post_answer(&form, user, title, &answers, &questions).await?;
                 self.client
                     .form()
                     .post_answer(user, form_id, answers)
