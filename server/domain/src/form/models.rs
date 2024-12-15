@@ -45,9 +45,6 @@ pub struct Form {
     pub title: FormTitle,
     #[builder(setter(into))]
     pub description: FormDescription,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
-    #[serde(default)]
-    pub questions: Vec<Question>,
     #[serde(default)]
     #[builder(setter(into))]
     pub metadata: FormMeta,

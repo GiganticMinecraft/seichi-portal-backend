@@ -47,7 +47,6 @@ pub struct FormDto {
     pub id: i32,
     pub title: String,
     pub description: Option<String>,
-    pub questions: Vec<QuestionDto>,
     pub metadata: (DateTime<Utc>, DateTime<Utc>),
     pub response_period: Option<(DateTime<Utc>, DateTime<Utc>)>,
     pub webhook_url: Option<String>,
@@ -65,7 +64,6 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             id,
             title,
             description,
-            questions,
             metadata,
             response_period,
             webhook_url,
@@ -79,12 +77,6 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             .id(id)
             .title(title)
             .description(description)
-            .questions(
-                questions
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<_>, _>>()?,
-            )
             .metadata(metadata)
             .settings(FormSettings {
                 response_period: ResponsePeriod::new(response_period),
