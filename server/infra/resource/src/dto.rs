@@ -52,7 +52,6 @@ pub struct FormDto {
     pub webhook_url: Option<String>,
     pub default_answer_title: Option<String>,
     pub visibility: String,
-    pub labels: Vec<LabelDto>,
     pub answer_visibility: String,
 }
 
@@ -69,7 +68,6 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             webhook_url,
             default_answer_title,
             visibility,
-            labels,
             answer_visibility,
         }: FormDto,
     ) -> Result<Self, Self::Error> {
@@ -85,12 +83,6 @@ impl TryFrom<FormDto> for domain::form::models::Form {
                 visibility: visibility.try_into()?,
                 answer_visibility: answer_visibility.try_into()?,
             })
-            .labels(
-                labels
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<_>, _>>()?,
-            )
             .build())
     }
 }
