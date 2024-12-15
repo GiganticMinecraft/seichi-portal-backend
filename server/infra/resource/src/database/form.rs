@@ -242,25 +242,6 @@ impl FormDatabase for ConnectionPool {
                     None => return Ok(None),
                 };
 
-                let labels = query_all_and_values(
-                    r"SELECT label_id, name FROM label_settings_for_forms
-                        INNER JOIN label_for_forms ON label_for_forms.id = label_id
-                        WHERE form_id = ?",
-                    [form_id.into_inner().into()],
-                    txn,
-                )
-                    .await?;
-
-                let labels = labels
-                    .iter()
-                    .map(|rs| {
-                        Ok::<LabelDto, InfraError>(LabelDto {
-                            id: rs.try_get("", "label_id")?,
-                            name: rs.try_get("", "name")?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
 
                 let start_at: Option<DateTime<Utc>> = form.try_get("", "start_at")?;
                 let end_at: Option<DateTime<Utc>> = form.try_get("", "end_at")?;
@@ -278,7 +259,6 @@ impl FormDatabase for ConnectionPool {
                     default_answer_title: form.try_get("", "default_answer_titles.title")?,
                     visibility: form.try_get("", "visibility")?,
                     answer_visibility: form.try_get("", "answer_visibility")?,
-                    labels,
                 }))
             })
         }).await

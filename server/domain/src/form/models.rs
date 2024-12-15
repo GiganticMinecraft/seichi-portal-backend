@@ -50,9 +50,6 @@ pub struct Form {
     pub metadata: FormMeta,
     #[serde(default)]
     pub settings: FormSettings,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_with_size(1..100)"))]
-    #[serde(default)]
-    pub labels: Vec<Label>,
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
