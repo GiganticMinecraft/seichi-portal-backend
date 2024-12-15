@@ -21,22 +21,12 @@ use crate::{
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn create(
-        &self,
-        title: FormTitle,
-        description: FormDescription,
-        user: User,
-    ) -> Result<FormId, Error> {
-        let form_id = self.client.form().create(title, description, user).await?;
-
-        match self.client.form().get(form_id).await? {
-            None => Ok(form_id),
-            Some(form) => {
-                form_outgoing::create(form.try_into()?).await?;
-
-                Ok(form_id)
-            }
-        }
+    async fn create(&self, form: &Form, user: &User) -> Result<(), Error> {
+        self.client
+            .form()
+            .create(form, user)
+            .await
+            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]

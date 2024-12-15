@@ -25,7 +25,7 @@ impl MigrationTrait for Migration {
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS form_meta_data(
-                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    id UUID NOT NULL PRIMARY KEY,
                     title TEXT NOT NULL,
                     description TEXT NOT NULL,
                     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
@@ -45,7 +45,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS form_questions(
                     question_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    form_id INT NOT NULL,
+                    form_id UUID NOT NULL,
                     title TEXT NOT NULL,
                     description TEXT,
                     question_type ENUM('TEXT', 'SINGLE', 'MULTIPLE'),
@@ -72,7 +72,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS response_period(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    form_id INT NOT NULL,
+                    form_id UUID NOT NULL,
                     start_at DATETIME,
                     end_at DATETIME,
                     FOREIGN KEY fk_response_period_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
@@ -85,7 +85,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS form_webhooks(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    form_id INT NOT NULL,
+                    form_id UUID NOT NULL,
                     url TEXT NOT NULL,
                     FOREIGN KEY fk_form_webhooks_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
@@ -97,7 +97,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS answers(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    form_id INT NOT NULL,
+                    form_id UUID NOT NULL,
                     user CHAR(36) NOT NULL,
                     title TEXT,
                     time_stamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -126,7 +126,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS default_answer_titles(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    form_id INT NOT NULL,
+                    form_id UUID NOT NULL,
                     title TEXT,
                     FOREIGN KEY fk_default_answer_titles_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
@@ -186,7 +186,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS label_settings_for_forms(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    form_id INT NOT NULL,
+                    form_id UUID NOT NULL,
                     label_id INT NOT NULL,
                     FOREIGN KEY fk_label_settings_for_forms_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
                     FOREIGN KEY fk_label_settings_for_forms_label_id(label_id) REFERENCES label_for_forms(id) ON DELETE CASCADE

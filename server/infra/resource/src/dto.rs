@@ -1,6 +1,11 @@
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
 use domain::{
-    form::models::{FormSettings, ResponsePeriod},
+    form::models::{
+        DefaultAnswerTitle, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
+        QuestionType, ResponsePeriod, WebhookUrl,
+    },
     user::models::{Role, User},
 };
 use strum_macros::{Display, EnumString};
@@ -9,7 +14,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct QuestionDto {
     pub id: Option<i32>,
-    pub form_id: i32,
+    pub form_id: Uuid,
     pub title: String,
     pub description: Option<String>,
     pub question_type: String,
@@ -31,24 +36,25 @@ impl TryFrom<QuestionDto> for domain::form::models::Question {
             is_required,
         }: QuestionDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Question::builder()
-            .id(id.map(Into::into))
-            .form_id(form_id.into())
-            .title(title)
-            .description(description)
-            .question_type(question_type.try_into()?)
-            .choices(choices)
-            .is_required(is_required)
-            .build())
+        Ok(Question::from_raw_parts(
+            id.map(Into::into),
+            FormId::from(form_id),
+            title,
+            description,
+            QuestionType::from_str(&question_type)?,
+            choices,
+            is_required,
+        ))
     }
 }
 
 pub struct FormDto {
-    pub id: i32,
+    pub id: Uuid,
     pub title: String,
     pub description: Option<String>,
     pub metadata: (DateTime<Utc>, DateTime<Utc>),
-    pub response_period: Option<(DateTime<Utc>, DateTime<Utc>)>,
+    pub start_at: Option<DateTime<Utc>>,
+    pub end_at: Option<DateTime<Utc>>,
     pub webhook_url: Option<String>,
     pub default_answer_title: Option<String>,
     pub visibility: String,
@@ -64,26 +70,27 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             title,
             description,
             metadata,
-            response_period,
+            start_at,
+            end_at,
             webhook_url,
             default_answer_title,
             visibility,
             answer_visibility,
         }: FormDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Form::builder()
-            .id(id)
-            .title(title)
-            .description(description)
-            .metadata(metadata)
-            .settings(FormSettings {
-                response_period: ResponsePeriod::new(response_period),
-                webhook_url: webhook_url.into(),
-                default_answer_title: default_answer_title.into(),
-                visibility: visibility.try_into()?,
-                answer_visibility: answer_visibility.try_into()?,
-            })
-            .build())
+        Ok(domain::form::models::Form::from_raw_parts(
+            FormId::from(id),
+            FormTitle::new(title),
+            FormDescription::new(description),
+            FormMeta::from_raw_parts(metadata.0, metadata.1),
+            FormSettings::from_raw_parts(
+                ResponsePeriod::from_raw_parts(start_at, end_at),
+                WebhookUrl::new(webhook_url),
+                DefaultAnswerTitle::new(default_answer_title),
+                visibility.try_into()?,
+                answer_visibility.try_into()?,
+            ),
+        ))
     }
 }
 
@@ -161,7 +168,7 @@ pub struct FormAnswerDto {
     pub uuid: Uuid,
     pub user_role: Role,
     pub timestamp: DateTime<Utc>,
-    pub form_id: i32,
+    pub form_id: Uuid,
     pub title: Option<String>,
 }
 
@@ -187,8 +194,8 @@ impl TryFrom<FormAnswerDto> for domain::form::models::FormAnswer {
                 role: user_role,
             },
             timestamp,
-            form_id: form_id.into(),
-            title: title.into(),
+            form_id: FormId::from(form_id),
+            title,
         })
     }
 }

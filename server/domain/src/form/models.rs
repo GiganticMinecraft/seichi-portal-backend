@@ -8,52 +8,215 @@ use errors::domain::DomainError;
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
-use typed_builder::TypedBuilder;
 
 use crate::{
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role::Administrator, User},
 };
 
-pub type FormId = types::IntegerId<Form>;
+pub type FormId = types::Id<Form>;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, TypedBuilder, Clone, Getters, Debug, PartialOrd, PartialEq)]
+#[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]
-pub struct FormTitle {
-    #[builder(setter(into))]
-    title: String,
+pub struct FormTitle(String);
+
+impl FormTitle {
+    pub fn new(title: String) -> Self {
+        Self(title)
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Debug, PartialEq)]
-pub struct Form {
-    #[serde(default)]
-    #[builder(setter(into))]
-    pub id: FormId,
-    #[builder(setter(into))]
-    pub title: FormTitle,
-    #[builder(setter(into))]
-    pub description: FormDescription,
-    #[serde(default)]
-    #[builder(setter(into))]
-    pub metadata: FormMeta,
-    #[serde(default)]
-    pub settings: FormSettings,
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, TypedBuilder, Getters, Debug, PartialEq)]
+#[derive(Clone, DerivingVia, Default, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
 ))]
-pub struct FormDescription {
-    description: Option<String>,
+pub struct FormDescription(Option<String>);
+
+impl FormDescription {
+    pub fn new(description: Option<String>) -> Self {
+        Self(description)
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
+pub struct FormSettings {
+    #[serde(default)]
+    response_period: ResponsePeriod,
+    #[serde(default)]
+    webhook_url: WebhookUrl,
+    #[serde(default)]
+    default_answer_title: DefaultAnswerTitle,
+    #[serde(default)]
+    visibility: Visibility,
+    #[serde(default)]
+    answer_visibility: Visibility,
+}
+
+impl FormSettings {
+    pub fn new() -> Self {
+        Self {
+            response_period: ResponsePeriod::new(None, None),
+            webhook_url: WebhookUrl::new(None),
+            default_answer_title: DefaultAnswerTitle::new(None),
+            visibility: Visibility::PUBLIC,
+            answer_visibility: Visibility::PRIVATE,
+        }
+    }
+
+    pub fn from_raw_parts(
+        response_period: ResponsePeriod,
+        webhook_url: WebhookUrl,
+        default_answer_title: DefaultAnswerTitle,
+        visibility: Visibility,
+        answer_visibility: Visibility,
+    ) -> Self {
+        Self {
+            response_period,
+            webhook_url,
+            default_answer_title,
+            visibility,
+            answer_visibility,
+        }
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
+))]
+pub struct WebhookUrl(Option<String>);
+
+impl WebhookUrl {
+    pub fn new(url: Option<String>) -> Self {
+        Self(url)
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
+pub struct ResponsePeriod {
+    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
+    start_at: Option<DateTime<Utc>>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
+    end_at: Option<DateTime<Utc>>,
+}
+
+impl ResponsePeriod {
+    pub fn new(start_at: Option<DateTime<Utc>>, end_at: Option<DateTime<Utc>>) -> Self {
+        Self { start_at, end_at }
+    }
+
+    pub fn from_raw_parts(start_at: Option<DateTime<Utc>>, end_at: Option<DateTime<Utc>>) -> Self {
+        Self { start_at, end_at }
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Debug, EnumString, Display, Default, PartialOrd, PartialEq)]
+pub enum Visibility {
+    PUBLIC,
+    #[default]
+    PRIVATE,
+}
+
+impl TryFrom<String> for Visibility {
+    type Error = DomainError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        use std::str::FromStr;
+        Self::from_str(&value).map_err(Into::into)
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
+))]
+pub struct DefaultAnswerTitle(Option<String>);
+
+impl DefaultAnswerTitle {
+    pub fn new(title: Option<String>) -> Self {
+        Self(title)
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
+pub struct Form {
+    #[serde(default)]
+    id: FormId,
+    title: FormTitle,
+    #[serde(default)]
+    description: FormDescription,
+    #[serde(default)]
+    metadata: FormMeta,
+    #[serde(default)]
+    settings: FormSettings,
+}
+
+impl Form {
+    pub fn new(title: FormTitle, description: FormDescription) -> Self {
+        Self {
+            id: FormId::new(),
+            title,
+            description,
+            metadata: FormMeta::new(),
+            settings: FormSettings::new(),
+        }
+    }
+
+    pub fn from_raw_parts(
+        id: FormId,
+        title: FormTitle,
+        description: FormDescription,
+        metadata: FormMeta,
+        settings: FormSettings,
+    ) -> Self {
+        Self {
+            id,
+            title,
+            description,
+            metadata,
+            settings,
+        }
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+pub struct FormMeta {
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    #[serde(default = "chrono::Utc::now")]
+    created_at: DateTime<Utc>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    #[serde(default = "chrono::Utc::now")]
+    updated_at: DateTime<Utc>,
+}
+
+impl FormMeta {
+    pub fn new() -> Self {
+        Self {
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    pub fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
+        Self {
+            created_at,
+            updated_at,
+        }
+    }
 }
 
 pub type QuestionId = types::IntegerId<Question>;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
 pub struct Question {
     #[serde(default)]
     pub id: Option<QuestionId>,
@@ -65,6 +228,48 @@ pub struct Question {
     #[serde(default)]
     pub choices: Vec<String>,
     pub is_required: bool,
+}
+
+impl Question {
+    pub fn new(
+        id: Option<QuestionId>,
+        form_id: FormId,
+        title: String,
+        description: Option<String>,
+        question_type: QuestionType,
+        choices: Vec<String>,
+        is_required: bool,
+    ) -> Self {
+        Self {
+            id,
+            form_id,
+            title,
+            description,
+            question_type,
+            choices,
+            is_required,
+        }
+    }
+
+    pub fn from_raw_parts(
+        id: Option<QuestionId>,
+        form_id: FormId,
+        title: String,
+        description: Option<String>,
+        question_type: QuestionType,
+        choices: Vec<String>,
+        is_required: bool,
+    ) -> Self {
+        Self {
+            id,
+            form_id,
+            title,
+            description,
+            question_type,
+            choices,
+            is_required,
+        }
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -79,107 +284,11 @@ pub enum QuestionType {
 }
 
 impl TryFrom<String> for QuestionType {
-    type Error = errors::domain::DomainError;
+    type Error = DomainError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         use std::str::FromStr;
         Self::from_str(&value).map_err(Into::into)
-    }
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, TypedBuilder, Debug, PartialEq)]
-pub struct FormMeta {
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    #[serde(default = "chrono::Utc::now")]
-    created_at: DateTime<Utc>,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    #[serde(default = "chrono::Utc::now")]
-    updated_at: DateTime<Utc>,
-}
-
-impl From<(DateTime<Utc>, DateTime<Utc>)> for FormMeta {
-    fn from((created_at, updated_at): (DateTime<Utc>, DateTime<Utc>)) -> Self {
-        Self {
-            created_at,
-            updated_at,
-        }
-    }
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
-pub struct FormSettings {
-    #[serde(default)]
-    pub response_period: ResponsePeriod,
-    #[serde(default)]
-    pub webhook_url: WebhookUrl,
-    #[serde(default)]
-    pub default_answer_title: DefaultAnswerTitle,
-    #[serde(default)]
-    pub visibility: Visibility,
-    #[serde(default)]
-    pub answer_visibility: Visibility,
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, Default, Debug, PartialEq)]
-#[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
-pub struct WebhookUrl {
-    pub webhook_url: Option<String>,
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(TypedBuilder, Serialize, Deserialize, Default, Debug, PartialEq)]
-pub struct ResponsePeriod {
-    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    #[serde(default)]
-    pub start_at: Option<DateTime<Utc>>,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    #[serde(default)]
-    pub end_at: Option<DateTime<Utc>>,
-}
-
-impl ResponsePeriod {
-    pub fn new(periods: Option<(DateTime<Utc>, DateTime<Utc>)>) -> Self {
-        periods.map_or_else(ResponsePeriod::default, |(start_at, end_at)| {
-            ResponsePeriod {
-                start_at: Some(start_at),
-                end_at: Some(end_at),
-            }
-        })
-    }
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, EnumString, Display, Default, PartialOrd, PartialEq)]
-pub enum Visibility {
-    PUBLIC,
-    #[default]
-    PRIVATE,
-}
-
-impl TryFrom<String> for Visibility {
-    type Error = errors::domain::DomainError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        use std::str::FromStr;
-        Self::from_str(&value).map_err(Into::into)
-    }
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(DerivingVia, Default, Debug, PartialEq)]
-#[deriving(From, Into, Serialize(via: Option::<String>), Deserialize(via: Option::<String>))]
-pub struct DefaultAnswerTitle {
-    pub default_answer_title: Option<String>,
-}
-
-impl DefaultAnswerTitle {
-    pub fn unwrap_or_default(&self) -> String {
-        self.default_answer_title
-            .to_owned()
-            .unwrap_or("未設定".to_string())
     }
 }
 
@@ -191,7 +300,7 @@ pub struct FormAnswer {
     pub user: User,
     pub timestamp: DateTime<Utc>,
     pub form_id: FormId,
-    pub title: DefaultAnswerTitle,
+    pub title: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -607,14 +716,6 @@ mod test {
     #[test_case("multiple" => Ok(QuestionType::MULTIPLE); "lower: multiple")]
     fn string_to_question_type(input: &str) -> Result<QuestionType, errors::domain::DomainError> {
         input.to_owned().try_into()
-    }
-
-    proptest! {
-        #[test]
-        fn string_into_from_title(title: String) {
-            let form_title: FormTitle = title.to_owned().into();
-            prop_assert_eq!(form_title, FormTitle::builder().title(title).build());
-        }
     }
 
     proptest! {

@@ -218,7 +218,7 @@ pub async fn get_answer_handler(
             Err(err) => return handle_error(err).into_response(),
         };
 
-        if form.settings.answer_visibility == PRIVATE {
+        if *form.settings().answer_visibility() == PRIVATE {
             return (
                 StatusCode::FORBIDDEN,
                 Json(json!({
@@ -254,7 +254,7 @@ pub async fn get_answer_by_form_id_handler(
 
     if user.role == StandardUser {
         match form_use_case.get_form(form_id).await {
-            Ok(form) if form.settings.answer_visibility == PRIVATE => {
+            Ok(form) if *form.settings().answer_visibility() == PRIVATE => {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(json!({

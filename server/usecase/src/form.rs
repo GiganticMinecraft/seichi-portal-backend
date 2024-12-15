@@ -41,7 +41,11 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         description: FormDescription,
         user: User,
     ) -> Result<FormId, Error> {
-        self.form_repository.create(title, description, user).await
+        let form = Form::new(title, description);
+
+        self.form_repository.create(&form, &user).await?;
+
+        Ok(form.id().to_owned())
     }
 
     pub async fn form_list(
@@ -139,22 +143,24 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         title: DefaultAnswerTitle,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let is_within_period =
-            self.form_repository
-                .get(form_id)
-                .await?
-                .and_then(|form| {
-                    let response_period = form.settings.response_period;
+        let is_within_period = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .and_then(|form| {
+                let response_period = form.settings().response_period();
 
-                    response_period.start_at.zip(response_period.end_at).map(
-                        |(start_at, end_at)| {
-                            let now = Utc::now();
-                            now >= start_at && now <= end_at
-                        },
-                    )
-                })
-                // Note: Noneの場合はフォームが存在していないかそもそも回答期間が無いフォーム
-                .unwrap_or(true);
+                response_period
+                    .start_at()
+                    .to_owned()
+                    .zip(response_period.end_at().to_owned())
+                    .map(|(start_at, end_at)| {
+                        let now = Utc::now();
+                        now >= start_at && now <= end_at
+                    })
+            })
+            // Note: Noneの場合はフォームが存在していないかそもそも回答期間が無いフォーム
+            .unwrap_or(true);
         if is_within_period {
             self.form_repository
                 .post_answer(user, form_id, title, answers)
@@ -280,7 +286,7 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
                     .await?
                     .ok_or(FormNotFound)?;
 
-                form.settings.answer_visibility == PUBLIC
+                form.settings().answer_visibility() == &PUBLIC
             }
         };
 
