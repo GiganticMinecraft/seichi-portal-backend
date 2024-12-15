@@ -387,7 +387,10 @@ impl FormDatabase for ConnectionPool {
                     })?
                     .try_get("", "title")?;
 
-                let default_answer_title = DefaultAnswerTitle::new(default_answer_title)
+                // FIXME: ここにドメイン知識が漏れてしまっていることで
+                //   ここでのドメインエラーが正しくハンドリングできない
+                let default_answer_title = DefaultAnswerTitle::try_new(default_answer_title)
+                    .unwrap()
                     .to_owned()
                     .into_inner()
                     .unwrap_or("未設定".to_string());

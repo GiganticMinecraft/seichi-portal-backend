@@ -3,9 +3,10 @@ use chrono::{DateTime, Utc};
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time, arbitrary_with_size};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
-use errors::domain::DomainError;
+use errors::domain::{DomainError, DomainError::EmptyValue};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
@@ -22,8 +23,12 @@ pub type FormId = types::Id<Form>;
 pub struct FormTitle(String);
 
 impl FormTitle {
-    pub fn new(title: String) -> Self {
-        Self(title)
+    pub fn try_new(title: String) -> Result<Self, DomainError> {
+        if title.is_empty() {
+            return Err(EmptyValue);
+        }
+
+        Ok(Self(title))
     }
 }
 
@@ -34,8 +39,14 @@ impl FormTitle {
 pub struct FormDescription(Option<String>);
 
 impl FormDescription {
-    pub fn new(description: Option<String>) -> Self {
-        Self(description)
+    pub fn try_new(description: Option<String>) -> Result<Self, DomainError> {
+        if let Some(description) = &description {
+            if description.is_empty() {
+                return Err(EmptyValue);
+            }
+        }
+
+        Ok(Self(description))
     }
 }
 
@@ -57,9 +68,9 @@ pub struct FormSettings {
 impl FormSettings {
     pub fn new() -> Self {
         Self {
-            response_period: ResponsePeriod::new(None, None),
-            webhook_url: WebhookUrl::new(None),
-            default_answer_title: DefaultAnswerTitle::new(None),
+            response_period: ResponsePeriod::try_new(None, None).unwrap(),
+            webhook_url: WebhookUrl::try_new(None).unwrap(),
+            default_answer_title: DefaultAnswerTitle::try_new(None).unwrap(),
             visibility: Visibility::PUBLIC,
             answer_visibility: Visibility::PRIVATE,
         }
@@ -89,8 +100,19 @@ impl FormSettings {
 pub struct WebhookUrl(Option<String>);
 
 impl WebhookUrl {
-    pub fn new(url: Option<String>) -> Self {
-        Self(url)
+    pub fn try_new(url: Option<String>) -> Result<Self, DomainError> {
+        if let Some(url) = &url {
+            if url.is_empty() {
+                return Err(EmptyValue);
+            }
+
+            let regex = Regex::new("https://discord.com/api/webhooks/.*").unwrap();
+            if !regex.is_match(url) {
+                return Err(DomainError::InvalidWebhookUrl);
+            }
+        }
+
+        Ok(Self(url))
     }
 }
 
@@ -106,12 +128,16 @@ pub struct ResponsePeriod {
 }
 
 impl ResponsePeriod {
-    pub fn new(start_at: Option<DateTime<Utc>>, end_at: Option<DateTime<Utc>>) -> Self {
-        Self { start_at, end_at }
-    }
-
-    pub fn from_raw_parts(start_at: Option<DateTime<Utc>>, end_at: Option<DateTime<Utc>>) -> Self {
-        Self { start_at, end_at }
+    pub fn try_new(
+        start_at: Option<DateTime<Utc>>,
+        end_at: Option<DateTime<Utc>>,
+    ) -> Result<Self, DomainError> {
+        match (start_at, end_at) {
+            (Some(start_at), Some(end_at)) if start_at > end_at => {
+                Err(DomainError::InvalidResponsePeriod)
+            }
+            _ => Ok(Self { start_at, end_at }),
+        }
     }
 }
 
@@ -139,8 +165,14 @@ impl TryFrom<String> for Visibility {
 pub struct DefaultAnswerTitle(Option<String>);
 
 impl DefaultAnswerTitle {
-    pub fn new(title: Option<String>) -> Self {
-        Self(title)
+    pub fn try_new(title: Option<String>) -> Result<Self, DomainError> {
+        if let Some(title) = &title {
+            if title.is_empty() {
+                return Err(EmptyValue);
+            }
+        }
+
+        Ok(Self(title))
     }
 }
 

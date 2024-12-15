@@ -80,13 +80,13 @@ impl TryFrom<FormDto> for domain::form::models::Form {
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Form::from_raw_parts(
             FormId::from(id),
-            FormTitle::new(title),
-            FormDescription::new(description),
+            FormTitle::try_new(title)?,
+            FormDescription::try_new(description)?,
             FormMeta::from_raw_parts(metadata.0, metadata.1),
             FormSettings::from_raw_parts(
-                ResponsePeriod::from_raw_parts(start_at, end_at),
-                WebhookUrl::new(webhook_url),
-                DefaultAnswerTitle::new(default_answer_title),
+                ResponsePeriod::try_new(start_at, end_at)?,
+                WebhookUrl::try_new(webhook_url)?,
+                DefaultAnswerTitle::try_new(default_answer_title)?,
                 visibility.try_into()?,
                 answer_visibility.try_into()?,
             ),
