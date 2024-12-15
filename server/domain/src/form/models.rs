@@ -177,6 +177,33 @@ impl DefaultAnswerTitle {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+pub struct FormMeta {
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    #[serde(default = "chrono::Utc::now")]
+    created_at: DateTime<Utc>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
+    #[serde(default = "chrono::Utc::now")]
+    updated_at: DateTime<Utc>,
+}
+
+impl FormMeta {
+    pub fn new() -> Self {
+        Self {
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    pub fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
+        Self {
+            created_at,
+            updated_at,
+        }
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct Form {
     #[serde(default)]
@@ -218,30 +245,190 @@ impl Form {
     }
 }
 
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
-pub struct FormMeta {
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    #[serde(default = "chrono::Utc::now")]
-    created_at: DateTime<Utc>,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
-    #[serde(default = "chrono::Utc::now")]
-    updated_at: DateTime<Utc>,
-}
-
-impl FormMeta {
-    pub fn new() -> Self {
-        Self {
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
+impl AuthorizationGuardDefinitions<Form> for Form {
+    /// [`Form`] の作成権限があるかどうかを判定します。
+    ///
+    /// 作成権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{Form, FormSettings},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    /// use domain::form::models::{FormDescription, FormTitle};
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    ///
+    /// let form = Form::new(
+    ///     FormTitle::try_new("テストフォーム".to_string()).unwrap(),
+    ///     FormDescription::try_new(None).unwrap()
+    /// );
+    ///
+    /// assert!(form.can_create(&administrator));
+    /// assert!(!form.can_create(&standard_user));
+    fn can_create(&self, actor: &User) -> bool {
+        actor.role == Administrator
     }
 
-    pub fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
-        Self {
-            created_at,
-            updated_at,
-        }
+    /// [`Form`] の読み取り権限があるかどうかを判定します。
+    ///
+    /// 読み取り権限は以下の条件のどちらかを満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    /// - [`Form`] が全体公開されている場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{Form, FormSettings},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    /// use domain::form::models::{
+    ///     DefaultAnswerTitle, FormDescription, FormId, FormMeta,
+    ///     FormTitle, ResponsePeriod, Visibility, WebhookUrl
+    /// };
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    ///
+    /// let private_form = Form::from_raw_parts(
+    ///     FormId::new(),
+    ///     FormTitle::try_new("非公開フォーム".to_string()).unwrap(),
+    ///     FormDescription::try_new(None).unwrap(),
+    ///     FormMeta::new(),
+    ///     FormSettings::from_raw_parts(
+    ///         ResponsePeriod::try_new(None, None).unwrap(),
+    ///         WebhookUrl::try_new(None).unwrap(),
+    ///         DefaultAnswerTitle::try_new(None).unwrap(),
+    ///         Visibility::PRIVATE,
+    ///         Visibility::PRIVATE
+    ///     )
+    /// );
+    ///
+    ///  let public_form = Form::from_raw_parts(
+    ///     FormId::new(),
+    ///     FormTitle::try_new("公開フォーム".to_string()).unwrap(),
+    ///     FormDescription::try_new(None).unwrap(),
+    ///     FormMeta::new(),
+    ///     FormSettings::from_raw_parts(
+    ///         ResponsePeriod::try_new(None, None).unwrap(),
+    ///         WebhookUrl::try_new(None).unwrap(),
+    ///         DefaultAnswerTitle::try_new(None).unwrap(),
+    ///         Visibility::PUBLIC,
+    ///         Visibility::PUBLIC
+    ///     )
+    /// );
+    ///
+    /// assert!(private_form.can_read(&administrator));
+    /// assert!(!private_form.can_read(&standard_user));
+    /// assert!(public_form.can_read(&administrator));
+    /// assert!(public_form.can_read(&standard_user));
+    fn can_read(&self, actor: &User) -> bool {
+        self.settings.visibility == Visibility::PUBLIC || actor.role == Administrator
+    }
+
+    /// [`Form`] の更新権限があるかどうかを判定します。
+    ///
+    /// 更新権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{Form, FormSettings},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    /// use domain::form::models::{FormDescription, FormTitle};
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    ///
+    /// let form = Form::new(
+    ///     FormTitle::try_new("テストフォーム".to_string()).unwrap(),
+    ///     FormDescription::try_new(None).unwrap()
+    /// );
+    ///
+    /// assert!(form.can_update(&administrator));
+    /// assert!(!form.can_update(&standard_user));
+    fn can_update(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    /// [`Form`] の削除権限があるかどうかを判定します。
+    ///
+    /// 削除権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    ///
+    /// # Examples
+    /// ```
+    /// use domain::{
+    ///     form::models::{Form, FormSettings},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
+    /// };
+    /// use uuid::Uuid;
+    /// use domain::form::models::{FormDescription, FormTitle};
+    ///
+    /// let administrator = User {
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
+    /// };
+    ///
+    ///
+    /// let form = Form::new(
+    ///     FormTitle::try_new("テストフォーム".to_string()).unwrap(),
+    ///     FormDescription::try_new(None).unwrap()
+    /// );
+    ///
+    /// assert!(form.can_delete(&administrator));
+    /// assert!(!form.can_delete(&standard_user));
+    fn can_delete(&self, actor: &User) -> bool {
+        actor.role == Administrator
     }
 }
 
@@ -734,11 +921,8 @@ impl Message {
 
 #[cfg(test)]
 mod test {
-    use proptest::{prop_assert_eq, proptest};
-    use serde_json::json;
-    use test_case::test_case;
-
     use super::*;
+    use test_case::test_case;
 
     #[test_case("TEXT"     => Ok(QuestionType::TEXT); "upper: TEXT")]
     #[test_case("text"     => Ok(QuestionType::TEXT); "lower: text")]
@@ -748,13 +932,5 @@ mod test {
     #[test_case("multiple" => Ok(QuestionType::MULTIPLE); "lower: multiple")]
     fn string_to_question_type(input: &str) -> Result<QuestionType, errors::domain::DomainError> {
         input.to_owned().try_into()
-    }
-
-    proptest! {
-        #[test]
-        fn serialize_from_id(id: i32) {
-            let form_id: FormId = id.into();
-            prop_assert_eq!(json!({"id":form_id}).to_string(), format!(r#"{{"id":{id}}}"#));
-        }
     }
 }
