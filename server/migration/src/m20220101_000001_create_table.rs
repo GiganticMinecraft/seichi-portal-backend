@@ -32,7 +32,7 @@ impl MigrationTrait for Migration {
                     answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     created_by CHAR(36) NOT NULL,
-                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     updated_by CHAR(36) NOT NULL,
                     FOREIGN KEY fk_form_meta_data_created_by(created_by) REFERENCES users(id),
                     FOREIGN KEY fk_form_meta_data_updated_by(updated_by) REFERENCES users(id)
