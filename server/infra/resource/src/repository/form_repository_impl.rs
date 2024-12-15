@@ -3,7 +3,7 @@ use domain::{
     form::models::{
         AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
         FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId,
-        Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        Question, ResponsePeriod, Visibility, WebhookUrl,
     },
     repository::form_repository::FormRepository,
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
@@ -39,25 +39,8 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         }
     }
 
-    async fn public_list(
-        &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<SimpleForm>, Error> {
-        let forms = self.client.form().public_list(offset, limit).await?;
-        forms
-            .into_iter()
-            .map(|form| form.try_into())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
-    }
-
     #[tracing::instrument(skip(self))]
-    async fn list(
-        &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<SimpleForm>, Error> {
+    async fn list(&self, offset: Option<u32>, limit: Option<u32>) -> Result<Vec<Form>, Error> {
         let forms = self.client.form().list(offset, limit).await?;
         forms
             .into_iter()

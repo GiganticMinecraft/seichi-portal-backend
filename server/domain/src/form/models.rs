@@ -17,16 +17,6 @@ use crate::{
 
 pub type FormId = types::IntegerId<Form>;
 
-#[derive(Serialize, Debug)]
-pub struct SimpleForm {
-    pub id: FormId,
-    pub title: FormTitle,
-    pub description: FormDescription,
-    pub response_period: ResponsePeriod,
-    pub labels: Vec<Label>,
-    pub answer_visibility: Visibility,
-}
-
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(DerivingVia, TypedBuilder, Clone, Getters, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]

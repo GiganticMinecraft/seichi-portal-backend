@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::dto::{
     AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
-    NotificationDto, QuestionDto, SimpleFormDto,
+    NotificationDto, QuestionDto,
 };
 
 #[async_trait]
@@ -41,16 +41,11 @@ pub trait FormDatabase: Send + Sync {
         description: FormDescription,
         user: User,
     ) -> Result<FormId, InfraError>;
-    async fn public_list(
-        &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn list(
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<SimpleFormDto>, InfraError>;
+    ) -> Result<Vec<FormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update_form_title(

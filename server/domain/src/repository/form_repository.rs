@@ -6,7 +6,7 @@ use crate::{
     form::models::{
         AnswerId, AnswerLabel, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer,
         FormAnswerContent, FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId,
-        Question, ResponsePeriod, SimpleForm, Visibility, WebhookUrl,
+        Question, ResponsePeriod, Visibility, WebhookUrl,
     },
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::User,
@@ -21,13 +21,7 @@ pub trait FormRepository: Send + Sync + 'static {
         description: FormDescription,
         user: User,
     ) -> Result<FormId, Error>;
-    async fn public_list(
-        &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<SimpleForm>, Error>;
-    async fn list(&self, offset: Option<u32>, limit: Option<u32>)
-        -> Result<Vec<SimpleForm>, Error>;
+    async fn list(&self, offset: Option<u32>, limit: Option<u32>) -> Result<Vec<Form>, Error>;
     async fn get(&self, id: FormId) -> Result<Option<Form>, Error>;
     async fn delete(&self, id: FormId) -> Result<(), Error>;
     async fn update_title(&self, form_id: &FormId, title: &FormTitle) -> Result<(), Error>;
