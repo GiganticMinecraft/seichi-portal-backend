@@ -6,8 +6,7 @@ use axum::{
 };
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, FormId, Label, LabelId, MessageId, OffsetAndLimit,
-        Visibility::PRIVATE,
+        AnswerId, Comment, CommentId, FormId, Label, LabelId, MessageId, Visibility::PRIVATE,
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},
@@ -24,7 +23,7 @@ use crate::{
         form_request_schemas::{
             AnswerUpdateSchema, AnswersPostSchema, CommentPostSchema, FormCreateSchema,
             FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, MessageUpdateSchema,
-            PostedMessageSchema, ReplaceAnswerLabelSchema,
+            OffsetAndLimit, PostedMessageSchema, ReplaceAnswerLabelSchema,
         },
         form_response_schemas::{FormAnswer, MessageContentSchema, SenderSchema},
     },
@@ -66,7 +65,10 @@ pub async fn public_form_list_handler(
         notification_repository: repository.notification_repository(),
     };
 
-    match form_use_case.public_form_list(offset_and_limit).await {
+    match form_use_case
+        .public_form_list(offset_and_limit.offset, offset_and_limit.limit)
+        .await
+    {
         Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -81,7 +83,10 @@ pub async fn form_list_handler(
         notification_repository: repository.notification_repository(),
     };
 
-    match form_use_case.form_list(offset_and_limit).await {
+    match form_use_case
+        .form_list(offset_and_limit.offset, offset_and_limit.limit)
+        .await
+    {
         Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
         Err(err) => handle_error(err).into_response(),
     }

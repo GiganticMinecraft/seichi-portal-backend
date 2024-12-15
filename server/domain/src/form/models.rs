@@ -17,14 +17,6 @@ use crate::{
 
 pub type FormId = types::IntegerId<Form>;
 
-#[derive(Deserialize, Debug)]
-pub struct OffsetAndLimit {
-    #[serde(default)]
-    pub offset: Option<i32>,
-    #[serde(default)]
-    pub limit: Option<i32>,
-}
-
 #[derive(Serialize, Debug)]
 pub struct SimpleForm {
     pub id: FormId,

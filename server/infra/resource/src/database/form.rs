@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
-        Question, ResponsePeriod, Visibility, WebhookUrl,
+        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, Question,
+        ResponsePeriod, Visibility, WebhookUrl,
     },
     user::models::{Role, User},
 };
@@ -83,7 +83,8 @@ impl FormDatabase for ConnectionPool {
 
     async fn public_list(
         &self,
-        OffsetAndLimit { offset, limit }: OffsetAndLimit,
+        offset: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<SimpleFormDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -153,7 +154,8 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn list(
         &self,
-        OffsetAndLimit { offset, limit }: OffsetAndLimit,
+        offset: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<SimpleFormDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
