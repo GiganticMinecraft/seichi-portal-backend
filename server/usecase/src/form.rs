@@ -3,7 +3,7 @@ use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswerContent, FormDescription,
         FormId, FormTitle, Label, LabelId, Message, MessageId, Question, ResponsePeriod,
-        SimpleForm, Visibility, Visibility::PUBLIC, WebhookUrl,
+        Visibility, Visibility::PUBLIC, WebhookUrl,
     },
     notification::models::{Notification, NotificationSource},
     repository::{
@@ -44,19 +44,11 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         self.form_repository.create(title, description, user).await
     }
 
-    pub async fn public_form_list(
-        &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<SimpleForm>, Error> {
-        self.form_repository.public_list(offset, limit).await
-    }
-
     pub async fn form_list(
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<SimpleForm>, Error> {
+    ) -> Result<Vec<Form>, Error> {
         self.form_repository.list(offset, limit).await
     }
 

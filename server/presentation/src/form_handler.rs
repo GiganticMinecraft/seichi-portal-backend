@@ -65,13 +65,15 @@ pub async fn public_form_list_handler(
         notification_repository: repository.notification_repository(),
     };
 
-    match form_use_case
-        .public_form_list(offset_and_limit.offset, offset_and_limit.limit)
-        .await
-    {
-        Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    // FIXME: public_form_list を実装する
+    todo!();
+    // match form_use_case
+    //     .public_form_list(offset_and_limit.offset, offset_and_limit.limit)
+    //     .await
+    // {
+    //     Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
+    //     Err(err) => handle_error(err).into_response(),
+    // }
 }
 
 pub async fn form_list_handler(
