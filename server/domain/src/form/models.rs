@@ -73,6 +73,7 @@ pub type QuestionId = types::IntegerId<Question>;
 pub struct Question {
     #[serde(default)]
     pub id: Option<QuestionId>,
+    pub form_id: FormId,
     pub title: String,
     pub description: Option<String>,
     pub question_type: QuestionType,

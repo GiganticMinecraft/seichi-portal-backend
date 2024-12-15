@@ -9,6 +9,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct QuestionDto {
     pub id: Option<i32>,
+    pub form_id: i32,
     pub title: String,
     pub description: Option<String>,
     pub question_type: String,
@@ -22,6 +23,7 @@ impl TryFrom<QuestionDto> for domain::form::models::Question {
     fn try_from(
         QuestionDto {
             id,
+            form_id,
             title,
             description,
             question_type,
@@ -31,6 +33,7 @@ impl TryFrom<QuestionDto> for domain::form::models::Question {
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Question::builder()
             .id(id.map(Into::into))
+            .form_id(form_id.into())
             .title(title)
             .description(description)
             .question_type(question_type.try_into()?)

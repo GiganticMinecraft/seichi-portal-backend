@@ -243,7 +243,7 @@ impl FormDatabase for ConnectionPool {
                 };
 
                 let questions = query_all_and_values(
-                    r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
+                    r"SELECT question_id, form_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
                     [form_id.into_inner().into()],
                     txn,
                 )
@@ -283,6 +283,7 @@ impl FormDatabase for ConnectionPool {
 
                         Ok(QuestionDto {
                             id: Some(question_id),
+                            form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             description: rs.try_get("", "description")?,
                             question_type: rs.try_get("", "question_type")?,
@@ -920,7 +921,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let questions_rs = query_all_and_values(
-                    r"SELECT question_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
+                    r"SELECT question_id, form_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
                     [form_id.into_inner().into()],
                     txn,
                 ).await?;
@@ -955,6 +956,7 @@ impl FormDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(QuestionDto {
                             id: Some(question_id),
+                            form_id: question_rs.try_get("", "form_id")?,
                             title: question_rs.try_get("", "title")?,
                             description: question_rs.try_get("", "description")?,
                             question_type: question_rs.try_get("", "question_type")?,
