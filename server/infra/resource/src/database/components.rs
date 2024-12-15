@@ -35,12 +35,7 @@ pub trait DatabaseComponents: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormDatabase: Send + Sync {
-    async fn create(
-        &self,
-        title: FormTitle,
-        description: FormDescription,
-        user: User,
-    ) -> Result<FormId, InfraError>;
+    async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError>;
     async fn list(
         &self,
         offset: Option<u32>,

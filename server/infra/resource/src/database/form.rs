@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
     form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, FormAnswer, FormAnswerContent,
+        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
         FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, Question,
         ResponsePeriod, Visibility, WebhookUrl,
     },
@@ -33,38 +33,37 @@ use crate::{
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn create(
-        &self,
-        title: FormTitle,
-        description: FormDescription,
-        user: User,
-    ) -> Result<FormId, InfraError> {
+    async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError> {
+        let form_id = form.id().to_owned();
+        let form_title = form.title().to_owned();
+        let description = form.description().to_owned();
+        let user_id = user.id.to_owned();
+
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                let form_id = execute_and_values(
-                    "INSERT INTO form_meta_data (title, description, created_by, updated_by)
-                        VALUES (?, ?, ?, ?)",
+                execute_and_values(
+                    r#"INSERT INTO form_meta_data (title, description, created_by, updated_by)
+                            VALUES (?, ?, ?, ?)"#,
                     [
-                        title.title().to_owned().into(),
+                        form_title.into_inner().into(),
                         description.into_inner().into(),
-                        user.id.to_string().into(),
-                        user.id.to_string().into(),
+                        user_id.to_string().into(),
+                        user_id.to_string().into(),
                     ],
                     txn,
                 )
-                .await?
-                .last_insert_id() as i32;
+                .await?;
 
                 let insert_default_answer_title_table = execute_and_values(
                     "INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
-                    [form_id.into()],
+                    [form_id.to_owned().into_inner().into()],
                     txn,
                 );
 
                 let insert_response_period_table = execute_and_values(
                     "INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, \
                      NULL)",
-                    [form_id.into()],
+                    [form_id.to_owned().into_inner().into()],
                     txn,
                 );
 
@@ -74,7 +73,7 @@ impl FormDatabase for ConnectionPool {
                 )
                 .await?;
 
-                Ok::<_, InfraError>(form_id.into())
+                Ok::<_, InfraError>(())
             })
         })
         .await
@@ -105,9 +104,6 @@ impl FormDatabase for ConnectionPool {
                 form_query
                     .into_iter()
                     .map(|query_rs| {
-                        let start_at: Option<DateTime<Utc>> = query_rs.try_get("", "start_at")?;
-                        let end_at: Option<DateTime<Utc>> = query_rs.try_get("", "end_at")?;
-
                         Ok::<_, InfraError>(FormDto {
                             id: query_rs.try_get("", "form_id")?,
                             title: query_rs.try_get("", "form_title")?,
@@ -116,7 +112,8 @@ impl FormDatabase for ConnectionPool {
                                 query_rs.try_get("", "created_at")?,
                                 query_rs.try_get("", "updated_at")?,
                             ),
-                            response_period: start_at.zip(end_at),
+                            start_at: query_rs.try_get("", "start_at")?,
+                            end_at: query_rs.try_get("", "end_at")?,
                             webhook_url: query_rs.try_get("", "url")?,
                             default_answer_title: query_rs.try_get("", "default_answer_titles.title")?,
                             visibility: query_rs.try_get("", "visibility")?,
@@ -149,10 +146,6 @@ impl FormDatabase for ConnectionPool {
                     None => return Ok(None),
                 };
 
-
-                let start_at: Option<DateTime<Utc>> = form.try_get("", "start_at")?;
-                let end_at: Option<DateTime<Utc>> = form.try_get("", "end_at")?;
-
                 Ok::<_, InfraError>(Some(FormDto {
                     id: form_id.into_inner(),
                     title: form.try_get("", "form_title")?,
@@ -161,7 +154,8 @@ impl FormDatabase for ConnectionPool {
                         form.try_get("", "created_at")?,
                         form.try_get("", "updated_at")?,
                     ),
-                    response_period: start_at.zip(end_at),
+                    start_at: form.try_get("", "start_at")?,
+                    end_at: form.try_get("", "end_at")?,
                     webhook_url: form.try_get("", "url")?,
                     default_answer_title: form.try_get("", "default_answer_titles.title")?,
                     visibility: form.try_get("", "visibility")?,
@@ -197,7 +191,7 @@ impl FormDatabase for ConnectionPool {
         form_title: &FormTitle,
     ) -> Result<(), InfraError> {
         let form_id = form_id.into_inner();
-        let form_title = form_title.title().to_owned();
+        let form_title = form_title.to_owned().into_inner();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -223,7 +217,7 @@ impl FormDatabase for ConnectionPool {
         form_description: &FormDescription,
     ) -> Result<(), InfraError> {
         let form_id = form_id.into_inner();
-        let form_description = form_description.description().to_owned();
+        let form_description = form_description.to_owned().into_inner();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -249,8 +243,8 @@ impl FormDatabase for ConnectionPool {
         response_period: &ResponsePeriod,
     ) -> Result<(), InfraError> {
         let form_id = form_id.into_inner();
-        let start_at = response_period.start_at;
-        let end_at = response_period.end_at;
+        let start_at = response_period.start_at().to_owned();
+        let end_at = response_period.end_at().to_owned();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -274,7 +268,7 @@ impl FormDatabase for ConnectionPool {
         webhook_url: &WebhookUrl,
     ) -> Result<(), InfraError> {
         let form_id = form_id.into_inner();
-        let webhook_url = webhook_url.webhook_url.to_owned();
+        let webhook_url = webhook_url.to_owned().into_inner();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -298,7 +292,7 @@ impl FormDatabase for ConnectionPool {
         default_answer_title: &DefaultAnswerTitle,
     ) -> Result<(), InfraError> {
         let form_id = form_id.into_inner();
-        let default_answer_title = default_answer_title.default_answer_title.to_owned();
+        let default_answer_title = default_answer_title.to_owned().into_inner();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -393,10 +387,10 @@ impl FormDatabase for ConnectionPool {
                     })?
                     .try_get("", "title")?;
 
-                let default_answer_title = DefaultAnswerTitle {
-                    default_answer_title,
-                }
-                .unwrap_or_default();
+                let default_answer_title = DefaultAnswerTitle::new(default_answer_title)
+                    .to_owned()
+                    .into_inner()
+                    .unwrap_or("未設定".to_string());
 
                 let embed_title = regex.find_iter(&default_answer_title.to_owned()).fold(
                     default_answer_title,
@@ -1117,12 +1111,14 @@ impl FormDatabase for ConnectionPool {
 
                 let params = label_ids
                     .into_iter()
-                    .flat_map(|label_id| [form_id.into_inner(), label_id.into_inner()])
+                    .flat_map(|label_id| {
+                        [form_id.into_inner().into(), label_id.into_inner().into()]
+                    })
                     .collect_vec();
 
                 batch_insert(
                     "INSERT INTO label_settings_for_forms (form_id, label_id) VALUES (?, ?)",
-                    params.into_iter().map(|value| value.into()),
+                    params,
                     txn,
                 )
                 .await?;
@@ -1232,7 +1228,7 @@ impl FormDatabase for ConnectionPool {
                     user_role: answers.user.role.to_owned(),
                     timestamp: answers.timestamp,
                     form_id: answers.form_id.into_inner().to_owned(),
-                    title: answers.title.default_answer_title.to_owned(),
+                    title: answers.title.to_owned(),
                 },
                 sender: user,
                 body,

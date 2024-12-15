@@ -88,7 +88,7 @@ impl From<domain::form::models::AnswerLabel> for AnswerLabels {
 pub(crate) struct FormAnswer {
     id: i32,
     user: User,
-    form_id: i32,
+    form_id: Uuid,
     timestamp: DateTime<Utc>,
     title: Option<String>,
     answers: Vec<AnswerContent>,
@@ -108,7 +108,7 @@ impl FormAnswer {
             user: answer.user.into(),
             form_id: answer.form_id.into(),
             timestamp: answer.timestamp,
-            title: answer.title.default_answer_title,
+            title: answer.title,
             answers: answer_contents.into_iter().map(Into::into).collect_vec(),
             comments: comments.into_iter().map(Into::into).collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
