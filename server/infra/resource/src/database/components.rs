@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::models::{
         AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
-        Question, ResponsePeriod, Visibility, WebhookUrl,
+        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, Question,
+        ResponsePeriod, Visibility, WebhookUrl,
     },
     notification::models::{Notification, NotificationId},
     user::models::{Role, User},
@@ -43,11 +43,13 @@ pub trait FormDatabase: Send + Sync {
     ) -> Result<FormId, InfraError>;
     async fn public_list(
         &self,
-        offset_and_limit: OffsetAndLimit,
+        offset: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn list(
         &self,
-        offset_and_limit: OffsetAndLimit,
+        offset: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<SimpleFormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;

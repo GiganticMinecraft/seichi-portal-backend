@@ -5,6 +5,12 @@ use domain::form::models::{
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
+pub struct OffsetAndLimit {
+    pub offset: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct FormCreateSchema {
     pub title: FormTitle,
     pub description: FormDescription,
