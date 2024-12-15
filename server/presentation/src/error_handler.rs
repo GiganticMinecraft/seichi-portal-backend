@@ -32,6 +32,30 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             )
                 .into_response()
         }
+        DomainError::EmptyValue => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "EMPTY_VALUE",
+                "reason": "Empty value error."
+            })),
+        )
+            .into_response(),
+        DomainError::InvalidResponsePeriod => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "INVALID_RESPONSE_PERIOD",
+                "reason": "Invalid response period."
+            })),
+        )
+            .into_response(),
+        DomainError::InvalidWebhookUrl => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "INVALID_WEBHOOK_URL",
+                "reason": "Invalid webhook url. (Seichi-Portal only supports Discord webhook)"
+            })),
+        )
+            .into_response(),
     }
 }
 

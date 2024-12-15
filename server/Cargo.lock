@@ -931,6 +931,7 @@ dependencies = [
  "mockall",
  "proptest",
  "proptest-derive",
+ "regex",
  "serde",
  "serde_json",
  "strum",
