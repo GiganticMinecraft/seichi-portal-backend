@@ -77,6 +77,7 @@ pub async fn public_form_list_handler(
 }
 
 pub async fn form_list_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> impl IntoResponse {
@@ -86,7 +87,7 @@ pub async fn form_list_handler(
     };
 
     match form_use_case
-        .form_list(offset_and_limit.offset, offset_and_limit.limit)
+        .form_list(&user, offset_and_limit.offset, offset_and_limit.limit)
         .await
     {
         Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
@@ -95,6 +96,7 @@ pub async fn form_list_handler(
 }
 
 pub async fn get_form_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
@@ -104,7 +106,7 @@ pub async fn get_form_handler(
     };
 
     // FIXME: form から questions を剥がしたので、usecase で questions を取得する必要がある
-    match form_use_case.get_form(form_id).await {
+    match form_use_case.get_form(&user, form_id).await {
         Ok(form) => (StatusCode::OK, Json(form)).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -213,7 +215,10 @@ pub async fn get_answer_handler(
     };
 
     if user.role == StandardUser {
-        let form = match form_use_case.get_form(answer_dto.form_answer.form_id).await {
+        let form = match form_use_case
+            .get_form(&user, answer_dto.form_answer.form_id)
+            .await
+        {
             Ok(form) => form,
             Err(err) => return handle_error(err).into_response(),
         };
@@ -253,7 +258,7 @@ pub async fn get_answer_by_form_id_handler(
     };
 
     if user.role == StandardUser {
-        match form_use_case.get_form(form_id).await {
+        match form_use_case.get_form(&user, form_id).await {
             Ok(form) if *form.settings().answer_visibility() == PRIVATE => {
                 return (
                     StatusCode::FORBIDDEN,
@@ -372,17 +377,19 @@ pub async fn post_form_comment(
         notification_repository: repository.notification_repository(),
     };
 
+    // FIXME: コメントは handler 側で作られるべきではないし、
+    //  コメントの id がデータベースで降られるなら Option になるべき。
     let comment = Comment {
         // NOTE: コメントはデータベースで insert した後に id が振られるのでデフォルト値を入れておく
         comment_id: Default::default(),
         answer_id: comment_schema.answer_id,
         content: comment_schema.content,
         timestamp: chrono::Utc::now(),
-        commented_by: user,
+        commented_by: user.to_owned(),
     };
 
     match form_use_case
-        .post_comment(comment, comment_schema.answer_id)
+        .post_comment(&user, comment, comment_schema.answer_id)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),

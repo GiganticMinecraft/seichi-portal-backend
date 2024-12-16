@@ -11,6 +11,7 @@ use domain::{
 };
 use errors::{domain::DomainError, infra::InfraError::AnswerNotFount, Error};
 use futures::{stream, stream::StreamExt};
+use itertools::Itertools;
 use outgoing::form_outgoing;
 
 use crate::{
@@ -30,19 +31,34 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn list(&self, offset: Option<u32>, limit: Option<u32>) -> Result<Vec<Form>, Error> {
-        let forms = self.client.form().list(offset, limit).await?;
-        forms
+    async fn list(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<Vec<AuthorizationGuard<Form, Read>>, Error> {
+        self.client
+            .form()
+            .list(offset, limit)
+            .await?
             .into_iter()
-            .map(|form| form.try_into())
+            .map(TryInto::<Form>::try_into)
+            .map_ok(Into::<AuthorizationGuard<Form, Create>>::into)
+            .map_ok(AuthorizationGuard::<_, Create>::into_read)
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get(&self, id: FormId) -> Result<Option<Form>, Error> {
-        let form = self.client.form().get(id).await?;
-        form.map(TryInto::try_into).transpose().map_err(Into::into)
+    async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<Form, Read>>, Error> {
+        Ok(self
+            .client
+            .form()
+            .get(id)
+            .await?
+            .map(TryInto::<Form>::try_into)
+            .transpose()?
+            .map(Into::<AuthorizationGuard<Form, Create>>::into)
+            .map(AuthorizationGuard::<_, Create>::into_read))
     }
 
     #[tracing::instrument(skip(self))]
@@ -153,7 +169,15 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
         title: DefaultAnswerTitle,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        match self.get(form_id).await? {
+        let form = self
+            .client
+            .form()
+            .get(form_id)
+            .await?
+            .map(TryInto::<Form>::try_into)
+            .transpose()?;
+
+        match form {
             None => Ok(()),
             Some(form) => {
                 let questions = self.get_questions(form_id).await?;
@@ -286,7 +310,15 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             id: answer_id.into_inner(),
         })?;
 
-        match self.get(posted_answers.form_id).await? {
+        let form = self
+            .client
+            .form()
+            .get(posted_answers.form_id)
+            .await?
+            .map(TryInto::<Form>::try_into)
+            .transpose()?;
+
+        match form {
             None => Ok(()),
             Some(form) => {
                 form_outgoing::post_comment(&form, comment, &posted_answers).await?;

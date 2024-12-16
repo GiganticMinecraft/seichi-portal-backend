@@ -16,8 +16,12 @@ use crate::{
 #[async_trait]
 pub trait FormRepository: Send + Sync + 'static {
     async fn create(&self, form: &Form, user: &User) -> Result<(), Error>;
-    async fn list(&self, offset: Option<u32>, limit: Option<u32>) -> Result<Vec<Form>, Error>;
-    async fn get(&self, id: FormId) -> Result<Option<Form>, Error>;
+    async fn list(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<Vec<AuthorizationGuard<Form, Read>>, Error>;
+    async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<Form, Read>>, Error>;
     async fn delete(&self, id: FormId) -> Result<(), Error>;
     async fn update_title(&self, form_id: &FormId, title: &FormTitle) -> Result<(), Error>;
     async fn update_description(

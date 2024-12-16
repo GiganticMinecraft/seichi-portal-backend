@@ -921,8 +921,9 @@ impl Message {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use test_case::test_case;
+
+    use super::*;
 
     #[test_case("TEXT"     => Ok(QuestionType::TEXT); "upper: TEXT")]
     #[test_case("text"     => Ok(QuestionType::TEXT); "lower: text")]
