@@ -50,17 +50,26 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
 
     pub async fn form_list(
         &self,
+        actor: &User,
         offset: Option<u32>,
         limit: Option<u32>,
     ) -> Result<Vec<Form>, Error> {
-        self.form_repository.list(offset, limit).await
+        self.form_repository
+            .list(offset, limit)
+            .await?
+            .into_iter()
+            .map(|form| form.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
-    pub async fn get_form(&self, form_id: FormId) -> Result<Form, Error> {
+    pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<Form, Error> {
         self.form_repository
             .get(form_id)
             .await?
-            .ok_or(Error::from(FormNotFound))
+            .ok_or(Error::from(FormNotFound))?
+            .try_into_read(actor)
+            .map_err(Into::into)
     }
 
     pub async fn delete_form(&self, form_id: FormId) -> Result<(), Error> {
@@ -143,10 +152,13 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         title: DefaultAnswerTitle,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
+        // TODO: answers に対して AuthorizationGuard を実装する必要がある
         let is_within_period = self
             .form_repository
             .get(form_id)
             .await?
+            .map(|form| form.try_into_read(user))
+            .transpose()?
             .and_then(|form| {
                 let response_period = form.settings().response_period();
 
@@ -270,7 +282,14 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         self.form_repository.put_questions(form_id, questions).await
     }
 
-    pub async fn post_comment(&self, comment: Comment, answer_id: AnswerId) -> Result<(), Error> {
+    pub async fn post_comment(
+        &self,
+        actor: &User,
+        comment: Comment,
+        answer_id: AnswerId,
+    ) -> Result<(), Error> {
+        // TODO: ドメイン知識が UseCase に紛れ込んでいる。
+        //      Comment に対して AuthorizationGuard を実装する必要がある
         let can_post_comment = match comment.commented_by.role {
             Administrator => true,
             StandardUser => {
@@ -284,9 +303,10 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
                     .form_repository
                     .get(answer.form_id)
                     .await?
-                    .ok_or(FormNotFound)?;
+                    .ok_or(FormNotFound)?
+                    .try_into_read(actor)?;
 
-                form.settings().answer_visibility() == &PUBLIC
+                *form.settings().visibility() == PUBLIC
             }
         };
 
