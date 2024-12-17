@@ -1,7 +1,55 @@
 use chrono::{DateTime, Utc};
+use domain::form::models::FormId;
 use itertools::Itertools;
 use serde::Serialize;
 use uuid::Uuid;
+
+#[derive(Serialize, Debug)]
+pub(crate) struct ResponsePeriodSchema {
+    start_at: Option<DateTime<Utc>>,
+    end_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) enum AnswerVisibility {
+    #[serde(rename = "PUBLIC")]
+    Public,
+    #[serde(rename = "PRIVATE")]
+    Private,
+}
+
+impl From<domain::form::models::Visibility> for AnswerVisibility {
+    fn from(val: domain::form::models::Visibility) -> Self {
+        match val {
+            domain::form::models::Visibility::PUBLIC => AnswerVisibility::Public,
+            domain::form::models::Visibility::PRIVATE => AnswerVisibility::Private,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormListSchema {
+    id: FormId,
+    title: String,
+    description: Option<String>,
+    response_period: ResponsePeriodSchema,
+    answer_visibility: AnswerVisibility,
+}
+
+impl From<domain::form::models::Form> for FormListSchema {
+    fn from(form: domain::form::models::Form) -> Self {
+        FormListSchema {
+            id: form.id().to_owned(),
+            title: form.title().to_owned().into_inner(),
+            description: form.description().to_owned().into_inner(),
+            response_period: ResponsePeriodSchema {
+                start_at: form.settings().response_period().start_at().to_owned(),
+                end_at: form.settings().response_period().end_at().to_owned(),
+            },
+            answer_visibility: form.settings().answer_visibility().to_owned().into(),
+        }
+    }
+}
 
 #[derive(Serialize, Debug)]
 pub(crate) enum Role {

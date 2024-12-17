@@ -142,7 +142,9 @@ impl ResponsePeriod {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, EnumString, Display, Default, PartialOrd, PartialEq)]
+#[derive(
+    Serialize, Deserialize, Debug, EnumString, Display, Copy, Clone, Default, PartialOrd, PartialEq,
+)]
 pub enum Visibility {
     PUBLIC,
     #[default]

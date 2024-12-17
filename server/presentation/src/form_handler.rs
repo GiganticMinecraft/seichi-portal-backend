@@ -25,7 +25,7 @@ use crate::{
             FormQuestionUpdateSchema, FormUpdateSchema, LabelSchema, MessageUpdateSchema,
             OffsetAndLimit, PostedMessageSchema, ReplaceAnswerLabelSchema,
         },
-        form_response_schemas::{FormAnswer, MessageContentSchema, SenderSchema},
+        form_response_schemas::{FormAnswer, FormListSchema, MessageContentSchema, SenderSchema},
     },
 };
 
@@ -56,26 +56,6 @@ pub async fn create_form_handler(
     }
 }
 
-pub async fn public_form_list_handler(
-    State(repository): State<RealInfrastructureRepository>,
-    Query(offset_and_limit): Query<OffsetAndLimit>,
-) -> impl IntoResponse {
-    let form_use_case = FormUseCase {
-        form_repository: repository.form_repository(),
-        notification_repository: repository.notification_repository(),
-    };
-
-    // FIXME: public_form_list を実装する
-    todo!();
-    // match form_use_case
-    //     .public_form_list(offset_and_limit.offset, offset_and_limit.limit)
-    //     .await
-    // {
-    //     Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
-    //     Err(err) => handle_error(err).into_response(),
-    // }
-}
-
 pub async fn form_list_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -90,7 +70,14 @@ pub async fn form_list_handler(
         .form_list(&user, offset_and_limit.offset, offset_and_limit.limit)
         .await
     {
-        Ok(forms) => (StatusCode::OK, Json(forms)).into_response(),
+        Ok(forms) => {
+            let form_list_schema = forms
+                .into_iter()
+                .map(Into::<FormListSchema>::into)
+                .collect_vec();
+
+            (StatusCode::OK, Json(form_list_schema)).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }

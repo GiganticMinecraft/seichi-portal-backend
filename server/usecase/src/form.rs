@@ -48,19 +48,20 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         Ok(form.id().to_owned())
     }
 
+    /// `actor` が参照可能なフォームのリストを取得する
     pub async fn form_list(
         &self,
         actor: &User,
         offset: Option<u32>,
         limit: Option<u32>,
     ) -> Result<Vec<Form>, Error> {
-        self.form_repository
+        Ok(self
+            .form_repository
             .list(offset, limit)
             .await?
             .into_iter()
-            .map(|form| form.try_into_read(actor))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+            .flat_map(|form| form.try_into_read(actor))
+            .collect::<Vec<_>>())
     }
 
     pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<Form, Error> {
