@@ -2,7 +2,7 @@ use derive_getters::Getters;
 use serde::Deserialize;
 
 use crate::{
-    form::models::MessageId, types::authorization_guard::AuthorizationGuardDefinitions,
+    form::message::models::MessageId, types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::User,
 };
 
@@ -27,7 +27,7 @@ impl Notification {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::MessageId,
+    ///     form::message::models::MessageId,
     ///     notification::models::{Notification, NotificationSource},
     ///     user::models::User,
     /// };
@@ -56,7 +56,7 @@ impl Notification {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::MessageId,
+    ///     form::message::models::MessageId,
     ///     notification::models::{Notification, NotificationId, NotificationSource},
     ///     user::models::User,
     /// };

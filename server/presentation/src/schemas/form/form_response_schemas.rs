@@ -91,8 +91,8 @@ pub(crate) struct AnswerContent {
     answer: String,
 }
 
-impl From<domain::form::models::FormAnswerContent> for AnswerContent {
-    fn from(val: domain::form::models::FormAnswerContent) -> Self {
+impl From<domain::form::answer::models::FormAnswerContent> for AnswerContent {
+    fn from(val: domain::form::answer::models::FormAnswerContent) -> Self {
         AnswerContent {
             question_id: val.question_id.into(),
             answer: val.answer,
@@ -107,8 +107,8 @@ pub(crate) struct AnswerComment {
     commented_by: User,
 }
 
-impl From<domain::form::models::Comment> for AnswerComment {
-    fn from(val: domain::form::models::Comment) -> Self {
+impl From<domain::form::comment::models::Comment> for AnswerComment {
+    fn from(val: domain::form::comment::models::Comment) -> Self {
         AnswerComment {
             content: val.content,
             timestamp: val.timestamp,
@@ -123,8 +123,8 @@ pub(crate) struct AnswerLabels {
     name: String,
 }
 
-impl From<domain::form::models::AnswerLabel> for AnswerLabels {
-    fn from(val: domain::form::models::AnswerLabel) -> Self {
+impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
+    fn from(val: domain::form::answer::models::AnswerLabel) -> Self {
         AnswerLabels {
             id: val.id.into(),
             name: val.name,
@@ -146,10 +146,10 @@ pub(crate) struct FormAnswer {
 
 impl FormAnswer {
     pub fn new(
-        answer: domain::form::models::FormAnswer,
-        answer_contents: Vec<domain::form::models::FormAnswerContent>,
-        comments: Vec<domain::form::models::Comment>,
-        labels: Vec<domain::form::models::AnswerLabel>,
+        answer: domain::form::answer::models::FormAnswer,
+        answer_contents: Vec<domain::form::answer::models::FormAnswerContent>,
+        comments: Vec<domain::form::comment::models::Comment>,
+        labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
         FormAnswer {
             id: answer.id.into(),

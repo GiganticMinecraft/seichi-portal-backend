@@ -1,6 +1,10 @@
-use domain::form::models::{
-    AnswerId, DefaultAnswerTitle, FormAnswerContent, FormDescription, FormId, FormTitle, LabelId,
-    Question, ResponsePeriod, Visibility, WebhookUrl,
+use domain::form::{
+    answer::models::{AnswerId, FormAnswerContent},
+    models::{
+        DefaultAnswerTitle, FormDescription, FormId, FormTitle, LabelId, ResponsePeriod,
+        Visibility, WebhookUrl,
+    },
+    question::models::Question,
 };
 use serde::Deserialize;
 

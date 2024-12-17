@@ -1,5 +1,10 @@
 use domain::{
-    form::models::{Comment, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent, Question},
+    form::{
+        answer::models::{FormAnswer, FormAnswerContent},
+        comment::models::Comment,
+        models::{DefaultAnswerTitle, Form},
+        question::models::Question,
+    },
     user::models::User,
 };
 use errors::infra::InfraError;

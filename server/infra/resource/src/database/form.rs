@@ -3,10 +3,15 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
-    form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, Question,
-        ResponsePeriod, Visibility, WebhookUrl,
+    form::{
+        answer::models::{AnswerId, FormAnswer, FormAnswerContent},
+        comment::models::{Comment, CommentId},
+        message::models::{Message, MessageId},
+        models::{
+            DefaultAnswerTitle, Form, FormDescription, FormId, FormTitle, Label, LabelId,
+            ResponsePeriod, Visibility, WebhookUrl,
+        },
+        question::models::Question,
     },
     user::models::{Role, User},
 };
@@ -642,7 +647,7 @@ impl FormDatabase for ConnectionPool {
                     .rev()
                     .zip((1..=last_insert_id).rev())
                     .filter(|(q, _)| {
-                        !q.choices.is_empty() && q.question_type != domain::form::models::QuestionType::TEXT
+                        !q.choices.is_empty() && q.question_type != domain::form::question::models::QuestionType::TEXT
                     })
                     .flat_map(|(question, question_id)| {
                         question
@@ -725,7 +730,7 @@ impl FormDatabase for ConnectionPool {
                 .rev()
                 .zip((1..=last_insert_id).rev())
                 .filter(|(q, _)| {
-                    !q.choices.is_empty() && q.question_type != domain::form::models::QuestionType::TEXT
+                    !q.choices.is_empty() && q.question_type != domain::form::question::models::QuestionType::TEXT
                 })
                 .flat_map(|(question, question_id)| {
                     question

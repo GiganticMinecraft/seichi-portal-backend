@@ -2,9 +2,12 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use domain::{
-    form::models::{
-        DefaultAnswerTitle, FormDescription, FormId, FormMeta, FormSettings, FormTitle, Question,
-        QuestionType, ResponsePeriod, WebhookUrl,
+    form::{
+        models::{
+            DefaultAnswerTitle, FormDescription, FormId, FormMeta, FormSettings, FormTitle,
+            ResponsePeriod, WebhookUrl,
+        },
+        question::models::{Question, QuestionType},
     },
     user::models::{Role, User},
 };
@@ -22,7 +25,7 @@ pub struct QuestionDto {
     pub is_required: bool,
 }
 
-impl TryFrom<QuestionDto> for domain::form::models::Question {
+impl TryFrom<QuestionDto> for domain::form::question::models::Question {
     type Error = errors::domain::DomainError;
 
     fn try_from(
@@ -100,7 +103,7 @@ pub struct FormAnswerContentDto {
     pub answer: String,
 }
 
-impl TryFrom<FormAnswerContentDto> for domain::form::models::FormAnswerContent {
+impl TryFrom<FormAnswerContentDto> for domain::form::answer::models::FormAnswerContent {
     type Error = errors::domain::DomainError;
 
     fn try_from(
@@ -110,7 +113,7 @@ impl TryFrom<FormAnswerContentDto> for domain::form::models::FormAnswerContent {
             answer,
         }: FormAnswerContentDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::FormAnswerContent {
+        Ok(domain::form::answer::models::FormAnswerContent {
             answer_id: answer_id.into(),
             question_id: question_id.into(),
             answer,
@@ -140,7 +143,7 @@ pub struct CommentDto {
     pub commented_by: UserDto,
 }
 
-impl TryFrom<CommentDto> for domain::form::models::Comment {
+impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
     type Error = errors::domain::DomainError;
 
     fn try_from(
@@ -152,7 +155,7 @@ impl TryFrom<CommentDto> for domain::form::models::Comment {
             commented_by,
         }: CommentDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Comment {
+        Ok(domain::form::comment::models::Comment {
             answer_id: answer_id.into(),
             comment_id: comment_id.into(),
             content,
@@ -172,7 +175,7 @@ pub struct FormAnswerDto {
     pub title: Option<String>,
 }
 
-impl TryFrom<FormAnswerDto> for domain::form::models::FormAnswer {
+impl TryFrom<FormAnswerDto> for domain::form::answer::models::FormAnswer {
     type Error = errors::domain::DomainError;
 
     fn try_from(
@@ -186,7 +189,7 @@ impl TryFrom<FormAnswerDto> for domain::form::models::FormAnswer {
             title,
         }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::FormAnswer {
+        Ok(domain::form::answer::models::FormAnswer {
             id: id.into(),
             user: User {
                 name: user_name,
@@ -206,7 +209,7 @@ pub struct AnswerLabelDto {
     pub name: String,
 }
 
-impl TryFrom<AnswerLabelDto> for domain::form::models::AnswerLabel {
+impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
     type Error = errors::domain::DomainError;
 
     fn try_from(
@@ -216,7 +219,7 @@ impl TryFrom<AnswerLabelDto> for domain::form::models::AnswerLabel {
             name,
         }: AnswerLabelDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::AnswerLabel {
+        Ok(domain::form::answer::models::AnswerLabel {
             id: id.into(),
             answer_id: answer_id.into(),
             name,
@@ -248,7 +251,7 @@ pub struct MessageDto {
     pub timestamp: DateTime<Utc>,
 }
 
-impl TryFrom<MessageDto> for domain::form::models::Message {
+impl TryFrom<MessageDto> for domain::form::message::models::Message {
     type Error = errors::domain::DomainError;
 
     fn try_from(
@@ -261,7 +264,7 @@ impl TryFrom<MessageDto> for domain::form::models::Message {
         }: MessageDto,
     ) -> Result<Self, Self::Error> {
         unsafe {
-            Ok(domain::form::models::Message::from_raw_parts(
+            Ok(domain::form::message::models::Message::from_raw_parts(
                 id.into(),
                 related_answer.try_into()?,
                 sender.try_into()?,
