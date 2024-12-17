@@ -1,9 +1,14 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, Question,
-        ResponsePeriod, Visibility, WebhookUrl,
+    form::{
+        answer::models::{AnswerId, FormAnswer, FormAnswerContent},
+        comment::models::{Comment, CommentId},
+        message::models::{Message, MessageId},
+        models::{
+            DefaultAnswerTitle, Form, FormDescription, FormId, FormTitle, Label, LabelId,
+            ResponsePeriod, Visibility, WebhookUrl,
+        },
+        question::models::Question,
     },
     notification::models::{Notification, NotificationId},
     user::models::{Role, User},

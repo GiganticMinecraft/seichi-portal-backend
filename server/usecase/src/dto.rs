@@ -1,4 +1,7 @@
-use domain::form::models::{AnswerLabel, Comment, FormAnswer, FormAnswerContent};
+use domain::form::{
+    answer::models::{AnswerLabel, FormAnswer, FormAnswerContent},
+    comment::models::Comment,
+};
 
 pub struct AnswerDto {
     pub form_answer: FormAnswer,

@@ -5,8 +5,11 @@ use axum::{
     Extension, Json,
 };
 use domain::{
-    form::models::{
-        AnswerId, Comment, CommentId, FormId, Label, LabelId, MessageId, Visibility::PRIVATE,
+    form::{
+        answer::models::AnswerId,
+        comment::models::{Comment, CommentId},
+        message::models::MessageId,
+        models::{FormId, Label, LabelId, Visibility::PRIVATE},
     },
     repository::Repositories,
     user::models::{Role::StandardUser, User},

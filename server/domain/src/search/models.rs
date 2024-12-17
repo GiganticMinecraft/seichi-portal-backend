@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    form::models::{AnswerId, CommentId, Form, FormAnswerContent, Label},
+    form::{
+        answer::models::{AnswerId, FormAnswerContent},
+        comment::models::CommentId,
+        models::{Form, Label},
+    },
     user::models::User,
 };
 
