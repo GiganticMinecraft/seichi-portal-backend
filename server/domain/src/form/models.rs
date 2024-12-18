@@ -434,11 +434,11 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     }
 }
 
-pub type LabelId = types::IntegerId<Label>;
+pub type FormLabelId = types::IntegerId<FormLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct Label {
-    pub id: LabelId,
+pub struct FormLabel {
+    pub id: FormLabelId,
     pub name: String,
 }

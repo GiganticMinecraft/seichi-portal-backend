@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{FormId, Label, LabelId},
+    form::models::{FormId, FormLabel, FormLabelId},
     repository::form::form_label_repository::FormLabelRepository,
 };
 use errors::Error;
@@ -23,17 +23,17 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_labels_for_forms(&self) -> Result<Vec<Label>, Error> {
+    async fn get_labels_for_forms(&self) -> Result<Vec<FormLabel>, Error> {
         stream::iter(self.client.form_label().get_labels_for_forms().await?)
             .then(|label_dto| async { Ok(label_dto.try_into()?) })
-            .collect::<Vec<Result<Label, _>>>()
+            .collect::<Vec<Result<FormLabel, _>>>()
             .await
             .into_iter()
-            .collect::<Result<Vec<Label>, _>>()
+            .collect::<Result<Vec<FormLabel>, _>>()
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), Error> {
+    async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), Error> {
         self.client
             .form_label()
             .delete_label_for_forms(label_id)
@@ -42,7 +42,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     }
 
     #[tracing::instrument(skip(self))]
-    async fn edit_label_for_forms(&self, label: &Label) -> Result<(), Error> {
+    async fn edit_label_for_forms(&self, label: &FormLabel) -> Result<(), Error> {
         self.client
             .form_label()
             .edit_label_for_forms(label)
@@ -54,7 +54,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     async fn replace_form_labels(
         &self,
         form_id: FormId,
-        label_ids: Vec<LabelId>,
+        label_ids: Vec<FormLabelId>,
     ) -> Result<(), Error> {
         self.client
             .form_label()

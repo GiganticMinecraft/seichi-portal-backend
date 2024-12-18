@@ -205,23 +205,15 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::FormAnswer {
 
 pub struct AnswerLabelDto {
     pub id: i32,
-    pub answer_id: i32,
     pub name: String,
 }
 
 impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
     type Error = errors::domain::DomainError;
 
-    fn try_from(
-        AnswerLabelDto {
-            id,
-            answer_id,
-            name,
-        }: AnswerLabelDto,
-    ) -> Result<Self, Self::Error> {
+    fn try_from(AnswerLabelDto { id, name }: AnswerLabelDto) -> Result<Self, Self::Error> {
         Ok(domain::form::answer::models::AnswerLabel {
             id: id.into(),
-            answer_id: answer_id.into(),
             name,
         })
     }
@@ -232,11 +224,11 @@ pub struct LabelDto {
     pub name: String,
 }
 
-impl TryFrom<LabelDto> for domain::form::models::Label {
+impl TryFrom<LabelDto> for domain::form::models::FormLabel {
     type Error = errors::domain::DomainError;
 
     fn try_from(LabelDto { id, name }: LabelDto) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Label {
+        Ok(domain::form::models::FormLabel {
             id: id.into(),
             name,
         })

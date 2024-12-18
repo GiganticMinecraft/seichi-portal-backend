@@ -5,10 +5,7 @@ use axum::{
     Json,
 };
 use domain::{
-    form::{
-        answer::models::AnswerId,
-        models::{Label, LabelId},
-    },
+    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::Repositories,
 };
 use resource::repository::RealInfrastructureRepository;
@@ -16,12 +13,12 @@ use usecase::forms::answer_label::AnswerLabelUseCase;
 
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::form::form_request_schemas::{LabelSchema, ReplaceAnswerLabelSchema},
+    schemas::form::form_request_schemas::{AnswerLabelSchema, ReplaceAnswerLabelSchema},
 };
 
 pub async fn create_label_for_answers(
     State(repository): State<RealInfrastructureRepository>,
-    Json(label): Json<LabelSchema>,
+    Json(label): Json<AnswerLabelSchema>,
 ) -> impl IntoResponse {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
@@ -51,7 +48,7 @@ pub async fn get_labels_for_answers(
 
 pub async fn delete_label_for_answers(
     State(repository): State<RealInfrastructureRepository>,
-    Path(label_id): Path<LabelId>,
+    Path(label_id): Path<AnswerLabelId>,
 ) -> impl IntoResponse {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
@@ -68,15 +65,15 @@ pub async fn delete_label_for_answers(
 
 pub async fn edit_label_for_answers(
     State(repository): State<RealInfrastructureRepository>,
-    Path(label_id): Path<LabelId>,
-    Json(label): Json<LabelSchema>,
+    Path(label_id): Path<AnswerLabelId>,
+    Json(label): Json<AnswerLabelSchema>,
 ) -> impl IntoResponse {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
 
     match answer_label_use_case
-        .edit_label_for_answers(&Label {
+        .edit_label_for_answers(&AnswerLabel {
             id: label_id,
             name: label.name,
         })

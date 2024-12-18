@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::{AnswerId, FormAnswer, FormAnswerContent},
+        answer::models::{AnswerId, AnswerLabel, AnswerLabelId, FormAnswer, FormAnswerContent},
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{
-            DefaultAnswerTitle, Form, FormDescription, FormId, FormTitle, Label, LabelId,
+            DefaultAnswerTitle, Form, FormDescription, FormId, FormLabel, FormLabelId, FormTitle,
             ResponsePeriod, Visibility, WebhookUrl,
         },
         question::models::Question,
@@ -127,17 +127,17 @@ pub trait FormAnswerDatabase: Send + Sync {
 #[async_trait]
 pub trait FormAnswerLabelDatabase: Send + Sync {
     async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
-    async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError>;
+    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError>;
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
     ) -> Result<Vec<AnswerLabelDto>, InfraError>;
-    async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError>;
-    async fn edit_label_for_answers(&self, label: &Label) -> Result<(), InfraError>;
+    async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), InfraError>;
+    async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
     async fn replace_answer_labels(
         &self,
         answer_id: AnswerId,
-        label_ids: Vec<LabelId>,
+        label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), InfraError>;
 }
 
@@ -187,12 +187,12 @@ pub trait FormCommentDatabase: Send + Sync {
 pub trait FormLabelDatabase: Send + Sync {
     async fn create_label_for_forms(&self, label_name: String) -> Result<(), InfraError>;
     async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError>;
-    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), InfraError>;
-    async fn edit_label_for_forms(&self, label: &Label) -> Result<(), InfraError>;
+    async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError>;
+    async fn edit_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError>;
     async fn replace_form_labels(
         &self,
         form_id: FormId,
-        label_ids: Vec<LabelId>,
+        label_ids: Vec<FormLabelId>,
     ) -> Result<(), InfraError>;
 }
 
@@ -221,8 +221,8 @@ pub trait UserDatabase: Send + Sync {
 pub trait SearchDatabase: Send + Sync {
     async fn search_users(&self, query: &str) -> Result<Vec<User>, InfraError>;
     async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError>;
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, InfraError>;
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, InfraError>;
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError>;
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
     async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError>;
     async fn search_comments(
         &self,

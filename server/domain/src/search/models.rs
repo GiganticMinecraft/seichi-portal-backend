@@ -3,9 +3,9 @@ use uuid::Uuid;
 
 use crate::{
     form::{
-        answer::models::{AnswerId, FormAnswerContent},
+        answer::models::{AnswerId, AnswerLabel, FormAnswerContent},
         comment::models::CommentId,
-        models::{Form, Label},
+        models::{Form, FormLabel},
     },
     user::models::User,
 };
@@ -23,7 +23,7 @@ pub struct CrossSearchResult {
     pub forms: Vec<Form>,
     pub users: Vec<User>,
     pub answers: Vec<FormAnswerContent>,
-    pub label_for_forms: Vec<Label>,
-    pub label_for_answers: Vec<Label>,
+    pub label_for_forms: Vec<FormLabel>,
+    pub label_for_answers: Vec<AnswerLabel>,
     pub comments: Vec<Comment>,
 }

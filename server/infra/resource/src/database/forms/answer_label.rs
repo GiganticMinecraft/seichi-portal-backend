@@ -1,8 +1,5 @@
 use async_trait::async_trait;
-use domain::form::{
-    answer::models::AnswerId,
-    models::{Label, LabelId},
-};
+use domain::form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId};
 use errors::infra::InfraError;
 use itertools::Itertools;
 
@@ -14,7 +11,7 @@ use crate::{
             ConnectionPool,
         },
     },
-    dto::{AnswerLabelDto, LabelDto},
+    dto::AnswerLabelDto,
 };
 
 #[async_trait]
@@ -40,7 +37,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError> {
+    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let labels_rs =
@@ -49,12 +46,12 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(LabelDto {
+                        Ok::<_, InfraError>(AnswerLabelDto {
                             id: rs.try_get("", "id")?,
                             name: rs.try_get("", "name")?,
                         })
                     })
-                    .collect::<Result<Vec<LabelDto>, _>>()
+                    .collect::<Result<Vec<_>, _>>()
             })
         })
         .await
@@ -84,7 +81,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                     .map(|rs| {
                         Ok::<_, InfraError>(AnswerLabelDto {
                             id: rs.try_get("", "label_id")?,
-                            answer_id,
                             name: rs.try_get("", "name")?,
                         })
                     })
@@ -96,7 +92,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError> {
+    async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
@@ -114,7 +110,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn edit_label_for_answers(&self, label: &Label) -> Result<(), InfraError> {
+    async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError> {
         let params = [label.name.to_owned().into(), label.id.to_string().into()];
 
         self.read_write_transaction(|txn| {
@@ -137,7 +133,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     async fn replace_answer_labels(
         &self,
         answer_id: AnswerId,
-        label_ids: Vec<LabelId>,
+        label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {

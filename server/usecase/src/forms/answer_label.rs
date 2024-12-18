@@ -1,8 +1,5 @@
 use domain::{
-    form::{
-        answer::models::AnswerId,
-        models::{Label, LabelId},
-    },
+    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
 };
 use errors::Error;
@@ -18,17 +15,17 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
             .await
     }
 
-    pub async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error> {
+    pub async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabel>, Error> {
         self.answer_label_repository.get_labels_for_answers().await
     }
 
-    pub async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), Error> {
+    pub async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), Error> {
         self.answer_label_repository
             .delete_label_for_answers(label_id)
             .await
     }
 
-    pub async fn edit_label_for_answers(&self, label_schema: &Label) -> Result<(), Error> {
+    pub async fn edit_label_for_answers(&self, label_schema: &AnswerLabel) -> Result<(), Error> {
         self.answer_label_repository
             .edit_label_for_answers(label_schema)
             .await
@@ -37,7 +34,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
     pub async fn replace_answer_labels(
         &self,
         answer_id: AnswerId,
-        label_ids: Vec<LabelId>,
+        label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), Error> {
         self.answer_label_repository
             .replace_answer_labels(answer_id, label_ids)

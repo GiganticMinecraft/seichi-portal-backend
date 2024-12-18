@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::FormAnswerContent,
-        models::{Form, Label},
+        answer::models::{AnswerLabel, FormAnswerContent},
+        models::{Form, FormLabel},
     },
     repository::search_repository::SearchRepository,
     search::models::Comment,
@@ -33,7 +33,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, Error> {
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, Error> {
         self.client
             .search()
             .search_labels_for_forms(query)
@@ -41,7 +41,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, Error> {
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, Error> {
         self.client
             .search()
             .search_labels_for_answers(query)

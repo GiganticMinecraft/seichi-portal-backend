@@ -1,7 +1,7 @@
 use domain::form::{
-    answer::models::{AnswerId, FormAnswerContent},
+    answer::models::{AnswerId, AnswerLabelId, FormAnswerContent},
     models::{
-        DefaultAnswerTitle, FormDescription, FormId, FormTitle, LabelId, ResponsePeriod,
+        DefaultAnswerTitle, FormDescription, FormId, FormLabelId, FormTitle, ResponsePeriod,
         Visibility, WebhookUrl,
     },
     question::models::Question,
@@ -66,13 +66,23 @@ pub struct CommentPostSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct LabelSchema {
+pub struct FormLabelSchema {
+    pub name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AnswerLabelSchema {
     pub name: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct ReplaceAnswerLabelSchema {
-    pub labels: Vec<LabelId>,
+    pub labels: Vec<AnswerLabelId>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ReplaceFormLabelSchema {
+    pub labels: Vec<FormLabelId>,
 }
 
 #[derive(Deserialize, Debug)]

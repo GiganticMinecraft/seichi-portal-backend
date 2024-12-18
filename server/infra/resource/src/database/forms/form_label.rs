@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use domain::form::models::{FormId, Label, LabelId};
+use domain::form::models::{FormId, FormLabel, FormLabelId};
 use errors::infra::InfraError;
 use itertools::Itertools;
 
@@ -53,7 +53,7 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), InfraError> {
+    async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
@@ -71,7 +71,7 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn edit_label_for_forms(&self, label: &Label) -> Result<(), InfraError> {
+    async fn edit_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError> {
         let params = [label.name.to_owned().into(), label.id.to_string().into()];
 
         self.read_write_transaction(|txn| {
@@ -94,7 +94,7 @@ impl FormLabelDatabase for ConnectionPool {
     async fn replace_form_labels(
         &self,
         form_id: FormId,
-        label_ids: Vec<LabelId>,
+        label_ids: Vec<FormLabelId>,
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
