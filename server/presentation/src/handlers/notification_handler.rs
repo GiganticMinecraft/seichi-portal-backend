@@ -6,7 +6,7 @@ use serde_json::json;
 use usecase::notification::NotificationUseCase;
 
 use crate::{
-    error_handler::handle_error,
+    handlers::error_handler::handle_error,
     schemas::notification::{
         notification_request_schemas::NotificationUpdateReadStateSchema,
         notification_response_schemas::NotificationResponse,

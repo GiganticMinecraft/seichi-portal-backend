@@ -14,21 +14,38 @@ use common::config::{ENV, HTTP};
 use hyper::header::SET_COOKIE;
 use presentation::{
     auth::auth,
-    form_handler::{
-        create_form_handler, create_label_for_answers, create_label_for_forms,
-        create_question_handler, delete_form_comment_handler, delete_form_handler,
-        delete_label_for_answers, delete_label_for_forms, delete_message_handler,
-        edit_label_for_answers, edit_label_for_forms, form_list_handler, get_all_answers,
-        get_answer_by_form_id_handler, get_answer_handler, get_form_handler,
-        get_labels_for_answers, get_labels_for_forms, get_messages_handler, get_questions_handler,
-        post_answer_handler, post_form_comment, post_message_handler, put_question_handler,
-        replace_answer_labels, replace_form_labels, update_answer_handler, update_form_handler,
-        update_message_handler,
+    handlers::{
+        form::{
+            answer_handler::{
+                get_all_answers, get_answer_by_form_id_handler, get_answer_handler,
+                post_answer_handler, update_answer_handler,
+            },
+            answer_label_handler::{
+                create_label_for_answers, delete_label_for_answers, edit_label_for_answers,
+                get_labels_for_answers, replace_answer_labels,
+            },
+            comment_handler::{delete_form_comment_handler, post_form_comment},
+            form_handler::{
+                create_form_handler, delete_form_handler, form_list_handler, get_form_handler,
+                update_form_handler,
+            },
+            form_label_handler::{
+                create_label_for_forms, delete_label_for_forms, edit_label_for_forms,
+                get_labels_for_forms, replace_form_labels,
+            },
+            message_handler::{
+                delete_message_handler, get_messages_handler, post_message_handler,
+                update_message_handler,
+            },
+            question_handler::{
+                create_question_handler, get_questions_handler, put_question_handler,
+            },
+        },
+        health_check_handler::health_check,
+        notification_handler::{fetch_by_request_user, update_read_state},
+        search_handler::cross_search,
+        user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
     },
-    health_check_handler::health_check,
-    notification_handler::{fetch_by_request_user, update_read_state},
-    search_handler::cross_search,
-    user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
