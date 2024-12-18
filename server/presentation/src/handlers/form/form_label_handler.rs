@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use domain::{
-    form::models::{FormId, Label, LabelId},
+    form::models::{FormId, FormLabel, FormLabelId},
     repository::Repositories,
 };
 use resource::repository::RealInfrastructureRepository;
@@ -13,12 +13,12 @@ use usecase::forms::form_label::FormLabelUseCase;
 
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::form::form_request_schemas::{LabelSchema, ReplaceAnswerLabelSchema},
+    schemas::form::form_request_schemas::{FormLabelSchema, ReplaceFormLabelSchema},
 };
 
 pub async fn create_label_for_forms(
     State(repository): State<RealInfrastructureRepository>,
-    Json(label): Json<LabelSchema>,
+    Json(label): Json<FormLabelSchema>,
 ) -> impl IntoResponse {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
@@ -45,7 +45,7 @@ pub async fn get_labels_for_forms(
 
 pub async fn delete_label_for_forms(
     State(repository): State<RealInfrastructureRepository>,
-    Path(label_id): Path<LabelId>,
+    Path(label_id): Path<FormLabelId>,
 ) -> impl IntoResponse {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
@@ -59,15 +59,15 @@ pub async fn delete_label_for_forms(
 
 pub async fn edit_label_for_forms(
     State(repository): State<RealInfrastructureRepository>,
-    Path(label_id): Path<LabelId>,
-    Json(label): Json<LabelSchema>,
+    Path(label_id): Path<FormLabelId>,
+    Json(label): Json<FormLabelSchema>,
 ) -> impl IntoResponse {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
     match form_label_use_case
-        .edit_label_for_forms(&Label {
+        .edit_label_for_forms(&FormLabel {
             id: label_id,
             name: label.name,
         })
@@ -81,7 +81,7 @@ pub async fn edit_label_for_forms(
 pub async fn replace_form_labels(
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-    Json(label_ids): Json<ReplaceAnswerLabelSchema>,
+    Json(label_ids): Json<ReplaceFormLabelSchema>,
 ) -> impl IntoResponse {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),

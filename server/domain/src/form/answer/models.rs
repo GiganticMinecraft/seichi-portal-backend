@@ -32,6 +32,5 @@ pub type AnswerLabelId = types::IntegerId<AnswerLabel>;
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct AnswerLabel {
     pub id: AnswerLabelId,
-    pub answer_id: AnswerId,
     pub name: String,
 }

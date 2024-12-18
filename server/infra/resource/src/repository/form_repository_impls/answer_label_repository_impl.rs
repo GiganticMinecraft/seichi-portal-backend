@@ -1,9 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::{
-        answer::models::{AnswerId, AnswerLabel},
-        models::{Label, LabelId},
-    },
+    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
 };
 use errors::Error;
@@ -26,7 +23,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_labels_for_answers(&self) -> Result<Vec<Label>, Error> {
+    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabel>, Error> {
         stream::iter(
             self.client
                 .form_answer_label()
@@ -34,10 +31,10 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
                 .await?,
         )
         .then(|label_dto| async { Ok(label_dto.try_into()?) })
-        .collect::<Vec<Result<Label, _>>>()
+        .collect::<Vec<Result<_, _>>>()
         .await
         .into_iter()
-        .collect::<Result<Vec<Label>, _>>()
+        .collect::<Result<Vec<_>, _>>()
     }
 
     #[tracing::instrument(skip(self))]
@@ -59,7 +56,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), Error> {
+    async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), Error> {
         self.client
             .form_answer_label()
             .delete_label_for_answers(label_id)
@@ -68,7 +65,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     }
 
     #[tracing::instrument(skip(self))]
-    async fn edit_label_for_answers(&self, label: &Label) -> Result<(), Error> {
+    async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), Error> {
         self.client
             .form_answer_label()
             .edit_label_for_answers(label)
@@ -80,7 +77,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     async fn replace_answer_labels(
         &self,
         answer_id: AnswerId,
-        label_ids: Vec<LabelId>,
+        label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), Error> {
         self.client
             .form_answer_label()
