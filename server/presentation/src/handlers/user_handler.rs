@@ -17,7 +17,7 @@ use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::Uuid;
 
-use crate::error_handler::handle_error;
+use crate::handlers::error_handler::handle_error;
 
 pub async fn get_my_user_info(Extension(user): Extension<User>) -> impl IntoResponse {
     (

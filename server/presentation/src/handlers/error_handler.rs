@@ -73,7 +73,7 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             StatusCode::FORBIDDEN,
             Json(json!({
                 "errorCode": "OUT_OF_PERIOD",
-                "reason": "Posted form is out of period."
+                "reason": "Posted forms is out of period."
             })),
         )
             .into_response(),
@@ -81,7 +81,7 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             StatusCode::FORBIDDEN,
             Json(json!({
                 "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
-                "reason": "Do not have permission to post form comment."
+                "reason": "Do not have permission to post forms comment."
             })),
         )
             .into_response(),
