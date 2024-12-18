@@ -87,3 +87,21 @@ impl TryFrom<String> for QuestionType {
         Self::from_str(&value).map_err(Into::into)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use test_case::test_case;
+
+    use super::*;
+    use crate::form::question::models::QuestionType;
+
+    #[test_case("TEXT"     => Ok(QuestionType::TEXT); "upper: TEXT")]
+    #[test_case("text"     => Ok(QuestionType::TEXT); "lower: text")]
+    #[test_case("SINGLE" => Ok(QuestionType::SINGLE); "upper: SINGLE")]
+    #[test_case("single" => Ok(QuestionType::SINGLE); "lower: single")]
+    #[test_case("MULTIPLE" => Ok(QuestionType::MULTIPLE); "upper: MULTIPLE")]
+    #[test_case("multiple" => Ok(QuestionType::MULTIPLE); "lower: multiple")]
+    fn string_to_question_type(input: &str) -> Result<QuestionType, DomainError> {
+        input.to_owned().try_into()
+    }
+}

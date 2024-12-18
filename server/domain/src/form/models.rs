@@ -94,29 +94,6 @@ impl FormSettings {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
-))]
-pub struct WebhookUrl(Option<String>);
-
-impl WebhookUrl {
-    pub fn try_new(url: Option<String>) -> Result<Self, DomainError> {
-        if let Some(url) = &url {
-            if url.is_empty() {
-                return Err(EmptyValue);
-            }
-
-            let regex = Regex::new("https://discord.com/api/webhooks/.*").unwrap();
-            if !regex.is_match(url) {
-                return Err(DomainError::InvalidWebhookUrl);
-            }
-        }
-
-        Ok(Self(url))
-    }
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
 pub struct ResponsePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
@@ -142,21 +119,25 @@ impl ResponsePeriod {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(
-    Serialize, Deserialize, Debug, EnumString, Display, Copy, Clone, Default, PartialOrd, PartialEq,
-)]
-pub enum Visibility {
-    PUBLIC,
-    #[default]
-    PRIVATE,
-}
+#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
+))]
+pub struct WebhookUrl(Option<String>);
 
-impl TryFrom<String> for Visibility {
-    type Error = DomainError;
+impl WebhookUrl {
+    pub fn try_new(url: Option<String>) -> Result<Self, DomainError> {
+        if let Some(url) = &url {
+            if url.is_empty() {
+                return Err(EmptyValue);
+            }
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        use std::str::FromStr;
-        Self::from_str(&value).map_err(Into::into)
+            let regex = Regex::new("https://discord.com/api/webhooks/.*").unwrap();
+            if !regex.is_match(url) {
+                return Err(DomainError::InvalidWebhookUrl);
+            }
+        }
+
+        Ok(Self(url))
     }
 }
 
@@ -175,6 +156,25 @@ impl DefaultAnswerTitle {
         }
 
         Ok(Self(title))
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(
+    Serialize, Deserialize, Debug, EnumString, Display, Copy, Clone, Default, PartialOrd, PartialEq,
+)]
+pub enum Visibility {
+    PUBLIC,
+    #[default]
+    PRIVATE,
+}
+
+impl TryFrom<String> for Visibility {
+    type Error = DomainError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        use std::str::FromStr;
+        Self::from_str(&value).map_err(Into::into)
     }
 }
 
@@ -441,22 +441,4 @@ pub type LabelId = types::IntegerId<Label>;
 pub struct Label {
     pub id: LabelId,
     pub name: String,
-}
-
-#[cfg(test)]
-mod test {
-    use test_case::test_case;
-
-    use super::*;
-    use crate::form::question::models::QuestionType;
-
-    #[test_case("TEXT"     => Ok(QuestionType::TEXT); "upper: TEXT")]
-    #[test_case("text"     => Ok(QuestionType::TEXT); "lower: text")]
-    #[test_case("SINGLE" => Ok(QuestionType::SINGLE); "upper: SINGLE")]
-    #[test_case("single" => Ok(QuestionType::SINGLE); "lower: single")]
-    #[test_case("MULTIPLE" => Ok(QuestionType::MULTIPLE); "upper: MULTIPLE")]
-    #[test_case("multiple" => Ok(QuestionType::MULTIPLE); "lower: multiple")]
-    fn string_to_question_type(input: &str) -> Result<QuestionType, errors::domain::DomainError> {
-        input.to_owned().try_into()
-    }
 }
