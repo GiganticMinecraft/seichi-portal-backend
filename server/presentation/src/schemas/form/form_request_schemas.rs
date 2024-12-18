@@ -1,8 +1,18 @@
-use domain::form::models::{
-    AnswerId, DefaultAnswerTitle, FormAnswerContent, FormDescription, FormId, FormTitle, LabelId,
-    Question, ResponsePeriod, Visibility, WebhookUrl,
+use domain::form::{
+    answer::models::{AnswerId, AnswerLabelId, FormAnswerContent},
+    models::{
+        DefaultAnswerTitle, FormDescription, FormId, FormLabelId, FormTitle, ResponsePeriod,
+        Visibility, WebhookUrl,
+    },
+    question::models::Question,
 };
 use serde::Deserialize;
+
+#[derive(Deserialize, Debug)]
+pub struct OffsetAndLimit {
+    pub offset: Option<u32>,
+    pub limit: Option<u32>,
+}
 
 #[derive(Deserialize, Debug)]
 pub struct FormCreateSchema {
@@ -56,13 +66,23 @@ pub struct CommentPostSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct LabelSchema {
+pub struct FormLabelSchema {
+    pub name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AnswerLabelSchema {
     pub name: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct ReplaceAnswerLabelSchema {
-    pub labels: Vec<LabelId>,
+    pub labels: Vec<AnswerLabelId>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ReplaceFormLabelSchema {
+    pub labels: Vec<FormLabelId>,
 }
 
 #[derive(Deserialize, Debug)]

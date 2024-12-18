@@ -4,9 +4,13 @@ use crate::user::models::User;
 
 pub trait Actions: private::Sealed {}
 
+#[derive(Debug)]
 pub struct Create;
+#[derive(Debug)]
 pub struct Read;
+#[derive(Debug)]
 pub struct Update;
+#[derive(Debug)]
 pub struct Delete;
 
 impl Actions for Create {}
@@ -26,6 +30,7 @@ mod private {
 /// [`User`] の `guard_target` に対するアクセスを制御するための定義を提供します。
 ///
 /// この定義は、`guard_target` によってアクセス権が異なるデータの操作を制御することのみを想定しています。
+#[derive(Debug)]
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
     guard_target: T,
     _phantom_data: std::marker::PhantomData<A>,

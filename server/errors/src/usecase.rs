@@ -4,7 +4,7 @@ use thiserror::Error;
 pub enum UseCaseError {
     #[error("Out of period.")]
     OutOfPeriod,
-    #[error("Do not have permission to post form comment.")]
+    #[error("Do not have permission to post forms comment.")]
     DoNotHavePermissionToPostFormComment,
     #[error("Answer not found.")]
     AnswerNotFound,

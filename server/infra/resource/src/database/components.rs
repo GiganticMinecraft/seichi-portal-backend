@@ -1,9 +1,14 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{
-        AnswerId, Comment, CommentId, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent,
-        FormDescription, FormId, FormTitle, Label, LabelId, Message, MessageId, OffsetAndLimit,
-        Question, ResponsePeriod, Visibility, WebhookUrl,
+    form::{
+        answer::models::{AnswerId, AnswerLabel, AnswerLabelId, FormAnswer, FormAnswerContent},
+        comment::models::{Comment, CommentId},
+        message::models::{Message, MessageId},
+        models::{
+            DefaultAnswerTitle, Form, FormDescription, FormId, FormLabel, FormLabelId, FormTitle,
+            ResponsePeriod, Visibility, WebhookUrl,
+        },
+        question::models::Question,
     },
     notification::models::{Notification, NotificationId},
     user::models::{Role, User},
@@ -14,12 +19,18 @@ use uuid::Uuid;
 
 use crate::dto::{
     AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
-    NotificationDto, QuestionDto, SimpleFormDto,
+    NotificationDto, QuestionDto,
 };
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
+    type ConcreteFormAnswerDatabase: FormAnswerDatabase;
+    type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
+    type ConcreteFormQuestionDatabase: FormQuestionDatabase;
+    type ConcreteFormMessageDatabase: FormMessageDatabase;
+    type ConcreteFormCommentDatabase: FormCommentDatabase;
+    type ConcreteFormLabelDatabase: FormLabelDatabase;
     type ConcreteUserDatabase: UserDatabase;
     type ConcreteNotificationDatabase: NotificationDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
@@ -27,6 +38,12 @@ pub trait DatabaseComponents: Send + Sync {
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
+    fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
+    fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
+    fn form_question(&self) -> &Self::ConcreteFormQuestionDatabase;
+    fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
+    fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
+    fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
     fn notification(&self) -> &Self::ConcreteNotificationDatabase;
@@ -35,20 +52,12 @@ pub trait DatabaseComponents: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormDatabase: Send + Sync {
-    async fn create(
-        &self,
-        title: FormTitle,
-        description: FormDescription,
-        user: User,
-    ) -> Result<FormId, InfraError>;
-    async fn public_list(
-        &self,
-        offset_and_limit: OffsetAndLimit,
-    ) -> Result<Vec<SimpleFormDto>, InfraError>;
+    async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError>;
     async fn list(
         &self,
-        offset_and_limit: OffsetAndLimit,
-    ) -> Result<Vec<SimpleFormDto>, InfraError>;
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<Vec<FormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update_form_title(
@@ -86,6 +95,11 @@ pub trait FormDatabase: Send + Sync {
         form_id: &FormId,
         visibility: &Visibility,
     ) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormAnswerDatabase: Send + Sync {
     async fn post_answer(
         &self,
         user: &User,
@@ -107,6 +121,29 @@ pub trait FormDatabase: Send + Sync {
         answer_id: AnswerId,
         title: Option<String>,
     ) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormAnswerLabelDatabase: Send + Sync {
+    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
+    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError>;
+    async fn get_labels_for_answers_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<AnswerLabelDto>, InfraError>;
+    async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), InfraError>;
+    async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
+    async fn replace_answer_labels(
+        &self,
+        answer_id: AnswerId,
+        label_ids: Vec<AnswerLabelId>,
+    ) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormQuestionDatabase: Send + Sync {
     async fn create_questions(
         &self,
         form_id: FormId,
@@ -118,31 +155,10 @@ pub trait FormDatabase: Send + Sync {
         questions: Vec<Question>,
     ) -> Result<(), InfraError>;
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
-    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError>;
-    async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
-    async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
-    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
-    async fn get_labels_for_answers(&self) -> Result<Vec<LabelDto>, InfraError>;
-    async fn get_labels_for_answers_by_answer_id(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<Vec<AnswerLabelDto>, InfraError>;
-    async fn delete_label_for_answers(&self, label_id: LabelId) -> Result<(), InfraError>;
-    async fn edit_label_for_answers(&self, label: &Label) -> Result<(), InfraError>;
-    async fn replace_answer_labels(
-        &self,
-        answer_id: AnswerId,
-        label_ids: Vec<LabelId>,
-    ) -> Result<(), InfraError>;
-    async fn create_label_for_forms(&self, label_name: String) -> Result<(), InfraError>;
-    async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError>;
-    async fn delete_label_for_forms(&self, label_id: LabelId) -> Result<(), InfraError>;
-    async fn edit_label_for_forms(&self, label: &Label) -> Result<(), InfraError>;
-    async fn replace_form_labels(
-        &self,
-        form_id: FormId,
-        label_ids: Vec<LabelId>,
-    ) -> Result<(), InfraError>;
+}
+
+#[async_trait]
+pub trait FormMessageDatabase: Send + Sync {
     async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
     async fn update_message_body(
         &self,
@@ -156,6 +172,28 @@ pub trait FormDatabase: Send + Sync {
     async fn fetch_message(&self, message_id: &MessageId)
         -> Result<Option<MessageDto>, InfraError>;
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormCommentDatabase: Send + Sync {
+    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError>;
+    async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
+    async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormLabelDatabase: Send + Sync {
+    async fn create_label_for_forms(&self, label_name: String) -> Result<(), InfraError>;
+    async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError>;
+    async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError>;
+    async fn edit_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError>;
+    async fn replace_form_labels(
+        &self,
+        form_id: FormId,
+        label_ids: Vec<FormLabelId>,
+    ) -> Result<(), InfraError>;
 }
 
 #[automock]
@@ -183,8 +221,8 @@ pub trait UserDatabase: Send + Sync {
 pub trait SearchDatabase: Send + Sync {
     async fn search_users(&self, query: &str) -> Result<Vec<User>, InfraError>;
     async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError>;
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, InfraError>;
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, InfraError>;
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError>;
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
     async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError>;
     async fn search_comments(
         &self,

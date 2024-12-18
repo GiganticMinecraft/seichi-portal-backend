@@ -1,5 +1,10 @@
 use domain::{
-    form::models::{Comment, DefaultAnswerTitle, Form, FormAnswer, FormAnswerContent},
+    form::{
+        answer::models::{FormAnswer, FormAnswerContent},
+        comment::models::Comment,
+        models::{DefaultAnswerTitle, Form},
+        question::models::Question,
+    },
     user::models::User,
 };
 use errors::infra::InfraError;
@@ -9,18 +14,18 @@ use crate::webhook::{Color, Webhook};
 
 #[tracing::instrument]
 pub async fn create(form: Form) -> Result<(), InfraError> {
-    if let Some(url) = form.settings.webhook_url.into() {
+    if let Some(url) = form.settings().webhook_url().to_owned().into_inner() {
         Webhook::new(url, "フォームが作成されました".to_string())
             .field(
                 "フォーム名".to_string(),
-                form.title.title().to_owned(),
+                form.title().to_owned().into_inner(),
                 false,
             )
             .field(
                 "フォーム説明".to_owned(),
-                form.description
-                    .description()
+                form.description()
                     .to_owned()
+                    .into_inner()
                     .unwrap_or("フォームの説明は設定されていません。".to_string()),
                 false,
             )
@@ -37,17 +42,21 @@ pub async fn post_answer(
     user: &User,
     title: DefaultAnswerTitle,
     answers: &Vec<FormAnswerContent>,
+    questions: &[Question],
 ) -> Result<(), InfraError> {
-    if let Some(url) = form.settings.webhook_url.to_owned() {
+    if let Some(url) = form.settings().webhook_url().to_owned().into_inner() {
         Webhook::new(url, "回答が送信されました".to_string())
             .field(
                 "フォーム名".to_string(),
-                form.title.title().to_owned(),
+                form.title().to_owned().into_inner().to_owned(),
                 false,
             )
             .field(
                 "タイトル".to_string(),
-                title.default_answer_title.to_owned().unwrap_or_default(),
+                title
+                    .to_owned()
+                    .into_inner()
+                    .unwrap_or("タイトルなし".to_string()),
                 false,
             )
             .fields(
@@ -55,7 +64,7 @@ pub async fn post_answer(
                     .iter()
                     .map(|answer| {
                         (
-                            form.questions
+                            questions
                                 .iter()
                                 .find(|question| question.id == Some(answer.question_id))
                                 .map(|question| question.title.to_owned())
@@ -80,9 +89,16 @@ pub async fn post_comment(
     comment: &Comment,
     answer: &FormAnswer,
 ) -> Result<(), InfraError> {
-    if let Some(url) = form.settings.webhook_url.webhook_url.to_owned() {
+    if let Some(url) = form.settings().webhook_url().to_owned().into_inner() {
         Webhook::new(url, "回答に対してコメントが投稿されました".to_string())
-            .field("回答".to_string(), answer.title.unwrap_or_default(), false)
+            .field(
+                "回答".to_string(),
+                answer
+                    .title
+                    .to_owned()
+                    .unwrap_or("タイトルなし".to_string()),
+                false,
+            )
             .field("内容".to_string(), comment.content.to_owned(), false)
             .field(
                 "発言者".to_string(),
@@ -98,11 +114,11 @@ pub async fn post_comment(
 
 #[tracing::instrument]
 pub async fn delete(form: Form) -> Result<(), InfraError> {
-    if let Some(url) = form.settings.webhook_url.into() {
+    if let Some(url) = form.settings().webhook_url().to_owned().into_inner() {
         Webhook::new(url, "フォームが削除されました".to_string())
             .field(
                 "フォーム名".to_string(),
-                form.title.title().to_owned(),
+                form.title().to_owned().into_inner(),
                 false,
             )
             .send(Color::Red)

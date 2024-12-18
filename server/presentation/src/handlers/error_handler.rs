@@ -32,6 +32,30 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             )
                 .into_response()
         }
+        DomainError::EmptyValue => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "EMPTY_VALUE",
+                "reason": "Empty value error."
+            })),
+        )
+            .into_response(),
+        DomainError::InvalidResponsePeriod => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "INVALID_RESPONSE_PERIOD",
+                "reason": "Invalid response period."
+            })),
+        )
+            .into_response(),
+        DomainError::InvalidWebhookUrl => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "INVALID_WEBHOOK_URL",
+                "reason": "Invalid webhook url. (Seichi-Portal only supports Discord webhook)"
+            })),
+        )
+            .into_response(),
     }
 }
 
@@ -49,7 +73,7 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             StatusCode::FORBIDDEN,
             Json(json!({
                 "errorCode": "OUT_OF_PERIOD",
-                "reason": "Posted form is out of period."
+                "reason": "Posted forms is out of period."
             })),
         )
             .into_response(),
@@ -57,7 +81,7 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             StatusCode::FORBIDDEN,
             Json(json!({
                 "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
-                "reason": "Do not have permission to post form comment."
+                "reason": "Do not have permission to post forms comment."
             })),
         )
             .into_response(),
