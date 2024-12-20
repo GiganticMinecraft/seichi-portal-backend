@@ -14,4 +14,6 @@ pub enum UseCaseError {
     MessageNotFound,
     #[error("Notification not found.")]
     NotificationNotFound,
+    #[error("Label not found.")]
+    LabelNotFound,
 }

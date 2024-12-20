@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use domain::form::models::{FormId, FormLabel, FormLabelId};
+use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
 use errors::infra::InfraError;
 use itertools::Itertools;
 
@@ -7,22 +7,30 @@ use crate::{
     database::{
         components::FormLabelDatabase,
         connection::{
-            batch_insert, execute_and_values, multiple_delete, query_all, ConnectionPool,
+            batch_insert, execute_and_values, multiple_delete, query_all, query_one_and_values,
+            ConnectionPool,
         },
     },
-    dto::LabelDto,
+    dto::FormLabelDto,
 };
 
 #[async_trait]
 impl FormLabelDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn create_label_for_forms(&self, label_name: String) -> Result<(), InfraError> {
-        let params = [label_name.to_owned().into()];
+    async fn create_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError> {
+        let params = [
+            label.id().to_owned().into_inner().to_string().into(),
+            label.name().to_owned().into_inner().into(),
+        ];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values("INSERT INTO label_for_forms (name) VALUES (?)", params, txn)
-                    .await?;
+                execute_and_values(
+                    "INSERT INTO label_for_forms (id, name) VALUES (?, ?)",
+                    params,
+                    txn,
+                )
+                .await?;
 
                 Ok::<_, InfraError>(())
             })
@@ -32,7 +40,7 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError> {
+    async fn fetch_labels(&self) -> Result<Vec<FormLabelDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let labels_rs = query_all("SELECT id, name FROM label_for_forms", txn).await?;
@@ -40,12 +48,12 @@ impl FormLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(LabelDto {
+                        Ok::<_, InfraError>(FormLabelDto {
                             id: rs.try_get("", "id")?,
                             name: rs.try_get("", "name")?,
                         })
                     })
-                    .collect::<Result<Vec<LabelDto>, _>>()
+                    .collect::<Result<Vec<FormLabelDto>, _>>()
             })
         })
         .await
@@ -71,14 +79,41 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn edit_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError> {
-        let params = [label.name.to_owned().into(), label.id.to_string().into()];
+    async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let label_rs = query_one_and_values(
+                    "SELECT id, name FROM label_for_forms WHERE id = ?",
+                    [id.into_inner().into()],
+                    txn,
+                )
+                .await?;
 
+                label_rs
+                    .map(|rs| {
+                        Ok::<_, InfraError>(FormLabelDto {
+                            id: rs.try_get("", "id")?,
+                            name: rs.try_get("", "name")?,
+                        })
+                    })
+                    .transpose()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn edit_label_for_forms(
+        &self,
+        id: FormLabelId,
+        name: FormLabelName,
+    ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
                     "UPDATE label_for_forms SET name = ? WHERE id = ?",
-                    params,
+                    [name.into_inner().into(), id.to_string().into()],
                     txn,
                 )
                 .await?;

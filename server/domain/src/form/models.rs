@@ -434,11 +434,190 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     }
 }
 
-pub type FormLabelId = types::IntegerId<FormLabel>;
+pub type FormLabelId = types::Id<FormLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]
+pub struct FormLabelName(String);
+
+impl FormLabelName {
+    pub fn try_new(name: String) -> Result<Self, DomainError> {
+        if name.is_empty() {
+            return Err(EmptyValue);
+        }
+
+        Ok(Self(name))
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct FormLabel {
-    pub id: FormLabelId,
-    pub name: String,
+    id: FormLabelId,
+    name: FormLabelName,
+}
+
+impl FormLabel {
+    pub fn new(name: FormLabelName) -> Self {
+        Self {
+            id: FormLabelId::new(),
+            name,
+        }
+    }
+
+    pub fn renamed(&self, name: FormLabelName) -> Self {
+        Self { id: self.id, name }
+    }
+
+    pub fn from_raw_parts(id: FormLabelId, name: FormLabelName) -> Self {
+        Self { id, name }
+    }
+}
+
+impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
+    /// [`FormLabel`] の作成権限があるかどうかを判定します。
+    ///
+    /// 作成権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    /// # Examples
+    /// ```
+    /// use uuid::Uuid;
+    /// use domain::{
+    ///    form::models::{FormLabel, FormLabelName},
+    ///   types::authorization_guard::AuthorizationGuardDefinitions,
+    ///   user::models::{Role, User},
+    /// };
+    ///
+    /// let administrator = User {
+    ///    name: "administrator".to_string(),
+    ///   id: Uuid::new_v4(),
+    ///  role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///   name: "standard_user".to_string(),
+    ///  id: Uuid::new_v4(),
+    /// role: Role::StandardUser,
+    /// };
+    ///
+    /// let form_label = FormLabel::new(
+    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    /// );
+    ///
+    /// assert!(form_label.can_create(&administrator));
+    /// assert!(!form_label.can_create(&standard_user));
+    /// ```
+    fn can_create(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    /// [`FormLabel`] の読み取り権限があるかどうかを判定します。
+    ///
+    /// 読み取り権限はすべてのユーザーに与えられます。
+    /// # Examples
+    /// ```
+    /// use uuid::Uuid;
+    /// use domain::{
+    ///    form::models::{FormLabel, FormLabelName},
+    ///   types::authorization_guard::AuthorizationGuardDefinitions,
+    ///   user::models::{Role, User},
+    /// };
+    ///
+    /// let administrator = User {
+    ///    name: "administrator".to_string(),
+    ///   id: Uuid::new_v4(),
+    ///  role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///   name: "standard_user".to_string(),
+    ///  id: Uuid::new_v4(),
+    /// role: Role::StandardUser,
+    /// };
+    ///
+    /// let form_label = FormLabel::new(
+    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    /// );
+    ///
+    /// assert!(form_label.can_read(&administrator));
+    /// assert!(form_label.can_read(&standard_user));
+    /// ```
+    fn can_read(&self, _actor: &User) -> bool {
+        true
+    }
+
+    /// [`FormLabel`] の更新権限があるかどうかを判定します。
+    ///
+    /// 更新権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    ///
+    /// # Examples
+    /// ```
+    /// use uuid::Uuid;
+    /// use domain::{
+    ///    form::models::{FormLabel, FormLabelName},
+    ///   types::authorization_guard::AuthorizationGuardDefinitions,
+    ///   user::models::{Role, User},
+    /// };
+    ///
+    /// let administrator = User {
+    ///    name: "administrator".to_string(),
+    ///   id: Uuid::new_v4(),
+    ///  role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///   name: "standard_user".to_string(),
+    ///  id: Uuid::new_v4(),
+    /// role: Role::StandardUser,
+    /// };
+    ///
+    /// let form_label = FormLabel::new(
+    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    /// );
+    ///
+    /// assert!(form_label.can_update(&administrator));
+    /// assert!(!form_label.can_update(&standard_user));
+    /// ```
+    fn can_update(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    /// [`FormLabel`] の削除権限があるかどうかを判定します。
+    ///
+    /// 削除権限は以下の条件を満たしている場合に与えられます。
+    /// - [`actor`] が [`Administrator`] である場合
+    ///
+    /// # Examples
+    /// ```
+    /// use uuid::Uuid;
+    /// use domain::{
+    ///    form::models::{FormLabel, FormLabelName},
+    ///   types::authorization_guard::AuthorizationGuardDefinitions,
+    ///   user::models::{Role, User},
+    /// };
+    ///
+    /// let administrator = User {
+    ///    name: "administrator".to_string(),
+    ///   id: Uuid::new_v4(),
+    ///  role: Role::Administrator,
+    /// };
+    ///
+    /// let standard_user = User {
+    ///   name: "standard_user".to_string(),
+    ///  id: Uuid::new_v4(),
+    /// role: Role::StandardUser,
+    /// };
+    ///
+    /// let form_label = FormLabel::new(
+    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    /// );
+    ///
+    /// assert!(form_label.can_delete(&administrator));
+    /// assert!(!form_label.can_delete(&standard_user));
+    /// ```
+    fn can_delete(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
 }
