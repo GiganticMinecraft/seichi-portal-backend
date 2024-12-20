@@ -57,7 +57,12 @@ impl FormCommentDatabase for ConnectionPool {
             comment.comment_id().into_inner().to_string().into(),
             answer_id.into_inner().into(),
             comment.commented_by().id.to_string().into(),
-            comment.content().to_owned().into_inner().into(),
+            comment
+                .content()
+                .to_owned()
+                .into_inner()
+                .into_inner()
+                .into(),
         ];
 
         self.read_write_transaction(|txn| {

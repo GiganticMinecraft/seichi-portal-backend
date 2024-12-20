@@ -31,7 +31,7 @@ pub async fn post_form_comment(
     let post_comment_result = async {
         let comment = Comment::new(
             comment_schema.answer_id,
-            CommentContent::try_new(comment_schema.content)?,
+            CommentContent::new(comment_schema.content.try_into()?),
             user.to_owned(),
         );
 
