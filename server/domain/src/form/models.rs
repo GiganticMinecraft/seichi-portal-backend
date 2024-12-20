@@ -1,52 +1,42 @@
+use crate::{
+    types::authorization_guard::AuthorizationGuardDefinitions,
+    user::models::{Role::Administrator, User},
+};
 use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
-use errors::domain::{DomainError, DomainError::EmptyValue};
+use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
-
-use crate::{
-    types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Role::Administrator, User},
-};
+use types::non_empty_string::NonEmptyString;
 
 pub type FormId = types::Id<Form>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]
-pub struct FormTitle(String);
+#[deriving(From, Into, IntoInner, Serialize, Deserialize)]
+pub struct FormTitle(NonEmptyString);
 
 impl FormTitle {
-    pub fn try_new(title: String) -> Result<Self, DomainError> {
-        if title.is_empty() {
-            return Err(EmptyValue);
-        }
-
-        Ok(Self(title))
+    pub fn new(title: NonEmptyString) -> Self {
+        Self(title)
     }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Default, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
 ))]
-pub struct FormDescription(Option<String>);
+pub struct FormDescription(Option<NonEmptyString>);
 
 impl FormDescription {
-    pub fn try_new(description: Option<String>) -> Result<Self, DomainError> {
-        if let Some(description) = &description {
-            if description.is_empty() {
-                return Err(EmptyValue);
-            }
-        }
-
-        Ok(Self(description))
+    pub fn new(description: Option<NonEmptyString>) -> Self {
+        Self(description)
     }
 }
 
@@ -70,7 +60,7 @@ impl FormSettings {
         Self {
             response_period: ResponsePeriod::try_new(None, None).unwrap(),
             webhook_url: WebhookUrl::try_new(None).unwrap(),
-            default_answer_title: DefaultAnswerTitle::try_new(None).unwrap(),
+            default_answer_title: DefaultAnswerTitle::new(None),
             visibility: Visibility::PUBLIC,
             answer_visibility: Visibility::PRIVATE,
         }
@@ -120,17 +110,13 @@ impl ResponsePeriod {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
 ))]
-pub struct WebhookUrl(Option<String>);
+pub struct WebhookUrl(Option<NonEmptyString>);
 
 impl WebhookUrl {
-    pub fn try_new(url: Option<String>) -> Result<Self, DomainError> {
+    pub fn try_new(url: Option<NonEmptyString>) -> Result<Self, DomainError> {
         if let Some(url) = &url {
-            if url.is_empty() {
-                return Err(EmptyValue);
-            }
-
             let regex = Regex::new("https://discord.com/api/webhooks/.*").unwrap();
             if !regex.is_match(url) {
                 return Err(DomainError::InvalidWebhookUrl);
@@ -143,19 +129,13 @@ impl WebhookUrl {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: Option::<String>), Deserialize(via: Option::<String>
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
 ))]
-pub struct DefaultAnswerTitle(Option<String>);
+pub struct DefaultAnswerTitle(Option<NonEmptyString>);
 
 impl DefaultAnswerTitle {
-    pub fn try_new(title: Option<String>) -> Result<Self, DomainError> {
-        if let Some(title) = &title {
-            if title.is_empty() {
-                return Err(EmptyValue);
-            }
-        }
-
-        Ok(Self(title))
+    pub fn new(title: Option<NonEmptyString>) -> Self {
+        Self(title)
     }
 }
 
@@ -277,8 +257,8 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///
     ///
     /// let form = Form::new(
-    ///     FormTitle::try_new("テストフォーム".to_string()).unwrap(),
-    ///     FormDescription::try_new(None).unwrap()
+    ///     FormTitle::new("テストフォーム".to_string().try_into()?),
+    ///     FormDescription::new(None)
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -322,12 +302,12 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     /// let private_form = Form::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::try_new("非公開フォーム".to_string()).unwrap(),
-    ///     FormDescription::try_new(None).unwrap(),
+    ///     FormDescription::new(None),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
     ///         ResponsePeriod::try_new(None, None).unwrap(),
     ///         WebhookUrl::try_new(None).unwrap(),
-    ///         DefaultAnswerTitle::try_new(None).unwrap(),
+    ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PRIVATE,
     ///         Visibility::PRIVATE
     ///     )
@@ -335,13 +315,13 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///
     ///  let public_form = Form::from_raw_parts(
     ///     FormId::new(),
-    ///     FormTitle::try_new("公開フォーム".to_string()).unwrap(),
-    ///     FormDescription::try_new(None).unwrap(),
+    ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
+    ///     FormDescription::new(None),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
     ///         ResponsePeriod::try_new(None, None).unwrap(),
     ///         WebhookUrl::try_new(None).unwrap(),
-    ///         DefaultAnswerTitle::try_new(None).unwrap(),
+    ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PUBLIC,
     ///         Visibility::PUBLIC
     ///     )
@@ -384,8 +364,8 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///
     ///
     /// let form = Form::new(
-    ///     FormTitle::try_new("テストフォーム".to_string()).unwrap(),
-    ///     FormDescription::try_new(None).unwrap()
+    ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
+    ///     FormDescription::new(None)
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -423,8 +403,8 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///
     ///
     /// let form = Form::new(
-    ///     FormTitle::try_new("テストフォーム".to_string()).unwrap(),
-    ///     FormDescription::try_new(None).unwrap()
+    ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
+    ///     FormDescription::new(None)
     /// );
     ///
     /// assert!(form.can_delete(&administrator));
@@ -438,16 +418,12 @@ pub type FormLabelId = types::Id<FormLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]
-pub struct FormLabelName(String);
+#[deriving(From, Into, IntoInner, Serialize(via: NonEmptyString), Deserialize(via: NonEmptyString))]
+pub struct FormLabelName(NonEmptyString);
 
 impl FormLabelName {
-    pub fn try_new(name: String) -> Result<Self, DomainError> {
-        if name.is_empty() {
-            return Err(EmptyValue);
-        }
-
-        Ok(Self(name))
+    pub fn new(name: NonEmptyString) -> Self {
+        Self(name)
     }
 }
 
@@ -488,6 +464,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     ///   types::authorization_guard::AuthorizationGuardDefinitions,
     ///   user::models::{Role, User},
     /// };
+    /// use types::non_empty_string::NonEmptyString;
     ///
     /// let administrator = User {
     ///    name: "administrator".to_string(),
@@ -502,7 +479,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     /// };
     ///
     /// let form_label = FormLabel::new(
-    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
     /// );
     ///
     /// assert!(form_label.can_create(&administrator));
@@ -523,6 +500,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     ///   types::authorization_guard::AuthorizationGuardDefinitions,
     ///   user::models::{Role, User},
     /// };
+    /// use types::non_empty_string::NonEmptyString;
     ///
     /// let administrator = User {
     ///    name: "administrator".to_string(),
@@ -537,7 +515,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     /// };
     ///
     /// let form_label = FormLabel::new(
-    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
     /// );
     ///
     /// assert!(form_label.can_read(&administrator));
@@ -560,6 +538,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     ///   types::authorization_guard::AuthorizationGuardDefinitions,
     ///   user::models::{Role, User},
     /// };
+    /// use types::non_empty_string::NonEmptyString;
     ///
     /// let administrator = User {
     ///    name: "administrator".to_string(),
@@ -574,7 +553,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     /// };
     ///
     /// let form_label = FormLabel::new(
-    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
     /// );
     ///
     /// assert!(form_label.can_update(&administrator));
@@ -597,6 +576,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     ///   types::authorization_guard::AuthorizationGuardDefinitions,
     ///   user::models::{Role, User},
     /// };
+    /// use types::non_empty_string::NonEmptyString;
     ///
     /// let administrator = User {
     ///    name: "administrator".to_string(),
@@ -611,7 +591,7 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     /// };
     ///
     /// let form_label = FormLabel::new(
-    ///   FormLabelName::try_new("テストラベル".to_string()).unwrap()
+    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
     /// );
     ///
     /// assert!(form_label.can_delete(&administrator));

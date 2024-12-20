@@ -32,86 +32,91 @@ impl FormAnswerDatabase for ConnectionPool {
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), InfraError> {
-        let User { id, .. } = user.to_owned();
-        let form_id = form_id.to_owned();
-        let answers = answers.to_owned();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                let regex = Regex::new(r"\$\d+").unwrap();
-
-                let default_answer_title_query_result = query_all_and_values(
-                    r"SELECT title FROM default_answer_titles WHERE form_id = ?",
-                    [form_id.to_owned().into_inner().into()],
-                    txn,
-                )
-                .await?;
-
-                let default_answer_title: Option<String> = default_answer_title_query_result
-                    .first()
-                    .ok_or(FormNotFound {
-                        id: form_id.to_owned().into_inner(),
-                    })?
-                    .try_get("", "title")?;
-
-                // FIXME: ここにドメイン知識が漏れてしまっていることで
-                //   ここでのドメインエラーが正しくハンドリングできない
-                let default_answer_title = DefaultAnswerTitle::try_new(default_answer_title)
-                    .unwrap()
-                    .to_owned()
-                    .into_inner()
-                    .unwrap_or("未設定".to_string());
-
-                let embed_title = regex.find_iter(&default_answer_title.to_owned()).fold(
-                    default_answer_title,
-                    |replaced_title, question_id| {
-                        let answer_opt = answers.iter().find(|answer| {
-                            answer.question_id.to_string() == question_id.as_str().replace('$', "")
-                        });
-                        replaced_title.replace(
-                            question_id.as_str(),
-                            &answer_opt
-                                .map(|answer| answer.answer.to_owned())
-                                .unwrap_or_default(),
-                        )
-                    },
-                );
-
-                let id = execute_and_values(
-                    r"INSERT INTO answers (form_id, user, title) VALUES (?, ?, ?)",
-                    [
-                        form_id.to_owned().into_inner().into(),
-                        id.to_owned().to_string().into(),
-                        embed_title.into(),
-                    ],
-                    txn,
-                )
-                .await?
-                .last_insert_id();
-
-                let params = answers
-                    .iter()
-                    .flat_map(|answer| {
-                        vec![
-                            id.to_string(),
-                            answer.question_id.to_string(),
-                            answer.answer.to_owned(),
-                        ]
-                    })
-                    .collect_vec();
-
-                batch_insert(
-                    "INSERT INTO real_answers (answer_id, question_id, answer) VALUES (?, ?, ?)",
-                    params.into_iter().map(|value| value.into()),
-                    txn,
-                )
-                .await?;
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-        .map_err(Into::into)
+        todo!()
+        // let User { id, .. } = user.to_owned();
+        // let form_id = form_id.to_owned();
+        // let answers = answers.to_owned();
+        //
+        // self.read_write_transaction(|txn| {
+        //     Box::pin(async move {
+        //         let regex = Regex::new(r"\$\d+").unwrap();
+        //
+        //         let default_answer_title_query_result = query_all_and_values(
+        //             r"SELECT title FROM default_answer_titles WHERE form_id = ?",
+        //             [form_id.to_owned().into_inner().into()],
+        //             txn,
+        //         )
+        //         .await?;
+        //
+        //         let default_answer_title: Option<String> = default_answer_title_query_result
+        //             .first()
+        //             .ok_or(FormNotFound {
+        //                 id: form_id.to_owned().into_inner(),
+        //             })?
+        //             .try_get("", "title")?;
+        //
+        //         // FIXME: ここにドメイン知識が漏れてしまっていることで
+        //         //   ここでのドメインエラーが正しくハンドリングできない
+        //         let default_answer_title = DefaultAnswerTitle::new(
+        //             default_answer_title
+        //                 .map(TryInto::try_into)
+        //                 .transpose()
+        //                 .unwrap(),
+        //         )
+        //         .to_owned();
+        //
+        //
+        //         let embed_title = regex
+        //             .find_iter(default_answer_title.to_string().as_str())
+        //             .fold(default_answer_title, |replaced_title, question_id| {
+        //                 let answer_opt = answers.iter().find(|answer| {
+        //                     answer.question_id.to_string() == question_id.as_str().replace('$', "")
+        //                 });
+        //                 todo!()
+        //                 // replaced_title.into_inner().replace(
+        //                 //     question_id.as_str(),
+        //                 //     &answer_opt
+        //                 //         .map(|answer| answer.answer.to_owned().to_string())
+        //                 //         .unwrap_or_default(),
+        //                 // )
+        //             });
+        //
+        //         let id = execute_and_values(
+        //             r"INSERT INTO answers (form_id, user, title) VALUES (?, ?, ?)",
+        //             [
+        //                 form_id.to_owned().into_inner().into(),
+        //                 id.to_owned().to_string().into(),
+        //                 todo!(),
+        //                 // embed_title.into(),
+        //             ],
+        //             txn,
+        //         )
+        //         .await?
+        //         .last_insert_id();
+        //
+        //         let params = answers
+        //             .iter()
+        //             .flat_map(|answer| {
+        //                 vec![
+        //                     id.to_string(),
+        //                     answer.question_id.to_string(),
+        //                     answer.answer.to_owned(),
+        //                 ]
+        //             })
+        //             .collect_vec();
+        //
+        //         batch_insert(
+        //             "INSERT INTO real_answers (answer_id, question_id, answer) VALUES (?, ?, ?)",
+        //             params.into_iter().map(|value| value.into()),
+        //             txn,
+        //         )
+        //         .await?;
+        //
+        //         Ok::<_, InfraError>(())
+        //     })
+        // })
+        // .await
+        // .map_err(Into::into)
     }
 
     #[tracing::instrument]

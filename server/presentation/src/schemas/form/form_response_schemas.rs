@@ -40,8 +40,12 @@ impl From<domain::form::models::Form> for FormListSchema {
     fn from(form: domain::form::models::Form) -> Self {
         FormListSchema {
             id: form.id().to_owned(),
-            title: form.title().to_owned().into_inner(),
-            description: form.description().to_owned().into_inner(),
+            title: form.title().to_string(),
+            description: form
+                .description()
+                .to_owned()
+                .into_inner()
+                .map(|desc| desc.to_string()),
             response_period: ResponsePeriodSchema {
                 start_at: form.settings().response_period().start_at().to_owned(),
                 end_at: form.settings().response_period().end_at().to_owned(),
