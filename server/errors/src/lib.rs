@@ -1,6 +1,7 @@
 pub mod domain;
 pub mod infra;
 pub mod usecase;
+pub mod validation;
 
 use thiserror::Error;
 
@@ -20,5 +21,10 @@ pub enum Error {
     UseCase {
         #[from]
         source: usecase::UseCaseError,
+    },
+    #[error(transparent)]
+    Validation {
+        #[from]
+        source: validation::ValidationError,
     },
 }

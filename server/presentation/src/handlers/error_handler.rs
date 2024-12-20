@@ -1,4 +1,5 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
+use errors::validation::ValidationError;
 use errors::{domain::DomainError, infra::InfraError, usecase::UseCaseError, Error};
 use serde_json::json;
 
@@ -245,10 +246,24 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
     }
 }
 
+pub fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
+    match err {
+        ValidationError::EmptyValue => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "EMPTY_VALUE",
+                "reason": "Empty value error."
+            })),
+        )
+            .into_response(),
+    }
+}
+
 pub fn handle_error(err: Error) -> impl IntoResponse {
     match err {
         Error::Domain { source } => handle_domain_error(source).into_response(),
         Error::UseCase { source } => handle_usecase_error(source).into_response(),
         Error::Infra { source } => handle_infra_error(source).into_response(),
+        Error::Validation { source } => handle_validation_error(source).into_response(),
     }
 }
