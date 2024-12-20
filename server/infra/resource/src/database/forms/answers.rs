@@ -4,13 +4,11 @@ use async_trait::async_trait;
 use domain::{
     form::{
         answer::models::{AnswerId, FormAnswerContent},
-        models::{DefaultAnswerTitle, FormId},
+        models::FormId,
     },
     user::models::{Role, User},
 };
-use errors::infra::{InfraError, InfraError::FormNotFound};
-use itertools::Itertools;
-use regex::Regex;
+use errors::infra::InfraError;
 
 use crate::{
     database::{

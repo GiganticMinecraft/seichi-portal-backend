@@ -1,22 +1,64 @@
-use chrono::{DateTime, Utc};
-#[cfg(test)]
-use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
-
 use crate::{
     form::{models::FormId, question::models::QuestionId},
     user::models::User,
 };
+use chrono::{DateTime, Utc};
+use derive_getters::Getters;
+use deriving_via::DerivingVia;
+#[cfg(test)]
+use proptest_derive::Arbitrary;
+use serde::{Deserialize, Serialize};
+use types::non_empty_string::NonEmptyString;
 
-pub type AnswerId = types::IntegerId<FormAnswer>;
+pub type AnswerId = types::Id<FormAnswer>;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
+))]
+pub struct AnswerTitle(Option<NonEmptyString>);
+
+// TODO: AnswerTitle の Service を実装して回答の埋め込みが行われたできるようにする
+impl AnswerTitle {
+    pub fn new(title: Option<NonEmptyString>) -> Self {
+        Self(title)
+    }
+}
+
+#[derive(Serialize, Deserialize, Getters, PartialEq, Debug)]
 pub struct FormAnswer {
-    pub id: AnswerId,
-    pub user: User,
-    pub timestamp: DateTime<Utc>,
-    pub form_id: FormId,
-    pub title: Option<String>,
+    id: AnswerId,
+    user: User,
+    timestamp: DateTime<Utc>,
+    form_id: FormId,
+    title: AnswerTitle,
+}
+
+impl FormAnswer {
+    pub fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
+        Self {
+            id: AnswerId::new(),
+            user,
+            timestamp: Utc::now(),
+            form_id,
+            title,
+        }
+    }
+
+    pub fn from_raw_parts(
+        id: AnswerId,
+        user: User,
+        timestamp: DateTime<Utc>,
+        form_id: FormId,
+        title: AnswerTitle,
+    ) -> Self {
+        Self {
+            id,
+            user,
+            timestamp,
+            form_id,
+            title,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

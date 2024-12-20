@@ -41,13 +41,11 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer {
-    ///     id: Default::default(),
-    ///     user: respondent.to_owned(),
-    ///     timestamp: Default::default(),
-    ///     form_id: Default::default(),
-    ///     title: Default::default(),
-    /// };
+    /// let related_answer = FormAnswer::new(
+    ///     respondent.to_owned(),
+    ///    Default::default(),
+    ///   Default::default(),
+    /// );
     ///
     /// let message = Message::try_new(
     ///     related_answer,
@@ -74,7 +72,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// ```
     fn can_create(&self, actor: &User) -> bool {
         actor.role == Administrator
-            || (actor.id == self.sender.id && self.related_answer.user.id == self.sender.id)
+            || (actor.id == self.sender.id && self.related_answer.user().id == self.sender.id)
     }
 
     /// [`Message`] の読み取り権限があるかどうかを判定します。
@@ -98,13 +96,11 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer {
-    ///     id: Default::default(),
-    ///     user: respondent.to_owned(),
-    ///     timestamp: Default::default(),
-    ///     form_id: Default::default(),
-    ///     title: Default::default(),
-    /// };
+    /// let related_answer = FormAnswer::new(
+    ///     respondent.to_owned(),
+    ///    Default::default(),
+    ///   Default::default(),
+    /// );
     ///
     /// let message = Message::try_new(
     ///     related_answer,
@@ -130,7 +126,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// assert!(!message.can_read(&unrelated_standard_user));
     /// ```
     fn can_read(&self, actor: &User) -> bool {
-        actor.role == Administrator || self.related_answer.user.id == actor.id
+        actor.role == Administrator || self.related_answer.user().id == actor.id
     }
 
     /// [`Message`] の更新権限があるかどうかを判定します。
@@ -156,13 +152,11 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer {
-    ///     id: Default::default(),
-    ///     user: respondent.to_owned(),
-    ///     timestamp: Default::default(),
-    ///     form_id: Default::default(),
-    ///     title: Default::default(),
-    /// };
+    /// let related_answer = FormAnswer::new(
+    ///     respondent.to_owned(),
+    ///    Default::default(),
+    ///   Default::default(),
+    /// );
     ///
     /// let message = Message::try_new(
     ///     related_answer,
@@ -214,13 +208,11 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer {
-    ///     id: Default::default(),
-    ///     user: respondent.to_owned(),
-    ///     timestamp: Default::default(),
-    ///     form_id: Default::default(),
-    ///     title: Default::default(),
-    /// };
+    /// let related_answer = FormAnswer::new(
+    ///     respondent.to_owned(),
+    ///    Default::default(),
+    ///   Default::default(),
+    /// );
     ///
     /// let message = Message::try_new(
     ///     related_answer,
@@ -270,13 +262,11 @@ impl Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer {
-    ///     id: 1.into(),
-    ///     user: user.to_owned(),
-    ///     timestamp: Default::default(),
-    ///     form_id: Default::default(),
-    ///     title: Default::default(),
-    /// };
+    /// let related_answer = FormAnswer::new(
+    ///     user.to_owned(),
+    ///    Default::default(),
+    ///   Default::default(),
+    /// );
     ///
     /// let success_message =
     ///     Message::try_new(related_answer, user.to_owned(), "test message".to_string());
@@ -331,13 +321,11 @@ impl Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer {
-    ///     id: 1.into(),
-    ///     user: user.to_owned(),
-    ///     timestamp: Utc::now(),
-    ///     form_id: Default::default(),
-    ///     title: Default::default(),
-    /// };
+    /// let related_answer = FormAnswer::new(
+    ///     user.to_owned(),
+    ///    Default::default(),
+    ///   Default::default(),
+    /// );
     ///
     /// unsafe {
     ///     let message = Message::from_raw_parts(

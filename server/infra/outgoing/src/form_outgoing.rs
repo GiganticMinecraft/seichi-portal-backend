@@ -91,8 +91,10 @@ pub async fn post_comment(
         .field(
             "回答".to_string(),
             answer
-                .title
+                .title()
                 .to_owned()
+                .into_inner()
+                .map(|title| title.to_string())
                 .unwrap_or("タイトルなし".to_string()),
             false,
         )

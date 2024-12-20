@@ -96,7 +96,7 @@ impl MigrationTrait for Migration {
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS answers(
-                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    id UUID NOT NULL PRIMARY KEY,
                     form_id UUID NOT NULL,
                     user CHAR(36) NOT NULL,
                     title TEXT,
@@ -112,7 +112,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS real_answers(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    answer_id INT NOT NULL,
+                    answer_id UUID NOT NULL,
                     question_id INT NOT NULL,
                     answer TEXT NOT NULL,
                     FOREIGN KEY fk_real_answers_answer_id(answer_id) REFERENCES answers(id),
@@ -138,7 +138,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS form_answer_comments(
                     id UUID NOT NULL PRIMARY KEY,
-                    answer_id INT NOT NULL,
+                    answer_id UUID NOT NULL,
                     commented_by CHAR(36) NOT NULL,
                     content TEXT NOT NULL,
                     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -163,7 +163,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS label_settings_for_form_answers(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    answer_id INT NOT NULL,
+                    answer_id UUID NOT NULL,
                     label_id INT NOT NULL,
                     FOREIGN KEY fk_label_settings_for_form_answers_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
                     FOREIGN KEY fk_label_settings_for_form_answers_label_id(label_id) REFERENCES label_for_form_answers(id) ON DELETE CASCADE
@@ -199,7 +199,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS messages(
                     id UUID NOT NULL PRIMARY KEY,
-                    related_answer_id INT NOT NULL,
+                    related_answer_id UUID NOT NULL,
                     sender CHAR(36) NOT NULL,
                     body TEXT NOT NULL,
                     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

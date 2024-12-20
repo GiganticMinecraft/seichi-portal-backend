@@ -146,13 +146,15 @@ impl FormAnswerLabelDatabase for ConnectionPool {
 
                 let params = label_ids
                     .into_iter()
-                    .flat_map(|label_id| [answer_id.into_inner(), label_id.into_inner()])
+                    .flat_map(|label_id| {
+                        [answer_id.into_inner().into(), label_id.into_inner().into()]
+                    })
                     .collect_vec();
 
                 batch_insert(
                     "INSERT INTO label_settings_for_form_answers (answer_id, label_id) VALUES (?, \
                      ?)",
-                    params.into_iter().map(|value| value.into()),
+                    params,
                     txn,
                 )
                 .await?;

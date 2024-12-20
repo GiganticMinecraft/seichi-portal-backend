@@ -51,7 +51,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
 
                 let form = self
                     .form_repository
-                    .get(answer.form_id)
+                    .get(*answer.form_id())
                     .await?
                     .ok_or(FormNotFound)?
                     .try_into_read(actor)?;
