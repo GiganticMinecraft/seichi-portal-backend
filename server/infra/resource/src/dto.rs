@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use domain::form::comment::models::CommentContent;
 use domain::{
     form::{
         models::{
@@ -137,7 +138,7 @@ impl TryFrom<UserDto> for User {
 
 pub struct CommentDto {
     pub answer_id: i32,
-    pub comment_id: i32,
+    pub comment_id: Uuid,
     pub content: String,
     pub timestamp: DateTime<Utc>,
     pub commented_by: UserDto,
@@ -155,13 +156,13 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
             commented_by,
         }: CommentDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::comment::models::Comment {
-            answer_id: answer_id.into(),
-            comment_id: comment_id.into(),
-            content,
+        Ok(domain::form::comment::models::Comment::from_raw_parts(
+            answer_id.into(),
+            comment_id.into(),
+            CommentContent::try_new(content)?,
             timestamp,
-            commented_by: commented_by.try_into()?,
-        })
+            commented_by.try_into()?,
+        ))
     }
 }
 

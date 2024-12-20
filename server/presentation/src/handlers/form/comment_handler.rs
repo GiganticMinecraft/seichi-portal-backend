@@ -4,6 +4,7 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
+use domain::form::comment::models::CommentContent;
 use domain::{
     form::comment::models::{Comment, CommentId},
     repository::Repositories,
@@ -27,21 +28,20 @@ pub async fn post_form_comment(
         form_repository: repository.form_repository(),
     };
 
-    // FIXME: コメントは handler 側で作られるべきではないし、
-    //  コメントの id がデータベースで降られるなら Option になるべき。
-    let comment = Comment {
-        // NOTE: コメントはデータベースで insert した後に id が振られるのでデフォルト値を入れておく
-        comment_id: Default::default(),
-        answer_id: comment_schema.answer_id,
-        content: comment_schema.content,
-        timestamp: chrono::Utc::now(),
-        commented_by: user.to_owned(),
-    };
+    let post_comment_result = async {
+        let comment = Comment::new(
+            comment_schema.answer_id,
+            CommentContent::try_new(comment_schema.content)?,
+            user.to_owned(),
+        );
 
-    match form_comment_use_case
-        .post_comment(&user, comment, comment_schema.answer_id)
-        .await
-    {
+        form_comment_use_case
+            .post_comment(&user, comment, comment_schema.answer_id)
+            .await
+    }
+    .await;
+
+    match post_comment_result {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
