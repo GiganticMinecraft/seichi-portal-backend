@@ -109,6 +109,14 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        UseCaseError::LabelNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "LABEL_NOT_FOUND",
+                "reason": "Label not found"
+            })),
+        )
+            .into_response(),
     }
 }
 

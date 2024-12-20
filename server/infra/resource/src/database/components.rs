@@ -5,8 +5,8 @@ use domain::{
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{
-            DefaultAnswerTitle, Form, FormDescription, FormId, FormLabel, FormLabelId, FormTitle,
-            ResponsePeriod, Visibility, WebhookUrl,
+            DefaultAnswerTitle, Form, FormDescription, FormId, FormLabel, FormLabelId,
+            FormLabelName, FormTitle, ResponsePeriod, Visibility, WebhookUrl,
         },
         question::models::Question,
     },
@@ -18,8 +18,8 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::dto::{
-    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, LabelDto, MessageDto,
-    NotificationDto, QuestionDto,
+    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
+    MessageDto, NotificationDto, QuestionDto,
 };
 
 #[async_trait]
@@ -185,10 +185,15 @@ pub trait FormCommentDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormLabelDatabase: Send + Sync {
-    async fn create_label_for_forms(&self, label_name: String) -> Result<(), InfraError>;
-    async fn get_labels_for_forms(&self) -> Result<Vec<LabelDto>, InfraError>;
+    async fn create_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError>;
+    async fn fetch_labels(&self) -> Result<Vec<FormLabelDto>, InfraError>;
     async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError>;
-    async fn edit_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError>;
+    async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelDto>, InfraError>;
+    async fn edit_label_for_forms(
+        &self,
+        id: FormLabelId,
+        name: FormLabelName,
+    ) -> Result<(), InfraError>;
     async fn replace_form_labels(
         &self,
         form_id: FormId,

@@ -1,10 +1,13 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{FormId, FormLabel, FormLabelId},
+    form::models::{FormId, FormLabel, FormLabelId, FormLabelName},
     repository::form::form_label_repository::FormLabelRepository,
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
+    user::models::User,
 };
 use errors::Error;
 use futures::{stream, StreamExt};
+use itertools::Itertools;
 
 use crate::{
     database::components::{DatabaseComponents, FormLabelDatabase},
@@ -14,38 +17,76 @@ use crate::{
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn create_label_for_forms(&self, label_name: String) -> Result<(), Error> {
-        self.client
-            .form_label()
-            .create_label_for_forms(label_name)
+    async fn create_label_for_forms(
+        &self,
+        label: AuthorizationGuard<FormLabel, Create>,
+        actor: &User,
+    ) -> Result<(), Error> {
+        label
+            .try_create(actor, |label| {
+                self.client.form_label().create_label_for_forms(label)
+            })?
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_labels_for_forms(&self) -> Result<Vec<FormLabel>, Error> {
-        stream::iter(self.client.form_label().get_labels_for_forms().await?)
-            .then(|label_dto| async { Ok(label_dto.try_into()?) })
-            .collect::<Vec<Result<FormLabel, _>>>()
-            .await
+    async fn fetch_labels(&self) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error> {
+        self.client
+            .form_label()
+            .fetch_labels()
+            .await?
             .into_iter()
-            .collect::<Result<Vec<FormLabel>, _>>()
+            .map(TryInto::<FormLabel>::try_into)
+            .map_ok(Into::<AuthorizationGuard<_, Read>>::into)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), Error> {
-        self.client
+    async fn fetch_label(
+        &self,
+        id: FormLabelId,
+    ) -> Result<Option<AuthorizationGuard<FormLabel, Read>>, Error> {
+        Ok(self
+            .client
             .form_label()
-            .delete_label_for_forms(label_id)
+            .fetch_label(id)
+            .await?
+            .map(TryInto::<FormLabel>::try_into)
+            .transpose()?
+            .map(Into::into))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_label_for_forms(
+        &self,
+        label: AuthorizationGuard<FormLabel, Delete>,
+        actor: &User,
+    ) -> Result<(), Error> {
+        label
+            .try_into_delete(actor, |label| {
+                self.client
+                    .form_label()
+                    .delete_label_for_forms(label.id().to_owned())
+            })?
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn edit_label_for_forms(&self, label: &FormLabel) -> Result<(), Error> {
-        self.client
-            .form_label()
-            .edit_label_for_forms(label)
+    async fn edit_label_for_forms(
+        &self,
+        id: FormLabelId,
+        label: AuthorizationGuard<FormLabel, Update>,
+        actor: &User,
+    ) -> Result<(), Error> {
+        label
+            .try_update(actor, |label| {
+                self.client
+                    .form_label()
+                    .edit_label_for_forms(id, label.name().to_owned())
+            })?
             .await
             .map_err(Into::into)
     }

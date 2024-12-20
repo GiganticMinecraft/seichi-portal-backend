@@ -219,19 +219,19 @@ impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
     }
 }
 
-pub struct LabelDto {
-    pub id: i32,
+pub struct FormLabelDto {
+    pub id: Uuid,
     pub name: String,
 }
 
-impl TryFrom<LabelDto> for domain::form::models::FormLabel {
+impl TryFrom<FormLabelDto> for domain::form::models::FormLabel {
     type Error = errors::domain::DomainError;
 
-    fn try_from(LabelDto { id, name }: LabelDto) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::FormLabel {
-            id: id.into(),
-            name,
-        })
+    fn try_from(FormLabelDto { id, name }: FormLabelDto) -> Result<Self, Self::Error> {
+        Ok(domain::form::models::FormLabel::from_raw_parts(
+            id.into(),
+            domain::form::models::FormLabelName::try_new(name)?,
+        ))
     }
 }
 
