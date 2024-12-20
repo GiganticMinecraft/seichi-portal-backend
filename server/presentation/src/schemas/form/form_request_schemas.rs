@@ -7,6 +7,7 @@ use domain::form::{
     question::models::Question,
 };
 use serde::Deserialize;
+use types::non_empty_string::NonEmptyString;
 
 #[derive(Deserialize, Debug)]
 pub struct OffsetAndLimit {
@@ -67,7 +68,7 @@ pub struct CommentPostSchema {
 
 #[derive(Deserialize, Debug)]
 pub struct FormLabelSchema {
-    pub name: String,
+    pub name: NonEmptyString,
 }
 
 #[derive(Deserialize, Debug)]

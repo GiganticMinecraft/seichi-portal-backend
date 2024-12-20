@@ -26,15 +26,10 @@ pub async fn create_label_for_forms(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let create_label_result = async {
-        let label = FormLabelName::try_new(label.name)?;
-        form_label_use_case
-            .create_label_for_forms(&user, label)
-            .await
-    }
-    .await;
-
-    match create_label_result {
+    match form_label_use_case
+        .create_label_for_forms(&user, FormLabelName::new(label.name))
+        .await
+    {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -82,15 +77,10 @@ pub async fn edit_label_for_forms(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let edit_form_label_result = async {
-        let label_name = FormLabelName::try_new(label.name)?;
-        form_label_use_case
-            .edit_label_for_forms(label_id, label_name, &user)
-            .await
-    }
-    .await;
-
-    match edit_form_label_result {
+    match form_label_use_case
+        .edit_label_for_forms(label_id, FormLabelName::new(label.name), &user)
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }

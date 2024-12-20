@@ -66,7 +66,7 @@ pub struct FormDto {
 }
 
 impl TryFrom<FormDto> for domain::form::models::Form {
-    type Error = errors::domain::DomainError;
+    type Error = errors::Error;
 
     fn try_from(
         FormDto {
@@ -84,13 +84,13 @@ impl TryFrom<FormDto> for domain::form::models::Form {
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Form::from_raw_parts(
             FormId::from(id),
-            FormTitle::try_new(title)?,
-            FormDescription::try_new(description)?,
+            FormTitle::new(title.try_into()?),
+            FormDescription::new(description.map(TryInto::try_into).transpose()?),
             FormMeta::from_raw_parts(metadata.0, metadata.1),
             FormSettings::from_raw_parts(
                 ResponsePeriod::try_new(start_at, end_at)?,
-                WebhookUrl::try_new(webhook_url)?,
-                DefaultAnswerTitle::try_new(default_answer_title)?,
+                WebhookUrl::try_new(webhook_url.map(TryInto::try_into).transpose()?)?,
+                DefaultAnswerTitle::new(default_answer_title.map(TryInto::try_into).transpose()?),
                 visibility.try_into()?,
                 answer_visibility.try_into()?,
             ),
@@ -226,12 +226,12 @@ pub struct FormLabelDto {
 }
 
 impl TryFrom<FormLabelDto> for domain::form::models::FormLabel {
-    type Error = errors::domain::DomainError;
+    type Error = errors::validation::ValidationError;
 
     fn try_from(FormLabelDto { id, name }: FormLabelDto) -> Result<Self, Self::Error> {
         Ok(domain::form::models::FormLabel::from_raw_parts(
             id.into(),
-            domain::form::models::FormLabelName::try_new(name)?,
+            domain::form::models::FormLabelName::new(name.try_into()?),
         ))
     }
 }

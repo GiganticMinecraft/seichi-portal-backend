@@ -20,7 +20,7 @@ impl FormLabelDatabase for ConnectionPool {
     async fn create_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError> {
         let params = [
             label.id().to_owned().into_inner().to_string().into(),
-            label.name().to_owned().into_inner().into(),
+            label.name().to_string().into(),
         ];
 
         self.read_write_transaction(|txn| {
@@ -113,7 +113,7 @@ impl FormLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     "UPDATE label_for_forms SET name = ? WHERE id = ?",
-                    [name.into_inner().into(), id.to_string().into()],
+                    [name.to_string().into(), id.to_string().into()],
                     txn,
                 )
                 .await?;

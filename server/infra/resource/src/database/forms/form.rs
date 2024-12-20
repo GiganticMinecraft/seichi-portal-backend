@@ -23,7 +23,11 @@ impl FormDatabase for ConnectionPool {
     async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError> {
         let form_id = form.id().to_owned();
         let form_title = form.title().to_owned();
-        let description = form.description().to_owned();
+        let description = form
+            .description()
+            .to_owned()
+            .into_inner()
+            .map(|d| d.to_string());
         let user_id = user.id.to_owned();
 
         self.read_write_transaction(|txn| {
@@ -32,8 +36,8 @@ impl FormDatabase for ConnectionPool {
                     r#"INSERT INTO form_meta_data (title, description, created_by, updated_by)
                             VALUES (?, ?, ?, ?)"#,
                     [
-                        form_title.into_inner().into(),
-                        description.into_inner().into(),
+                        form_title.to_string().into(),
+                        description.to_owned().into(),
                         user_id.to_string().into(),
                         user_id.to_string().into(),
                     ],
@@ -185,7 +189,7 @@ impl FormDatabase for ConnectionPool {
                 execute_and_values(
                     r"UPDATE form_meta_data SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     [
-                        form_title.into(),
+                        form_title.to_string().into(),
                         form_id.into(),
                     ],
                     txn,
@@ -211,7 +215,7 @@ impl FormDatabase for ConnectionPool {
                 execute_and_values(
                     r"UPDATE form_meta_data SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     [
-                        form_description.to_owned().into(),
+                        form_description.map(|des| des.to_string()).into(),
                         form_id.into(),
                     ],
                     txn,
@@ -261,7 +265,7 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     "UPDATE form_webhooks SET url = ? WHERE form_id = ?",
-                    [webhook_url.into(), form_id.into()],
+                    [webhook_url.map(|s| s.to_string()).into(), form_id.into()],
                     txn,
                 )
                 .await?;
@@ -285,7 +289,10 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     "UPDATE default_answer_titles SET title = ? WHERE form_id = ?",
-                    [default_answer_title.into(), form_id.into()],
+                    [
+                        default_answer_title.map(|v| v.to_string()).into(),
+                        form_id.into(),
+                    ],
                     txn,
                 )
                 .await?;
