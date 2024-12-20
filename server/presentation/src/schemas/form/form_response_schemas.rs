@@ -110,7 +110,7 @@ pub(crate) struct AnswerComment {
 impl From<domain::form::comment::models::Comment> for AnswerComment {
     fn from(val: domain::form::comment::models::Comment) -> Self {
         AnswerComment {
-            content: val.content().to_owned().into_inner(),
+            content: val.content().to_string(),
             timestamp: val.timestamp().to_owned(),
             commented_by: val.commented_by().to_owned().into(),
         }

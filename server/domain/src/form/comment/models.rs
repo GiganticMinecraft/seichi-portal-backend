@@ -2,22 +2,18 @@ use crate::{form::answer::models::AnswerId, user::models::User};
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
-use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
+use types::non_empty_string::NonEmptyString;
 
 pub type CommentId = types::Id<Comment>;
 
 #[derive(DerivingVia, Debug, PartialEq)]
-#[deriving(Clone, From, Into, IntoInner, Serialize(via: String), Deserialize(via: String))]
-pub struct CommentContent(String);
+#[deriving(Clone, From, Into, IntoInner, Serialize, Deserialize)]
+pub struct CommentContent(NonEmptyString);
 
 impl CommentContent {
-    pub fn try_new(content: String) -> Result<Self, DomainError> {
-        if content.is_empty() {
-            return Err(DomainError::EmptyValue);
-        }
-
-        Ok(Self(content))
+    pub fn new(content: NonEmptyString) -> Self {
+        Self(content)
     }
 }
 

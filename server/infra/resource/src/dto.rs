@@ -145,7 +145,7 @@ pub struct CommentDto {
 }
 
 impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
-    type Error = errors::domain::DomainError;
+    type Error = errors::Error;
 
     fn try_from(
         CommentDto {
@@ -159,7 +159,7 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
         Ok(domain::form::comment::models::Comment::from_raw_parts(
             answer_id.into(),
             comment_id.into(),
-            CommentContent::try_new(content)?,
+            CommentContent::new(content.try_into()?),
             timestamp,
             commented_by.try_into()?,
         ))
