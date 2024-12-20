@@ -41,7 +41,7 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
             .await?
             .into_iter()
             .map(|dto| {
-                Ok::<Message, DomainError>(dto.try_into()?).map(|message| {
+                Ok::<Message, Error>(dto.try_into()?).map(|message| {
                     let message: AuthorizationGuard<Message, Create> = message.into();
 
                     message.into_read()
@@ -80,7 +80,7 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
             .fetch_message(message_id)
             .await?
             .map(|dto| {
-                Ok::<Message, DomainError>(dto.try_into()?).map(|message| {
+                Ok::<Message, Error>(dto.try_into()?).map(|message| {
                     let message: AuthorizationGuard<Message, Create> = message.into();
 
                     message.into_read()

@@ -138,7 +138,7 @@ impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
 
 #[derive(Serialize, Debug)]
 pub(crate) struct FormAnswer {
-    id: i32,
+    id: Uuid,
     user: User,
     form_id: Uuid,
     timestamp: DateTime<Utc>,
@@ -156,11 +156,15 @@ impl FormAnswer {
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
         FormAnswer {
-            id: answer.id.into(),
-            user: answer.user.into(),
-            form_id: answer.form_id.into(),
-            timestamp: answer.timestamp,
-            title: answer.title,
+            id: answer.id().to_owned().into(),
+            user: answer.user().to_owned().into(),
+            form_id: answer.form_id().into_inner(),
+            timestamp: answer.timestamp().to_owned(),
+            title: answer
+                .title()
+                .to_owned()
+                .into_inner()
+                .map(|title| title.to_string()),
             answers: answer_contents.into_iter().map(Into::into).collect_vec(),
             comments: comments.into_iter().map(Into::into).collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),

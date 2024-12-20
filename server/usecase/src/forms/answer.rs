@@ -104,11 +104,13 @@ impl<
                 .await?,
         )
         .then(|form_answer| async {
-            let fetch_contents = self.answer_repository.get_answer_contents(form_answer.id);
+            let fetch_contents = self
+                .answer_repository
+                .get_answer_contents(*form_answer.id());
             let fetch_labels = self
                 .answer_label_repository
-                .get_labels_for_answers_by_answer_id(form_answer.id);
-            let fetch_comments = self.comment_repository.get_comments(form_answer.id);
+                .get_labels_for_answers_by_answer_id(*form_answer.id());
+            let fetch_comments = self.comment_repository.get_comments(*form_answer.id());
 
             let (contents, labels, comments) =
                 try_join!(fetch_contents, fetch_labels, fetch_comments)?;
@@ -129,11 +131,13 @@ impl<
     pub async fn get_all_answers(&self) -> Result<Vec<AnswerDto>, Error> {
         stream::iter(self.answer_repository.get_all_answers().await?)
             .then(|form_answer| async {
-                let fetch_contents = self.answer_repository.get_answer_contents(form_answer.id);
+                let fetch_contents = self
+                    .answer_repository
+                    .get_answer_contents(*form_answer.id());
                 let fetch_labels = self
                     .answer_label_repository
-                    .get_labels_for_answers_by_answer_id(form_answer.id);
-                let fetch_comments = self.comment_repository.get_comments(form_answer.id);
+                    .get_labels_for_answers_by_answer_id(*form_answer.id());
+                let fetch_comments = self.comment_repository.get_comments(*form_answer.id());
 
                 let (contents, labels, comments) =
                     try_join!(fetch_contents, fetch_labels, fetch_comments)?;

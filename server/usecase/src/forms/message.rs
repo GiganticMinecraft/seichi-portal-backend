@@ -45,7 +45,7 @@ impl<R1: MessageRepository, R2: AnswerRepository, R3: NotificationRepository>
             Ok(message) => {
                 let notification = Notification::new(
                     NotificationSource::Message(message.id().to_owned()),
-                    message.related_answer().user.to_owned(),
+                    message.related_answer().user().to_owned(),
                 );
 
                 let message_sender = message.sender().to_owned();
@@ -96,7 +96,7 @@ impl<R1: MessageRepository, R2: AnswerRepository, R3: NotificationRepository>
             .await?
             .ok_or(MessageNotFound)?;
 
-        if &message.try_read(actor)?.related_answer().id != answer_id {
+        if &message.try_read(actor)?.related_answer().id().to_owned() != answer_id {
             return Err(Error::from(MessageNotFound));
         }
 
@@ -117,7 +117,7 @@ impl<R1: MessageRepository, R2: AnswerRepository, R3: NotificationRepository>
             .await?
             .ok_or(MessageNotFound)?;
 
-        if &message.try_read(actor)?.related_answer().id != answer_id {
+        if &message.try_read(actor)?.related_answer().id().to_owned() != answer_id {
             return Err(Error::from(MessageNotFound));
         }
 

@@ -27,7 +27,7 @@ impl FormMessageDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn post_message(&self, message: &Message) -> Result<(), InfraError> {
         let id = message.id().to_string().to_owned();
-        let related_answer_id = message.related_answer().id.into_inner().to_owned();
+        let related_answer_id = message.related_answer().id().into_inner().to_owned();
         let sender = message.sender().id.to_string().to_owned();
         let body = message.body().to_owned();
         let timestamp = message.timestamp().to_owned();
@@ -75,7 +75,7 @@ impl FormMessageDatabase for ConnectionPool {
         &self,
         answers: &FormAnswer,
     ) -> Result<Vec<MessageDto>, InfraError> {
-        let answer_id = answers.id.into_inner().to_owned();
+        let answer_id = answers.id().into_inner().to_owned();
 
         Ok(self
             .read_only_transaction(|txn| {
@@ -116,13 +116,13 @@ impl FormMessageDatabase for ConnectionPool {
             .map(|(user, message_id, body, timestamp)| MessageDto {
                 id: message_id,
                 related_answer: FormAnswerDto {
-                    id: answers.id.into_inner().to_owned(),
-                    user_name: answers.user.name.to_owned(),
-                    uuid: answers.user.id,
-                    user_role: answers.user.role.to_owned(),
-                    timestamp: answers.timestamp,
-                    form_id: answers.form_id.into_inner().to_owned(),
-                    title: answers.title.to_owned(),
+                    id: answers.id().into_inner().to_owned(),
+                    user_name: answers.user().name.to_owned(),
+                    uuid: answers.user().id,
+                    user_role: answers.user().role.to_owned(),
+                    timestamp: answers.timestamp().to_owned(),
+                    form_id: answers.form_id().into_inner().to_owned(),
+                    title: answers.title().to_owned().into_inner().map(|title| title.to_string()),
                 },
                 sender: user,
                 body,

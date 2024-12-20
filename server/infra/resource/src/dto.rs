@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use domain::form::answer::models::AnswerTitle;
 use domain::form::comment::models::CommentContent;
 use domain::{
     form::{
@@ -99,7 +100,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
 }
 
 pub struct FormAnswerContentDto {
-    pub answer_id: i32,
+    pub answer_id: Uuid,
     pub question_id: i32,
     pub answer: String,
 }
@@ -137,7 +138,7 @@ impl TryFrom<UserDto> for User {
 }
 
 pub struct CommentDto {
-    pub answer_id: i32,
+    pub answer_id: Uuid,
     pub comment_id: Uuid,
     pub content: String,
     pub timestamp: DateTime<Utc>,
@@ -167,7 +168,7 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
 }
 
 pub struct FormAnswerDto {
-    pub id: i32,
+    pub id: Uuid,
     pub user_name: String,
     pub uuid: Uuid,
     pub user_role: Role,
@@ -177,7 +178,7 @@ pub struct FormAnswerDto {
 }
 
 impl TryFrom<FormAnswerDto> for domain::form::answer::models::FormAnswer {
-    type Error = errors::domain::DomainError;
+    type Error = errors::Error;
 
     fn try_from(
         FormAnswerDto {
@@ -190,17 +191,17 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::FormAnswer {
             title,
         }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::answer::models::FormAnswer {
-            id: id.into(),
-            user: User {
+        Ok(domain::form::answer::models::FormAnswer::from_raw_parts(
+            id.into(),
+            User {
                 name: user_name,
                 id: uuid,
                 role: user_role,
             },
             timestamp,
-            form_id: FormId::from(form_id),
-            title,
-        })
+            FormId::from(form_id),
+            AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
+        ))
     }
 }
 
@@ -245,7 +246,7 @@ pub struct MessageDto {
 }
 
 impl TryFrom<MessageDto> for domain::form::message::models::Message {
-    type Error = errors::domain::DomainError;
+    type Error = errors::Error;
 
     fn try_from(
         MessageDto {
