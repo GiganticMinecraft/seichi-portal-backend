@@ -99,10 +99,14 @@ pub async fn post_comment(
                     .unwrap_or("タイトルなし".to_string()),
                 false,
             )
-            .field("内容".to_string(), comment.content.to_owned(), false)
+            .field(
+                "内容".to_string(),
+                comment.content().to_owned().into_inner(),
+                false,
+            )
             .field(
                 "発言者".to_string(),
-                comment.commented_by.name.to_owned(),
+                comment.commented_by().name.to_owned(),
                 false,
             )
             .send(Color::Lime)

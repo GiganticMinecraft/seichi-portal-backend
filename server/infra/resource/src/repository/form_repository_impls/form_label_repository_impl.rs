@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{FormId, FormLabel, FormLabelId, FormLabelName},
+    form::models::{FormId, FormLabel, FormLabelId},
     repository::form::form_label_repository::FormLabelRepository,
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::User,
 };
 use errors::Error;
-use futures::{stream, StreamExt};
+use futures::StreamExt;
 use itertools::Itertools;
 
 use crate::{

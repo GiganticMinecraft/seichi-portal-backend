@@ -54,16 +54,17 @@ impl FormCommentDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError> {
         let params = [
+            comment.comment_id().into_inner().to_string().into(),
             answer_id.into_inner().into(),
-            comment.commented_by.id.to_string().into(),
-            comment.content.to_owned().into(),
+            comment.commented_by().id.to_string().into(),
+            comment.content().to_owned().into_inner().into(),
         ];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r"INSERT INTO form_answer_comments (answer_id, commented_by, content)
-                        VALUES (?, ?, ?)",
+                    r"INSERT INTO form_answer_comments (id, answer_id, commented_by, content)
+                        VALUES (?, ?, ?, ?)",
                     params,
                     txn,
                 )

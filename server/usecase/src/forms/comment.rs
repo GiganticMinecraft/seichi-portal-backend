@@ -40,7 +40,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
     ) -> Result<(), Error> {
         // TODO: ドメイン知識が UseCase に紛れ込んでいる。
         //      Comment に対して AuthorizationGuard を実装する必要がある
-        let can_post_comment = match comment.commented_by.role {
+        let can_post_comment = match comment.commented_by().role {
             Administrator => true,
             StandardUser => {
                 let answer = self

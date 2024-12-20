@@ -137,7 +137,7 @@ impl MigrationTrait for Migration {
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS form_answer_comments(
-                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    id UUID NOT NULL PRIMARY KEY,
                     answer_id INT NOT NULL,
                     commented_by CHAR(36) NOT NULL,
                     content TEXT NOT NULL,
