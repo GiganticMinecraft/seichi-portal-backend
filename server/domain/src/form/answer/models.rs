@@ -18,7 +18,6 @@ pub type AnswerId = types::Id<FormAnswer>;
 ))]
 pub struct AnswerTitle(Option<NonEmptyString>);
 
-// TODO: AnswerTitle の Service を実装して回答の埋め込みが行われたできるようにする
 impl AnswerTitle {
     pub fn new(title: Option<NonEmptyString>) -> Self {
         Self(title)
