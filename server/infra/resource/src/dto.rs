@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use domain::form::answer::models::AnswerTitle;
-use domain::form::comment::models::CommentContent;
 use domain::{
     form::{
+        answer::models::AnswerTitle,
+        comment::models::CommentContent,
         models::{
             DefaultAnswerTitle, FormDescription, FormId, FormMeta, FormSettings, FormTitle,
             ResponsePeriod, WebhookUrl,

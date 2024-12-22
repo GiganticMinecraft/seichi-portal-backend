@@ -1,7 +1,3 @@
-use crate::{
-    form::{models::FormId, question::models::QuestionId},
-    user::models::User,
-};
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
@@ -9,6 +5,11 @@ use deriving_via::DerivingVia;
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
+
+use crate::{
+    form::{models::FormId, question::models::QuestionId},
+    user::models::User,
+};
 
 pub type AnswerId = types::Id<FormAnswer>;
 
@@ -61,6 +62,7 @@ impl FormAnswer {
     }
 }
 
+//FIXME: Clone を外せるなら外す
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct FormAnswerContent {
     pub answer_id: AnswerId,
