@@ -1,12 +1,17 @@
 use chrono::Utc;
 use domain::{
     form::{
-        answer::models::{AnswerId, FormAnswerContent},
+        answer::{
+            models::{AnswerId, FormAnswer, FormAnswerContent},
+            service::AnswerService,
+        },
         models::{DefaultAnswerTitle, FormId},
+        service::DefaultAnswerTitleDomainService,
     },
     repository::form::{
         answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
         comment_repository::CommentRepository, form_repository::FormRepository,
+        question_repository::QuestionRepository,
     },
     user::models::User,
 };
@@ -24,11 +29,13 @@ pub struct AnswerUseCase<
     FormRepo: FormRepository,
     CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
+    QuestionRepo: QuestionRepository,
 > {
     pub answer_repository: &'a AnswerRepo,
     pub form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
+    pub question_repository: &'a QuestionRepo,
 }
 
 impl<
@@ -36,43 +43,33 @@ impl<
         R2: FormRepository,
         R3: CommentRepository,
         R4: AnswerLabelRepository,
-    > AnswerUseCase<'_, R1, R2, R3, R4>
+        R5: QuestionRepository,
+    > AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
     pub async fn post_answers(
         &self,
-        user: &User,
+        user: User,
         form_id: FormId,
-        title: DefaultAnswerTitle,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        // TODO: answers に対して AuthorizationGuard を実装する必要がある
-        let is_within_period = self
-            .form_repository
-            .get(form_id)
-            .await?
-            .map(|form| form.try_into_read(user))
-            .transpose()?
-            .and_then(|form| {
-                let response_period = form.settings().response_period();
+        let answer_service = AnswerService {
+            answer_repo: self.answer_repository,
+            form_repo: self.form_repository,
+        };
 
-                response_period
-                    .start_at()
-                    .to_owned()
-                    .zip(response_period.end_at().to_owned())
-                    .map(|(start_at, end_at)| {
-                        let now = Utc::now();
-                        now >= start_at && now <= end_at
-                    })
-            })
-            // Note: Noneの場合はフォームが存在していないかそもそも回答期間が無いフォーム
-            .unwrap_or(true);
-        if is_within_period {
-            self.answer_repository
-                .post_answer(user, form_id, title, answers)
-                .await
-        } else {
-            Err(Error::from(OutOfPeriod))
-        }
+        let form_service = DefaultAnswerTitleDomainService {
+            form_repo: self.form_repository,
+            question_repo: self.question_repository,
+            answer_repo: self.answer_repository,
+        };
+
+        let title = form_service
+            .to_answer_title(&user, form_id, answers.as_slice())
+            .await?;
+
+        let form_answer = FormAnswer::new(user, form_id, title);
+
+        answer_service.post_answer(form_answer, answers).await
     }
 
     pub async fn get_answers(&self, answer_id: AnswerId) -> Result<AnswerDto, Error> {

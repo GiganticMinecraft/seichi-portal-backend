@@ -30,8 +30,8 @@ pub async fn get_all_answers(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        question_repository: repository.form_question_repository(),
     };
-
     match form_answer_use_case.get_all_answers().await {
         Ok(answers) => {
             let response = answers
@@ -57,11 +57,12 @@ pub async fn get_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(_answer_id): Path<AnswerId>,
 ) -> impl IntoResponse {
-    let _form_answer_use_case = AnswerUseCase {
+    let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        question_repository: repository.form_question_repository(),
     };
 
     // FIXME: ドメイン知識が handler に紛れ込んでいる
@@ -110,11 +111,12 @@ pub async fn get_answer_by_form_id_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(_form_id): Path<FormId>,
 ) -> impl IntoResponse {
-    let _form_answer_use_case = AnswerUseCase {
+    let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        question_repository: repository.form_question_repository(),
     };
 
     // FIXME: ドメイン知識が handler に紛れ込んでいる
@@ -165,10 +167,10 @@ pub async fn post_answer_handler(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        question_repository: repository.form_question_repository(),
     };
-
     match form_answer_use_case
-        .post_answers(&user, schema.form_id, schema.title, schema.answers)
+        .post_answers(user, schema.form_id, schema.answers)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),
@@ -186,6 +188,7 @@ pub async fn update_answer_handler(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        question_repository: repository.form_question_repository(),
     };
 
     match form_answer_use_case

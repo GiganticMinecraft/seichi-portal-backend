@@ -102,9 +102,8 @@ pub trait FormDatabase: Send + Sync {
 pub trait FormAnswerDatabase: Send + Sync {
     async fn post_answer(
         &self,
-        user: &User,
-        form_id: FormId,
-        answers: Vec<FormAnswerContent>,
+        answer: &FormAnswer,
+        content: Vec<FormAnswerContent>,
     ) -> Result<(), InfraError>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError>;
     async fn get_answer_contents(

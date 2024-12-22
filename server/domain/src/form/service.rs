@@ -29,7 +29,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
 {
     fn embedded_answer_title(
         default_answer_title: DefaultAnswerTitle,
-        answers: Vec<FormAnswerContent>,
+        answers: &[FormAnswerContent],
     ) -> Result<AnswerTitle, Error> {
         match default_answer_title.into_inner() {
             Some(default_answer_title) => {
@@ -60,7 +60,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
         &self,
         actor: &User,
         form_id: FormId,
-        answer_id: AnswerId,
+        answers: &[FormAnswerContent],
     ) -> Result<AnswerTitle, Error> {
         let form = self
             .form_repo
@@ -70,8 +70,6 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
             .try_into_read(actor)?;
 
         let default_answer_title = form.settings().default_answer_title().to_owned();
-
-        let answers = self.answer_repo.get_answer_contents(answer_id).await?;
 
         Self::embedded_answer_title(default_answer_title, answers)
     }
@@ -130,7 +128,7 @@ mod tests {
             MockFormRepository,
             MockQuestionRepository,
             MockAnswerRepository,
-        >::embedded_answer_title(default_answer_title, answers)
+        >::embedded_answer_title(default_answer_title, answers.as_slice())
         .unwrap();
 
         assert_eq!(

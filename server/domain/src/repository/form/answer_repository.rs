@@ -15,10 +15,8 @@ use crate::{
 pub trait AnswerRepository: Send + Sync + 'static {
     async fn post_answer(
         &self,
-        user: &User,
-        form_id: FormId,
-        title: DefaultAnswerTitle,
-        answers: Vec<FormAnswerContent>,
+        answer: &FormAnswer,
+        content: Vec<FormAnswerContent>,
     ) -> Result<(), Error>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswer>, Error>;
     async fn get_answer_contents(
