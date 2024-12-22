@@ -76,3 +76,66 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
         Self::embedded_answer_title(default_answer_title, answers)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use types::non_empty_string::NonEmptyString;
+
+    use super::*;
+    use crate::{
+        form::{
+            answer::models::FormAnswerContent, models::DefaultAnswerTitle,
+            question::models::QuestionId,
+        },
+        repository::form::{
+            answer_repository::MockAnswerRepository, form_repository::MockFormRepository,
+            question_repository::MockQuestionRepository,
+        },
+    };
+
+    #[test]
+    fn test_embedded_answer_title() {
+        let first_question_id = QuestionId::from(0);
+        let second_question_id = QuestionId::from(1);
+        let third_question_id = QuestionId::from(2);
+
+        let default_answer_title = DefaultAnswerTitle::new(Some(
+            NonEmptyString::try_new(format!(
+                "Answer to ${}, ${}, ${}",
+                first_question_id.to_string(),
+                second_question_id.to_string(),
+                third_question_id.to_string()
+            ))
+            .unwrap(),
+        ));
+        let answers = vec![
+            FormAnswerContent {
+                answer_id: AnswerId::new(),
+                question_id: first_question_id,
+                answer: "Answer1".to_string(),
+            },
+            FormAnswerContent {
+                answer_id: AnswerId::new(),
+                question_id: second_question_id,
+                answer: "Answer2".to_string(),
+            },
+            FormAnswerContent {
+                answer_id: AnswerId::new(),
+                question_id: third_question_id,
+                answer: "Answer3".to_string(),
+            },
+        ];
+
+        let result = DefaultAnswerTitleDomainService::<
+            MockFormRepository,
+            MockQuestionRepository,
+            MockAnswerRepository,
+        >::embedded_answer_title(default_answer_title, answers)
+        .unwrap();
+
+        assert_eq!(
+            result.into_inner().unwrap().into_inner(),
+            "Answer to Answer1, Answer2, Answer3"
+        );
+    }
+}
