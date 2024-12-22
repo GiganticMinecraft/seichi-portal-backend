@@ -1,9 +1,10 @@
-use crate::{form::answer::models::AnswerId, user::models::User};
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
+
+use crate::{form::answer::models::AnswerId, user::models::User};
 
 pub type CommentId = types::Id<Comment>;
 

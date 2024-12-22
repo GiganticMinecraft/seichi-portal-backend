@@ -4,9 +4,8 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
-use domain::form::comment::models::CommentContent;
 use domain::{
-    form::comment::models::{Comment, CommentId},
+    form::comment::models::{Comment, CommentContent, CommentId},
     repository::Repositories,
     user::models::User,
 };

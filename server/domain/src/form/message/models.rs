@@ -43,8 +43,8 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///
     /// let related_answer = FormAnswer::new(
     ///     respondent.to_owned(),
-    ///    Default::default(),
-    ///   Default::default(),
+    ///     Default::default(),
+    ///     Default::default(),
     /// );
     ///
     /// let message = Message::try_new(
@@ -98,8 +98,8 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///
     /// let related_answer = FormAnswer::new(
     ///     respondent.to_owned(),
-    ///    Default::default(),
-    ///   Default::default(),
+    ///     Default::default(),
+    ///     Default::default(),
     /// );
     ///
     /// let message = Message::try_new(
@@ -154,8 +154,8 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///
     /// let related_answer = FormAnswer::new(
     ///     respondent.to_owned(),
-    ///    Default::default(),
-    ///   Default::default(),
+    ///     Default::default(),
+    ///     Default::default(),
     /// );
     ///
     /// let message = Message::try_new(
@@ -210,8 +210,8 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///
     /// let related_answer = FormAnswer::new(
     ///     respondent.to_owned(),
-    ///    Default::default(),
-    ///   Default::default(),
+    ///     Default::default(),
+    ///     Default::default(),
     /// );
     ///
     /// let message = Message::try_new(
@@ -262,22 +262,12 @@ impl Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(
-    ///     user.to_owned(),
-    ///    Default::default(),
-    ///   Default::default(),
-    /// );
+    /// let related_answer = FormAnswer::new(user.to_owned(), Default::default(), Default::default());
     ///
     /// let success_message =
     ///     Message::try_new(related_answer, user.to_owned(), "test message".to_string());
     ///
-    /// let related_answer = FormAnswer {
-    ///     id: 1.into(),
-    ///     user: user.to_owned(),
-    ///     timestamp: Default::default(),
-    ///     form_id: Default::default(),
-    ///     title: Default::default(),
-    /// };
+    /// let related_answer = FormAnswer::new(user.to_owned(), Default::default(), Default::default());
     /// let message_with_empty_body = Message::try_new(related_answer, user, "".to_string());
     ///
     /// assert!(success_message.is_ok());
@@ -321,11 +311,7 @@ impl Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(
-    ///     user.to_owned(),
-    ///    Default::default(),
-    ///   Default::default(),
-    /// );
+    /// let related_answer = FormAnswer::new(user.to_owned(), Default::default(), Default::default());
     ///
     /// unsafe {
     ///     let message = Message::from_raw_parts(

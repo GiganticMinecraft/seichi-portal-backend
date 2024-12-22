@@ -1,7 +1,3 @@
-use crate::{
-    types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Role::Administrator, User},
-};
 use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time};
@@ -14,6 +10,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
+
+use crate::{
+    types::authorization_guard::AuthorizationGuardDefinitions,
+    user::models::{Role::Administrator, User},
+};
 
 pub type FormId = types::Id<Form>;
 
@@ -257,7 +258,7 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///
     ///
     /// let form = Form::new(
-    ///     FormTitle::new("テストフォーム".to_string().try_into()?),
+    ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(None)
     /// );
     ///
@@ -301,7 +302,7 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///
     /// let private_form = Form::from_raw_parts(
     ///     FormId::new(),
-    ///     FormTitle::try_new("非公開フォーム".to_string()).unwrap(),
+    ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(None),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
@@ -458,29 +459,29 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     /// - [`actor`] が [`Administrator`] である場合
     /// # Examples
     /// ```
-    /// use uuid::Uuid;
     /// use domain::{
-    ///    form::models::{FormLabel, FormLabelName},
-    ///   types::authorization_guard::AuthorizationGuardDefinitions,
-    ///   user::models::{Role, User},
+    ///     form::models::{FormLabel, FormLabelName},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
+    /// use uuid::Uuid;
     ///
     /// let administrator = User {
-    ///    name: "administrator".to_string(),
-    ///   id: Uuid::new_v4(),
-    ///  role: Role::Administrator,
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
-    ///   name: "standard_user".to_string(),
-    ///  id: Uuid::new_v4(),
-    /// role: Role::StandardUser,
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
     /// };
     ///
-    /// let form_label = FormLabel::new(
-    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
-    /// );
+    /// let form_label = FormLabel::new(FormLabelName::new(
+    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
+    /// ));
     ///
     /// assert!(form_label.can_create(&administrator));
     /// assert!(!form_label.can_create(&standard_user));
@@ -494,29 +495,29 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     /// 読み取り権限はすべてのユーザーに与えられます。
     /// # Examples
     /// ```
-    /// use uuid::Uuid;
     /// use domain::{
-    ///    form::models::{FormLabel, FormLabelName},
-    ///   types::authorization_guard::AuthorizationGuardDefinitions,
-    ///   user::models::{Role, User},
+    ///     form::models::{FormLabel, FormLabelName},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
+    /// use uuid::Uuid;
     ///
     /// let administrator = User {
-    ///    name: "administrator".to_string(),
-    ///   id: Uuid::new_v4(),
-    ///  role: Role::Administrator,
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
-    ///   name: "standard_user".to_string(),
-    ///  id: Uuid::new_v4(),
-    /// role: Role::StandardUser,
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
     /// };
     ///
-    /// let form_label = FormLabel::new(
-    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
-    /// );
+    /// let form_label = FormLabel::new(FormLabelName::new(
+    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
+    /// ));
     ///
     /// assert!(form_label.can_read(&administrator));
     /// assert!(form_label.can_read(&standard_user));
@@ -532,29 +533,29 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     ///
     /// # Examples
     /// ```
-    /// use uuid::Uuid;
     /// use domain::{
-    ///    form::models::{FormLabel, FormLabelName},
-    ///   types::authorization_guard::AuthorizationGuardDefinitions,
-    ///   user::models::{Role, User},
+    ///     form::models::{FormLabel, FormLabelName},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
+    /// use uuid::Uuid;
     ///
     /// let administrator = User {
-    ///    name: "administrator".to_string(),
-    ///   id: Uuid::new_v4(),
-    ///  role: Role::Administrator,
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
-    ///   name: "standard_user".to_string(),
-    ///  id: Uuid::new_v4(),
-    /// role: Role::StandardUser,
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
     /// };
     ///
-    /// let form_label = FormLabel::new(
-    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
-    /// );
+    /// let form_label = FormLabel::new(FormLabelName::new(
+    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
+    /// ));
     ///
     /// assert!(form_label.can_update(&administrator));
     /// assert!(!form_label.can_update(&standard_user));
@@ -570,29 +571,29 @@ impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
     ///
     /// # Examples
     /// ```
-    /// use uuid::Uuid;
     /// use domain::{
-    ///    form::models::{FormLabel, FormLabelName},
-    ///   types::authorization_guard::AuthorizationGuardDefinitions,
-    ///   user::models::{Role, User},
+    ///     form::models::{FormLabel, FormLabelName},
+    ///     types::authorization_guard::AuthorizationGuardDefinitions,
+    ///     user::models::{Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
+    /// use uuid::Uuid;
     ///
     /// let administrator = User {
-    ///    name: "administrator".to_string(),
-    ///   id: Uuid::new_v4(),
-    ///  role: Role::Administrator,
+    ///     name: "administrator".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
-    ///   name: "standard_user".to_string(),
-    ///  id: Uuid::new_v4(),
-    /// role: Role::StandardUser,
+    ///     name: "standard_user".to_string(),
+    ///     id: Uuid::new_v4(),
+    ///     role: Role::StandardUser,
     /// };
     ///
-    /// let form_label = FormLabel::new(
-    ///   FormLabelName::new(NonEmptyString::try_new("テストラベル".to_string()).unwrap())
-    /// );
+    /// let form_label = FormLabel::new(FormLabelName::new(
+    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
+    /// ));
     ///
     /// assert!(form_label.can_delete(&administrator));
     /// assert!(!form_label.can_delete(&standard_user));
