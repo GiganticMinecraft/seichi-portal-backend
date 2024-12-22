@@ -1,9 +1,11 @@
-use errors::validation::ValidationError;
-use errors::validation::ValidationError::EmptyValue;
-use serde::{Deserialize, Serialize};
-use std::ops::Deref;
-use std::str::FromStr;
+use std::{ops::Deref, str::FromStr};
 
+use errors::validation::{ValidationError, ValidationError::EmptyValue};
+#[cfg(feature = "arbitrary")]
+use proptest_derive::Arbitrary;
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct NonEmptyString(String);
 
@@ -61,8 +63,9 @@ impl<'de> Deserialize<'de> for NonEmptyString {
 #[cfg(feature = "proptest")]
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]
