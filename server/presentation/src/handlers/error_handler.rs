@@ -1,6 +1,8 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
-use errors::validation::ValidationError;
-use errors::{domain::DomainError, infra::InfraError, usecase::UseCaseError, Error};
+use errors::{
+    domain::DomainError, infra::InfraError, usecase::UseCaseError, validation::ValidationError,
+    Error,
+};
 use serde_json::json;
 
 fn handle_domain_error(err: DomainError) -> impl IntoResponse {
@@ -10,6 +12,14 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             Json(json!({
                 "errorCode": "FORBIDDEN",
                 "reason": "You do not have permission to access this resource."
+            })),
+        )
+            .into_response(),
+        DomainError::NotFound => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "NOT_FOUND",
+                "reason": "Resource not found."
             })),
         )
             .into_response(),

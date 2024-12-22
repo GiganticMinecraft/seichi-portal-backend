@@ -7,6 +7,8 @@ pub enum DomainError {
         #[from]
         source: strum::ParseError,
     },
+    #[error("Not found.")]
+    NotFound,
     #[error("Access to forbidden resource.")]
     Forbidden,
     #[error("Empty message body.")]
