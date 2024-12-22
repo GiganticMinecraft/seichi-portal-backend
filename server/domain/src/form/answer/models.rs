@@ -61,8 +61,7 @@ impl FormAnswer {
     }
 }
 
-//FIXME: Clone を外せるなら外す
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct FormAnswerContent {
     pub answer_id: AnswerId,
     pub question_id: QuestionId,
