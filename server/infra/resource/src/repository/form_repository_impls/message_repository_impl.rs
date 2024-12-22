@@ -8,7 +8,7 @@ use domain::{
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::User,
 };
-use errors::{domain::DomainError, Error};
+use errors::Error;
 
 use crate::{
     database::components::{DatabaseComponents, FormMessageDatabase},

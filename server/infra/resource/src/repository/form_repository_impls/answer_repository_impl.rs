@@ -2,10 +2,9 @@ use async_trait::async_trait;
 use domain::{
     form::{
         answer::models::{AnswerId, FormAnswer, FormAnswerContent},
-        models::{DefaultAnswerTitle, FormId},
+        models::FormId,
     },
     repository::form::answer_repository::AnswerRepository,
-    user::models::User,
 };
 use errors::Error;
 use futures::{stream, StreamExt};
@@ -20,14 +19,12 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     #[tracing::instrument(skip(self))]
     async fn post_answer(
         &self,
-        user: &User,
-        form_id: FormId,
-        _title: DefaultAnswerTitle,
-        answers: Vec<FormAnswerContent>,
+        answer: &FormAnswer,
+        content: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         self.client
             .form_answer()
-            .post_answer(user, form_id, answers)
+            .post_answer(answer, content)
             .await
             .map_err(Into::into)
     }

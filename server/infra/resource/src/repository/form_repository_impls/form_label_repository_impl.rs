@@ -6,7 +6,6 @@ use domain::{
     user::models::User,
 };
 use errors::Error;
-use futures::StreamExt;
 use itertools::Itertools;
 
 use crate::{
