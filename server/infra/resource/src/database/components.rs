@@ -1,12 +1,19 @@
+use crate::dto::{
+    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
+    MessageDto, NotificationDto, QuestionDto,
+};
 use async_trait::async_trait;
+use domain::form::answer::settings::models::{
+    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+};
 use domain::{
     form::{
         answer::models::{AnswerId, AnswerLabel, AnswerLabelId, FormAnswer, FormAnswerContent},
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{
-            DefaultAnswerTitle, Form, FormDescription, FormId, FormLabel, FormLabelId,
-            FormLabelName, FormTitle, ResponsePeriod, Visibility, WebhookUrl,
+            Form, FormDescription, FormId, FormLabel, FormLabelId, FormLabelName, FormTitle,
+            Visibility, WebhookUrl,
         },
         question::models::Question,
     },
@@ -16,11 +23,6 @@ use domain::{
 use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
-
-use crate::dto::{
-    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
-    MessageDto, NotificationDto, QuestionDto,
-};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -93,7 +95,7 @@ pub trait FormDatabase: Send + Sync {
     async fn update_form_answer_visibility(
         &self,
         form_id: &FormId,
-        visibility: &Visibility,
+        visibility: &AnswerVisibility,
     ) -> Result<(), InfraError>;
 }
 

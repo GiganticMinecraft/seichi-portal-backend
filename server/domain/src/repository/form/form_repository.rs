@@ -2,11 +2,9 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
+use crate::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
 use crate::{
-    form::models::{
-        DefaultAnswerTitle, Form, FormDescription, FormId, FormTitle, ResponsePeriod, Visibility,
-        WebhookUrl,
-    },
+    form::models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
     types::authorization_guard::{AuthorizationGuard, Read},
     user::models::User,
 };
@@ -51,6 +49,6 @@ pub trait FormRepository: Send + Sync + 'static {
     async fn update_answer_visibility(
         &self,
         form_id: &FormId,
-        visibility: &Visibility,
+        visibility: &AnswerVisibility,
     ) -> Result<(), Error>;
 }

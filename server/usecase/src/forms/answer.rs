@@ -1,11 +1,10 @@
-use chrono::Utc;
 use domain::{
     form::{
         answer::{
             models::{AnswerId, FormAnswer, FormAnswerContent},
             service::AnswerService,
         },
-        models::{DefaultAnswerTitle, FormId},
+        models::FormId,
         service::DefaultAnswerTitleDomainService,
     },
     repository::form::{
@@ -15,10 +14,7 @@ use domain::{
     },
     user::models::User,
 };
-use errors::{
-    usecase::UseCaseError::{AnswerNotFound, OutOfPeriod},
-    Error,
-};
+use errors::{usecase::UseCaseError::AnswerNotFound, Error};
 use futures::{stream, try_join, StreamExt};
 
 use crate::dto::AnswerDto;

@@ -11,6 +11,9 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
+use crate::form::answer::settings::models::{
+    AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+};
 use crate::{
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role::Administrator, User},
@@ -45,25 +48,22 @@ impl FormDescription {
 #[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
 pub struct FormSettings {
     #[serde(default)]
-    response_period: ResponsePeriod,
-    #[serde(default)]
     webhook_url: WebhookUrl,
     #[serde(default)]
-    default_answer_title: DefaultAnswerTitle,
-    #[serde(default)]
     visibility: Visibility,
-    #[serde(default)]
-    answer_visibility: Visibility,
+    answer_settings: AnswerSettings,
 }
 
 impl FormSettings {
     pub fn new() -> Self {
         Self {
-            response_period: ResponsePeriod::try_new(None, None).unwrap(),
             webhook_url: WebhookUrl::try_new(None).unwrap(),
-            default_answer_title: DefaultAnswerTitle::new(None),
             visibility: Visibility::PUBLIC,
-            answer_visibility: Visibility::PRIVATE,
+            answer_settings: AnswerSettings::new(
+                DefaultAnswerTitle::new(None),
+                AnswerVisibility::PRIVATE,
+                ResponsePeriod::try_new(None, None).unwrap(),
+            ),
         }
     }
 
@@ -72,39 +72,16 @@ impl FormSettings {
         webhook_url: WebhookUrl,
         default_answer_title: DefaultAnswerTitle,
         visibility: Visibility,
-        answer_visibility: Visibility,
+        answer_visibility: AnswerVisibility,
     ) -> Self {
         Self {
-            response_period,
             webhook_url,
-            default_answer_title,
             visibility,
-            answer_visibility,
-        }
-    }
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
-pub struct ResponsePeriod {
-    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    #[serde(default)]
-    start_at: Option<DateTime<Utc>>,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    #[serde(default)]
-    end_at: Option<DateTime<Utc>>,
-}
-
-impl ResponsePeriod {
-    pub fn try_new(
-        start_at: Option<DateTime<Utc>>,
-        end_at: Option<DateTime<Utc>>,
-    ) -> Result<Self, DomainError> {
-        match (start_at, end_at) {
-            (Some(start_at), Some(end_at)) if start_at > end_at => {
-                Err(DomainError::InvalidResponsePeriod)
-            }
-            _ => Ok(Self { start_at, end_at }),
+            answer_settings: AnswerSettings::new(
+                default_answer_title,
+                answer_visibility,
+                response_period,
+            ),
         }
     }
 }
@@ -125,18 +102,6 @@ impl WebhookUrl {
         }
 
         Ok(Self(url))
-    }
-}
-
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
-))]
-pub struct DefaultAnswerTitle(Option<NonEmptyString>);
-
-impl DefaultAnswerTitle {
-    pub fn new(title: Option<NonEmptyString>) -> Self {
-        Self(title)
     }
 }
 
