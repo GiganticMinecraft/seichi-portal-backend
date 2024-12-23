@@ -9,7 +9,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::search::SearchUseCase;
 
-use crate::{error_handler::handle_error, search_schemas::SearchQuery};
+use crate::{handlers::error_handler::handle_error, schemas::search_schemas::SearchQuery};
 
 pub async fn cross_search(
     State(repository): State<RealInfrastructureRepository>,

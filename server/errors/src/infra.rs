@@ -1,4 +1,5 @@
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum InfraError {
@@ -15,7 +16,7 @@ pub enum InfraError {
         source: uuid::Error,
     },
     #[error("Form Not Found: id = {}", .id)]
-    FormNotFound { id: i32 },
+    FormNotFound { id: Uuid },
     #[error("Answer Not Fount: id = {}", .id)]
     AnswerNotFount { id: i32 },
     #[error("Outgoing Error: {}", .cause)]
