@@ -1,16 +1,16 @@
+use crate::webhook::{Color, Webhook};
+use domain::form::answer::settings::models::DefaultAnswerTitle;
 use domain::{
     form::{
         answer::models::{FormAnswer, FormAnswerContent},
         comment::models::Comment,
-        models::{DefaultAnswerTitle, Form},
+        models::Form,
         question::models::Question,
     },
     user::models::User,
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
-
-use crate::webhook::{Color, Webhook};
 
 #[tracing::instrument]
 pub async fn create(form: Form) -> Result<(), InfraError> {

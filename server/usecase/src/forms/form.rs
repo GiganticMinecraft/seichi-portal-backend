@@ -1,8 +1,8 @@
+use domain::form::answer::settings::models::{
+    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+};
 use domain::{
-    form::models::{
-        DefaultAnswerTitle, Form, FormDescription, FormId, FormTitle, ResponsePeriod, Visibility,
-        WebhookUrl,
-    },
+    form::models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
     repository::{
         form::form_repository::FormRepository, notification_repository::NotificationRepository,
     },
@@ -70,7 +70,7 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
         webhook: Option<&WebhookUrl>,
         default_answer_title: Option<&DefaultAnswerTitle>,
         visibility: Option<&Visibility>,
-        answer_visibility: Option<&Visibility>,
+        answer_visibility: Option<&AnswerVisibility>,
     ) -> Result<(), Error> {
         let update_title: OptionFuture<_> = title
             .map(|title| self.form_repository.update_title(form_id, title))

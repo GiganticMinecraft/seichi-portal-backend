@@ -18,11 +18,15 @@ pub(crate) enum AnswerVisibility {
     Private,
 }
 
-impl From<domain::form::models::Visibility> for AnswerVisibility {
-    fn from(val: domain::form::models::Visibility) -> Self {
+impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVisibility {
+    fn from(val: domain::form::answer::settings::models::AnswerVisibility) -> Self {
         match val {
-            domain::form::models::Visibility::PUBLIC => AnswerVisibility::Public,
-            domain::form::models::Visibility::PRIVATE => AnswerVisibility::Private,
+            domain::form::answer::settings::models::AnswerVisibility::PUBLIC => {
+                AnswerVisibility::Public
+            }
+            domain::form::answer::settings::models::AnswerVisibility::PRIVATE => {
+                AnswerVisibility::Private
+            }
         }
     }
 }
@@ -47,10 +51,25 @@ impl From<domain::form::models::Form> for FormListSchema {
                 .into_inner()
                 .map(|desc| desc.to_string()),
             response_period: ResponsePeriodSchema {
-                start_at: form.settings().response_period().start_at().to_owned(),
-                end_at: form.settings().response_period().end_at().to_owned(),
+                start_at: form
+                    .settings()
+                    .answer_settings()
+                    .response_period()
+                    .start_at()
+                    .to_owned(),
+                end_at: form
+                    .settings()
+                    .answer_settings()
+                    .response_period()
+                    .end_at()
+                    .to_owned(),
             },
-            answer_visibility: form.settings().answer_visibility().to_owned().into(),
+            answer_visibility: form
+                .settings()
+                .answer_settings()
+                .visibility()
+                .to_owned()
+                .into(),
         }
     }
 }

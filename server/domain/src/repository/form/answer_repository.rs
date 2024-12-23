@@ -2,12 +2,9 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::{
-    form::{
-        answer::models::{AnswerId, FormAnswer, FormAnswerContent},
-        models::{DefaultAnswerTitle, FormId},
-    },
-    user::models::User,
+use crate::form::{
+    answer::models::{AnswerId, FormAnswer, FormAnswerContent},
+    models::FormId,
 };
 
 #[automock]

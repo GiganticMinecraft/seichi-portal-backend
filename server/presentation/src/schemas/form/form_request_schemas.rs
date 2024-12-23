@@ -1,9 +1,9 @@
+use domain::form::answer::settings::models::{
+    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+};
 use domain::form::{
     answer::models::{AnswerId, AnswerLabelId, FormAnswerContent},
-    models::{
-        DefaultAnswerTitle, FormDescription, FormId, FormLabelId, FormTitle, ResponsePeriod,
-        Visibility, WebhookUrl,
-    },
+    models::{FormDescription, FormId, FormLabelId, FormTitle, Visibility, WebhookUrl},
     question::models::Question,
 };
 use serde::Deserialize;
@@ -38,7 +38,7 @@ pub struct FormUpdateSchema {
     #[serde(default)]
     pub visibility: Option<Visibility>,
     #[serde(default)]
-    pub answer_visibility: Option<Visibility>,
+    pub answer_visibility: Option<AnswerVisibility>,
 }
 
 #[derive(Deserialize, Debug)]

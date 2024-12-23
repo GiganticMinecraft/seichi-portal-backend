@@ -1,9 +1,9 @@
 use async_trait::async_trait;
+use domain::form::answer::settings::models::{
+    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+};
 use domain::{
-    form::models::{
-        DefaultAnswerTitle, Form, FormDescription, FormId, FormTitle, ResponsePeriod, Visibility,
-        WebhookUrl,
-    },
+    form::models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
     repository::form::form_repository::FormRepository,
     types::authorization_guard::{AuthorizationGuard, Create, Read},
     user::models::User,
@@ -150,7 +150,7 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     async fn update_answer_visibility(
         &self,
         form_id: &FormId,
-        visibility: &Visibility,
+        visibility: &AnswerVisibility,
     ) -> Result<(), Error> {
         self.client
             .form()

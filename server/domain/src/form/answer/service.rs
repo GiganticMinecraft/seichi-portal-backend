@@ -32,8 +32,8 @@ impl<R1: AnswerRepository, R2: FormRepository> AnswerService<'_, R1, R2> {
             return Err(Error::from(DomainError::Forbidden));
         }
 
-        let start_at = *form_settings.response_period().start_at();
-        let end_at = *form_settings.response_period().end_at();
+        let start_at = *form_settings.answer_settings().response_period().start_at();
+        let end_at = *form_settings.answer_settings().response_period().end_at();
 
         if let Some(start_at) = start_at {
             if start_at > chrono::Utc::now() {

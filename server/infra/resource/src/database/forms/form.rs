@@ -1,14 +1,3 @@
-use async_trait::async_trait;
-use domain::{
-    form::models::{
-        DefaultAnswerTitle, Form, FormDescription, FormId, FormTitle, ResponsePeriod, Visibility,
-        WebhookUrl,
-    },
-    user::models::User,
-};
-use errors::infra::InfraError;
-use futures::future::try_join;
-
 use crate::{
     database::{
         components::FormDatabase,
@@ -16,6 +5,16 @@ use crate::{
     },
     dto::FormDto,
 };
+use async_trait::async_trait;
+use domain::form::answer::settings::models::{
+    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+};
+use domain::{
+    form::models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
+    user::models::User,
+};
+use errors::infra::InfraError;
+use futures::future::try_join;
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
@@ -331,7 +330,7 @@ impl FormDatabase for ConnectionPool {
     async fn update_form_answer_visibility(
         &self,
         form_id: &FormId,
-        visibility: &Visibility,
+        visibility: &AnswerVisibility,
     ) -> Result<(), InfraError> {
         let form_id = form_id.into_inner();
         let visibility = visibility.to_string();

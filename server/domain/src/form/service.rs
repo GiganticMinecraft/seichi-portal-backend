@@ -1,10 +1,11 @@
 use errors::{domain::DomainError, Error};
 use regex::Regex;
 
+use crate::form::answer::settings::models::DefaultAnswerTitle;
 use crate::{
     form::{
         answer::models::{AnswerId, AnswerTitle, FormAnswerContent},
-        models::{DefaultAnswerTitle, FormId},
+        models::FormId,
     },
     repository::form::{
         answer_repository::AnswerRepository, form_repository::FormRepository,
@@ -69,7 +70,11 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
             .ok_or(DomainError::NotFound)?
             .try_into_read(actor)?;
 
-        let default_answer_title = form.settings().default_answer_title().to_owned();
+        let default_answer_title = form
+            .settings()
+            .answer_settings()
+            .default_answer_title()
+            .to_owned();
 
         Self::embedded_answer_title(default_answer_title, answers)
     }
