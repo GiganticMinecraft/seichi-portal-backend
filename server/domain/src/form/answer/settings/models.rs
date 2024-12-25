@@ -62,6 +62,20 @@ impl ResponsePeriod {
             _ => Ok(Self { start_at, end_at }),
         }
     }
+
+    pub fn is_within_period(&self, now: DateTime<Utc>) -> bool {
+        if let Some(start_at) = self.start_at {
+            if start_at > now {
+                return false;
+            }
+        }
+        if let Some(end_at) = self.end_at {
+            if end_at < now {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]

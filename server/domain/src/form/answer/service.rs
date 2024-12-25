@@ -1,3 +1,4 @@
+use chrono::Utc;
 use errors::{domain::DomainError, Error};
 
 use crate::{
@@ -32,19 +33,12 @@ impl<R1: AnswerRepository, R2: FormRepository> AnswerService<'_, R1, R2> {
             return Err(Error::from(DomainError::Forbidden));
         }
 
-        let start_at = *form_settings.answer_settings().response_period().start_at();
-        let end_at = *form_settings.answer_settings().response_period().end_at();
-
-        if let Some(start_at) = start_at {
-            if start_at > chrono::Utc::now() {
-                return Err(Error::from(DomainError::Forbidden));
-            }
-        }
-
-        if let Some(end_at) = end_at {
-            if end_at < chrono::Utc::now() {
-                return Err(Error::from(DomainError::Forbidden));
-            }
+        if !form_settings
+            .answer_settings()
+            .response_period()
+            .is_within_period(Utc::now())
+        {
+            return Err(Error::from(DomainError::Forbidden));
         }
 
         self.answer_repo.post_answer(&answer, answer_contents).await
