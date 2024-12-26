@@ -1,8 +1,8 @@
-use domain::form::answer::settings::models::{
-    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
-};
 use domain::{
-    form::models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
+    form::{
+        answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+        models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
+    },
     repository::{
         form::form_repository::FormRepository, notification_repository::NotificationRepository,
     },

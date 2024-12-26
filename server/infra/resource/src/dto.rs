@@ -1,10 +1,12 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use domain::form::answer::settings::models::{DefaultAnswerTitle, ResponsePeriod};
 use domain::{
     form::{
-        answer::models::AnswerTitle,
+        answer::{
+            models::AnswerTitle,
+            settings::models::{DefaultAnswerTitle, ResponsePeriod},
+        },
         comment::models::CommentContent,
         models::{FormDescription, FormId, FormMeta, FormSettings, FormTitle, WebhookUrl},
         question::models::{Question, QuestionType},
@@ -189,17 +191,19 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::FormAnswer {
             title,
         }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::answer::models::FormAnswer::from_raw_parts(
-            id.into(),
-            User {
-                name: user_name,
-                id: uuid,
-                role: user_role,
-            },
-            timestamp,
-            FormId::from(form_id),
-            AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
-        ))
+        unsafe {
+            Ok(domain::form::answer::models::FormAnswer::from_raw_parts(
+                id.into(),
+                User {
+                    name: user_name,
+                    id: uuid,
+                    role: user_role,
+                },
+                timestamp,
+                FormId::from(form_id),
+                AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
+            ))
+        }
     }
 }
 

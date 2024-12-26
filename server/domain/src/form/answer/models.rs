@@ -34,7 +34,14 @@ pub struct FormAnswer {
 }
 
 impl FormAnswer {
-    pub fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
+    /// [`FormAnswer`] を新しく作成します。
+    ///
+    /// この関数が pub(crate) になっているのは、
+    /// [`FormAnswer`] というドメインモデルは [`FormSettings`] の状態によって
+    /// 作成できるか否かが変わるためです。
+    /// このため、この関数が pub であると、Invalid な状態の [`FormAnswer`] が作成される可能性あり、
+    /// [`FormAnswer`] を作成する処理は DomainService 側に委譲するために pub(crate) にしています。
+    pub(crate) fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
         Self {
             id: AnswerId::new(),
             user,
@@ -44,7 +51,12 @@ impl FormAnswer {
         }
     }
 
-    pub fn from_raw_parts(
+    /// [`FormAnswer`] の各フィールドを指定して新しく作成します。
+    ///
+    /// # Safety
+    /// この関数はオブジェクトを新しく作成しない場合
+    /// (例えば、データベースから取得した場合)にのみ使用してください。
+    pub unsafe fn from_raw_parts(
         id: AnswerId,
         user: User,
         timestamp: DateTime<Utc>,

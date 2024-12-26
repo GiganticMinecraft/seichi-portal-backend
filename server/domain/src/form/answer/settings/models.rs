@@ -1,4 +1,6 @@
 use chrono::{DateTime, Utc};
+#[cfg(test)]
+use common::test_utils::arbitrary_opt_date_time;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use errors::domain::DomainError;

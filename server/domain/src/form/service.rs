@@ -1,10 +1,12 @@
 use errors::{domain::DomainError, Error};
 use regex::Regex;
 
-use crate::form::answer::settings::models::DefaultAnswerTitle;
 use crate::{
     form::{
-        answer::models::{AnswerId, AnswerTitle, FormAnswerContent},
+        answer::{
+            models::{AnswerTitle, FormAnswerContent},
+            settings::models::DefaultAnswerTitle,
+        },
         models::FormId,
     },
     repository::form::{
@@ -86,10 +88,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        form::{
-            answer::models::FormAnswerContent, models::DefaultAnswerTitle,
-            question::models::QuestionId,
-        },
+        form::{answer::models::FormAnswerContent, question::models::QuestionId},
         repository::form::{
             answer_repository::MockAnswerRepository, form_repository::MockFormRepository,
             question_repository::MockQuestionRepository,
