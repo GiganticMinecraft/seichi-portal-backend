@@ -1,7 +1,7 @@
 use domain::{
     form::{
         answer::{
-            models::{AnswerId, FormAnswer, FormAnswerContent},
+            models::{AnswerId, FormAnswerContent},
             service::AnswerService,
         },
         models::FormId,
@@ -49,7 +49,6 @@ impl<
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         let answer_service = AnswerService {
-            answer_repo: self.answer_repository,
             form_repo: self.form_repository,
         };
 
@@ -63,9 +62,11 @@ impl<
             .to_answer_title(&user, form_id, answers.as_slice())
             .await?;
 
-        let form_answer = FormAnswer::new(user, form_id, title);
+        let form_answer = answer_service.new_form_answer(user, form_id, title).await?;
 
-        answer_service.post_answer(form_answer, answers).await
+        self.answer_repository
+            .post_answer(&form_answer, answers)
+            .await
     }
 
     pub async fn get_answers(&self, answer_id: AnswerId) -> Result<AnswerDto, Error> {

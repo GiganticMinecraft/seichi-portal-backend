@@ -3,44 +3,43 @@ use errors::{domain::DomainError, Error};
 
 use crate::{
     form::{
-        answer::models::{FormAnswer, FormAnswerContent},
-        models::Visibility,
+        answer::models::{AnswerTitle, FormAnswer},
+        models::{FormId, Visibility},
     },
-    repository::form::{answer_repository::AnswerRepository, form_repository::FormRepository},
+    repository::form::form_repository::FormRepository,
+    user::models::User,
 };
 
-pub struct AnswerService<'a, AnswerRepo: AnswerRepository, FormRepo: FormRepository> {
-    pub answer_repo: &'a AnswerRepo,
+pub struct AnswerService<'a, FormRepo: FormRepository> {
     pub form_repo: &'a FormRepo,
 }
 
-impl<R1: AnswerRepository, R2: FormRepository> AnswerService<'_, R1, R2> {
-    pub async fn post_answer(
+impl<R1: FormRepository> AnswerService<'_, R1> {
+    pub async fn new_form_answer(
         &self,
-        answer: FormAnswer,
-        answer_contents: Vec<FormAnswerContent>,
-    ) -> Result<(), Error> {
+        user: User,
+        form_id: FormId,
+        title: AnswerTitle,
+    ) -> Result<FormAnswer, Error> {
         let form = self
             .form_repo
-            .get(*answer.form_id())
+            .get(form_id)
             .await?
             .ok_or(DomainError::NotFound)?
-            .try_into_read(answer.user())?;
+            .try_into_read(&user)?;
 
         let form_settings = form.settings();
 
-        if *form_settings.visibility() == Visibility::PRIVATE {
-            return Err(Error::from(DomainError::Forbidden));
-        }
-
-        if !form_settings
+        let is_public_form = *form_settings.visibility() == Visibility::PUBLIC;
+        let is_within_period = form_settings
             .answer_settings()
             .response_period()
-            .is_within_period(Utc::now())
-        {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+            .is_within_period(Utc::now());
 
-        self.answer_repo.post_answer(&answer, answer_contents).await
+        if is_public_form && is_within_period {
+            Ok(FormAnswer::new(user, form_id, title))
+        } else {
+            Err(Error::from(DomainError::Forbidden))
+        }
     }
 }

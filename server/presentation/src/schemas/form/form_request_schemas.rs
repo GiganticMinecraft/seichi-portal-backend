@@ -1,8 +1,8 @@
-use domain::form::answer::settings::models::{
-    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
-};
 use domain::form::{
-    answer::models::{AnswerId, AnswerLabelId, FormAnswerContent},
+    answer::{
+        models::{AnswerId, AnswerLabelId, FormAnswerContent},
+        settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+    },
     models::{FormDescription, FormId, FormLabelId, FormTitle, Visibility, WebhookUrl},
     question::models::Question,
 };

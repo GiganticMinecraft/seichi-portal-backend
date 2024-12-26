@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
-use crate::form::answer::settings::models::{
-    AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
-};
 use crate::{
+    form::answer::settings::models::{
+        AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+    },
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role::Administrator, User},
 };
@@ -247,9 +247,10 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///     user::models::{Role, User},
     /// };
     /// use uuid::Uuid;
+    /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
     /// use domain::form::models::{
-    ///     DefaultAnswerTitle, FormDescription, FormId, FormMeta,
-    ///     FormTitle, ResponsePeriod, Visibility, WebhookUrl
+    ///     FormDescription, FormId, FormMeta,
+    ///     FormTitle, Visibility, WebhookUrl
     /// };
     ///
     /// let administrator = User {
@@ -275,7 +276,7 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PRIVATE,
-    ///         Visibility::PRIVATE
+    ///         AnswerVisibility::PRIVATE
     ///     )
     /// );
     ///
@@ -289,7 +290,7 @@ impl AuthorizationGuardDefinitions<Form> for Form {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PUBLIC,
-    ///         Visibility::PUBLIC
+    ///         AnswerVisibility::PRIVATE
     ///     )
     /// );
     ///

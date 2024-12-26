@@ -1,14 +1,10 @@
-use crate::dto::{
-    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
-    MessageDto, NotificationDto, QuestionDto,
-};
 use async_trait::async_trait;
-use domain::form::answer::settings::models::{
-    AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
-};
 use domain::{
     form::{
-        answer::models::{AnswerId, AnswerLabel, AnswerLabelId, FormAnswer, FormAnswerContent},
+        answer::{
+            models::{AnswerId, AnswerLabel, AnswerLabelId, FormAnswer, FormAnswerContent},
+            settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+        },
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{
@@ -23,6 +19,11 @@ use domain::{
 use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
+
+use crate::dto::{
+    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
+    MessageDto, NotificationDto, QuestionDto,
+};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
