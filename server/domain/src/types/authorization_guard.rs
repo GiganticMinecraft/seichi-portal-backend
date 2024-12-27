@@ -27,9 +27,7 @@ mod private {
     impl Sealed for super::Delete {}
 }
 
-/// [`User`] の `guard_target` に対するアクセスを制御するための定義を提供します。
-///
-/// この定義は、`guard_target` によってアクセス権が異なるデータの操作を制御することのみを想定しています。
+/// [`User`] による `guard_target` に対するアクセスを制御するための定義を提供します。
 #[derive(Debug)]
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
     guard_target: T,
@@ -198,6 +196,11 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 }
 
 /// `actor` が `guard_target` に対して操作可能かどうかを定義するためのトレイト
+///
+/// このトレイトでは、あくまで「[`actor`] と `guard_target` の情報を使用して判断できる中で、
+/// `guard_target` にアクセスすることができるかどうか」
+/// という情報を提供するためのみに使用することを想定しています。
+/// そのため、`guard_target` のドメイン制約に関する情報を定義することは想定していません。
 ///
 /// # Examples
 /// ```
