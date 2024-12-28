@@ -177,7 +177,7 @@ pub struct FormAnswerDto {
     pub title: Option<String>,
 }
 
-impl TryFrom<FormAnswerDto> for domain::form::answer::models::FormAnswer {
+impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
     type Error = errors::Error;
 
     fn try_from(
@@ -192,7 +192,7 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::FormAnswer {
         }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
         unsafe {
-            Ok(domain::form::answer::models::FormAnswer::from_raw_parts(
+            Ok(domain::form::answer::models::AnswerEntry::from_raw_parts(
                 id.into(),
                 User {
                     name: user_name,

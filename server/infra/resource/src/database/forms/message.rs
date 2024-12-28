@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
     form::{
-        answer::models::FormAnswer,
+        answer::models::AnswerEntry,
         message::models::{Message, MessageId},
     },
     user::models::Role,
@@ -73,7 +73,7 @@ impl FormMessageDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn fetch_messages_by_form_answer(
         &self,
-        answers: &FormAnswer,
+        answers: &AnswerEntry,
     ) -> Result<Vec<MessageDto>, InfraError> {
         let answer_id = answers.id().into_inner().to_owned();
 

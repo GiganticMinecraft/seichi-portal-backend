@@ -1,7 +1,7 @@
 use domain::{
     form::{
         answer::{
-            models::{FormAnswer, FormAnswerContent},
+            models::{AnswerEntry, FormAnswerContent},
             settings::models::DefaultAnswerTitle,
         },
         comment::models::Comment,
@@ -84,7 +84,7 @@ pub async fn post_answer(
 pub async fn post_comment(
     form: &Form,
     comment: &Comment,
-    answer: &FormAnswer,
+    answer: &AnswerEntry,
 ) -> Result<(), InfraError> {
     if let Some(url) = form.settings().webhook_url().to_owned().into_inner() {
         Webhook::new(

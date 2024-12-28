@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::{
         answer::{
-            models::{AnswerId, AnswerLabel, AnswerLabelId, FormAnswer, FormAnswerContent},
+            models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, FormAnswerContent},
             settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
         },
         comment::models::{Comment, CommentId},
@@ -105,7 +105,7 @@ pub trait FormDatabase: Send + Sync {
 pub trait FormAnswerDatabase: Send + Sync {
     async fn post_answer(
         &self,
-        answer: &FormAnswer,
+        answer: &AnswerEntry,
         content: Vec<FormAnswerContent>,
     ) -> Result<(), InfraError>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError>;
@@ -169,7 +169,7 @@ pub trait FormMessageDatabase: Send + Sync {
     ) -> Result<(), InfraError>;
     async fn fetch_messages_by_form_answer(
         &self,
-        answers: &FormAnswer,
+        answers: &AnswerEntry,
     ) -> Result<Vec<MessageDto>, InfraError>;
     async fn fetch_message(&self, message_id: &MessageId)
         -> Result<Option<MessageDto>, InfraError>;

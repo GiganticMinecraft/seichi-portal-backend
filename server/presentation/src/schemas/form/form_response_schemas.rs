@@ -169,7 +169,7 @@ pub(crate) struct FormAnswer {
 
 impl FormAnswer {
     pub fn new(
-        answer: domain::form::answer::models::FormAnswer,
+        answer: domain::form::answer::models::AnswerEntry,
         answer_contents: Vec<domain::form::answer::models::FormAnswerContent>,
         comments: Vec<domain::form::comment::models::Comment>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,

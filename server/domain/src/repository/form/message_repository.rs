@@ -4,7 +4,7 @@ use mockall::automock;
 
 use crate::{
     form::{
-        answer::models::FormAnswer,
+        answer::models::AnswerEntry,
         message::models::{Message, MessageId},
     },
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
@@ -21,7 +21,7 @@ pub trait MessageRepository: Send + Sync + 'static {
     ) -> Result<(), Error>;
     async fn fetch_messages_by_answer(
         &self,
-        answers: &FormAnswer,
+        answers: &AnswerEntry,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error>;
     async fn update_message_body(
         &self,

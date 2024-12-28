@@ -11,7 +11,7 @@ use crate::{
     user::models::User,
 };
 
-pub type AnswerId = types::Id<FormAnswer>;
+pub type AnswerId = types::Id<AnswerEntry>;
 
 #[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
@@ -25,7 +25,7 @@ impl AnswerTitle {
 }
 
 #[derive(Serialize, Deserialize, Getters, PartialEq, Debug)]
-pub struct FormAnswer {
+pub struct AnswerEntry {
     id: AnswerId,
     user: User,
     timestamp: DateTime<Utc>,
@@ -33,14 +33,14 @@ pub struct FormAnswer {
     title: AnswerTitle,
 }
 
-impl FormAnswer {
-    /// [`FormAnswer`] を新しく作成します。
+impl AnswerEntry {
+    /// [`AnswerEntry`] を新しく作成します。
     ///
     /// この関数が pub(crate) になっているのは、
-    /// [`FormAnswer`] というドメインモデルは [`FormSettings`] の状態によって
+    /// [`AnswerEntry`] というドメインモデルは [`FormSettings`] の状態によって
     /// 作成できるか否かが変わるためです。
-    /// このため、この関数が pub であると、Invalid な状態の [`FormAnswer`] が作成される可能性あり、
-    /// [`FormAnswer`] を作成する処理は DomainService 側に委譲するために pub(crate) にしています。
+    /// このため、この関数が pub であると、Invalid な状態の [`AnswerEntry`] が作成される可能性あり、
+    /// [`AnswerEntry`] を作成する処理は DomainService 側に委譲するために pub(crate) にしています。
     pub(crate) fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
         Self {
             id: AnswerId::new(),
@@ -51,7 +51,7 @@ impl FormAnswer {
         }
     }
 
-    /// [`FormAnswer`] の各フィールドを指定して新しく作成します。
+    /// [`AnswerEntry`] の各フィールドを指定して新しく作成します。
     ///
     /// # Safety
     /// この関数はオブジェクトを新しく作成しない場合
