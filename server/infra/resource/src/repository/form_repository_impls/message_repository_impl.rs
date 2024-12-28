@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::FormAnswer,
+        answer::models::AnswerEntry,
         message::models::{Message, MessageId},
     },
     repository::form::message_repository::MessageRepository,
@@ -33,7 +33,7 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     #[tracing::instrument(skip(self))]
     async fn fetch_messages_by_answer(
         &self,
-        answers: &FormAnswer,
+        answers: &AnswerEntry,
     ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
         self.client
             .form_message()

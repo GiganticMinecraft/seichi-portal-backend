@@ -3,7 +3,7 @@ use errors::{domain::DomainError, Error};
 
 use crate::{
     form::{
-        answer::models::{AnswerTitle, FormAnswer},
+        answer::models::{AnswerEntry, AnswerTitle},
         models::{FormId, Visibility},
     },
     repository::form::form_repository::FormRepository,
@@ -15,12 +15,12 @@ pub struct AnswerService<'a, FormRepo: FormRepository> {
 }
 
 impl<R1: FormRepository> AnswerService<'_, R1> {
-    pub async fn new_form_answer(
+    pub async fn new_answer_entry(
         &self,
         user: User,
         form_id: FormId,
         title: AnswerTitle,
-    ) -> Result<FormAnswer, Error> {
+    ) -> Result<AnswerEntry, Error> {
         let form = self
             .form_repo
             .get(form_id)
@@ -37,7 +37,7 @@ impl<R1: FormRepository> AnswerService<'_, R1> {
             .is_within_period(Utc::now());
 
         if is_public_form && is_within_period {
-            Ok(FormAnswer::new(user, form_id, title))
+            Ok(AnswerEntry::new(user, form_id, title))
         } else {
             Err(Error::from(DomainError::Forbidden))
         }

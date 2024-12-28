@@ -62,7 +62,9 @@ impl<
             .to_answer_title(&user, form_id, answers.as_slice())
             .await?;
 
-        let form_answer = answer_service.new_form_answer(user, form_id, title).await?;
+        let form_answer = answer_service
+            .new_answer_entry(user, form_id, title)
+            .await?;
 
         self.answer_repository
             .post_answer(&form_answer, answers)

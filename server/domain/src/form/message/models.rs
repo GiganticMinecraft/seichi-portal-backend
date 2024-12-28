@@ -3,7 +3,7 @@ use derive_getters::Getters;
 use errors::domain::DomainError;
 
 use crate::{
-    form::answer::models::FormAnswer,
+    form::answer::models::AnswerEntry,
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role::Administrator, User},
 };
@@ -13,7 +13,7 @@ pub type MessageId = types::Id<Message>;
 #[derive(Getters, PartialEq, Debug)]
 pub struct Message {
     id: MessageId,
-    related_answer: FormAnswer,
+    related_answer: AnswerEntry,
     sender: User,
     body: String,
     timestamp: DateTime<Utc>,
@@ -29,7 +29,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::{answer::models::FormAnswer, message::models::Message},
+    ///     form::{answer::models::AnswerEntry, message::models::Message},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -41,7 +41,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(
+    /// let related_answer = AnswerEntry::new(
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
@@ -84,7 +84,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::{answer::models::FormAnswer, message::models::Message},
+    ///     form::{answer::models::AnswerEntry, message::models::Message},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -96,7 +96,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(
+    /// let related_answer = AnswerEntry::new(
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
@@ -140,7 +140,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::{answer::models::FormAnswer, message::models::Message},
+    ///     form::{answer::models::AnswerEntry, message::models::Message},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -152,7 +152,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(
+    /// let related_answer = AnswerEntry::new(
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
@@ -196,7 +196,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::{answer::models::FormAnswer, message::models::Message},
+    ///     form::{answer::models::AnswerEntry, message::models::Message},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -208,7 +208,7 @@ impl AuthorizationGuardDefinitions<Message> for Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(
+    /// let related_answer = AnswerEntry::new(
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
@@ -251,7 +251,7 @@ impl Message {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::{answer::models::FormAnswer, message::models::Message},
+    ///     form::{answer::models::AnswerEntry, message::models::Message},
     ///     user::models::{Role, User},
     /// };
     /// use uuid::Uuid;
@@ -262,19 +262,19 @@ impl Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(user.to_owned(), Default::default(), Default::default());
+    /// let related_answer = AnswerEntry::new(user.to_owned(), Default::default(), Default::default());
     ///
     /// let success_message =
     ///     Message::try_new(related_answer, user.to_owned(), "test message".to_string());
     ///
-    /// let related_answer = FormAnswer::new(user.to_owned(), Default::default(), Default::default());
+    /// let related_answer = AnswerEntry::new(user.to_owned(), Default::default(), Default::default());
     /// let message_with_empty_body = Message::try_new(related_answer, user, "".to_string());
     ///
     /// assert!(success_message.is_ok());
     /// assert!(message_with_empty_body.is_err());
     /// ```
     pub fn try_new(
-        related_answer: FormAnswer,
+        related_answer: AnswerEntry,
         sender: User,
         body: String,
     ) -> Result<Self, DomainError> {
@@ -298,7 +298,7 @@ impl Message {
     /// use chrono::{DateTime, Utc};
     /// use domain::{
     ///     form::{
-    ///         answer::models::FormAnswer,
+    ///         answer::models::AnswerEntry,
     ///         message::models::{Message, MessageId},
     ///     },
     ///     user::models::{Role, User},
@@ -311,7 +311,7 @@ impl Message {
     ///     role: Role::StandardUser,
     /// };
     ///
-    /// let related_answer = FormAnswer::new(user.to_owned(), Default::default(), Default::default());
+    /// let related_answer = AnswerEntry::new(user.to_owned(), Default::default(), Default::default());
     ///
     /// unsafe {
     ///     let message = Message::from_raw_parts(
@@ -330,7 +330,7 @@ impl Message {
     /// データの信頼性が保証されている場合にのみ使用してください。
     pub unsafe fn from_raw_parts(
         id: MessageId,
-        related_answer: FormAnswer,
+        related_answer: AnswerEntry,
         sender: User,
         body: String,
         timestamp: DateTime<Utc>,

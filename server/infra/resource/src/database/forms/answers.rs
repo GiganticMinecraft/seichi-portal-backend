@@ -3,7 +3,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::{AnswerId, FormAnswer, FormAnswerContent},
+        answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
         models::FormId,
     },
     user::models::Role,
@@ -27,7 +27,7 @@ impl FormAnswerDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn post_answer(
         &self,
-        answer: &FormAnswer,
+        answer: &AnswerEntry,
         content: Vec<FormAnswerContent>,
     ) -> Result<(), InfraError> {
         let answer_id = answer.id().to_owned().into_inner();
