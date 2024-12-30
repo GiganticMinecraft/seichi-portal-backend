@@ -6,13 +6,14 @@ use crate::form::{
     answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
     models::FormId,
 };
+use crate::types::verified::Verified;
 
 #[automock]
 #[async_trait]
 pub trait AnswerRepository: Send + Sync + 'static {
     async fn post_answer(
         &self,
-        answer: &AnswerEntry,
+        answer: Verified<AnswerEntry>,
         content: Vec<FormAnswerContent>,
     ) -> Result<(), Error>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<AnswerEntry>, Error>;

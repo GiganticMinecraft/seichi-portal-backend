@@ -1,6 +1,8 @@
+use async_trait::async_trait;
 use chrono::Utc;
 use errors::{domain::DomainError, Error};
 
+use crate::types::verified::{Verified, Verifier};
 use crate::{
     form::{
         answer::models::{AnswerEntry, AnswerTitle},
@@ -10,23 +12,23 @@ use crate::{
     user::models::User,
 };
 
-pub struct AnswerService<'a, FormRepo: FormRepository> {
+pub struct PostAnswerEntriesVerifier<'a, FormRepo: FormRepository> {
     pub form_repo: &'a FormRepo,
+    pub actor: &'a User,
+    pub answer_entry: AnswerEntry,
 }
 
-impl<R1: FormRepository> AnswerService<'_, R1> {
-    pub async fn new_answer_entry(
-        &self,
-        user: User,
-        form_id: FormId,
-        title: AnswerTitle,
-    ) -> Result<AnswerEntry, Error> {
+#[async_trait]
+impl<FormRepo: FormRepository> Verifier<AnswerEntry> for PostAnswerEntriesVerifier<'_, FormRepo> {
+    async fn verify(self) -> Result<Verified<AnswerEntry>, Error> {
+        let target = self.answer_entry;
+
         let form = self
             .form_repo
-            .get(form_id)
+            .get(*target.form_id())
             .await?
             .ok_or(DomainError::NotFound)?
-            .try_into_read(&user)?;
+            .try_into_read(self.actor)?;
 
         let form_settings = form.settings();
 
@@ -37,7 +39,7 @@ impl<R1: FormRepository> AnswerService<'_, R1> {
             .is_within_period(Utc::now());
 
         if is_public_form && is_within_period {
-            Ok(AnswerEntry::new(user, form_id, title))
+            Ok(Self::new(target))
         } else {
             Err(Error::from(DomainError::Forbidden))
         }

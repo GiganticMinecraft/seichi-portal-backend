@@ -1,4 +1,9 @@
+use crate::{
+    database::components::{DatabaseComponents, FormAnswerDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::types::verified::Verified;
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
@@ -9,19 +14,16 @@ use domain::{
 use errors::Error;
 use futures::{stream, StreamExt};
 
-use crate::{
-    database::components::{DatabaseComponents, FormAnswerDatabase},
-    repository::Repository,
-};
-
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
     async fn post_answer(
         &self,
-        answer: &AnswerEntry,
+        answer: Verified<AnswerEntry>,
         content: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
+        let answer = answer.inner();
+
         self.client
             .form_answer()
             .post_answer(answer, content)

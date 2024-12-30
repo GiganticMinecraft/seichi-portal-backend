@@ -4,6 +4,7 @@ use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
@@ -41,7 +42,7 @@ impl AnswerEntry {
     /// 作成できるか否かが変わるためです。
     /// このため、この関数が pub であると、Invalid な状態の [`AnswerEntry`] が作成される可能性あり、
     /// [`AnswerEntry`] を作成する処理は DomainService 側に委譲するために pub(crate) にしています。
-    pub(crate) fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
+    pub fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
         Self {
             id: AnswerId::new(),
             user,
