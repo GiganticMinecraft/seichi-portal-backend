@@ -1,9 +1,10 @@
+use crate::dto::AnswerDto;
+use domain::form::answer::models::AnswerEntry;
+use domain::form::answer::service::PostAnswerEntriesVerifier;
+use domain::types::verified::Verifier;
 use domain::{
     form::{
-        answer::{
-            models::{AnswerId, FormAnswerContent},
-            service::AnswerService,
-        },
+        answer::models::{AnswerId, FormAnswerContent},
         models::FormId,
         service::DefaultAnswerTitleDomainService,
     },
@@ -16,8 +17,6 @@ use domain::{
 };
 use errors::{usecase::UseCaseError::AnswerNotFound, Error};
 use futures::{stream, try_join, StreamExt};
-
-use crate::dto::AnswerDto;
 
 pub struct AnswerUseCase<
     'a,
@@ -48,10 +47,6 @@ impl<
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let answer_service = AnswerService {
-            form_repo: self.form_repository,
-        };
-
         let form_service = DefaultAnswerTitleDomainService {
             form_repo: self.form_repository,
             question_repo: self.question_repository,
@@ -62,12 +57,18 @@ impl<
             .to_answer_title(&user, form_id, answers.as_slice())
             .await?;
 
-        let form_answer = answer_service
-            .new_answer_entry(user, form_id, title)
-            .await?;
+        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title);
+
+        let verifier = PostAnswerEntriesVerifier {
+            form_repo: self.form_repository,
+            actor: &user,
+            answer_entry,
+        };
+
+        let answer_entry = verifier.verify().await?;
 
         self.answer_repository
-            .post_answer(&form_answer, answers)
+            .post_answer(answer_entry, answers)
             .await
     }
 
