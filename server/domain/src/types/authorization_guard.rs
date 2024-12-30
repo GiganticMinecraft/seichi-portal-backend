@@ -4,9 +4,13 @@ use crate::user::models::User;
 
 pub trait Actions: private::Sealed {}
 
+#[derive(Debug)]
 pub struct Create;
+#[derive(Debug)]
 pub struct Read;
+#[derive(Debug)]
 pub struct Update;
+#[derive(Debug)]
 pub struct Delete;
 
 impl Actions for Create {}
@@ -23,9 +27,8 @@ mod private {
     impl Sealed for super::Delete {}
 }
 
-/// [`User`] の `guard_target` に対するアクセスを制御するための定義を提供します。
-///
-/// この定義は、`guard_target` によってアクセス権が異なるデータの操作を制御することのみを想定しています。
+/// [`User`] による `guard_target` に対するアクセスを制御するための定義を提供します。
+#[derive(Debug)]
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
     guard_target: T,
     _phantom_data: std::marker::PhantomData<A>,
@@ -94,6 +97,24 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
         }
     }
 
+    /// [`T`] の値に対して map 相当の操作を行います。
+    ///
+    /// [`actor`] に [`UPDATE`] 権限がある場合は [`f`] を適用し、
+    /// そうでない場合は [`self`] をそのまま返します。
+    pub fn map<F>(self, actor: &User, f: F) -> AuthorizationGuard<T, Update>
+    where
+        F: FnOnce(T) -> T,
+    {
+        if self.guard_target.can_update(actor) {
+            AuthorizationGuard {
+                guard_target: f(self.guard_target),
+                _phantom_data: std::marker::PhantomData,
+            }
+        } else {
+            self
+        }
+    }
+
     /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
@@ -159,9 +180,27 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
             Err(DomainError::Forbidden)
         }
     }
+
+    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
+    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
+    pub fn try_into_delete<R, F>(self, actor: &User, f: F) -> Result<R, DomainError>
+    where
+        F: FnOnce(T) -> R,
+    {
+        if self.guard_target.can_delete(actor) {
+            Ok(f(self.guard_target))
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
 }
 
 /// `actor` が `guard_target` に対して操作可能かどうかを定義するためのトレイト
+///
+/// このトレイトでは、あくまで「[`actor`] と `guard_target` の情報を使用して判断できる中で、
+/// `guard_target` にアクセスすることができるかどうか」
+/// という情報を提供するためのみに使用することを想定しています。
+/// そのため、`guard_target` のドメイン制約に関する情報を定義することは想定していません。
 ///
 /// # Examples
 /// ```
@@ -203,6 +242,33 @@ pub trait AuthorizationGuardDefinitions<T> {
 impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Create> {
     fn from(guard_target: T) -> Self {
         AuthorizationGuard::new(guard_target)
+    }
+}
+
+impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Read> {
+    fn from(guard_target: T) -> Self {
+        Self {
+            guard_target,
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Update> {
+    fn from(guard_target: T) -> Self {
+        Self {
+            guard_target,
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Delete> {
+    fn from(guard_target: T) -> Self {
+        Self {
+            guard_target,
+            _phantom_data: std::marker::PhantomData,
+        }
     }
 }
 

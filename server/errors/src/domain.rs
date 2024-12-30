@@ -7,8 +7,14 @@ pub enum DomainError {
         #[from]
         source: strum::ParseError,
     },
+    #[error("Not found.")]
+    NotFound,
     #[error("Access to forbidden resource.")]
     Forbidden,
     #[error("Empty message body.")]
     EmptyMessageBody,
+    #[error("Invalid response period.")]
+    InvalidResponsePeriod,
+    #[error("Invalid webhook url.")]
+    InvalidWebhookUrl,
 }
