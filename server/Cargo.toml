@@ -44,5 +44,5 @@ deriving_via = "2.0.0"
 reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tls", "json"] }
 num-traits = "0.2.19"
 regex = "1.11.1"
-redis = { version = "0.27.6", features = ["tokio-comp", "json"] }
+redis = { version = "0.28.0", features = ["tokio-comp", "json"] }
 meilisearch-sdk = "0.27.1"
