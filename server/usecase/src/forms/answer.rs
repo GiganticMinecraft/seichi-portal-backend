@@ -1,10 +1,9 @@
-use crate::dto::AnswerDto;
-use domain::form::answer::models::AnswerEntry;
-use domain::form::answer::service::PostAnswerEntriesVerifier;
-use domain::types::verified::Verifier;
 use domain::{
     form::{
-        answer::models::{AnswerId, FormAnswerContent},
+        answer::{
+            models::{AnswerEntry, AnswerId, FormAnswerContent},
+            service::PostAnswerEntriesVerifier,
+        },
         models::FormId,
         service::DefaultAnswerTitleDomainService,
     },
@@ -13,10 +12,13 @@ use domain::{
         comment_repository::CommentRepository, form_repository::FormRepository,
         question_repository::QuestionRepository,
     },
+    types::verified::Verifier,
     user::models::User,
 };
 use errors::{usecase::UseCaseError::AnswerNotFound, Error};
 use futures::{stream, try_join, StreamExt};
+
+use crate::dto::AnswerDto;
 
 pub struct AnswerUseCase<
     'a,

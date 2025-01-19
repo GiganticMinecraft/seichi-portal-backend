@@ -1,18 +1,19 @@
-use crate::{
-    database::components::{DatabaseComponents, FormAnswerDatabase},
-    repository::Repository,
-};
 use async_trait::async_trait;
-use domain::types::verified::Verified;
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
         models::FormId,
     },
     repository::form::answer_repository::AnswerRepository,
+    types::verified::Verified,
 };
 use errors::Error;
 use futures::{stream, StreamExt};
+
+use crate::{
+    database::components::{DatabaseComponents, FormAnswerDatabase},
+    repository::Repository,
+};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {
@@ -37,7 +38,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
             .form_answer()
             .get_answers(answer_id)
             .await?
-            .map(|posted_answers_dto| Ok(posted_answers_dto.try_into()?))
+            .map(|posted_answers_dto| posted_answers_dto.try_into())
             .transpose()
     }
 
@@ -77,7 +78,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     #[tracing::instrument(skip(self))]
     async fn get_all_answers(&self) -> Result<Vec<AnswerEntry>, Error> {
         stream::iter(self.client.form_answer().get_all_answers().await?)
-            .then(|posted_answers_dto| async { Ok(posted_answers_dto.try_into()?) })
+            .then(|posted_answers_dto| async { posted_answers_dto.try_into() })
             .collect::<Vec<Result<AnswerEntry, _>>>()
             .await
             .into_iter()

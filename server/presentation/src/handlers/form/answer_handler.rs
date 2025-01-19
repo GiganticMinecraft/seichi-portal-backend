@@ -57,7 +57,7 @@ pub async fn get_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(_answer_id): Path<AnswerId>,
 ) -> impl IntoResponse {
-    let form_answer_use_case = AnswerUseCase {
+    let _form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
@@ -111,7 +111,7 @@ pub async fn get_answer_by_form_id_handler(
     State(repository): State<RealInfrastructureRepository>,
     Path(_form_id): Path<FormId>,
 ) -> impl IntoResponse {
-    let form_answer_use_case = AnswerUseCase {
+    let _form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),

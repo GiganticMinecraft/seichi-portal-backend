@@ -2,11 +2,13 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::{
-    answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
-    models::FormId,
+use crate::{
+    form::{
+        answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
+        models::FormId,
+    },
+    types::verified::Verified,
 };
-use crate::types::verified::Verified;
 
 #[automock]
 #[async_trait]

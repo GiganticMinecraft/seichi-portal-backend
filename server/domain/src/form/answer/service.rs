@@ -2,13 +2,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use errors::{domain::DomainError, Error};
 
-use crate::types::verified::{Verified, Verifier};
 use crate::{
-    form::{
-        answer::models::{AnswerEntry, AnswerTitle},
-        models::{FormId, Visibility},
-    },
+    form::{answer::models::AnswerEntry, models::Visibility},
     repository::form::form_repository::FormRepository,
+    types::verified::{Verified, Verifier},
     user::models::User,
 };
 
@@ -39,7 +36,7 @@ impl<FormRepo: FormRepository> Verifier<AnswerEntry> for PostAnswerEntriesVerifi
             .is_within_period(Utc::now());
 
         if is_public_form && is_within_period {
-            Ok(Self::new(target))
+            Ok(Self::new_verified(target))
         } else {
             Err(Error::from(DomainError::Forbidden))
         }

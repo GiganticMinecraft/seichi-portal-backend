@@ -88,7 +88,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        form::{answer::models::FormAnswerContent, question::models::QuestionId},
+        form::{
+            answer::models::{AnswerId, FormAnswerContent},
+            question::models::QuestionId,
+        },
         repository::form::{
             answer_repository::MockAnswerRepository, form_repository::MockFormRepository,
             question_repository::MockQuestionRepository,
@@ -104,9 +107,7 @@ mod tests {
         let default_answer_title = DefaultAnswerTitle::new(Some(
             NonEmptyString::try_new(format!(
                 "Answer to ${}, ${}, ${}",
-                first_question_id.to_string(),
-                second_question_id.to_string(),
-                third_question_id.to_string()
+                first_question_id, second_question_id, third_question_id
             ))
             .unwrap(),
         ));

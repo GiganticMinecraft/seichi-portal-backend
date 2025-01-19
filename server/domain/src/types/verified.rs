@@ -20,7 +20,7 @@ impl<T> Verified<T> {
 pub trait Verifier<T> {
     async fn verify(self) -> Result<Verified<T>, Error>;
 
-    fn new(inner: T) -> Verified<T> {
+    fn new_verified(inner: T) -> Verified<T> {
         Verified { inner }
     }
 }

@@ -4,7 +4,6 @@ use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
