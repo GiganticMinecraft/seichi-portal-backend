@@ -35,12 +35,6 @@ pub struct AnswerEntry {
 
 impl AnswerEntry {
     /// [`AnswerEntry`] を新しく作成します。
-    ///
-    /// この関数が pub(crate) になっているのは、
-    /// [`AnswerEntry`] というドメインモデルは [`FormSettings`] の状態によって
-    /// 作成できるか否かが変わるためです。
-    /// このため、この関数が pub であると、Invalid な状態の [`AnswerEntry`] が作成される可能性あり、
-    /// [`AnswerEntry`] を作成する処理は DomainService 側に委譲するために pub(crate) にしています。
     pub fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
         Self {
             id: AnswerId::new(),
