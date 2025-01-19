@@ -12,14 +12,11 @@ use crate::{
 pub struct PostAnswerEntriesVerifier<'a, FormRepo: FormRepository> {
     pub form_repo: &'a FormRepo,
     pub actor: &'a User,
-    pub answer_entry: AnswerEntry,
 }
 
 #[async_trait]
 impl<FormRepo: FormRepository> Verifier<AnswerEntry> for PostAnswerEntriesVerifier<'_, FormRepo> {
-    async fn verify(self) -> Result<Verified<AnswerEntry>, Error> {
-        let target = self.answer_entry;
-
+    async fn verify(self, target: AnswerEntry) -> Result<Verified<AnswerEntry>, Error> {
         let form = self
             .form_repo
             .get(*target.form_id())

@@ -18,7 +18,7 @@ impl<T> Verified<T> {
 
 #[async_trait]
 pub trait Verifier<T> {
-    async fn verify(self) -> Result<Verified<T>, Error>;
+    async fn verify(self, target: T) -> Result<Verified<T>, Error>;
 
     fn new_verified(inner: T) -> Verified<T> {
         Verified { inner }

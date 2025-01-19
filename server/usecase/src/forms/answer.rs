@@ -59,15 +59,14 @@ impl<
             .to_answer_title(&user, form_id, answers.as_slice())
             .await?;
 
-        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title);
-
         let verifier = PostAnswerEntriesVerifier {
             form_repo: self.form_repository,
             actor: &user,
-            answer_entry,
         };
 
-        let answer_entry = verifier.verify().await?;
+        let answer_entry = verifier
+            .verify(AnswerEntry::new(user.to_owned(), form_id, title))
+            .await?;
 
         self.answer_repository
             .post_answer(answer_entry, answers)
