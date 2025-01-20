@@ -14,10 +14,17 @@ args = ["migrate", "generate", "${@}"]
 command = "cargo"
 args = ["clippy", "--fix", "--allow-dirty", "--allow-staged"]
 
-[tasks.test]
+[tasks.doctest]
+command = "cargo"
+args = ["test", "--doc"]
+
+[tasks.nextest]
 install_crate = { crate_name = "cargo-nextst" }
 command = "cargo"
 args = ["nextest", "run"]
+
+[tasks.test]
+dependencies = ["nextest", "doctest"]
 
 [tasks.lint]
 command = "cargo"
