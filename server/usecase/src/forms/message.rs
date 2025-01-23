@@ -1,3 +1,4 @@
+use domain::types::authorization_guard_with_context::Read;
 use domain::{
     form::{
         answer::models::AnswerId,
@@ -8,7 +9,7 @@ use domain::{
         form::{answer_repository::AnswerRepository, message_repository::MessageRepository},
         notification_repository::NotificationRepository,
     },
-    types::authorization_guard::{AuthorizationGuard, Read},
+    types::authorization_guard::AuthorizationGuard,
     user::models::User,
 };
 use errors::{

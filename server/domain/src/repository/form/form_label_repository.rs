@@ -2,9 +2,10 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
+use crate::types::authorization_guard_with_context::{Create, Delete, Read, Update};
 use crate::{
     form::models::{FormId, FormLabel, FormLabelId},
-    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
+    types::authorization_guard::AuthorizationGuard,
     user::models::User,
 };
 

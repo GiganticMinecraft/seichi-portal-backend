@@ -1,37 +1,14 @@
-use errors::domain::DomainError;
-
+use crate::types::authorization_guard_with_context::{
+    Actions, AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
+    Delete, Read, Update,
+};
 use crate::user::models::User;
-
-pub trait Actions: private::Sealed {}
-
-#[derive(Debug)]
-pub struct Create;
-#[derive(Debug)]
-pub struct Read;
-#[derive(Debug)]
-pub struct Update;
-#[derive(Debug)]
-pub struct Delete;
-
-impl Actions for Create {}
-impl Actions for Read {}
-impl Actions for Update {}
-impl Actions for Delete {}
-
-mod private {
-    pub trait Sealed {}
-
-    impl Sealed for super::Create {}
-    impl Sealed for super::Read {}
-    impl Sealed for super::Update {}
-    impl Sealed for super::Delete {}
-}
+use errors::domain::DomainError;
 
 /// [`User`] による `guard_target` に対するアクセスを制御するための定義を提供します。
 #[derive(Debug)]
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
-    guard_target: T,
-    _phantom_data: std::marker::PhantomData<A>,
+    authorization_guard_with_context: AuthorizationGuardWithContext<T, A, ()>,
 }
 
 // NOTE: 実装時点(2024/10/27)では、AuthorizationGuard の Action は以下のようにのみ変換することができます
@@ -51,8 +28,7 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
     pub(crate) fn new(guard_target: T) -> Self {
         Self {
-            guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target, ()),
         }
     }
 
@@ -61,25 +37,20 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_create(actor) {
-            Ok(f(&self.guard_target))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorization_guard_with_context
+            .try_create(actor, f, &())
     }
 
     /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
-            guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: self.authorization_guard_with_context.into_read(),
         }
     }
 
     pub fn into_update(self) -> AuthorizationGuard<T, Update> {
         AuthorizationGuard {
-            guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: self.authorization_guard_with_context.into_update(),
         }
     }
 }
@@ -90,11 +61,8 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_update(actor) {
-            Ok(f(&self.guard_target))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorization_guard_with_context
+            .try_update(actor, f, &())
     }
 
     /// [`T`] の値に対して map 相当の操作を行います。
@@ -105,29 +73,26 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
     where
         F: FnOnce(T) -> T,
     {
-        if self.guard_target.can_update(actor) {
-            AuthorizationGuard {
-                guard_target: f(self.guard_target),
-                _phantom_data: std::marker::PhantomData,
-            }
-        } else {
-            self
+        AuthorizationGuard {
+            authorization_guard_with_context: self.authorization_guard_with_context.map(
+                actor,
+                f,
+                &(),
+            ),
         }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
-            guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: self.authorization_guard_with_context.into_read(),
         }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Delete`] に変換します。
     pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
         AuthorizationGuard {
-            guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: self.authorization_guard_with_context.into_delete(),
         }
     }
 }
@@ -135,35 +100,26 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
     /// `actor` が `guard_target` の参照を取得することを試みます。
     pub fn try_read(&self, actor: &User) -> Result<&T, DomainError> {
-        if self.guard_target.can_read(actor) {
-            Ok(&self.guard_target)
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorization_guard_with_context.try_read(actor, &())
     }
 
     /// `actor` が `guard_target` を取得することを試みます。
     pub fn try_into_read(self, actor: &User) -> Result<T, DomainError> {
-        if self.guard_target.can_read(actor) {
-            Ok(self.guard_target)
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorization_guard_with_context
+            .try_into_read(actor, &())
     }
 
     /// [`AuthorizationGuard`] の Action を [`Update`] に変換します。
     pub fn into_update(self) -> AuthorizationGuard<T, Update> {
         AuthorizationGuard {
-            guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: self.authorization_guard_with_context.into_update(),
         }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Delete`] に変換します。
     pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
         AuthorizationGuard {
-            guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: self.authorization_guard_with_context.into_delete(),
         }
     }
 }
@@ -174,11 +130,8 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_delete(actor) {
-            Ok(f(&self.guard_target))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorization_guard_with_context
+            .try_delete(actor, f, &())
     }
 
     /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
@@ -187,11 +140,8 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
     where
         F: FnOnce(T) -> R,
     {
-        if self.guard_target.can_delete(actor) {
-            Ok(f(self.guard_target))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorization_guard_with_context
+            .try_into_delete(actor, f, &())
     }
 }
 
@@ -239,6 +189,27 @@ pub trait AuthorizationGuardDefinitions<T> {
     fn can_delete(&self, actor: &User) -> bool;
 }
 
+impl<T> AuthorizationGuardWithContextDefinitions<T, ()> for T
+where
+    T: AuthorizationGuardDefinitions<T>,
+{
+    fn can_create(&self, actor: &User, _context: &()) -> bool {
+        self.can_create(actor)
+    }
+
+    fn can_read(&self, actor: &User, _context: &()) -> bool {
+        self.can_read(actor)
+    }
+
+    fn can_update(&self, actor: &User, _context: &()) -> bool {
+        self.can_update(actor)
+    }
+
+    fn can_delete(&self, actor: &User, _context: &()) -> bool {
+        self.can_delete(actor)
+    }
+}
+
 impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Create> {
     fn from(guard_target: T) -> Self {
         AuthorizationGuard::new(guard_target)
@@ -248,8 +219,8 @@ impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Crea
 impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Read> {
     fn from(guard_target: T) -> Self {
         Self {
-            guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target, ())
+                .into_read(),
         }
     }
 }
@@ -257,8 +228,8 @@ impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Read
 impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Update> {
     fn from(guard_target: T) -> Self {
         Self {
-            guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target, ())
+                .into_update(),
         }
     }
 }
@@ -266,8 +237,9 @@ impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Upda
 impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Delete> {
     fn from(guard_target: T) -> Self {
         Self {
-            guard_target,
-            _phantom_data: std::marker::PhantomData,
+            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target, ())
+                .into_read()
+                .into_delete(),
         }
     }
 }

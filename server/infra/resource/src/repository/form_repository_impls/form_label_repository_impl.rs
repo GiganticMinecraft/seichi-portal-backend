@@ -1,17 +1,17 @@
-use async_trait::async_trait;
-use domain::{
-    form::models::{FormId, FormLabel, FormLabelId},
-    repository::form::form_label_repository::FormLabelRepository,
-    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::User,
-};
-use errors::Error;
-use itertools::Itertools;
-
 use crate::{
     database::components::{DatabaseComponents, FormLabelDatabase},
     repository::Repository,
 };
+use async_trait::async_trait;
+use domain::types::authorization_guard_with_context::{Create, Delete, Read, Update};
+use domain::{
+    form::models::{FormId, FormLabel, FormLabelId},
+    repository::form::form_label_repository::FormLabelRepository,
+    types::authorization_guard::AuthorizationGuard,
+    user::models::User,
+};
+use errors::Error;
+use itertools::Itertools;
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Client> {

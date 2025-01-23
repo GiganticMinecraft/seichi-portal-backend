@@ -1,18 +1,18 @@
+use crate::{
+    database::components::{DatabaseComponents, NotificationDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::types::authorization_guard_with_context::{Create, Read, Update};
 use domain::{
     notification::models::{Notification, NotificationId},
     repository::notification_repository::NotificationRepository,
-    types::authorization_guard::{AuthorizationGuard, Create, Read, Update},
+    types::authorization_guard::AuthorizationGuard,
     user::models::User,
 };
 use errors::Error;
 use itertools::Itertools;
 use uuid::Uuid;
-
-use crate::{
-    database::components::{DatabaseComponents, NotificationDatabase},
-    repository::Repository,
-};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository<Client> {

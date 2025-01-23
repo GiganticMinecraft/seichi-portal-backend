@@ -2,12 +2,13 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
+use crate::types::authorization_guard_with_context::Read;
 use crate::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
         models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
     },
-    types::authorization_guard::{AuthorizationGuard, Read},
+    types::authorization_guard::AuthorizationGuard,
     user::models::User,
 };
 
