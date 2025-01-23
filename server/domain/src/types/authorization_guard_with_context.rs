@@ -26,6 +26,8 @@ mod private {
     impl Sealed for super::Delete {}
 }
 
+/// [`AuthorizationGuardWithContext`] は、[`User`] と [`Context`] を受け取り、
+/// [`guard_target`] に対して CRUD 操作が可能であるかを定義するための抽象です。
 #[derive(Debug)]
 pub struct AuthorizationGuardWithContext<
     T: AuthorizationGuardWithContextDefinitions<T, Context>,
@@ -37,7 +39,7 @@ pub struct AuthorizationGuardWithContext<
     context: Context,
 }
 
-// NOTE: 実装時点(2024/10/27)では、AuthorizationGuard の Action は以下のようにのみ変換することができます
+// NOTE: 実装時点(2024/10/27)では、AuthorizationGuardWithContext の Action は以下のようにのみ変換することができます
 //    - Create -> Read
 //    - Create -> Update
 //    - Update <-> Read
@@ -48,9 +50,9 @@ pub struct AuthorizationGuardWithContext<
 //
 //  仮に Delete から Read へ変換することができるとすると、 データの削除操作の実装において
 //  Read 権限を保持しているかつ、Delete 権限を持たないユーザーが居る場合に
-//  AuthorizationGuard<T, Delete> から誤って `.into_read()` 関数を呼び出すことで
+//  AuthorizationGuardWithContext<T, Delete> から誤って `.into_read()` 関数を呼び出すことで
 //  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
-//  このような事故を防ぐために、AuthorizationGuard の Action の変換は上記のように限定されています。
+//  このような事故を防ぐために、AuthorizationGuardWithContext の Action の変換は上記のように限定されています。
 impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     AuthorizationGuardWithContext<T, Create, Context>
 {
@@ -79,7 +81,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
         }
     }
 
-    /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
+    /// [`AuthorizationGuardWithContext`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuardWithContext<T, Read, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
@@ -181,7 +183,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
         }
     }
 
-    /// [`AuthorizationGuard`] の Action を [`Update`] に変換します。
+    /// [`AuthorizationGuardWithContext`] の Action を [`Update`] に変換します。
     pub fn into_update(self) -> AuthorizationGuardWithContext<T, Update, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
@@ -190,7 +192,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
         }
     }
 
-    /// [`AuthorizationGuard`] の Action を [`Delete`] に変換します。
+    /// [`AuthorizationGuardWithContext`] の Action を [`Delete`] に変換します。
     pub fn into_delete(self) -> AuthorizationGuardWithContext<T, Delete, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,

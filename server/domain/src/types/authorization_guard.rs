@@ -6,25 +6,14 @@ use crate::user::models::User;
 use errors::domain::DomainError;
 
 /// [`User`] による `guard_target` に対するアクセスを制御するための定義を提供します。
+///
+/// [`AuthorizationGuard`] は、Context を必要としない [`AuthorizationGuardWithContext`] であり、
+/// [`AuthorizationGuardWithContext<T, A, ()>`] と同等の機能を提供します。
 #[derive(Debug)]
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
     authorization_guard_with_context: AuthorizationGuardWithContext<T, A, ()>,
 }
 
-// NOTE: 実装時点(2024/10/27)では、AuthorizationGuard の Action は以下のようにのみ変換することができます
-//    - Create -> Read
-//    - Create -> Update
-//    - Update <-> Read
-//    - Update または Read -> Delete
-//  これは、データのライフサイクルを考えた時に
-//    - データの新規作成(Create) -> データ読み取り(Read) <-> データ更新(Update) -> データ削除(Delete)
-//  という順序のみ操作が行われるはずであるからです。
-//
-//  仮に Delete から Read へ変換することができるとすると、 データの削除操作の実装において
-//  Read 権限を保持しているかつ、Delete 権限を持たないユーザーが居る場合に
-//  AuthorizationGuard<T, Delete> から誤って `.into_read()` 関数を呼び出すことで
-//  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
-//  このような事故を防ぐために、AuthorizationGuard の Action の変換は上記のように限定されています。
 impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
     pub(crate) fn new(guard_target: T) -> Self {
         Self {
@@ -146,11 +135,6 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 }
 
 /// `actor` が `guard_target` に対して操作可能かどうかを定義するためのトレイト
-///
-/// このトレイトでは、あくまで「[`actor`] と `guard_target` の情報を使用して判断できる中で、
-/// `guard_target` にアクセスすることができるかどうか」
-/// という情報を提供するためのみに使用することを想定しています。
-/// そのため、`guard_target` のドメイン制約に関する情報を定義することは想定していません。
 ///
 /// # Examples
 /// ```
