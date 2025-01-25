@@ -2,21 +2,26 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::{
-    form::{
-        answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
-        models::FormId,
-    },
-    types::verified::Verified,
+use crate::form::answer::service::AnswerEntryAuthorizationContext;
+use crate::form::{
+    answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
+    models::FormId,
 };
+use crate::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Create};
+use crate::user::models::User;
 
 #[automock]
 #[async_trait]
 pub trait AnswerRepository: Send + Sync + 'static {
-    async fn post_answer(
+    async fn post_answer<'a>(
         &self,
-        answer: Verified<AnswerEntry>,
+        answer: AuthorizationGuardWithContext<
+            AnswerEntry,
+            Create,
+            AnswerEntryAuthorizationContext<'a>,
+        >,
         content: Vec<FormAnswerContent>,
+        actor: &User,
     ) -> Result<(), Error>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<AnswerEntry>, Error>;
     async fn get_answer_contents(

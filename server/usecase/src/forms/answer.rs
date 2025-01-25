@@ -1,9 +1,9 @@
+use crate::dto::AnswerDto;
+use domain::form::answer::service::AnswerEntryAuthorizationContext;
+use domain::types::authorization_guard_with_context::AuthorizationGuardWithContext;
 use domain::{
     form::{
-        answer::{
-            models::{AnswerEntry, AnswerId, FormAnswerContent},
-            service::PostAnswerEntriesVerifier,
-        },
+        answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
         models::FormId,
         service::DefaultAnswerTitleDomainService,
     },
@@ -12,13 +12,11 @@ use domain::{
         comment_repository::CommentRepository, form_repository::FormRepository,
         question_repository::QuestionRepository,
     },
-    types::verified::Verifier,
     user::models::User,
 };
+use errors::usecase::UseCaseError::FormNotFound;
 use errors::{usecase::UseCaseError::AnswerNotFound, Error};
 use futures::{stream, try_join, StreamExt};
-
-use crate::dto::AnswerDto;
 
 pub struct AnswerUseCase<
     'a,
@@ -55,21 +53,22 @@ impl<
             answer_repo: self.answer_repository,
         };
 
-        let title = form_service
-            .to_answer_title(&user, form_id, answers.as_slice())
-            .await?;
+        let (form, title) = try_join!(
+            self.form_repository.get(form_id),
+            form_service.to_answer_title(&user, form_id, answers.as_slice())
+        )?;
 
-        let verifier = PostAnswerEntriesVerifier {
-            form_repo: self.form_repository,
-            actor: &user,
-        };
+        let form = form.ok_or(Error::from(FormNotFound))?;
 
-        let answer_entry = verifier
-            .verify(AnswerEntry::new(user.to_owned(), form_id, title))
-            .await?;
+        let form_settings = form.try_read(&user)?.settings();
+
+        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title);
+        let context = AnswerEntryAuthorizationContext::new(form_settings);
+
+        let guard = AuthorizationGuardWithContext::new(answer_entry, context);
 
         self.answer_repository
-            .post_answer(answer_entry, answers)
+            .post_answer(guard, answers, &user)
             .await
     }
 

@@ -1,33 +1,38 @@
+use crate::{
+    database::components::{DatabaseComponents, FormAnswerDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::form::answer::service::AnswerEntryAuthorizationContext;
+use domain::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Create};
+use domain::user::models::User;
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
         models::FormId,
     },
     repository::form::answer_repository::AnswerRepository,
-    types::verified::Verified,
 };
 use errors::Error;
 use futures::{stream, StreamExt};
 
-use crate::{
-    database::components::{DatabaseComponents, FormAnswerDatabase},
-    repository::Repository,
-};
-
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn post_answer(
+    async fn post_answer<'a>(
         &self,
-        answer: Verified<AnswerEntry>,
+        answer: AuthorizationGuardWithContext<
+            AnswerEntry,
+            Create,
+            AnswerEntryAuthorizationContext<'a>,
+        >,
         content: Vec<FormAnswerContent>,
+        actor: &User,
     ) -> Result<(), Error> {
-        let answer = answer.inner();
-
-        self.client
-            .form_answer()
-            .post_answer(answer, content)
+        answer
+            .try_create(actor, |entry| {
+                self.client.form_answer().post_answer(entry, content)
+            })?
             .await
             .map_err(Into::into)
     }

@@ -65,16 +65,11 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     }
 
     /// [`AuthorizationGuardWithContextDefinitions::can_create`] の条件で作成操作 `f` を試みます。
-    pub fn try_create<'a, R, F>(
-        &'a self,
-        actor: &User,
-        f: F,
-        context: &Context,
-    ) -> Result<R, DomainError>
+    pub fn try_create<'a, R, F>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_create(actor, context) {
+        if self.guard_target.can_create(actor, &self.context) {
             Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
@@ -103,16 +98,11 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     AuthorizationGuardWithContext<T, Update, Context>
 {
     /// [`AuthorizationGuardWithContextDefinitions::can_update`] の条件で更新操作 `f` を試みます。
-    pub fn try_update<'a, R, F>(
-        &'a self,
-        actor: &User,
-        f: F,
-        context: &Context,
-    ) -> Result<R, DomainError>
+    pub fn try_update<'a, R, F>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_update(actor, context) {
+        if self.guard_target.can_update(actor, &self.context) {
             Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
@@ -123,16 +113,11 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     ///
     /// [`actor`] に [`UPDATE`] 権限がある場合は [`f`] を適用し、
     /// そうでない場合は [`self`] をそのまま返します。
-    pub fn map<F>(
-        self,
-        actor: &User,
-        f: F,
-        context: &Context,
-    ) -> AuthorizationGuardWithContext<T, Update, Context>
+    pub fn map<F>(self, actor: &User, f: F) -> AuthorizationGuardWithContext<T, Update, Context>
     where
         F: FnOnce(T) -> T,
     {
-        if self.guard_target.can_update(actor, context) {
+        if self.guard_target.can_update(actor, &self.context) {
             AuthorizationGuardWithContext {
                 guard_target: f(self.guard_target),
                 _phantom_data: std::marker::PhantomData,
@@ -166,8 +151,8 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     AuthorizationGuardWithContext<T, Read, Context>
 {
     /// `actor` が `guard_target` の参照を取得することを試みます。
-    pub fn try_read(&self, actor: &User, context: &Context) -> Result<&T, DomainError> {
-        if self.guard_target.can_read(actor, context) {
+    pub fn try_read(&self, actor: &User) -> Result<&T, DomainError> {
+        if self.guard_target.can_read(actor, &self.context) {
             Ok(&self.guard_target)
         } else {
             Err(DomainError::Forbidden)
@@ -175,8 +160,8 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     }
 
     /// `actor` が `guard_target` を取得することを試みます。
-    pub fn try_into_read(self, actor: &User, context: &Context) -> Result<T, DomainError> {
-        if self.guard_target.can_read(actor, context) {
+    pub fn try_into_read(self, actor: &User) -> Result<T, DomainError> {
+        if self.guard_target.can_read(actor, &self.context) {
             Ok(self.guard_target)
         } else {
             Err(DomainError::Forbidden)
@@ -206,16 +191,11 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     AuthorizationGuardWithContext<T, Delete, Context>
 {
     /// [`AuthorizationGuardWithContextDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
-    pub fn try_delete<'a, R, F>(
-        &'a self,
-        actor: &User,
-        f: F,
-        context: &Context,
-    ) -> Result<R, DomainError>
+    pub fn try_delete<'a, R, F>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_delete(actor, context) {
+        if self.guard_target.can_delete(actor, &self.context) {
             Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
@@ -224,16 +204,11 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
 
     /// [`AuthorizationGuardWithContextDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
     /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
-    pub fn try_into_delete<R, F>(
-        self,
-        actor: &User,
-        f: F,
-        context: &Context,
-    ) -> Result<R, DomainError>
+    pub fn try_into_delete<R, F>(self, actor: &User, f: F) -> Result<R, DomainError>
     where
         F: FnOnce(T) -> R,
     {
-        if self.guard_target.can_delete(actor, context) {
+        if self.guard_target.can_delete(actor, &self.context) {
             Ok(f(self.guard_target))
         } else {
             Err(DomainError::Forbidden)
