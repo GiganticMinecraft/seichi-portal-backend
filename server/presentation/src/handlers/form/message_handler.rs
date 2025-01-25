@@ -32,10 +32,11 @@ pub async fn post_message_handler(
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
+        form_repository: repository.form_repository(),
     };
 
     match form_message_use_case
-        .post_message(user, message.body, answer_id)
+        .post_message(&user, message.body, answer_id)
         .await
     {
         Ok(_) => (
@@ -60,6 +61,7 @@ pub async fn update_message_handler(
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
+        form_repository: repository.form_repository(),
     };
 
     match form_message_use_case
@@ -80,9 +82,10 @@ pub async fn get_messages_handler(
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
+        form_repository: repository.form_repository(),
     };
 
-    match form_message_use_case.get_messages(answer_id).await {
+    match form_message_use_case.get_messages(&user, answer_id).await {
         Ok(messages) => {
             let messages_read_result = messages
                 .into_iter()
@@ -134,6 +137,7 @@ pub async fn delete_message_handler(
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
+        form_repository: repository.form_repository(),
     };
 
     match form_message_use_case

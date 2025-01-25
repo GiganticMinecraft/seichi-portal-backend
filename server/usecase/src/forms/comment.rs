@@ -1,3 +1,4 @@
+use domain::form::answer::service::AnswerEntryAuthorizationContext;
 use domain::{
     form::{
         answer::models::AnswerId,
@@ -45,9 +46,36 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             StandardUser => {
                 let answer = self
                     .answer_repository
-                    .get_answers(answer_id)
+                    .get_answer(answer_id)
                     .await?
-                    .ok_or(AnswerNotFound)?;
+                    .ok_or(Error::from(AnswerNotFound))?
+                    .try_into_read_with_context_fn(&actor, move |entry| {
+                        let form_id = entry.form_id().to_owned();
+
+                        async move {
+                            let guard = self
+                                .form_repository
+                                .get(form_id)
+                                .await?
+                                .ok_or(FormNotFound)?;
+
+                            let form = guard.try_read(&actor)?;
+                            let form_settings = form.settings();
+
+                            Ok(AnswerEntryAuthorizationContext {
+                                form_visibility: form_settings.visibility().to_owned(),
+                                response_period: form_settings
+                                    .answer_settings()
+                                    .response_period()
+                                    .to_owned(),
+                                answer_visibility: form_settings
+                                    .answer_settings()
+                                    .visibility()
+                                    .to_owned(),
+                            })
+                        }
+                    })
+                    .await?;
 
                 let form = self
                     .form_repository

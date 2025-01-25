@@ -16,7 +16,6 @@ use domain::{
     repository::form::answer_repository::AnswerRepository,
 };
 use errors::Error;
-use futures::{stream, StreamExt};
 use itertools::Itertools;
 
 #[async_trait]
@@ -40,13 +39,21 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<AnswerEntry>, Error> {
-        self.client
+    async fn get_answer(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<
+        Option<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    > {
+        Ok(self
+            .client
             .form_answer()
             .get_answers(answer_id)
             .await?
-            .map(|posted_answers_dto| posted_answers_dto.try_into())
-            .transpose()
+            .map(TryInto::<AnswerEntry>::try_into)
+            .transpose()?
+            .map(|entry| AuthorizationGuardWithContext::new(entry).into_read()))
     }
 
     #[tracing::instrument(skip(self))]

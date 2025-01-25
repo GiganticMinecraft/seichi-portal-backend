@@ -20,7 +20,13 @@ pub trait AnswerRepository: Send + Sync + 'static {
         content: Vec<FormAnswerContent>,
         actor: &User,
     ) -> Result<(), Error>;
-    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<AnswerEntry>, Error>;
+    async fn get_answer(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<
+        Option<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    >;
     async fn get_answer_contents(
         &self,
         answer_id: AnswerId,

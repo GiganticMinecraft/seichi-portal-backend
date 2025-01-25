@@ -1,6 +1,5 @@
 use crate::dto::AnswerDto;
 use domain::form::answer::service::AnswerEntryAuthorizationContext;
-use domain::form::models::{Form, FormSettings};
 use domain::types::authorization_guard_with_context::AuthorizationGuardWithContext;
 use domain::{
     form::{
@@ -18,7 +17,6 @@ use domain::{
 use errors::usecase::UseCaseError::FormNotFound;
 use errors::{usecase::UseCaseError::AnswerNotFound, Error};
 use futures::{stream, try_join, StreamExt};
-use std::sync::Mutex;
 
 pub struct AnswerUseCase<
     'a,
@@ -78,8 +76,37 @@ impl<
             .await
     }
 
-    pub async fn get_answers(&self, answer_id: AnswerId) -> Result<AnswerDto, Error> {
-        if let Some(form_answer) = self.answer_repository.get_answers(answer_id).await? {
+    pub async fn get_answers(&self, answer_id: AnswerId, user: &User) -> Result<AnswerDto, Error> {
+        if let Some(form_answer) = self.answer_repository.get_answer(answer_id).await? {
+            let form_answer = form_answer
+                .try_into_read_with_context_fn(user, move |entry| {
+                    let form_id = entry.form_id().to_owned();
+
+                    async move {
+                        let guard = self
+                            .form_repository
+                            .get(form_id)
+                            .await?
+                            .ok_or(FormNotFound)?;
+
+                        let form = guard.try_read(user)?;
+                        let form_settings = form.settings();
+
+                        Ok(AnswerEntryAuthorizationContext {
+                            form_visibility: form_settings.visibility().to_owned(),
+                            response_period: form_settings
+                                .answer_settings()
+                                .response_period()
+                                .to_owned(),
+                            answer_visibility: form_settings
+                                .answer_settings()
+                                .visibility()
+                                .to_owned(),
+                        })
+                    }
+                })
+                .await?;
+
             let fetch_contents = self.answer_repository.get_answer_contents(answer_id);
             let fetch_labels = self
                 .answer_label_repository
