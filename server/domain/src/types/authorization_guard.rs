@@ -55,19 +55,12 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
     }
 
     /// [`T`] の値に対して map 相当の操作を行います。
-    ///
-    /// [`actor`] に [`UPDATE`] 権限がある場合は [`f`] を適用し、
-    /// そうでない場合は [`self`] をそのまま返します。
-    pub fn map<F>(self, actor: &User, f: F) -> AuthorizationGuard<T, Update>
+    pub fn map<F>(self, f: F) -> AuthorizationGuard<T, Update>
     where
         F: FnOnce(T) -> T,
     {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.map(
-                actor,
-                f,
-                &(),
-            ),
+            authorization_guard_with_context: self.authorization_guard_with_context.map(f),
         }
     }
 

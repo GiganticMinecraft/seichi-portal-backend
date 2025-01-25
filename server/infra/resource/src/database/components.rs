@@ -118,11 +118,7 @@ pub trait FormAnswerDatabase: Send + Sync {
         form_id: FormId,
     ) -> Result<Vec<FormAnswerDto>, InfraError>;
     async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError>;
-    async fn update_answer_meta(
-        &self,
-        answer_id: AnswerId,
-        title: Option<String>,
-    ) -> Result<(), InfraError>;
+    async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError>;
 }
 
 #[automock]

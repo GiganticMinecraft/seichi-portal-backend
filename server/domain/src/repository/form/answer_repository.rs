@@ -7,7 +7,9 @@ use crate::form::{
     answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
     models::FormId,
 };
-use crate::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Create, Read};
+use crate::types::authorization_guard_with_context::{
+    AuthorizationGuardWithContext, Create, Read, Update,
+};
 use crate::user::models::User;
 
 #[automock]
@@ -38,9 +40,14 @@ pub trait AnswerRepository: Send + Sync + 'static {
         Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
         Error,
     >;
-    async fn update_answer_meta(
+    async fn update_answer_entry(
         &self,
-        answer_id: AnswerId,
-        title: Option<String>,
+        actor: &User,
+        context: &AnswerEntryAuthorizationContext,
+        answer_entry: AuthorizationGuardWithContext<
+            AnswerEntry,
+            Update,
+            AnswerEntryAuthorizationContext,
+        >,
     ) -> Result<(), Error>;
 }

@@ -118,25 +118,13 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     }
 
     /// [`T`] の値に対して map 相当の操作を行います。
-    ///
-    /// [`actor`] に [`UPDATE`] 権限がある場合は [`f`] を適用し、
-    /// そうでない場合は [`self`] をそのまま返します。
-    pub fn map<F>(
-        self,
-        actor: &User,
-        f: F,
-        context: &Context,
-    ) -> AuthorizationGuardWithContext<T, Update, Context>
+    pub fn map<F>(self, f: F) -> AuthorizationGuardWithContext<T, Update, Context>
     where
         F: FnOnce(T) -> T,
     {
-        if self.guard_target.can_update(actor, &context) {
-            AuthorizationGuardWithContext {
-                guard_target: f(self.guard_target),
-                _phantom_data: std::marker::PhantomData,
-            }
-        } else {
-            self
+        AuthorizationGuardWithContext {
+            guard_target: f(self.guard_target),
+            _phantom_data: std::marker::PhantomData,
         }
     }
 
@@ -249,6 +237,20 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
         } else {
             Err(DomainError::Forbidden)
         }
+    }
+}
+
+impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Action: Actions, Context>
+    AuthorizationGuardWithContext<T, Action, Context>
+{
+    pub async fn create_context<Fut>(
+        &self,
+        context_fn: impl FnOnce(&T) -> Fut,
+    ) -> Result<Context, Error>
+    where
+        Fut: Future<Output = Result<Context, Error>> + Sized,
+    {
+        context_fn(&self.guard_target).await
     }
 }
 

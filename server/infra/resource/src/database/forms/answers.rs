@@ -33,9 +33,8 @@ impl FormAnswerDatabase for ConnectionPool {
         let answer_id = answer.id().to_owned().into_inner();
         let form_id = answer.form_id().to_owned().into_inner();
         let user_id = answer.user().to_owned().id.to_owned();
-        let title =
-            <std::option::Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
-                .map(|title| title.into_inner());
+        let title = <Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
+            .map(|title| title.into_inner());
         let timestamp = answer.timestamp().to_owned();
 
         self.read_write_transaction(|txn| {
@@ -207,24 +206,24 @@ impl FormAnswerDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn update_answer_meta(
-        &self,
-        answer_id: AnswerId,
-        title: Option<String>,
-    ) -> Result<(), InfraError> {
-        let title = title.to_owned();
+    async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError> {
+        let answer_id = answer_entry.id().to_owned().into_inner().to_string();
+        let form_id = answer_entry.form_id().to_owned().to_string();
+        let user = answer_entry.user().id.to_owned().to_string();
+        let title = <Option<NonEmptyString> as Clone>::clone(&answer_entry.title().to_owned())
+            .map(|title| title.into_inner());
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                if let Some(title) = title {
-                    execute_and_values(
-                        r"UPDATE answers SET title = ? WHERE id = ?",
-                        [title.into(), answer_id.into_inner().into()],
-                        txn,
-                    )
-                    .await?;
-                }
-
+                execute_and_values(
+                    r#"INSERT INTO answers (id, form_id, user, title)
+                    VALUES (?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    title = VALUES(title)"#,
+                    [answer_id.into(), form_id.into(), user.into(), title.into()],
+                    txn,
+                )
+                .await?;
                 Ok::<_, InfraError>(())
             })
         })

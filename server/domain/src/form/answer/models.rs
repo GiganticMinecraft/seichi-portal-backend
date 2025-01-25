@@ -65,6 +65,16 @@ impl AnswerEntry {
             title,
         }
     }
+
+    pub fn with_title(&self, title: AnswerTitle) -> Self {
+        Self {
+            id: self.id,
+            user: self.user.to_owned(),
+            form_id: self.form_id,
+            timestamp: self.timestamp,
+            title,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]

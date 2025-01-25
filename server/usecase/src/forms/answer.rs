@@ -1,4 +1,5 @@
 use crate::dto::AnswerDto;
+use domain::form::answer::models::AnswerTitle;
 use domain::form::answer::service::AnswerEntryAuthorizationContext;
 use domain::types::authorization_guard_with_context::AuthorizationGuardWithContext;
 use domain::{
@@ -216,10 +217,53 @@ impl<
     pub async fn update_answer_meta(
         &self,
         answer_id: AnswerId,
-        title: Option<String>,
+        actor: &User,
+        title: Option<AnswerTitle>,
     ) -> Result<(), Error> {
-        self.answer_repository
-            .update_answer_meta(answer_id, title)
-            .await
+        match title {
+            Some(title) => {
+                let answer_entry = self
+                    .answer_repository
+                    .get_answer(answer_id)
+                    .await?
+                    .ok_or(Error::from(AnswerNotFound))?
+                    .into_update()
+                    .map(|entry| entry.with_title(title));
+
+                let context = answer_entry
+                    .create_context(|entry| {
+                        let form_id = entry.form_id().to_owned();
+
+                        async move {
+                            let guard = self
+                                .form_repository
+                                .get(form_id)
+                                .await?
+                                .ok_or(FormNotFound)?;
+
+                            let form = guard.try_read(actor)?;
+                            let form_settings = form.settings();
+
+                            Ok(AnswerEntryAuthorizationContext {
+                                form_visibility: form_settings.visibility().to_owned(),
+                                response_period: form_settings
+                                    .answer_settings()
+                                    .response_period()
+                                    .to_owned(),
+                                answer_visibility: form_settings
+                                    .answer_settings()
+                                    .visibility()
+                                    .to_owned(),
+                            })
+                        }
+                    })
+                    .await?;
+
+                self.answer_repository
+                    .update_answer_entry(actor, &context, answer_entry)
+                    .await
+            }
+            None => Ok(()),
+        }
     }
 }

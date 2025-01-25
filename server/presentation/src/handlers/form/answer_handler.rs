@@ -156,6 +156,7 @@ pub async fn post_answer_handler(
 }
 
 pub async fn update_answer_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(answer_id): Path<AnswerId>,
     Json(schema): Json<AnswerUpdateSchema>,
@@ -169,7 +170,7 @@ pub async fn update_answer_handler(
     };
 
     match form_answer_use_case
-        .update_answer_meta(answer_id, schema.title)
+        .update_answer_meta(answer_id, &user, schema.title)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),

@@ -5,7 +5,7 @@ use crate::{
 use async_trait::async_trait;
 use domain::form::answer::service::AnswerEntryAuthorizationContext;
 use domain::types::authorization_guard_with_context::{
-    AuthorizationGuardWithContext, Create, Read,
+    AuthorizationGuardWithContext, Create, Read, Update,
 };
 use domain::user::models::User;
 use domain::{
@@ -107,14 +107,22 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     }
 
     #[tracing::instrument(skip(self))]
-    async fn update_answer_meta(
+    async fn update_answer_entry(
         &self,
-        answer_id: AnswerId,
-        title: Option<String>,
+        actor: &User,
+        context: &AnswerEntryAuthorizationContext,
+        answer_entry: AuthorizationGuardWithContext<
+            AnswerEntry,
+            Update,
+            AnswerEntryAuthorizationContext,
+        >,
     ) -> Result<(), Error> {
-        self.client
-            .form_answer()
-            .update_answer_meta(answer_id, title)
+        answer_entry
+            .try_update(
+                actor,
+                |entry| self.client.form_answer().update_answer_entry(entry),
+                context,
+            )?
             .await
             .map_err(Into::into)
     }

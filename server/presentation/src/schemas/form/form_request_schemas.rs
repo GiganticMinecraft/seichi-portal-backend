@@ -1,3 +1,4 @@
+use domain::form::answer::models::AnswerTitle;
 use domain::form::{
     answer::{
         models::{AnswerId, AnswerLabelId, FormAnswerContent},
@@ -51,7 +52,7 @@ pub struct AnswersPostSchema {
 #[derive(Deserialize, Debug)]
 pub struct AnswerUpdateSchema {
     #[serde(default)]
-    pub title: Option<String>,
+    pub title: Option<AnswerTitle>,
 }
 
 #[derive(Deserialize, Debug)]

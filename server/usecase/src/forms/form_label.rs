@@ -61,7 +61,7 @@ impl<R1: FormLabelRepository> FormLabelUseCase<'_, R1> {
 
         let renamed_label = current_label
             .into_update()
-            .map(actor, |label| label.renamed(form_label_name));
+            .map(|label| label.renamed(form_label_name));
 
         self.form_label_repository
             .edit_label_for_forms(id, renamed_label, actor)
