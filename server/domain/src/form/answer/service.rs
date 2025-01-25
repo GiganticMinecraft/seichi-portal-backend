@@ -3,7 +3,7 @@ use chrono::Utc;
 use derive_getters::Getters;
 use errors::{domain::DomainError, Error};
 
-use crate::form::answer::settings::models::AnswerVisibility;
+use crate::form::answer::settings::models::{AnswerVisibility, ResponsePeriod};
 use crate::form::models::FormSettings;
 use crate::types::authorization_guard_with_context::AuthorizationGuardWithContextDefinitions;
 use crate::user::models::Role;
@@ -14,34 +14,26 @@ use crate::{
     user::models::User,
 };
 
-#[derive(Getters, Debug)]
-pub struct AnswerEntryAuthorizationContext<'a> {
-    form_settings: &'a FormSettings,
+#[derive(Debug)]
+pub struct AnswerEntryAuthorizationContext {
+    pub form_visibility: Visibility,
+    pub response_period: ResponsePeriod,
+    pub answer_visibility: AnswerVisibility,
 }
 
-impl<'a> AnswerEntryAuthorizationContext<'a> {
-    pub fn new(form_settings: &'a FormSettings) -> Self {
-        Self { form_settings }
-    }
-}
-
-impl AuthorizationGuardWithContextDefinitions<AnswerEntry, AnswerEntryAuthorizationContext<'_>>
+impl AuthorizationGuardWithContextDefinitions<AnswerEntry, AnswerEntryAuthorizationContext>
     for AnswerEntry
 {
     fn can_create(&self, actor: &User, context: &AnswerEntryAuthorizationContext) -> bool {
-        let is_public_form = *context.form_settings.visibility() == Visibility::PUBLIC;
-        let is_within_period = context
-            .form_settings
-            .answer_settings()
-            .response_period()
-            .is_within_period(Utc::now());
+        let is_public_form = context.form_visibility == Visibility::PUBLIC;
+        let is_within_period = context.response_period.is_within_period(Utc::now());
 
         is_public_form && is_within_period || actor.role == Role::Administrator
     }
 
     fn can_read(&self, actor: &User, context: &AnswerEntryAuthorizationContext) -> bool {
         self.user().id == actor.id
-            || *context.form_settings.answer_settings().visibility() == AnswerVisibility::PUBLIC
+            || context.answer_visibility == AnswerVisibility::PUBLIC
             || actor.role == Role::Administrator
     }
 

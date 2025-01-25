@@ -4,7 +4,9 @@ use crate::{
 };
 use async_trait::async_trait;
 use domain::form::answer::service::AnswerEntryAuthorizationContext;
-use domain::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Create};
+use domain::types::authorization_guard_with_context::{
+    AuthorizationGuardWithContext, Create, Read,
+};
 use domain::user::models::User;
 use domain::{
     form::{
@@ -15,24 +17,24 @@ use domain::{
 };
 use errors::Error;
 use futures::{stream, StreamExt};
+use itertools::Itertools;
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
     async fn post_answer<'a>(
         &self,
-        answer: AuthorizationGuardWithContext<
-            AnswerEntry,
-            Create,
-            AnswerEntryAuthorizationContext<'a>,
-        >,
+        context: &'a AnswerEntryAuthorizationContext,
+        answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
         content: Vec<FormAnswerContent>,
         actor: &User,
     ) -> Result<(), Error> {
         answer
-            .try_create(actor, |entry| {
-                self.client.form_answer().post_answer(entry, content)
-            })?
+            .try_create(
+                actor,
+                |entry| self.client.form_answer().post_answer(entry, content),
+                context,
+            )?
             .await
             .map_err(Into::into)
     }
@@ -81,13 +83,20 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_all_answers(&self) -> Result<Vec<AnswerEntry>, Error> {
-        stream::iter(self.client.form_answer().get_all_answers().await?)
-            .then(|posted_answers_dto| async { posted_answers_dto.try_into() })
-            .collect::<Vec<Result<AnswerEntry, _>>>()
-            .await
+    async fn get_all_answers(
+        &self,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    > {
+        self.client
+            .form_answer()
+            .get_all_answers()
+            .await?
             .into_iter()
-            .collect::<Result<Vec<AnswerEntry>, _>>()
+            .map(TryInto::<AnswerEntry>::try_into)
+            .map_ok(|entry| AuthorizationGuardWithContext::new(entry).into_read())
+            .collect::<Result<Vec<_>, _>>()
     }
 
     #[tracing::instrument(skip(self))]

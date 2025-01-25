@@ -1,5 +1,6 @@
 use crate::dto::AnswerDto;
 use domain::form::answer::service::AnswerEntryAuthorizationContext;
+use domain::form::models::{Form, FormSettings};
 use domain::types::authorization_guard_with_context::AuthorizationGuardWithContext;
 use domain::{
     form::{
@@ -17,6 +18,7 @@ use domain::{
 use errors::usecase::UseCaseError::FormNotFound;
 use errors::{usecase::UseCaseError::AnswerNotFound, Error};
 use futures::{stream, try_join, StreamExt};
+use std::sync::Mutex;
 
 pub struct AnswerUseCase<
     'a,
@@ -63,12 +65,16 @@ impl<
         let form_settings = form.try_read(&user)?.settings();
 
         let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title);
-        let context = AnswerEntryAuthorizationContext::new(form_settings);
+        let context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
 
-        let guard = AuthorizationGuardWithContext::new(answer_entry, context);
+        let guard = AuthorizationGuardWithContext::new(answer_entry);
 
         self.answer_repository
-            .post_answer(guard, answers, &user)
+            .post_answer(&context, guard, answers, &user)
             .await
     }
 
@@ -125,9 +131,37 @@ impl<
         .collect::<Result<Vec<_>, _>>()
     }
 
-    pub async fn get_all_answers(&self) -> Result<Vec<AnswerDto>, Error> {
+    pub async fn get_all_answers(&self, user: &User) -> Result<Vec<AnswerDto>, Error> {
         stream::iter(self.answer_repository.get_all_answers().await?)
             .then(|form_answer| async {
+                let form_answer = form_answer
+                    .try_into_read_with_context_fn(user, move |entry| {
+                        let form_id = entry.form_id().to_owned();
+
+                        async move {
+                            let guard = self
+                                .form_repository
+                                .get(form_id)
+                                .await?
+                                .ok_or(FormNotFound)?;
+
+                            let form = guard.try_read(user)?;
+                            let form_settings = form.settings();
+
+                            Ok(AnswerEntryAuthorizationContext {
+                                form_visibility: form_settings.visibility().to_owned(),
+                                response_period: form_settings
+                                    .answer_settings()
+                                    .response_period()
+                                    .to_owned(),
+                                answer_visibility: form_settings
+                                    .answer_settings()
+                                    .visibility()
+                                    .to_owned(),
+                            })
+                        }
+                    })
+                    .await?;
                 let fetch_contents = self
                     .answer_repository
                     .get_answer_contents(*form_answer.id());

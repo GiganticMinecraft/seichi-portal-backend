@@ -42,7 +42,7 @@ impl TryFrom<String> for AnswerVisibility {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
 pub struct ResponsePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
     #[serde(default)]

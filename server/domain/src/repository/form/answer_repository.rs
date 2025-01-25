@@ -7,7 +7,7 @@ use crate::form::{
     answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
     models::FormId,
 };
-use crate::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Create};
+use crate::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Create, Read};
 use crate::user::models::User;
 
 #[automock]
@@ -15,11 +15,8 @@ use crate::user::models::User;
 pub trait AnswerRepository: Send + Sync + 'static {
     async fn post_answer<'a>(
         &self,
-        answer: AuthorizationGuardWithContext<
-            AnswerEntry,
-            Create,
-            AnswerEntryAuthorizationContext<'a>,
-        >,
+        context: &'a AnswerEntryAuthorizationContext,
+        answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
         content: Vec<FormAnswerContent>,
         actor: &User,
     ) -> Result<(), Error>;
@@ -29,7 +26,12 @@ pub trait AnswerRepository: Send + Sync + 'static {
         answer_id: AnswerId,
     ) -> Result<Vec<FormAnswerContent>, Error>;
     async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, Error>;
-    async fn get_all_answers(&self) -> Result<Vec<AnswerEntry>, Error>;
+    async fn get_all_answers(
+        &self,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    >;
     async fn update_answer_meta(
         &self,
         answer_id: AnswerId,

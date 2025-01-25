@@ -23,6 +23,7 @@ use crate::{
 };
 
 pub async fn get_all_answers(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
     let form_answer_use_case = AnswerUseCase {
@@ -32,7 +33,7 @@ pub async fn get_all_answers(
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
     };
-    match form_answer_use_case.get_all_answers().await {
+    match form_answer_use_case.get_all_answers(&user).await {
         Ok(answers) => {
             let response = answers
                 .into_iter()
