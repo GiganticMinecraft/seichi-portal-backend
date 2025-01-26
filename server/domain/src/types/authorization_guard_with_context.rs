@@ -253,6 +253,22 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Action: Actions, C
     {
         context_fn(&self.guard_target).await
     }
+
+    pub fn can_create(&self, actor: &User, context: &Context) -> bool {
+        self.guard_target.can_create(actor, context)
+    }
+
+    pub fn can_read(&self, actor: &User, context: &Context) -> bool {
+        self.guard_target.can_read(actor, context)
+    }
+
+    pub fn can_update(&self, actor: &User, context: &Context) -> bool {
+        self.guard_target.can_update(actor, context)
+    }
+
+    pub fn can_delete(&self, actor: &User, context: &Context) -> bool {
+        self.guard_target.can_delete(actor, context)
+    }
 }
 
 pub trait AuthorizationGuardWithContextDefinitions<T, Context> {

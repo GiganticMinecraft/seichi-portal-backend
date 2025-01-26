@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
+use crate::form::answer::service::FormAnswerContentAuthorizationContext;
 use crate::{
     form::{
         answer::{
@@ -33,10 +34,19 @@ pub trait AnswerRepository: Send + Sync + 'static {
         Option<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
         Error,
     >;
-    async fn get_answer_contents(
+    async fn get_answer_contents<'a>(
         &self,
         answer_id: AnswerId,
-    ) -> Result<Vec<FormAnswerContent>, Error>;
+    ) -> Result<
+        Vec<
+            AuthorizationGuardWithContext<
+                FormAnswerContent,
+                Read,
+                FormAnswerContentAuthorizationContext<'a, Read>,
+            >,
+        >,
+        Error,
+    >;
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,

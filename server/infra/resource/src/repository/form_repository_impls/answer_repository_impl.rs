@@ -1,4 +1,9 @@
+use crate::{
+    database::components::{DatabaseComponents, FormAnswerDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::form::answer::service::FormAnswerContentAuthorizationContext;
 use domain::{
     form::{
         answer::{
@@ -15,11 +20,6 @@ use domain::{
 };
 use errors::Error;
 use itertools::Itertools;
-
-use crate::{
-    database::components::{DatabaseComponents, FormAnswerDatabase},
-    repository::Repository,
-};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {
@@ -60,20 +60,27 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_answer_contents(
+    async fn get_answer_contents<'a>(
         &self,
         answer_id: AnswerId,
-    ) -> Result<Vec<FormAnswerContent>, Error> {
+    ) -> Result<
+        Vec<
+            AuthorizationGuardWithContext<
+                FormAnswerContent,
+                Read,
+                FormAnswerContentAuthorizationContext<'a, Read>,
+            >,
+        >,
+        Error,
+    > {
         self.client
             .form_answer()
             .get_answer_contents(answer_id)
-            .await
-            .map(|answer_contents| {
-                answer_contents
-                    .into_iter()
-                    .map(|answer_content_dto| answer_content_dto.try_into())
-                    .collect::<Result<Vec<FormAnswerContent>, _>>()
-            })?
+            .await?
+            .into_iter()
+            .map(TryInto::<FormAnswerContent>::try_into)
+            .map_ok(|content| AuthorizationGuardWithContext::new(content).into_read())
+            .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
 

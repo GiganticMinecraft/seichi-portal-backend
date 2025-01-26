@@ -1,3 +1,5 @@
+use crate::dto::AnswerDto;
+use domain::form::answer::service::FormAnswerContentAuthorizationContext;
 use domain::{
     form::{
         answer::{
@@ -20,8 +22,6 @@ use errors::{
     Error,
 };
 use futures::{stream, try_join, StreamExt};
-
-use crate::dto::AnswerDto;
 
 pub struct AnswerUseCase<
     'a,
@@ -82,9 +82,9 @@ impl<
     }
 
     pub async fn get_answers(&self, answer_id: AnswerId, user: &User) -> Result<AnswerDto, Error> {
-        if let Some(form_answer) = self.answer_repository.get_answer(answer_id).await? {
-            let form_answer = form_answer
-                .try_into_read_with_context_fn(user, move |entry| {
+        if let Some(form_answer_guard) = self.answer_repository.get_answer(answer_id).await? {
+            let context = form_answer_guard
+                .create_context(move |entry| {
                     let form_id = entry.form_id().to_owned();
 
                     async move {
@@ -112,6 +112,11 @@ impl<
                 })
                 .await?;
 
+            let form_answer_content_context = FormAnswerContentAuthorizationContext {
+                answer_entry_authorization_context: &context,
+                answer_entry: &form_answer_guard,
+            };
+
             let fetch_contents = self.answer_repository.get_answer_contents(answer_id);
             let fetch_labels = self
                 .answer_label_repository
@@ -120,6 +125,13 @@ impl<
 
             let (contents, labels, comments) =
                 try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+            let contents = contents
+                .into_iter()
+                .map(|content| content.try_into_read(user, &form_answer_content_context))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let form_answer = form_answer_guard.try_into_read(user, &context)?;
 
             Ok(AnswerDto {
                 form_answer,
@@ -156,8 +168,8 @@ impl<
                 .get_answers_by_form_id(form_id)
                 .await?,
         )
-        .then(|form_answer| async {
-            let form_answer = form_answer.try_into_read(actor, &context)?;
+        .then(|form_answer_guard| async {
+            let form_answer = form_answer_guard.try_read(actor, &context)?;
 
             let fetch_contents = self
                 .answer_repository
@@ -169,6 +181,18 @@ impl<
 
             let (contents, labels, comments) =
                 try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+            let form_answer_content_context = FormAnswerContentAuthorizationContext {
+                answer_entry_authorization_context: &context,
+                answer_entry: &form_answer_guard,
+            };
+
+            let contents = contents
+                .into_iter()
+                .map(|content| content.try_into_read(actor, &form_answer_content_context))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let form_answer = form_answer_guard.try_into_read(actor, &context)?;
 
             Ok(AnswerDto {
                 form_answer,
@@ -185,9 +209,9 @@ impl<
 
     pub async fn get_all_answers(&self, user: &User) -> Result<Vec<AnswerDto>, Error> {
         stream::iter(self.answer_repository.get_all_answers().await?)
-            .then(|form_answer| async {
-                let form_answer = form_answer
-                    .try_into_read_with_context_fn(user, move |entry| {
+            .then(|form_answer_guard| async move {
+                let context = form_answer_guard
+                    .create_context(move |entry| {
                         let form_id = entry.form_id().to_owned();
 
                         async move {
@@ -214,6 +238,13 @@ impl<
                         }
                     })
                     .await?;
+
+                let form_answer_content_context = FormAnswerContentAuthorizationContext {
+                    answer_entry_authorization_context: &context,
+                    answer_entry: &form_answer_guard,
+                };
+
+                let form_answer = form_answer_guard.try_read(user, &context)?;
                 let fetch_contents = self
                     .answer_repository
                     .get_answer_contents(*form_answer.id());
@@ -224,6 +255,13 @@ impl<
 
                 let (contents, labels, comments) =
                     try_join!(fetch_contents, fetch_labels, fetch_comments)?;
+
+                let contents = contents
+                    .into_iter()
+                    .map(|content| content.try_into_read(user, &form_answer_content_context))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let form_answer = form_answer_guard.try_into_read(user, &context)?;
 
                 Ok(AnswerDto {
                     form_answer,
