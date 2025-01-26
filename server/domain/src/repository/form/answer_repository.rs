@@ -33,7 +33,13 @@ pub trait AnswerRepository: Send + Sync + 'static {
         &self,
         answer_id: AnswerId,
     ) -> Result<Vec<FormAnswerContent>, Error>;
-    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, Error>;
+    async fn get_answers_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    >;
     async fn get_all_answers(
         &self,
     ) -> Result<

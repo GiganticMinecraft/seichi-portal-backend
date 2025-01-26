@@ -75,8 +75,15 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, Error> {
-        self.client
+    async fn get_answers_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    > {
+        Ok(self
+            .client
             .form_answer()
             .get_answers_by_form_id(form_id)
             .await
@@ -85,8 +92,10 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
                     .into_iter()
                     .map(|posted_answers_dto| posted_answers_dto.try_into())
                     .collect::<Result<Vec<AnswerEntry>, _>>()
-            })?
-            .map_err(Into::into)
+            })??
+            .into_iter()
+            .map(|entry| AuthorizationGuardWithContext::new(entry).into_read())
+            .collect_vec())
     }
 
     #[tracing::instrument(skip(self))]

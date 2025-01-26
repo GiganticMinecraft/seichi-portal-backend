@@ -84,11 +84,11 @@ pub async fn get_answer_handler(
 }
 
 pub async fn get_answer_by_form_id_handler(
-    Extension(_user): Extension<User>,
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(_form_id): Path<FormId>,
+    Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
-    let _form_answer_use_case = AnswerUseCase {
+    let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
@@ -96,42 +96,27 @@ pub async fn get_answer_by_form_id_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    // FIXME: ドメイン知識が handler に紛れ込んでいる
-    todo!()
-    // if user.role == StandardUser {
-    //     match form_answer_use_case.get_form(&user, form_id).await {
-    //         Ok(forms) if *forms.settings().answer_visibility() == PRIVATE => {
-    //             return (
-    //                 StatusCode::FORBIDDEN,
-    //                 Json(json!({
-    //                     "errorCode": "DO_NOT_HAVE_PERMISSION_TO_GET_ANSWERS",
-    //                     "reason": "This forms answer visibility is private."
-    //                 })),
-    //             )
-    //                 .into_response();
-    //         }
-    //         _ => {}
-    //     }
-    // }
-    //
-    // match form_answer_use_case.get_answers_by_form_id(form_id).await {
-    //     Ok(answers) => {
-    //         let response = answers
-    //             .into_iter()
-    //             .map(|answer_dto| {
-    //                 FormAnswer::new(
-    //                     answer_dto.form_answer,
-    //                     answer_dto.contents,
-    //                     answer_dto.comments,
-    //                     answer_dto.labels,
-    //                 )
-    //             })
-    //             .collect_vec();
-    //
-    //         (StatusCode::OK, Json(response)).into_response()
-    //     }
-    //     Err(err) => handle_error(err).into_response(),
-    // }
+    match form_answer_use_case
+        .get_answers_by_form_id(form_id, &user)
+        .await
+    {
+        Ok(answers) => {
+            let response = answers
+                .into_iter()
+                .map(|answer_dto| {
+                    FormAnswer::new(
+                        answer_dto.form_answer,
+                        answer_dto.contents,
+                        answer_dto.comments,
+                        answer_dto.labels,
+                    )
+                })
+                .collect_vec();
+
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(err) => handle_error(err).into_response(),
+    }
 }
 
 pub async fn post_answer_handler(

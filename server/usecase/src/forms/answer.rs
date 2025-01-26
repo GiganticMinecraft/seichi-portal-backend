@@ -128,13 +128,33 @@ impl<
         }
     }
 
-    pub async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerDto>, Error> {
+    pub async fn get_answers_by_form_id(
+        &self,
+        form_id: FormId,
+        actor: &User,
+    ) -> Result<Vec<AnswerDto>, Error> {
+        let form = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+
+        let form_settings = form.try_read(actor)?.settings();
+
+        let context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
         stream::iter(
             self.answer_repository
                 .get_answers_by_form_id(form_id)
                 .await?,
         )
         .then(|form_answer| async {
+            let form_answer = form_answer.try_into_read(actor, &context)?;
+
             let fetch_contents = self
                 .answer_repository
                 .get_answer_contents(*form_answer.id());
