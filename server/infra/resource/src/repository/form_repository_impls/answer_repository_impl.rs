@@ -1,22 +1,25 @@
+use async_trait::async_trait;
+use domain::{
+    form::{
+        answer::{
+            models::{AnswerEntry, AnswerId, FormAnswerContent},
+            service::AnswerEntryAuthorizationContext,
+        },
+        models::FormId,
+    },
+    repository::form::answer_repository::AnswerRepository,
+    types::authorization_guard_with_context::{
+        AuthorizationGuardWithContext, Create, Read, Update,
+    },
+    user::models::User,
+};
+use errors::Error;
+use itertools::Itertools;
+
 use crate::{
     database::components::{DatabaseComponents, FormAnswerDatabase},
     repository::Repository,
 };
-use async_trait::async_trait;
-use domain::form::answer::service::AnswerEntryAuthorizationContext;
-use domain::types::authorization_guard_with_context::{
-    AuthorizationGuardWithContext, Create, Read, Update,
-};
-use domain::user::models::User;
-use domain::{
-    form::{
-        answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
-        models::FormId,
-    },
-    repository::form::answer_repository::AnswerRepository,
-};
-use errors::Error;
-use itertools::Itertools;
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {

@@ -2,10 +2,12 @@ use async_trait::async_trait;
 use errors::Error;
 use uuid::Uuid;
 
-use crate::types::authorization_guard_with_context::{Read, Update};
 use crate::{
     notification::models::{Notification, NotificationId},
-    types::authorization_guard::AuthorizationGuard,
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{Read, Update},
+    },
     user::models::User,
 };
 

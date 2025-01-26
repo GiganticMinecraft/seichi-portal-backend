@@ -1,9 +1,12 @@
-use crate::types::authorization_guard_with_context::{
-    Actions, AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
-    Delete, Read, Update,
-};
-use crate::user::models::User;
 use errors::domain::DomainError;
+
+use crate::{
+    types::authorization_guard_with_context::{
+        Actions, AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
+        Delete, Read, Update,
+    },
+    user::models::User,
+};
 
 /// [`User`] による `guard_target` に対するアクセスを制御するための定義を提供します。
 ///

@@ -1,7 +1,8 @@
-use crate::user::models::User;
-use errors::domain::DomainError;
-use errors::Error;
 use std::future::Future;
+
+use errors::{domain::DomainError, Error};
+
+use crate::user::models::User;
 
 pub trait Actions: private::Sealed {}
 
@@ -74,7 +75,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_create(actor, &context) {
+        if self.guard_target.can_create(actor, context) {
             Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
@@ -110,7 +111,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_update(actor, &context) {
+        if self.guard_target.can_update(actor, context) {
             Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
@@ -150,7 +151,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
 {
     /// `actor` が `guard_target` の参照を取得することを試みます。
     pub fn try_read(&self, actor: &User, context: &Context) -> Result<&T, DomainError> {
-        if self.guard_target.can_read(actor, &context) {
+        if self.guard_target.can_read(actor, context) {
             Ok(&self.guard_target)
         } else {
             Err(DomainError::Forbidden)
@@ -159,7 +160,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
 
     /// `actor` が `guard_target` を取得することを試みます。
     pub fn try_into_read(self, actor: &User, context: &Context) -> Result<T, DomainError> {
-        if self.guard_target.can_read(actor, &context) {
+        if self.guard_target.can_read(actor, context) {
             Ok(self.guard_target)
         } else {
             Err(DomainError::Forbidden)
@@ -214,7 +215,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     where
         F: FnOnce(&'a T) -> R,
     {
-        if self.guard_target.can_delete(actor, &context) {
+        if self.guard_target.can_delete(actor, context) {
             Ok(f(&self.guard_target))
         } else {
             Err(DomainError::Forbidden)
@@ -232,7 +233,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     where
         F: FnOnce(T) -> R,
     {
-        if self.guard_target.can_delete(actor, &context) {
+        if self.guard_target.can_delete(actor, context) {
             Ok(f(self.guard_target))
         } else {
             Err(DomainError::Forbidden)
@@ -265,10 +266,12 @@ pub trait AuthorizationGuardWithContextDefinitions<T, Context> {
 mod test {
     use uuid::Uuid;
 
-    use crate::types::authorization_guard_with_context::{
-        AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
+    use crate::{
+        types::authorization_guard_with_context::{
+            AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
+        },
+        user::models::{Role, User},
     };
-    use crate::user::models::{Role, User};
 
     #[derive(Clone, PartialEq, Debug)]
     struct AuthorizationGuardWithContextTestStruct {

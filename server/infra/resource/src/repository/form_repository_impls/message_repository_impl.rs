@@ -1,12 +1,14 @@
 use async_trait::async_trait;
-use domain::types::authorization_guard_with_context::{Create, Delete, Read, Update};
 use domain::{
     form::{
         answer::models::AnswerEntry,
         message::models::{Message, MessageId},
     },
     repository::form::message_repository::MessageRepository,
-    types::authorization_guard::AuthorizationGuard,
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{Create, Delete, Read, Update},
+    },
     user::models::User,
 };
 use errors::Error;

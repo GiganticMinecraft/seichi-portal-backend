@@ -1,8 +1,7 @@
-use domain::types::authorization_guard_with_context::Read;
 use domain::{
     notification::models::{Notification, NotificationId},
     repository::notification_repository::NotificationRepository,
-    types::authorization_guard::AuthorizationGuard,
+    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
     user::models::User,
 };
 use errors::Error;

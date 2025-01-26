@@ -1,22 +1,21 @@
-use domain::form::answer::service::AnswerEntryAuthorizationContext;
-use domain::repository::form::form_repository::FormRepository;
-use domain::types::authorization_guard_with_context::Read;
 use domain::{
     form::{
-        answer::models::AnswerId,
+        answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
         message::models::{Message, MessageId},
     },
     notification::models::{Notification, NotificationSource},
     repository::{
-        form::{answer_repository::AnswerRepository, message_repository::MessageRepository},
+        form::{
+            answer_repository::AnswerRepository, form_repository::FormRepository,
+            message_repository::MessageRepository,
+        },
         notification_repository::NotificationRepository,
     },
-    types::authorization_guard::AuthorizationGuard,
+    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
     user::models::User,
 };
-use errors::usecase::UseCaseError::FormNotFound;
 use errors::{
-    usecase::UseCaseError::{AnswerNotFound, MessageNotFound},
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
     Error,
 };
 
@@ -51,7 +50,7 @@ impl<
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read_with_context_fn(&actor, move |entry| {
+            .try_into_read_with_context_fn(actor, move |entry| {
                 let form_id = entry.form_id().to_owned();
 
                 async move {
@@ -87,7 +86,7 @@ impl<
 
                 let post_message_result = self
                     .message_repository
-                    .post_message(&actor, message.into())
+                    .post_message(actor, message.into())
                     .await;
 
                 match post_message_result {
@@ -113,7 +112,7 @@ impl<
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read_with_context_fn(&actor, move |entry| {
+            .try_into_read_with_context_fn(actor, move |entry| {
                 let form_id = entry.form_id().to_owned();
 
                 async move {
@@ -123,7 +122,7 @@ impl<
                         .await?
                         .ok_or(FormNotFound)?;
 
-                    let form = guard.try_read(&actor)?;
+                    let form = guard.try_read(actor)?;
                     let form_settings = form.settings();
 
                     Ok(AnswerEntryAuthorizationContext {

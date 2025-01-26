@@ -1,7 +1,6 @@
-use domain::form::answer::service::AnswerEntryAuthorizationContext;
 use domain::{
     form::{
-        answer::models::AnswerId,
+        answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
         comment::models::{Comment, CommentId},
         models::Visibility::PUBLIC,
     },
@@ -49,7 +48,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
                     .get_answer(answer_id)
                     .await?
                     .ok_or(Error::from(AnswerNotFound))?
-                    .try_into_read_with_context_fn(&actor, move |entry| {
+                    .try_into_read_with_context_fn(actor, move |entry| {
                         let form_id = entry.form_id().to_owned();
 
                         async move {
@@ -59,7 +58,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
                                 .await?
                                 .ok_or(FormNotFound)?;
 
-                            let form = guard.try_read(&actor)?;
+                            let form = guard.try_read(actor)?;
                             let form_settings = form.settings();
 
                             Ok(AnswerEntryAuthorizationContext {

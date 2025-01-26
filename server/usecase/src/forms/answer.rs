@@ -1,10 +1,9 @@
-use crate::dto::AnswerDto;
-use domain::form::answer::models::AnswerTitle;
-use domain::form::answer::service::AnswerEntryAuthorizationContext;
-use domain::types::authorization_guard_with_context::AuthorizationGuardWithContext;
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerId, FormAnswerContent},
+        answer::{
+            models::{AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent},
+            service::AnswerEntryAuthorizationContext,
+        },
         models::FormId,
         service::DefaultAnswerTitleDomainService,
     },
@@ -13,11 +12,16 @@ use domain::{
         comment_repository::CommentRepository, form_repository::FormRepository,
         question_repository::QuestionRepository,
     },
+    types::authorization_guard_with_context::AuthorizationGuardWithContext,
     user::models::User,
 };
-use errors::usecase::UseCaseError::FormNotFound;
-use errors::{usecase::UseCaseError::AnswerNotFound, Error};
+use errors::{
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
+    Error,
+};
 use futures::{stream, try_join, StreamExt};
+
+use crate::dto::AnswerDto;
 
 pub struct AnswerUseCase<
     'a,

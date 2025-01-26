@@ -1,7 +1,6 @@
-use domain::form::answer::models::AnswerTitle;
 use domain::form::{
     answer::{
-        models::{AnswerId, AnswerLabelId, FormAnswerContent},
+        models::{AnswerId, AnswerLabelId, AnswerTitle, FormAnswerContent},
         settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     },
     models::{FormDescription, FormId, FormLabelId, FormTitle, Visibility, WebhookUrl},
