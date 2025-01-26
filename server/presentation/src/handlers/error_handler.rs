@@ -80,14 +80,6 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             })),
         )
             .into_response(),
-        UseCaseError::DoNotHavePermissionToPostFormComment => (
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "errorCode": "DO_NOT_HAVE_PERMISSION_TO_POST_FORM_COMMENT",
-                "reason": "Do not have permission to post forms comment."
-            })),
-        )
-            .into_response(),
         UseCaseError::MessageNotFound => (
             StatusCode::NOT_FOUND,
             Json(json!({
@@ -117,6 +109,14 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             Json(json!({
                 "errorCode": "LABEL_NOT_FOUND",
                 "reason": "Label not found"
+            })),
+        )
+            .into_response(),
+        UseCaseError::CommentNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "COMMENT_NOT_FOUND",
+                "reason": "Comment not found"
             })),
         )
             .into_response(),

@@ -21,6 +21,37 @@ use crate::{
 #[async_trait]
 impl FormCommentDatabase for ConnectionPool {
     #[tracing::instrument]
+    async fn get_comment(&self, comment_id: CommentId) -> Result<Option<CommentDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let comment = query_all_and_values(
+                    r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
+                    INNER JOIN users ON form_answer_comments.commented_by = users.id
+                    WHERE form_answer_comments.id = ?",
+                    [comment_id.into_inner().into()],
+                    txn,
+                ).await?;
+
+                comment.into_iter().next().map(|rs| {
+                    Ok::<_, InfraError>(CommentDto {
+                        answer_id: rs.try_get("", "answer_id")?,
+                        comment_id: rs.try_get("", "id")?,
+                        content: rs.try_get("", "content")?,
+                        timestamp: rs.try_get("", "time_stamp")?,
+                        commented_by: UserDto {
+                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("", "commented_by")?,
+                            role: Role::from_str(rs.try_get::<String>("", "role")?.as_str())?,
+                        },
+                    })
+                }).transpose()
+            })
+        })
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {

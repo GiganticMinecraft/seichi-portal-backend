@@ -1,11 +1,10 @@
-use crate::dto::AnswerDto;
-use domain::form::answer::service::FormAnswerContentAuthorizationContext;
 use domain::{
     form::{
         answer::{
             models::{AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent},
-            service::AnswerEntryAuthorizationContext,
+            service::{AnswerEntryAuthorizationContext, FormAnswerContentAuthorizationContext},
         },
+        comment::service::CommentAuthorizationContext,
         models::FormId,
         service::DefaultAnswerTitleDomainService,
     },
@@ -22,6 +21,8 @@ use errors::{
     Error,
 };
 use futures::{stream, try_join, StreamExt};
+
+use crate::dto::AnswerDto;
 
 pub struct AnswerUseCase<
     'a,
@@ -131,7 +132,22 @@ impl<
                 .map(|content| content.try_into_read(user, &form_answer_content_context))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let form_answer = form_answer_guard.try_into_read(user, &context)?;
+            let comment_authorization_context = CommentAuthorizationContext {
+                related_answer_entry_guard: form_answer_guard,
+                related_answer_entry_guard_context: context,
+            };
+
+            let comments = comments
+                .into_iter()
+                .map(|comment| comment.try_into_read(user, &comment_authorization_context))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let form_answer = comment_authorization_context
+                .related_answer_entry_guard
+                .try_into_read(
+                    user,
+                    &comment_authorization_context.related_answer_entry_guard_context,
+                )?;
 
             Ok(AnswerDto {
                 form_answer,
@@ -192,7 +208,26 @@ impl<
                 .map(|content| content.try_into_read(actor, &form_answer_content_context))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let form_answer = form_answer_guard.try_into_read(actor, &context)?;
+            let comment_authorization_context = CommentAuthorizationContext {
+                related_answer_entry_guard: form_answer_guard,
+                related_answer_entry_guard_context: AnswerEntryAuthorizationContext {
+                    form_visibility: form_settings.visibility().to_owned(),
+                    response_period: form_settings.answer_settings().response_period().to_owned(),
+                    answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+                },
+            };
+
+            let comments = comments
+                .into_iter()
+                .map(|comment| comment.try_into_read(actor, &comment_authorization_context))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let form_answer = comment_authorization_context
+                .related_answer_entry_guard
+                .try_into_read(
+                    actor,
+                    &comment_authorization_context.related_answer_entry_guard_context,
+                )?;
 
             Ok(AnswerDto {
                 form_answer,
@@ -261,7 +296,22 @@ impl<
                     .map(|content| content.try_into_read(user, &form_answer_content_context))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let form_answer = form_answer_guard.try_into_read(user, &context)?;
+                let comment_authorization_context = CommentAuthorizationContext {
+                    related_answer_entry_guard: form_answer_guard,
+                    related_answer_entry_guard_context: context,
+                };
+
+                let comments = comments
+                    .into_iter()
+                    .map(|comment| comment.try_into_read(user, &comment_authorization_context))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let form_answer = comment_authorization_context
+                    .related_answer_entry_guard
+                    .try_into_read(
+                        user,
+                        &comment_authorization_context.related_answer_entry_guard_context,
+                    )?;
 
                 Ok(AnswerDto {
                     form_answer,

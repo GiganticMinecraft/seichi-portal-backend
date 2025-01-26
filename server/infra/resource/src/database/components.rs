@@ -175,6 +175,7 @@ pub trait FormMessageDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormCommentDatabase: Send + Sync {
+    async fn get_comment(&self, comment_id: CommentId) -> Result<Option<CommentDto>, InfraError>;
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;

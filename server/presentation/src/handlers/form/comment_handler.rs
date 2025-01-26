@@ -47,6 +47,7 @@ pub async fn post_form_comment(
 }
 
 pub async fn delete_form_comment_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(comment_id): Path<CommentId>,
 ) -> impl IntoResponse {
@@ -56,7 +57,10 @@ pub async fn delete_form_comment_handler(
         form_repository: repository.form_repository(),
     };
 
-    match form_comment_use_case.delete_comment(comment_id).await {
+    match form_comment_use_case
+        .delete_comment(&user, comment_id)
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }

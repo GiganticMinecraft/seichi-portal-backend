@@ -1,14 +1,9 @@
-use crate::{
-    database::components::{DatabaseComponents, FormAnswerDatabase},
-    repository::Repository,
-};
 use async_trait::async_trait;
-use domain::form::answer::service::FormAnswerContentAuthorizationContext;
 use domain::{
     form::{
         answer::{
             models::{AnswerEntry, AnswerId, FormAnswerContent},
-            service::AnswerEntryAuthorizationContext,
+            service::{AnswerEntryAuthorizationContext, FormAnswerContentAuthorizationContext},
         },
         models::FormId,
     },
@@ -20,6 +15,11 @@ use domain::{
 };
 use errors::Error;
 use itertools::Itertools;
+
+use crate::{
+    database::components::{DatabaseComponents, FormAnswerDatabase},
+    repository::Repository,
+};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {

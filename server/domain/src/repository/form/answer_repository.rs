@@ -2,12 +2,11 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::answer::service::FormAnswerContentAuthorizationContext;
 use crate::{
     form::{
         answer::{
             models::{AnswerEntry, AnswerId, FormAnswerContent},
-            service::AnswerEntryAuthorizationContext,
+            service::{AnswerEntryAuthorizationContext, FormAnswerContentAuthorizationContext},
         },
         models::FormId,
     },
