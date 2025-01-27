@@ -95,15 +95,15 @@ async fn main() -> anyhow::Result<()> {
         .route("/forms", post(create_form_handler).get(form_list_handler))
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/:id",
+            "/forms/{id}",
             get(get_form_handler)
                 .delete(delete_form_handler)
                 .patch(update_form_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route("/forms/:id/answers", get(get_answer_by_form_id_handler))
+        .route("/forms/{id}/answers", get(get_answer_by_form_id_handler))
         .with_state(shared_repository.to_owned())
-        .route("/forms/:id/questions", get(get_questions_handler))
+        .route("/forms/{id}/questions", get(get_questions_handler))
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/answers",
@@ -121,30 +121,30 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/labels/answers/:label_id",
+            "/forms/labels/answers/{label_id}",
             delete(delete_label_for_answers).patch(edit_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/labels/forms/:label_id",
+            "/forms/labels/forms/{label_id}",
             delete(delete_label_for_forms).patch(edit_label_for_forms),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/:answer_id",
+            "/forms/answers/{answer_id}",
             get(get_answer_handler).patch(update_answer_handler),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/:answer_id/labels",
+            "/forms/answers/{answer_id}/labels",
             put(replace_answer_labels),
         )
         .with_state(shared_repository.to_owned())
-        .route("/forms/:form_id/labels", put(replace_form_labels))
+        .route("/forms/{form_id}/labels", put(replace_form_labels))
         .route("/forms/answers/comment", post(post_form_comment))
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/comments/:comment_id",
+            "/forms/answers/comments/{comment_id}",
             delete(delete_form_comment_handler),
         )
         .route(
@@ -155,17 +155,17 @@ async fn main() -> anyhow::Result<()> {
         .route("/users", get(get_my_user_info))
         .route("/users/list", get(user_list))
         .with_state(shared_repository.to_owned())
-        .route("/users/:uuid", patch(patch_user_role))
+        .route("/users/{uuid}", patch(patch_user_role))
         .with_state(shared_repository.to_owned())
         .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/:answer_id/messages",
+            "/forms/answers/{answer_id}/messages",
             get(get_messages_handler).post(post_message_handler),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/:answer_id/messages/:message_id",
+            "/forms/answers/{answer_id}/messages/{message_id}",
             delete(delete_message_handler).patch(update_message_handler),
         )
         .with_state(shared_repository.to_owned())
