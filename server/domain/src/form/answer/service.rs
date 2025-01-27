@@ -29,7 +29,7 @@ impl AuthorizationGuardWithContextDefinitions<AnswerEntry, AnswerEntryAuthorizat
         let is_public_form = context.form_visibility == Visibility::PUBLIC;
         let is_within_period = context.response_period.is_within_period(Utc::now());
 
-        is_public_form && is_within_period || actor.role == Role::Administrator
+        (is_public_form && is_within_period) || actor.role == Role::Administrator
     }
 
     fn can_read(&self, actor: &User, context: &AnswerEntryAuthorizationContext) -> bool {

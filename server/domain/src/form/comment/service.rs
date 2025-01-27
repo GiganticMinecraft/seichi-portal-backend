@@ -33,20 +33,20 @@ impl<Action: Actions>
     }
 
     fn can_update(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
-        context
+        (context
             .related_answer_entry_guard
             .can_read(actor, &context.related_answer_entry_guard_context)
-            && self.commented_by().id == actor.id
+            && self.commented_by().id == actor.id)
             || actor.role == Administrator
     }
 
     fn can_delete(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
         // NOTE: コメントの削除に関しては、コメント自体が全体公開されうるものなので、
         // 適さないメッセージを Administrator が削除できる必要がある
-        context
+        (context
             .related_answer_entry_guard
             .can_read(actor, &context.related_answer_entry_guard_context)
-            && self.commented_by().id == actor.id
+            && self.commented_by().id == actor.id)
             || actor.role == Administrator
     }
 }
