@@ -30,7 +30,7 @@ pub struct DefaultAnswerTitleDomainService<
 impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: AnswerRepository>
     DefaultAnswerTitleDomainService<'_, FormRepo, QuestionRepo, AnswerRepo>
 {
-    fn embedded_answer_title(
+    fn generate_embedded_answer_title(
         default_answer_title: DefaultAnswerTitle,
         answers: &[FormAnswerContent],
     ) -> Result<AnswerTitle, Error> {
@@ -78,7 +78,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
             .default_answer_title()
             .to_owned();
 
-        Self::embedded_answer_title(default_answer_title, answers)
+        Self::generate_embedded_answer_title(default_answer_title, answers)
     }
 }
 
@@ -129,12 +129,13 @@ mod tests {
             },
         ];
 
-        let result = DefaultAnswerTitleDomainService::<
-            MockFormRepository,
-            MockQuestionRepository,
-            MockAnswerRepository,
-        >::embedded_answer_title(default_answer_title, answers.as_slice())
-        .unwrap();
+        let result =
+            DefaultAnswerTitleDomainService::<
+                MockFormRepository,
+                MockQuestionRepository,
+                MockAnswerRepository,
+            >::generate_embedded_answer_title(default_answer_title, answers.as_slice())
+            .unwrap();
 
         assert_eq!(
             result.into_inner().unwrap().into_inner(),
