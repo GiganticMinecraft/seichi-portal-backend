@@ -94,6 +94,22 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     }
 
     #[tracing::instrument(skip(self))]
+    async fn fetch_labels_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error> {
+        self.client
+            .form_label()
+            .fetch_labels_by_form_id(form_id)
+            .await?
+            .into_iter()
+            .map(TryInto::<FormLabel>::try_into)
+            .map_ok(Into::<AuthorizationGuard<_, Read>>::into)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn replace_form_labels(
         &self,
         form_id: FormId,

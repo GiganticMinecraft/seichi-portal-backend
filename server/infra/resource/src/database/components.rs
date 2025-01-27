@@ -193,6 +193,10 @@ pub trait FormLabelDatabase: Send + Sync {
         id: FormLabelId,
         name: FormLabelName,
     ) -> Result<(), InfraError>;
+    async fn fetch_labels_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<Vec<FormLabelDto>, InfraError>;
     async fn replace_form_labels(
         &self,
         form_id: FormId,

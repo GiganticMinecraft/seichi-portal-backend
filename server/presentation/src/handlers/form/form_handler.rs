@@ -8,13 +8,13 @@ use domain::{form::models::FormId, repository::Repositories, user::models::User}
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
-use usecase::forms::form::FormUseCase;
+use usecase::{dto::FormDto, forms::form::FormUseCase};
 
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
         form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
-        form_response_schemas::FormListSchema,
+        form_response_schemas::{FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema},
     },
 };
 
@@ -26,6 +26,8 @@ pub async fn create_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
+        question_repository: repository.form_question_repository(),
+        form_label_repository: repository.form_label_repository(),
     };
 
     match form_use_case
@@ -53,6 +55,8 @@ pub async fn form_list_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
+        question_repository: repository.form_question_repository(),
+        form_label_repository: repository.form_label_repository(),
     };
 
     match form_use_case
@@ -79,11 +83,28 @@ pub async fn get_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
+        question_repository: repository.form_question_repository(),
+        form_label_repository: repository.form_label_repository(),
     };
 
-    // FIXME: forms から questions を剥がしたので、usecase で questions を取得する必要がある
     match form_use_case.get_form(&user, form_id).await {
-        Ok(form) => (StatusCode::OK, Json(form)).into_response(),
+        Ok(FormDto {
+            form,
+            questions,
+            labels,
+        }) => {
+            let response = FormSchema {
+                id: form.id().to_owned(),
+                title: form.title().to_owned(),
+                description: form.description().to_owned(),
+                settings: FormSettingsSchema::from_settings_ref(form.settings()),
+                metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+                questions,
+                labels,
+            };
+
+            (StatusCode::OK, Json(json!(response))).into_response()
+        }
         Err(err) => handle_error(err).into_response(),
     }
 }
@@ -95,6 +116,8 @@ pub async fn delete_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
+        question_repository: repository.form_question_repository(),
+        form_label_repository: repository.form_label_repository(),
     };
 
     match form_use_case.delete_form(form_id).await {
@@ -111,6 +134,8 @@ pub async fn update_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
+        question_repository: repository.form_question_repository(),
+        form_label_repository: repository.form_label_repository(),
     };
 
     match form_use_case

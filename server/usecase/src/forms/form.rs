@@ -4,19 +4,39 @@ use domain::{
         models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
     },
     repository::{
-        form::form_repository::FormRepository, notification_repository::NotificationRepository,
+        form::{
+            form_label_repository::FormLabelRepository, form_repository::FormRepository,
+            question_repository::QuestionRepository,
+        },
+        notification_repository::NotificationRepository,
     },
     user::models::User,
 };
 use errors::{usecase::UseCaseError::FormNotFound, Error};
 use futures::future::{join_all, OptionFuture};
 
-pub struct FormUseCase<'a, FormRepo: FormRepository, NotificationRepo: NotificationRepository> {
+use crate::dto::FormDto;
+
+pub struct FormUseCase<
+    'a,
+    FormRepo: FormRepository,
+    NotificationRepo: NotificationRepository,
+    QuestionRepo: QuestionRepository,
+    FormLabelRepo: FormLabelRepository,
+> {
     pub form_repository: &'a FormRepo,
     pub notification_repository: &'a NotificationRepo,
+    pub question_repository: &'a QuestionRepo,
+    pub form_label_repository: &'a FormLabelRepo,
 }
 
-impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
+impl<
+        R1: FormRepository,
+        R2: NotificationRepository,
+        R3: QuestionRepository,
+        R4: FormLabelRepository,
+    > FormUseCase<'_, R1, R2, R3, R4>
+{
     pub async fn create_form(
         &self,
         title: FormTitle,
@@ -46,13 +66,28 @@ impl<R1: FormRepository, R2: NotificationRepository> FormUseCase<'_, R1, R2> {
             .collect::<Vec<_>>())
     }
 
-    pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<Form, Error> {
-        self.form_repository
+    pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<FormDto, Error> {
+        let form = self
+            .form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(actor)
-            .map_err(Into::into)
+            .try_into_read(actor)?;
+
+        let questions = self.question_repository.get_questions(form_id).await?;
+        let labels = self
+            .form_label_repository
+            .fetch_labels_by_form_id(form_id)
+            .await?
+            .into_iter()
+            .map(|label| label.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(FormDto {
+            form,
+            questions,
+            labels,
+        })
     }
 
     pub async fn delete_form(&self, form_id: FormId) -> Result<(), Error> {

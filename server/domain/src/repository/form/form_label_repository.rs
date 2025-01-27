@@ -35,7 +35,10 @@ pub trait FormLabelRepository: Send + Sync + 'static {
         label: AuthorizationGuard<FormLabel, Update>,
         actor: &User,
     ) -> Result<(), Error>;
-    // TODO: replace_form_labelsはFormRepositoryに移動する
+    async fn fetch_labels_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error>;
     async fn replace_form_labels(
         &self,
         form_id: FormId,

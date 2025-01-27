@@ -129,10 +129,10 @@ impl TryFrom<String> for Visibility {
 pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     #[serde(default = "chrono::Utc::now")]
-    created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     #[serde(default = "chrono::Utc::now")]
-    updated_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl FormMeta {

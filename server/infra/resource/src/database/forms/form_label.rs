@@ -7,8 +7,8 @@ use crate::{
     database::{
         components::FormLabelDatabase,
         connection::{
-            batch_insert, execute_and_values, multiple_delete, query_all, query_one_and_values,
-            ConnectionPool,
+            batch_insert, execute_and_values, multiple_delete, query_all, query_all_and_values,
+            query_one_and_values, ConnectionPool,
         },
     },
     dto::FormLabelDto,
@@ -119,6 +119,36 @@ impl FormLabelDatabase for ConnectionPool {
                 .await?;
 
                 Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn fetch_labels_by_form_id(
+        &self,
+        form_id: FormId,
+    ) -> Result<Vec<FormLabelDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let labels_rs = query_all_and_values(
+                    "SELECT id, name FROM label_for_forms WHERE id IN (SELECT label_id FROM \
+                     label_settings_for_forms WHERE form_id = ?)",
+                    [form_id.into_inner().into()],
+                    txn,
+                )
+                .await?;
+
+                labels_rs
+                    .into_iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>(FormLabelDto {
+                            id: rs.try_get("", "id")?,
+                            name: rs.try_get("", "name")?,
+                        })
+                    })
+                    .collect::<Result<Vec<FormLabelDto>, _>>()
             })
         })
         .await

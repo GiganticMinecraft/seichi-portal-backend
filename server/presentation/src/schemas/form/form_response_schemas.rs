@@ -1,5 +1,12 @@
 use chrono::{DateTime, Utc};
-use domain::form::models::FormId;
+use domain::form::{
+    answer::settings::models::DefaultAnswerTitle,
+    models::{
+        FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility,
+        WebhookUrl,
+    },
+    question::models::Question,
+};
 use itertools::Itertools;
 use serde::Serialize;
 use uuid::Uuid;
@@ -29,6 +36,64 @@ impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVi
             }
         }
     }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormSettingsSchema {
+    pub response_period: ResponsePeriodSchema,
+    pub webhook_url: WebhookUrl,
+    pub default_title: DefaultAnswerTitle,
+    pub visibility: Visibility,
+    pub answer_visibility: AnswerVisibility,
+}
+
+impl FormSettingsSchema {
+    pub fn from_settings_ref(settings: &FormSettings) -> Self {
+        FormSettingsSchema {
+            response_period: ResponsePeriodSchema {
+                start_at: settings
+                    .answer_settings()
+                    .response_period()
+                    .start_at()
+                    .to_owned(),
+                end_at: settings
+                    .answer_settings()
+                    .response_period()
+                    .end_at()
+                    .to_owned(),
+            },
+            webhook_url: settings.webhook_url().to_owned(),
+            default_title: settings.answer_settings().default_answer_title().to_owned(),
+            visibility: settings.visibility().to_owned(),
+            answer_visibility: settings.answer_settings().visibility().to_owned().into(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormMetaSchema {
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl FormMetaSchema {
+    pub fn from_meta_ref(meta: &FormMeta) -> Self {
+        FormMetaSchema {
+            created_at: meta.created_at,
+            updated_at: meta.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormSchema {
+    pub id: FormId,
+    pub title: FormTitle,
+    pub description: FormDescription,
+    pub settings: FormSettingsSchema,
+    pub metadata: FormMetaSchema,
+    pub questions: Vec<Question>,
+    pub labels: Vec<FormLabel>,
 }
 
 #[derive(Serialize, Debug)]
