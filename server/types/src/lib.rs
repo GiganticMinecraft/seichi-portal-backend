@@ -1,3 +1,5 @@
+pub mod non_empty_string;
+
 #[cfg(feature = "arbitrary")]
 use common::test_utils::arbitrary_uuid_v7;
 use deriving_via::DerivingVia;

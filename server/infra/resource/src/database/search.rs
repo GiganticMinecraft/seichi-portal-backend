@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Form, FormAnswerContent, Label},
+    form::{
+        answer::models::{AnswerLabel, FormAnswerContent},
+        models::{Form, FormLabel},
+    },
     search::models::Comment,
     user::models::User,
 };
@@ -42,14 +45,14 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<Label>, InfraError> {
+    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("label_for_forms")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<Label>()
+            .execute::<FormLabel>()
             .await?
             .hits
             .into_iter()
@@ -57,14 +60,14 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<Label>, InfraError> {
+    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("label_for_form_answers")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<Label>()
+            .execute::<AnswerLabel>()
             .await?
             .hits
             .into_iter()

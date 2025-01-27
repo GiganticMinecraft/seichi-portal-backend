@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use domain::{
     notification::models::{Notification, NotificationId},
     repository::notification_repository::NotificationRepository,
-    types::authorization_guard::{AuthorizationGuard, Create, Read, Update},
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{Create, Read, Update},
+    },
     user::models::User,
 };
 use errors::Error;

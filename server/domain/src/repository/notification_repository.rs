@@ -4,7 +4,10 @@ use uuid::Uuid;
 
 use crate::{
     notification::models::{Notification, NotificationId},
-    types::authorization_guard::{AuthorizationGuard, Read, Update},
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{Read, Update},
+    },
     user::models::User,
 };
 

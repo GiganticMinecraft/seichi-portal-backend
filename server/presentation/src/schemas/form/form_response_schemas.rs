@@ -1,7 +1,143 @@
 use chrono::{DateTime, Utc};
+use domain::form::{
+    answer::settings::models::DefaultAnswerTitle,
+    models::{
+        FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility,
+        WebhookUrl,
+    },
+    question::models::Question,
+};
 use itertools::Itertools;
 use serde::Serialize;
 use uuid::Uuid;
+
+#[derive(Serialize, Debug)]
+pub(crate) struct ResponsePeriodSchema {
+    start_at: Option<DateTime<Utc>>,
+    end_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) enum AnswerVisibility {
+    #[serde(rename = "PUBLIC")]
+    Public,
+    #[serde(rename = "PRIVATE")]
+    Private,
+}
+
+impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVisibility {
+    fn from(val: domain::form::answer::settings::models::AnswerVisibility) -> Self {
+        match val {
+            domain::form::answer::settings::models::AnswerVisibility::PUBLIC => {
+                AnswerVisibility::Public
+            }
+            domain::form::answer::settings::models::AnswerVisibility::PRIVATE => {
+                AnswerVisibility::Private
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormSettingsSchema {
+    pub response_period: ResponsePeriodSchema,
+    pub webhook_url: WebhookUrl,
+    pub default_title: DefaultAnswerTitle,
+    pub visibility: Visibility,
+    pub answer_visibility: AnswerVisibility,
+}
+
+impl FormSettingsSchema {
+    pub fn from_settings_ref(settings: &FormSettings) -> Self {
+        FormSettingsSchema {
+            response_period: ResponsePeriodSchema {
+                start_at: settings
+                    .answer_settings()
+                    .response_period()
+                    .start_at()
+                    .to_owned(),
+                end_at: settings
+                    .answer_settings()
+                    .response_period()
+                    .end_at()
+                    .to_owned(),
+            },
+            webhook_url: settings.webhook_url().to_owned(),
+            default_title: settings.answer_settings().default_answer_title().to_owned(),
+            visibility: settings.visibility().to_owned(),
+            answer_visibility: settings.answer_settings().visibility().to_owned().into(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormMetaSchema {
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl FormMetaSchema {
+    pub fn from_meta_ref(meta: &FormMeta) -> Self {
+        FormMetaSchema {
+            created_at: meta.created_at,
+            updated_at: meta.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormSchema {
+    pub id: FormId,
+    pub title: FormTitle,
+    pub description: FormDescription,
+    pub settings: FormSettingsSchema,
+    pub metadata: FormMetaSchema,
+    pub questions: Vec<Question>,
+    pub labels: Vec<FormLabel>,
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormListSchema {
+    id: FormId,
+    title: String,
+    description: Option<String>,
+    response_period: ResponsePeriodSchema,
+    answer_visibility: AnswerVisibility,
+}
+
+impl From<domain::form::models::Form> for FormListSchema {
+    fn from(form: domain::form::models::Form) -> Self {
+        FormListSchema {
+            id: form.id().to_owned(),
+            title: form.title().to_string(),
+            description: form
+                .description()
+                .to_owned()
+                .into_inner()
+                .map(|desc| desc.to_string()),
+            response_period: ResponsePeriodSchema {
+                start_at: form
+                    .settings()
+                    .answer_settings()
+                    .response_period()
+                    .start_at()
+                    .to_owned(),
+                end_at: form
+                    .settings()
+                    .answer_settings()
+                    .response_period()
+                    .end_at()
+                    .to_owned(),
+            },
+            answer_visibility: form
+                .settings()
+                .answer_settings()
+                .visibility()
+                .to_owned()
+                .into(),
+        }
+    }
+}
 
 #[derive(Serialize, Debug)]
 pub(crate) enum Role {
@@ -43,8 +179,8 @@ pub(crate) struct AnswerContent {
     answer: String,
 }
 
-impl From<domain::form::models::FormAnswerContent> for AnswerContent {
-    fn from(val: domain::form::models::FormAnswerContent) -> Self {
+impl From<domain::form::answer::models::FormAnswerContent> for AnswerContent {
+    fn from(val: domain::form::answer::models::FormAnswerContent) -> Self {
         AnswerContent {
             question_id: val.question_id.into(),
             answer: val.answer,
@@ -59,12 +195,12 @@ pub(crate) struct AnswerComment {
     commented_by: User,
 }
 
-impl From<domain::form::models::Comment> for AnswerComment {
-    fn from(val: domain::form::models::Comment) -> Self {
+impl From<domain::form::comment::models::Comment> for AnswerComment {
+    fn from(val: domain::form::comment::models::Comment) -> Self {
         AnswerComment {
-            content: val.content,
-            timestamp: val.timestamp,
-            commented_by: val.commented_by.into(),
+            content: val.content().to_string(),
+            timestamp: val.timestamp().to_owned(),
+            commented_by: val.commented_by().to_owned().into(),
         }
     }
 }
@@ -75,8 +211,8 @@ pub(crate) struct AnswerLabels {
     name: String,
 }
 
-impl From<domain::form::models::AnswerLabel> for AnswerLabels {
-    fn from(val: domain::form::models::AnswerLabel) -> Self {
+impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
+    fn from(val: domain::form::answer::models::AnswerLabel) -> Self {
         AnswerLabels {
             id: val.id.into(),
             name: val.name,
@@ -86,9 +222,9 @@ impl From<domain::form::models::AnswerLabel> for AnswerLabels {
 
 #[derive(Serialize, Debug)]
 pub(crate) struct FormAnswer {
-    id: i32,
+    id: Uuid,
     user: User,
-    form_id: i32,
+    form_id: Uuid,
     timestamp: DateTime<Utc>,
     title: Option<String>,
     answers: Vec<AnswerContent>,
@@ -98,17 +234,21 @@ pub(crate) struct FormAnswer {
 
 impl FormAnswer {
     pub fn new(
-        answer: domain::form::models::FormAnswer,
-        answer_contents: Vec<domain::form::models::FormAnswerContent>,
-        comments: Vec<domain::form::models::Comment>,
-        labels: Vec<domain::form::models::AnswerLabel>,
+        answer: domain::form::answer::models::AnswerEntry,
+        answer_contents: Vec<domain::form::answer::models::FormAnswerContent>,
+        comments: Vec<domain::form::comment::models::Comment>,
+        labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
         FormAnswer {
-            id: answer.id.into(),
-            user: answer.user.into(),
-            form_id: answer.form_id.into(),
-            timestamp: answer.timestamp,
-            title: answer.title.default_answer_title,
+            id: answer.id().to_owned().into(),
+            user: answer.user().to_owned().into(),
+            form_id: answer.form_id().into_inner(),
+            timestamp: answer.timestamp().to_owned(),
+            title: answer
+                .title()
+                .to_owned()
+                .into_inner()
+                .map(|title| title.to_string()),
             answers: answer_contents.into_iter().map(Into::into).collect_vec(),
             comments: comments.into_iter().map(Into::into).collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
