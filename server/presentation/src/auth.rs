@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::State,
-    http::{Method, Request, StatusCode},
+    http::{Request, StatusCode},
     middleware::Next,
     response::Response,
 };
@@ -12,12 +12,8 @@ use axum_extra::{
 use common::config::ENV;
 use domain::{
     repository::Repositories,
-    user::models::{
-        Role::{Administrator, StandardUser},
-        User,
-    },
+    user::models::{Role::Administrator, User},
 };
-use regex::Regex;
 use resource::repository::RealInfrastructureRepository;
 use usecase::user::UserUseCase;
 use uuid::uuid;
@@ -55,41 +51,6 @@ pub async fn auth(
             None => return Err(StatusCode::UNAUTHORIZED),
         }
     };
-
-    let static_endpoints_allowed_for_standard_users = [
-        (&Method::POST, "/forms/answers"),
-        (&Method::POST, "/forms/answers/comment"),
-        (&Method::GET, "/users"),
-    ];
-
-    // NOTE: 動的パスを指定する場合は、正規表現を埋め込む
-    let dynamic_endpoints_allowed_for_standard_users = [
-        (&Method::GET, "/forms/[^/]+/questions"),
-        (&Method::GET, "/forms/[^/]+/answers"),
-        (&Method::GET, "/forms/answers/[^/]+"),
-        (&Method::GET, "/forms/answers/[^/]+/messages"),
-        (&Method::POST, "/forms/answers/[^/]+/messages"),
-        (&Method::PATCH, "/forms/answers/[^/]+/messages/[^/]+"),
-        (&Method::DELETE, "/forms/answers/[^/]+/messages/[^/]+"),
-    ];
-
-    let is_not_allow_dynamic_endpoint = !dynamic_endpoints_allowed_for_standard_users
-        .into_iter()
-        .any(|(method, endpoint)| {
-            let regex = Regex::new(endpoint).unwrap();
-
-            method == request.method() && regex.is_match(request.uri().path())
-        });
-
-    if user.role == StandardUser
-        && !static_endpoints_allowed_for_standard_users
-            .contains(&(request.method(), request.uri().path()))
-        && is_not_allow_dynamic_endpoint
-    {
-        // NOTE: standard_user_endpointsに存在しないMethodとエンドポイントに
-        //          一般ユーザーがアクセスした場合は、アクセス権限なしとしてすべてFORBIDDENを返す。
-        return Err(StatusCode::FORBIDDEN);
-    }
 
     match user_use_case.upsert_user(&user).await {
         Ok(_) => {
