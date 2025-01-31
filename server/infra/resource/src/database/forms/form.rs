@@ -1,3 +1,10 @@
+use crate::{
+    database::{
+        components::FormDatabase,
+        connection::{execute_and_values, query_all_and_values, ConnectionPool},
+    },
+    dto::FormDto,
+};
 use async_trait::async_trait;
 use domain::{
     form::{
@@ -8,14 +15,6 @@ use domain::{
 };
 use errors::infra::InfraError;
 use futures::future::try_join;
-
-use crate::{
-    database::{
-        components::FormDatabase,
-        connection::{execute_and_values, query_all_and_values, ConnectionPool},
-    },
-    dto::FormDto,
-};
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
@@ -33,9 +32,10 @@ impl FormDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r#"INSERT INTO form_meta_data (title, description, created_by, updated_by)
-                            VALUES (?, ?, ?, ?)"#,
+                    r#"INSERT INTO form_meta_data (id, title, description, created_by, updated_by)
+                            VALUES (?, ?, ?, ?, ?)"#,
                     [
+                        form_id.into_inner().to_string().into(),
                         form_title.to_string().into(),
                         description.to_owned().into(),
                         user_id.to_string().into(),
@@ -46,15 +46,14 @@ impl FormDatabase for ConnectionPool {
                 .await?;
 
                 let insert_default_answer_title_table = execute_and_values(
-                    "INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
-                    [form_id.to_owned().into_inner().into()],
+                    r"INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
+                    [form_id.to_owned().into_inner().to_string().into()],
                     txn,
                 );
 
                 let insert_response_period_table = execute_and_values(
-                    "INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, \
-                     NULL)",
-                    [form_id.to_owned().into_inner().into()],
+                    r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)",
+                    [form_id.to_owned().into_inner().to_string().into()],
                     txn,
                 );
 
