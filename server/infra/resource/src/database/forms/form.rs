@@ -15,6 +15,8 @@ use domain::{
 };
 use errors::infra::InfraError;
 use futures::future::try_join;
+use std::str::FromStr;
+use uuid::Uuid;
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
@@ -95,7 +97,7 @@ impl FormDatabase for ConnectionPool {
                     .into_iter()
                     .map(|query_rs| {
                         Ok::<_, InfraError>(FormDto {
-                            id: query_rs.try_get("", "form_id")?,
+                            id: Uuid::from_str(query_rs.try_get::<String>("", "form_id")?.as_str())?,
                             title: query_rs.try_get("", "form_title")?,
                             description: query_rs.try_get("", "description")?,
                             metadata: (
