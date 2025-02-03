@@ -159,7 +159,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerDto {
-                            id: rs.try_get("", "answer_id")?,
+                            id: uuid::Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
@@ -189,7 +189,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerDto {
-                            id: rs.try_get("", "answer_id")?,
+                            id: uuid::Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?,
                             uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
