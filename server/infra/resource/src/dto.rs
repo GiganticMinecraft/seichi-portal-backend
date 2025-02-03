@@ -100,7 +100,6 @@ impl TryFrom<FormDto> for domain::form::models::Form {
 }
 
 pub struct FormAnswerContentDto {
-    pub answer_id: Uuid,
     pub question_id: i32,
     pub answer: String,
 }
@@ -110,13 +109,11 @@ impl TryFrom<FormAnswerContentDto> for domain::form::answer::models::FormAnswerC
 
     fn try_from(
         FormAnswerContentDto {
-            answer_id,
             question_id,
             answer,
         }: FormAnswerContentDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::answer::models::FormAnswerContent {
-            answer_id: answer_id.into(),
             question_id: question_id.into(),
             answer,
         })
