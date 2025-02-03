@@ -42,7 +42,7 @@ impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVi
 pub(crate) struct FormSettingsSchema {
     pub response_period: ResponsePeriodSchema,
     pub webhook_url: WebhookUrl,
-    pub default_title: DefaultAnswerTitle,
+    pub default_answer_title: DefaultAnswerTitle,
     pub visibility: Visibility,
     pub answer_visibility: AnswerVisibility,
 }
@@ -63,7 +63,7 @@ impl FormSettingsSchema {
                     .to_owned(),
             },
             webhook_url: settings.webhook_url().to_owned(),
-            default_title: settings.answer_settings().default_answer_title().to_owned(),
+            default_answer_title: settings.answer_settings().default_answer_title().to_owned(),
             visibility: settings.visibility().to_owned(),
             answer_visibility: settings.answer_settings().visibility().to_owned().into(),
         }

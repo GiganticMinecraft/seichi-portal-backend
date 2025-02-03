@@ -151,7 +151,7 @@ impl FormDatabase for ConnectionPool {
                     start_at: form.try_get("", "start_at")?,
                     end_at: form.try_get("", "end_at")?,
                     webhook_url: form.try_get("", "url")?,
-                    default_answer_title: form.try_get("", "default_answer_titles.title")?,
+                    default_answer_title: form.try_get("", "title")?,
                     visibility: form.try_get("", "visibility")?,
                     answer_visibility: form.try_get("", "answer_visibility")?,
                 }))
