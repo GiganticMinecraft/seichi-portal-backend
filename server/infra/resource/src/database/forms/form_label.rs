@@ -1,8 +1,3 @@
-use async_trait::async_trait;
-use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
-use errors::infra::InfraError;
-use itertools::Itertools;
-
 use crate::{
     database::{
         components::FormLabelDatabase,
@@ -13,6 +8,12 @@ use crate::{
     },
     dto::FormLabelDto,
 };
+use async_trait::async_trait;
+use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
+use errors::infra::InfraError;
+use itertools::Itertools;
+use std::str::FromStr;
+use uuid::Uuid;
 
 #[async_trait]
 impl FormLabelDatabase for ConnectionPool {
@@ -49,7 +50,7 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
+                            id: Uuid::from_str(rs.try_get::<String>("", "id")?.as_str())?,
                             name: rs.try_get("", "name")?,
                         })
                     })

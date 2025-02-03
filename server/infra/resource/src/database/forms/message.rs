@@ -1,5 +1,14 @@
 use std::str::FromStr;
 
+use crate::{
+    database::{
+        components::FormMessageDatabase,
+        connection::{
+            execute_and_values, query_all_and_values, query_one_and_values, ConnectionPool,
+        },
+    },
+    dto::{FormAnswerDto, MessageDto, UserDto},
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
@@ -11,16 +20,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
-
-use crate::{
-    database::{
-        components::FormMessageDatabase,
-        connection::{
-            execute_and_values, query_all_and_values, query_one_and_values, ConnectionPool,
-        },
-    },
-    dto::{FormAnswerDto, MessageDto, UserDto},
-};
+use uuid::Uuid;
 
 #[async_trait]
 impl FormMessageDatabase for ConnectionPool {
@@ -171,7 +171,7 @@ impl FormMessageDatabase for ConnectionPool {
                         uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "respondent_id")?)?,
                         user_role: Role::from_str(&rs.try_get::<String>("", "respondent_role")?)?,
                         timestamp: rs.try_get("", "time_stamp")?,
-                        form_id: rs.try_get("", "form_id")?,
+                        form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
                         title: rs.try_get("", "title")?,
                     })?;
 
