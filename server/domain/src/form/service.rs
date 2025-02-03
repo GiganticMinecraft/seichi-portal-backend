@@ -88,10 +88,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        form::{
-            answer::models::{AnswerId, FormAnswerContent},
-            question::models::QuestionId,
-        },
+        form::{answer::models::FormAnswerContent, question::models::QuestionId},
         repository::form::{
             answer_repository::MockAnswerRepository, form_repository::MockFormRepository,
             question_repository::MockQuestionRepository,
@@ -113,17 +110,14 @@ mod tests {
         ));
         let answers = vec![
             FormAnswerContent {
-                answer_id: AnswerId::new(),
                 question_id: first_question_id,
                 answer: "Answer1".to_string(),
             },
             FormAnswerContent {
-                answer_id: AnswerId::new(),
                 question_id: second_question_id,
                 answer: "Answer2".to_string(),
             },
             FormAnswerContent {
-                answer_id: AnswerId::new(),
                 question_id: third_question_id,
                 answer: "Answer3".to_string(),
             },

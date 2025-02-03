@@ -128,7 +128,6 @@ impl FormAnswerDatabase for ConnectionPool {
                     .iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerContentDto {
-                            answer_id,
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         })

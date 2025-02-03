@@ -79,7 +79,6 @@ impl AnswerEntry {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct FormAnswerContent {
-    pub answer_id: AnswerId,
     pub question_id: QuestionId,
     pub answer: String,
 }
