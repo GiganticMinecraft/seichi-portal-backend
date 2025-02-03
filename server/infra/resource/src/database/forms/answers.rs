@@ -33,7 +33,7 @@ impl FormAnswerDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         let answer_id = answer.id().to_owned().into_inner();
         let form_id = answer.form_id().to_owned().into_inner();
-        let user_id = answer.user().to_owned().id.to_owned();
+        let user_id = answer.user().to_owned().id.to_string().to_owned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
             .map(|title| title.into_inner());
         let timestamp = answer.timestamp().to_owned();
@@ -41,7 +41,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r"INSERT INTO answers (id, form_id, user, title, timestamp) VALUES (?, ?, ?, ?, ?)",
+                    r"INSERT INTO answers (id, form_id, user, title, time_stamp) VALUES (?, ?, ?, ?, ?)",
                     [
                         answer_id.into(),
                         form_id.into(),
