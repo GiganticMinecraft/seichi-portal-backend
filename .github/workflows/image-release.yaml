@@ -23,11 +23,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
       - name: Setup rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           target: ${{ matrix.cross-target }}
-          override: true
+          components: clippy, rustfmt
       - name: Build binary using cross
         uses: actions-rs/cargo@v1
         with:
