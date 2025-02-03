@@ -32,6 +32,8 @@ jobs:
     needs: [ rustfmt ]
     name: Lint and test server
     runs-on: ubuntu-latest
+    env:
+      RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,7 +44,7 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.82.0
+          toolchain: ${{ env.RUST_VERSION }}
           target: x86_64-unknown-linux-musl
           components: clippy, rustfmt
 
