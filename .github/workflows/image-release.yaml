@@ -17,13 +17,15 @@ jobs:
           - docker-platform: linux/arm64/v8
             cross-target: aarch64-unknown-linux-gnu
     runs-on: ubuntu-latest
+    env:
+      RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
       - name: Checkout
         uses: actions/checkout@master
       - name: Setup rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.82.0
+          toolchain: ${{ env.RUST_VERSION }}
           target: ${{ matrix.cross-target }}
           override: true
       - name: Build binary using cross
