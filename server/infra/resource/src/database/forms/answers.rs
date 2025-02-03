@@ -10,6 +10,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use types::non_empty_string::NonEmptyString;
+use uuid::Uuid;
 
 use crate::{
     database::{
@@ -96,7 +97,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
-                            form_id: rs.try_get("", "form_id")?,
+                            form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
                             title: rs.try_get("", "title")?,
                         })
                     })
@@ -164,7 +165,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
-                            form_id: rs.try_get("", "form_id")?,
+                            form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
                             title: rs.try_get("", "title")?,
                         })
                     })
@@ -194,7 +195,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
-                            form_id: rs.try_get("", "form_id")?,
+                            form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
                             title: rs.try_get("", "title")?,
                         })
                     })

@@ -1,7 +1,10 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
 use errors::infra::InfraError;
 use itertools::Itertools;
+use uuid::Uuid;
 
 use crate::{
     database::{
@@ -49,7 +52,7 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
+                            id: Uuid::from_str(rs.try_get::<String>("", "id")?.as_str())?,
                             name: rs.try_get("", "name")?,
                         })
                     })
