@@ -51,8 +51,9 @@ use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde_json::json;
 use tokio::net::TcpListener;
+use tokio::signal;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::log;
+use tracing::{info, log};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 #[tokio::main]
@@ -203,7 +204,10 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    axum::serve(listener, router).await.expect("Fail to serve.");
+    axum::serve(listener, router)
+        .with_graceful_shutdown(graceful_handler())
+        .await
+        .expect("Fail to serve.");
     Ok(())
 }
 
@@ -215,14 +219,28 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
-// NOTE: hyper::Serverが削除され、2023/12/03時点でgraceful_shutdownが実装できない
-// ref: https://github.com/hyperium/hyper/issues/2862
-// async fn graceful_handler() {
-//     let mut sigterm = signal(SignalKind::terminate()).unwrap();
-//
-//     tokio::select! {
-//         _ = sigterm.recv() => {
-//             //todo: シャットダウン時にしなければいけない処理を記述する
-//         }
-//     }
-// }
+async fn graceful_handler() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            info!("Gracefully shutdown...");
+        },
+        _ = terminate => {},
+    }
+}
