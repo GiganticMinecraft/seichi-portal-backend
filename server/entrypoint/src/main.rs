@@ -50,8 +50,7 @@ use presentation::{
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde_json::json;
-use tokio::net::TcpListener;
-use tokio::signal;
+use tokio::{net::TcpListener, signal};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
