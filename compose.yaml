@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:10.11.10
+    image: mariadb:10.11.11
     container_name: mariadb
     # NOTE: binlog-format=ROW は meilisync で必要
     # ref: https://www.meilisearch.com/docs/guides/database/meilisync_mysql#configure-mysql
