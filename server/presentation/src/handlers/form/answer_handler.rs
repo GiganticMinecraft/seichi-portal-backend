@@ -32,7 +32,6 @@ pub async fn get_all_answers(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
-        user_repository: repository.user_repository(),
     };
     match form_answer_use_case.get_all_answers(&user).await {
         Ok(answers) => {
@@ -65,7 +64,6 @@ pub async fn get_answer_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
-        user_repository: repository.user_repository(),
     };
 
     let answer_dto = match form_answer_use_case.get_answers(answer_id, &user).await {
@@ -96,7 +94,6 @@ pub async fn get_answer_by_form_id_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
-        user_repository: repository.user_repository(),
     };
 
     match form_answer_use_case
@@ -133,7 +130,6 @@ pub async fn post_answer_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
-        user_repository: repository.user_repository(),
     };
     match form_answer_use_case
         .post_answers(user, schema.form_id, schema.answers)
@@ -156,7 +152,6 @@ pub async fn update_answer_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
-        user_repository: repository.user_repository(),
     };
 
     match form_answer_use_case
