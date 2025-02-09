@@ -33,6 +33,7 @@ pub async fn post_message_handler(
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
         form_repository: repository.form_repository(),
+        user_repository: repository.user_repository(),
     };
 
     match form_message_use_case
@@ -62,6 +63,7 @@ pub async fn update_message_handler(
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
         form_repository: repository.form_repository(),
+        user_repository: repository.user_repository(),
     };
 
     match form_message_use_case
@@ -83,6 +85,7 @@ pub async fn get_messages_handler(
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
         form_repository: repository.form_repository(),
+        user_repository: repository.user_repository(),
     };
 
     match form_message_use_case.get_messages(&user, answer_id).await {
@@ -138,6 +141,7 @@ pub async fn delete_message_handler(
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
         form_repository: repository.form_repository(),
+        user_repository: repository.user_repository(),
     };
 
     match form_message_use_case

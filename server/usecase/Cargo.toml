@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 domain = { path = "../domain" }
-outgoing = { path = "../infra/outgoing" }
+resource = { path = "../infra/resource" }
 errors = { path = "../errors" }
 types = { path = "../types" }
 uuid = { workspace = true }
