@@ -157,12 +157,15 @@ impl UserDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         let user_id = user.id.to_string();
         let discord_user_id = discord_user_id.to_owned().into_inner();
-        println!("{:?}", discord_user_id);
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    "INSERT INTO discord_linked_users (user_id, discord_id) VALUES (?, ?)",
+                    r#"INSERT INTO discord_linked_users (user_id, discord_id)
+                    VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    discord_id = VALUES(discord_id)
+                    "#,
                     [user_id.into(), discord_user_id.into()],
                     txn,
                 )
