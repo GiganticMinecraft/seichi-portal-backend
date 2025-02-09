@@ -44,7 +44,9 @@ use presentation::{
         health_check_handler::health_check,
         notification_handler::{fetch_by_request_user, update_read_state},
         search_handler::cross_search,
-        user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
+        user_handler::{
+            end_session, get_my_user_info, link_discord, patch_user_role, start_session, user_list,
+        },
     },
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
@@ -176,6 +178,8 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
         .route("/session", post(start_session).delete(end_session))
+        .with_state(shared_repository.to_owned())
+        .route("/link-discord", post(link_discord))
         .with_state(shared_repository.to_owned())
         .fallback(not_found_handler)
         .layer(layer)

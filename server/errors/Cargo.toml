@@ -13,3 +13,4 @@ uuid = { workspace = true }
 redis = { workspace = true }
 reqwest = { workspace = true }
 meilisearch-sdk = { workspace = true }
+serde_json = { workspace = true }

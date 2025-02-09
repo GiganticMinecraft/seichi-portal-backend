@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use common::config::ENV;
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{Role, Role::Administrator, User},
+    user::models::{DiscordUserId, Role, Role::Administrator, User},
 };
 use errors::{infra::InfraError::Reqwest, Error};
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
@@ -10,6 +10,7 @@ use uuid::{uuid, Uuid};
 
 use crate::{
     database::components::{DatabaseComponents, UserDatabase},
+    external::discord_api::DiscordAPI,
     repository::Repository,
 };
 
@@ -104,5 +105,38 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .end_user_session(session_id)
             .await
             .map_err(Into::into)
+    }
+
+    async fn link_discord_user(
+        &self,
+        discord_user_id: &DiscordUserId,
+        user: &User,
+    ) -> Result<(), Error> {
+        self.client
+            .user()
+            .link_discord_user(discord_user_id, user)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_discord_user_id(&self, user: &User) -> Result<Option<DiscordUserId>, Error> {
+        self.client
+            .user()
+            .fetch_discord_user_id(user)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_discord_user_id_by_token(
+        &self,
+        token: String,
+    ) -> Result<Option<DiscordUserId>, Error> {
+        Ok(self
+            .client
+            .discord_api()
+            .fetch_user(token)
+            .await
+            .ok()
+            .map(|schema| DiscordUserId::new(schema.id)))
     }
 }

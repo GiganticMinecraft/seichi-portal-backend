@@ -1,5 +1,6 @@
 #[cfg(test)]
 use common::test_utils::arbitrary_uuid_v4;
+use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
@@ -36,4 +37,21 @@ pub struct RoleQuery {
 #[derive(Deserialize)]
 pub struct UserSessionExpires {
     pub expires: i32,
+}
+
+#[derive(DerivingVia, Debug)]
+#[deriving(From, Into, IntoInner, Clone)]
+pub struct DiscordUserId(String);
+
+impl DiscordUserId {
+    pub fn new(user_id: String) -> Self {
+        // NOTE: Discord のユーザー id は 17桁または18桁である
+        //  ref: https://support.discord.com/hc/ja/articles/4407571667351
+        assert!(
+            user_id.len() == 17 || user_id.len() == 18,
+            "Discord user id must be 17 or 18 characters long"
+        );
+
+        Self(user_id)
+    }
 }

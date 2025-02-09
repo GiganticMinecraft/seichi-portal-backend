@@ -14,15 +14,18 @@ use domain::{
         question::models::Question,
     },
     notification::models::{Notification, NotificationId},
-    user::models::{Role, User},
+    user::models::{DiscordUserId, Role, User},
 };
 use errors::infra::InfraError;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::dto::{
-    AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
-    MessageDto, NotificationDto, QuestionDto,
+use crate::{
+    dto::{
+        AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
+        MessageDto, NotificationDto, QuestionDto,
+    },
+    external::discord_api::DiscordAPI,
 };
 
 #[async_trait]
@@ -35,6 +38,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormCommentDatabase: FormCommentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
     type ConcreteUserDatabase: UserDatabase;
+    type ConcreteDiscordAPI: DiscordAPI;
     type ConcreteNotificationDatabase: NotificationDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
     type TransactionAcrossComponents: Send + Sync;
@@ -48,6 +52,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
+    fn discord_api(&self) -> &Self::ConcreteDiscordAPI;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
     fn notification(&self) -> &Self::ConcreteNotificationDatabase;
 }
@@ -222,6 +227,13 @@ pub trait UserDatabase: Send + Sync {
         session_id: String,
     ) -> Result<Option<User>, InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
+    async fn link_discord_user(
+        &self,
+        discord_user_id: &DiscordUserId,
+        user: &User,
+    ) -> Result<(), InfraError>;
+    async fn fetch_discord_user_id(&self, user: &User)
+        -> Result<Option<DiscordUserId>, InfraError>;
 }
 
 #[automock]

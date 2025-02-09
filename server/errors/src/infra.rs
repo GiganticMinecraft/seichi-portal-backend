@@ -1,3 +1,4 @@
+use serde_json::Error;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -35,6 +36,8 @@ pub enum InfraError {
     Reqwest { cause: String },
     #[error("MeiliSearch Error: {}", .cause)]
     MeiliSearch { cause: String },
+    #[error("SerdeJson Error: {}", .cause)]
+    SerdeJson { cause: String },
 }
 
 impl<E> From<sea_orm::TransactionError<E>> for InfraError
@@ -51,6 +54,14 @@ where
 impl From<meilisearch_sdk::errors::Error> for InfraError {
     fn from(value: meilisearch_sdk::errors::Error) -> Self {
         InfraError::MeiliSearch {
+            cause: value.to_string(),
+        }
+    }
+}
+
+impl From<serde_json::Error> for InfraError {
+    fn from(value: Error) -> Self {
+        InfraError::SerdeJson {
             cause: value.to_string(),
         }
     }

@@ -2,7 +2,7 @@ use domain::{
     repository::user_repository::UserRepository,
     user::models::{Role, User},
 };
-use errors::Error;
+use errors::{usecase::UseCaseError, Error};
 use uuid::Uuid;
 
 pub struct UserUseCase<'a, UserRepo: UserRepository> {
@@ -67,5 +67,21 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn end_user_session(&self, session_id: String) -> Result<(), Error> {
         self.repository.end_user_session(session_id).await
+    }
+
+    pub async fn link_discord_user(
+        &self,
+        discord_oauth_token: String,
+        user: &User,
+    ) -> Result<(), Error> {
+        let discord_user_id = self
+            .repository
+            .fetch_discord_user_id_by_token(discord_oauth_token)
+            .await?
+            .ok_or(Error::from(UseCaseError::DiscordLinkFailed))?;
+
+        self.repository
+            .link_discord_user(&discord_user_id, user)
+            .await
     }
 }

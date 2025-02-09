@@ -89,6 +89,7 @@ impl ConnectionPool {
 
 #[async_trait]
 impl DatabaseComponents for ConnectionPool {
+    type ConcreteDiscordAPI = Self;
     type ConcreteFormAnswerDatabase = Self;
     type ConcreteFormAnswerLabelDatabase = Self;
     type ConcreteFormCommentDatabase = Self;
@@ -134,6 +135,10 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn user(&self) -> &Self::ConcreteUserDatabase {
+        self
+    }
+
+    fn discord_api(&self) -> &Self::ConcreteDiscordAPI {
         self
     }
 

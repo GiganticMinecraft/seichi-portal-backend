@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::user::models::{Role, User};
+use crate::user::models::{DiscordUserId, Role, User};
 
 #[automock]
 #[async_trait]
@@ -21,4 +21,14 @@ pub trait UserRepository: Send + Sync + 'static {
     ) -> Result<String, Error>;
     async fn fetch_user_by_session_id(&self, session_id: String) -> Result<Option<User>, Error>;
     async fn end_user_session(&self, session_id: String) -> Result<(), Error>;
+    async fn link_discord_user(
+        &self,
+        discord_user_id: &DiscordUserId,
+        user: &User,
+    ) -> Result<(), Error>;
+    async fn fetch_discord_user_id(&self, user: &User) -> Result<Option<DiscordUserId>, Error>;
+    async fn fetch_discord_user_id_by_token(
+        &self,
+        token: String,
+    ) -> Result<Option<DiscordUserId>, Error>;
 }
