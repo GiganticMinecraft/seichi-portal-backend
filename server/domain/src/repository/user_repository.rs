@@ -26,6 +26,7 @@ pub trait UserRepository: Send + Sync + 'static {
         discord_user_id: &DiscordUserId,
         user: &User,
     ) -> Result<(), Error>;
+    async fn unlink_discord_user(&self, user: &User) -> Result<(), Error>;
     async fn fetch_discord_user_id(&self, user: &User) -> Result<Option<DiscordUserId>, Error>;
     async fn fetch_discord_user_id_by_token(
         &self,

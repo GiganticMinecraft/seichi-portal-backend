@@ -46,7 +46,8 @@ use presentation::{
         notification_handler::{fetch_by_request_user, update_read_state},
         search_handler::cross_search,
         user_handler::{
-            end_session, get_my_user_info, link_discord, patch_user_role, start_session, user_list,
+            end_session, get_my_user_info, link_discord, patch_user_role, start_session,
+            unlink_discord, user_list,
         },
     },
 };
@@ -183,7 +184,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health_check))
         .route("/session", post(start_session).delete(end_session))
         .with_state(shared_repository.to_owned())
-        .route("/link-discord", post(link_discord))
+        .route("/link-discord", post(link_discord).delete(unlink_discord))
         .with_state(shared_repository.to_owned())
         .fallback(not_found_handler)
         .layer(layer)

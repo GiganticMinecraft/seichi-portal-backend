@@ -157,3 +157,17 @@ pub async fn link_discord(
         Err(err) => handle_error(err).into_response(),
     }
 }
+
+pub async fn unlink_discord(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+) -> impl IntoResponse {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    match user_use_case.unlink_discord_user(&user).await {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}

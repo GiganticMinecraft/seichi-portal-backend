@@ -119,6 +119,14 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .map_err(Into::into)
     }
 
+    async fn unlink_discord_user(&self, user: &User) -> Result<(), Error> {
+        self.client
+            .user()
+            .unlink_discord_user(user)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn fetch_discord_user_id(&self, user: &User) -> Result<Option<DiscordUserId>, Error> {
         self.client
             .user()

@@ -178,6 +178,25 @@ impl UserDatabase for ConnectionPool {
         .map_err(Into::into)
     }
 
+    async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError> {
+        let user_id = user.id.to_string();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "DELETE FROM discord_linked_users WHERE user_id = ?",
+                    [user_id.into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
     async fn fetch_discord_user_id(
         &self,
         user: &User,

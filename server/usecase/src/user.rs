@@ -84,4 +84,8 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .link_discord_user(&discord_user_id, user)
             .await
     }
+
+    pub async fn unlink_discord_user(&self, user: &User) -> Result<(), Error> {
+        self.repository.unlink_discord_user(user).await
+    }
 }

@@ -1,4 +1,3 @@
-use domain::repository::user_repository::UserRepository;
 use domain::{
     form::{
         answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
@@ -10,6 +9,7 @@ use domain::{
             message_repository::MessageRepository,
         },
         notification_repository::NotificationRepository,
+        user_repository::UserRepository,
     },
     types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
     user::models::User,
@@ -18,8 +18,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
     Error,
 };
-use resource::outgoing::connection::ConnectionPool;
-use resource::outgoing::discord_sender::DiscordSender;
+use resource::outgoing::{connection::ConnectionPool, discord_sender::DiscordSender};
 
 pub struct MessageUseCase<
     'a,

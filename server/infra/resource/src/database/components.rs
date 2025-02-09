@@ -232,6 +232,7 @@ pub trait UserDatabase: Send + Sync {
         discord_user_id: &DiscordUserId,
         user: &User,
     ) -> Result<(), InfraError>;
+    async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError>;
     async fn fetch_discord_user_id(&self, user: &User)
         -> Result<Option<DiscordUserId>, InfraError>;
 }
