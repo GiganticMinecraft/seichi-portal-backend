@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
 
 use axum::{
     http::{
@@ -11,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use common::config::{ENV, HTTP};
+use futures::future;
 use hyper::header::SET_COOKIE;
 use presentation::{
     auth::auth,
@@ -52,6 +53,7 @@ use presentation::{
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde_json::json;
+use serenity::all::ShardManager;
 use tokio::{net::TcpListener, signal};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
@@ -207,10 +209,17 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    axum::serve(listener, router)
-        .with_graceful_shutdown(graceful_handler())
-        .await
-        .expect("Fail to serve.");
+    let mut discord_connection = outgoing::connection::ConnectionPool::new().await;
+    let shared_manager = discord_connection.pool.shard_manager.clone();
+
+    let (_discord, _axum) = future::join(
+        discord_connection.pool.start(),
+        axum::serve(listener, router)
+            .with_graceful_shutdown(graceful_handler(shared_manager))
+            .into_future(),
+    )
+    .await;
+
     Ok(())
 }
 
@@ -222,7 +231,7 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
-async fn graceful_handler() {
+async fn graceful_handler(serenity_shared_manager: Arc<ShardManager>) {
     let ctrl_c = async {
         signal::ctrl_c()
             .await
@@ -243,6 +252,7 @@ async fn graceful_handler() {
     tokio::select! {
         _ = ctrl_c => {
             info!("Gracefully shutdown...");
+            serenity_shared_manager.shutdown_all().await;
         },
         _ = terminate => {},
     }
