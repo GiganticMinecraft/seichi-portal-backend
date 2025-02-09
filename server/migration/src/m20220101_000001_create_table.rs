@@ -24,6 +24,17 @@ impl MigrationTrait for Migration {
         connection
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
+                r"CREATE TABLE IF NOT EXISTS discord_linked_users(
+                    user_id CHAR(36) NOT NULL PRIMARY KEY,
+                    discord_id VARCHAR(18) NOT NULL,
+                    FOREIGN KEY fk_discord_linked_users_id(user_id) REFERENCES users(id)
+                )",
+            ))
+            .await?;
+
+        connection
+            .execute(Statement::from_string(
+                DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS form_meta_data(
                     id UUID NOT NULL PRIMARY KEY,
                     title TEXT NOT NULL,
@@ -235,6 +246,7 @@ impl MigrationTrait for Migration {
                 r"
                     DROP TABLE IF EXISTS 
                         users,
+                        discord_linked_users,
                         form_meta_data, 
                         form_questions,
                         form_choices,

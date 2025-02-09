@@ -3,13 +3,13 @@ use domain::{
         answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
         message::models::{Message, MessageId},
     },
-    notification::models::{Notification, NotificationSource},
     repository::{
         form::{
             answer_repository::AnswerRepository, form_repository::FormRepository,
             message_repository::MessageRepository,
         },
         notification_repository::NotificationRepository,
+        user_repository::UserRepository,
     },
     types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
     user::models::User,
@@ -18,6 +18,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
     Error,
 };
+use resource::outgoing::{connection::ConnectionPool, discord_sender::DiscordSender};
 
 pub struct MessageUseCase<
     'a,
@@ -25,11 +26,13 @@ pub struct MessageUseCase<
     AnswerRepo: AnswerRepository,
     NotificationRepo: NotificationRepository,
     FormRepo: FormRepository,
+    UserRepo: UserRepository,
 > {
     pub message_repository: &'a MessageRepo,
     pub answer_repository: &'a AnswerRepo,
     pub notification_repository: &'a NotificationRepo,
     pub form_repository: &'a FormRepo,
+    pub user_repository: &'a UserRepo,
 }
 
 impl<
@@ -37,7 +40,8 @@ impl<
         R2: AnswerRepository,
         R3: NotificationRepository,
         R4: FormRepository,
-    > MessageUseCase<'_, R1, R2, R3, R4>
+        R5: UserRepository,
+    > MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
     pub async fn post_message(
         &self,
@@ -75,12 +79,12 @@ impl<
             })
             .await?;
 
+        let form_id = form_answer.form_id().to_owned().into_inner().to_string();
+        let answer_id = form_answer.id().to_owned().into_inner().to_string();
+
         match Message::try_new(form_answer, actor.to_owned(), message_body) {
             Ok(message) => {
-                let notification = Notification::new(
-                    NotificationSource::Message(message.id().to_owned()),
-                    message.related_answer().user().to_owned(),
-                );
+                let notification_recipient = message.related_answer().user().to_owned();
 
                 let message_sender = message.sender().to_owned();
 
@@ -90,8 +94,28 @@ impl<
                     .await;
 
                 match post_message_result {
-                    Ok(_) if message_sender.id != notification.recipient().id => {
-                        self.notification_repository.create(&notification).await?;
+                    Ok(_) if message_sender.id != notification_recipient.id => {
+                        if let Some(discord_id) = self
+                            .user_repository
+                            .fetch_discord_user_id(&notification_recipient)
+                            .await?
+                        {
+                            ConnectionPool::new()
+                                .await
+                                .send_direct_message(
+                                    discord_id,
+                                    [
+                                        "あなたの回答にメッセージが送信されました。",
+                                        "メッセージを確認してください。",
+                                        &format!(
+                                            "http://localhost:3000/forms/{form_id}/answers/{answer_id}/messages"
+                                        ),
+                                    ]
+                                    .join("\n"),
+                                )
+                                .await?;
+                        }
+
                         Ok(())
                     }
                     Err(error) => Err(error),

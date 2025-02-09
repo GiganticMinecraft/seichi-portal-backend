@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::user::models::{Role, User};
+use domain::user::models::{DiscordUserId, Role, User};
 use errors::infra::InfraError;
 use redis::{Commands, JsonCommands};
 use sha256::digest;
@@ -148,5 +148,80 @@ impl UserDatabase for ConnectionPool {
         redis_connection.del::<&str, ()>(&session_id)?;
 
         Ok(())
+    }
+
+    async fn link_discord_user(
+        &self,
+        discord_user_id: &DiscordUserId,
+        user: &User,
+    ) -> Result<(), InfraError> {
+        let user_id = user.id.to_string();
+        let discord_user_id = discord_user_id.to_owned().into_inner();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    r#"INSERT INTO discord_linked_users (user_id, discord_id)
+                    VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    discord_id = VALUES(discord_id)
+                    "#,
+                    [user_id.into(), discord_user_id.into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError> {
+        let user_id = user.id.to_string();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                execute_and_values(
+                    "DELETE FROM discord_linked_users WHERE user_id = ?",
+                    [user_id.into()],
+                    txn,
+                )
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn fetch_discord_user_id(
+        &self,
+        user: &User,
+    ) -> Result<Option<DiscordUserId>, InfraError> {
+        let user_id = user.id.to_string();
+
+        Ok(self
+            .read_only_transaction(|txn| {
+                Box::pin(async move {
+                    let query = query_one_and_values(
+                        "SELECT discord_id FROM discord_linked_users WHERE user_id = ?",
+                        [user_id.into()],
+                        txn,
+                    )
+                    .await?;
+
+                    query
+                        .map(|rs| {
+                            Ok::<DiscordUserId, InfraError>(DiscordUserId::new(
+                                rs.try_get::<String>("", "discord_id")?,
+                            ))
+                        })
+                        .transpose()
+                })
+            })
+            .await?)
     }
 }

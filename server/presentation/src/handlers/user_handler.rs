@@ -17,7 +17,7 @@ use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::Uuid;
 
-use crate::handlers::error_handler::handle_error;
+use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 
 pub async fn get_my_user_info(Extension(user): Extension<User>) -> impl IntoResponse {
     (
@@ -136,6 +136,38 @@ pub async fn end_session(
             )],
         )
             .into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn link_discord(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Json(discord_token): Json<DiscordOAuthToken>,
+) -> impl IntoResponse {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    match user_use_case
+        .link_discord_user(discord_token.token, &user)
+        .await
+    {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn unlink_discord(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+) -> impl IntoResponse {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    match user_use_case.unlink_discord_user(&user).await {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }

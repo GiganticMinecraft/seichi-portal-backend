@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
 
 use axum::{
     http::{
@@ -11,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use common::config::{ENV, HTTP};
+use futures::future;
 use hyper::header::SET_COOKIE;
 use presentation::{
     auth::auth,
@@ -44,12 +45,16 @@ use presentation::{
         health_check_handler::health_check,
         notification_handler::{fetch_by_request_user, update_read_state},
         search_handler::cross_search,
-        user_handler::{end_session, get_my_user_info, patch_user_role, start_session, user_list},
+        user_handler::{
+            end_session, get_my_user_info, link_discord, patch_user_role, start_session,
+            unlink_discord, user_list,
+        },
     },
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde_json::json;
+use serenity::all::ShardManager;
 use tokio::{net::TcpListener, signal};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
@@ -88,6 +93,8 @@ async fn main() -> anyhow::Result<()> {
 
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
+
+    let mut discord_connection = resource::outgoing::connection::ConnectionPool::new().await;
 
     let shared_repository = Repository::new(conn).into_shared();
 
@@ -177,6 +184,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health_check))
         .route("/session", post(start_session).delete(end_session))
         .with_state(shared_repository.to_owned())
+        .route("/link-discord", post(link_discord).delete(unlink_discord))
+        .with_state(shared_repository.to_owned())
         .fallback(not_found_handler)
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(
@@ -203,10 +212,16 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    axum::serve(listener, router)
-        .with_graceful_shutdown(graceful_handler())
-        .await
-        .expect("Fail to serve.");
+    let shared_manager = discord_connection.pool.shard_manager.clone();
+
+    let (_discord, _axum) = future::join(
+        discord_connection.pool.start(),
+        axum::serve(listener, router)
+            .with_graceful_shutdown(graceful_handler(shared_manager))
+            .into_future(),
+    )
+    .await;
+
     Ok(())
 }
 
@@ -218,7 +233,7 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
-async fn graceful_handler() {
+async fn graceful_handler(serenity_shared_manager: Arc<ShardManager>) {
     let ctrl_c = async {
         signal::ctrl_c()
             .await
@@ -239,6 +254,7 @@ async fn graceful_handler() {
     tokio::select! {
         _ = ctrl_c => {
             info!("Gracefully shutdown...");
+            serenity_shared_manager.shutdown_all().await;
         },
         _ = terminate => {},
     }

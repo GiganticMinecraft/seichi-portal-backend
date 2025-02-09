@@ -120,6 +120,14 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        UseCaseError::DiscordLinkFailed => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "errorCode": "DISCORD_LINK_FAILED",
+                "reason": "Failed to link discord"
+            })),
+        )
+            .into_response(),
     }
 }
 
@@ -241,6 +249,30 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
                 Json(json!({
                     "errorCode": "INTERNAL_SERVER_ERROR",
                     "reason": "Search database Error",
+                })),
+            )
+                .into_response()
+        }
+        InfraError::SerdeJson { cause } => {
+            tracing::error!("SerdeJson Error: {}", cause);
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "errorCode": "INTERNAL_SERVER_ERROR",
+                    "reason": "JSON parse Error",
+                })),
+            )
+                .into_response()
+        }
+        InfraError::SerenityError { cause } => {
+            tracing::error!("Serenity Error: {}", cause);
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "errorCode": "INTERNAL_SERVER_ERROR",
+                    "reason": "Discord API Error",
                 })),
             )
                 .into_response()
