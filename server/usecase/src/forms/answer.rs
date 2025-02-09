@@ -8,10 +8,13 @@ use domain::{
         models::FormId,
         service::DefaultAnswerTitleDomainService,
     },
-    repository::form::{
-        answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
-        comment_repository::CommentRepository, form_repository::FormRepository,
-        question_repository::QuestionRepository,
+    repository::{
+        form::{
+            answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
+            comment_repository::CommentRepository, form_repository::FormRepository,
+            question_repository::QuestionRepository,
+        },
+        user_repository::UserRepository,
     },
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
     user::models::User,
@@ -31,12 +34,14 @@ pub struct AnswerUseCase<
     CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
     QuestionRepo: QuestionRepository,
+    UserRepo: UserRepository,
 > {
     pub answer_repository: &'a AnswerRepo,
     pub form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub question_repository: &'a QuestionRepo,
+    pub user_repository: &'a UserRepo,
 }
 
 impl<
@@ -45,7 +50,8 @@ impl<
         R3: CommentRepository,
         R4: AnswerLabelRepository,
         R5: QuestionRepository,
-    > AnswerUseCase<'_, R1, R2, R3, R4, R5>
+        R6: UserRepository,
+    > AnswerUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
     pub async fn post_answers(
         &self,

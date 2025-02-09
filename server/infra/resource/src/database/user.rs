@@ -185,7 +185,7 @@ impl UserDatabase for ConnectionPool {
             .read_only_transaction(|txn| {
                 Box::pin(async move {
                     let query = query_one_and_values(
-                        "SELECT discord_user_id FROM discord_linked_users WHERE user_id = ?",
+                        "SELECT discord_id FROM discord_linked_users WHERE user_id = ?",
                         [user_id.into()],
                         txn,
                     )
@@ -194,7 +194,7 @@ impl UserDatabase for ConnectionPool {
                     query
                         .map(|rs| {
                             Ok::<DiscordUserId, InfraError>(DiscordUserId::new(
-                                rs.try_get::<String>("", "discord_user_id")?,
+                                rs.try_get::<String>("", "discord_id")?,
                             ))
                         })
                         .transpose()

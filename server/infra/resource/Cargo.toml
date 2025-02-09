@@ -19,7 +19,6 @@ outgoing = { path = "../outgoing" }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
-num-traits = { workspace = true }
 regex = { workspace = true }
 uuid = { workspace = true }
 types = { path = "../../types" }
@@ -31,3 +30,4 @@ serde_json = { workspace = true }
 meilisearch-sdk = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+serenity = { workspace = true }

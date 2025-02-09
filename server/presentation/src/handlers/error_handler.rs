@@ -265,6 +265,18 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
             )
                 .into_response()
         }
+        InfraError::SerenityError { cause } => {
+            tracing::error!("Serenity Error: {}", cause);
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "errorCode": "INTERNAL_SERVER_ERROR",
+                    "reason": "Discord API Error",
+                })),
+            )
+                .into_response()
+        }
     }
 }
 

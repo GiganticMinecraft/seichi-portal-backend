@@ -38,6 +38,8 @@ pub enum InfraError {
     MeiliSearch { cause: String },
     #[error("SerdeJson Error: {}", .cause)]
     SerdeJson { cause: String },
+    #[error("SerdeJson Error: {}", .cause)]
+    SerenityError { cause: String },
 }
 
 impl<E> From<sea_orm::TransactionError<E>> for InfraError
@@ -62,6 +64,14 @@ impl From<meilisearch_sdk::errors::Error> for InfraError {
 impl From<serde_json::Error> for InfraError {
     fn from(value: Error) -> Self {
         InfraError::SerdeJson {
+            cause: value.to_string(),
+        }
+    }
+}
+
+impl From<serenity::Error> for InfraError {
+    fn from(value: serenity::Error) -> Self {
+        InfraError::SerenityError {
             cause: value.to_string(),
         }
     }

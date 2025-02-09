@@ -93,6 +93,8 @@ async fn main() -> anyhow::Result<()> {
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
 
+    let mut discord_connection = resource::outgoing::connection::ConnectionPool::new().await;
+
     let shared_repository = Repository::new(conn).into_shared();
 
     let router = Router::new()
@@ -209,7 +211,6 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    let mut discord_connection = outgoing::connection::ConnectionPool::new().await;
     let shared_manager = discord_connection.pool.shard_manager.clone();
 
     let (_discord, _axum) = future::join(
