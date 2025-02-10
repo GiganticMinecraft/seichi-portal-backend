@@ -1,11 +1,11 @@
+use crate::outgoing::connection::ConnectionPool;
+use domain::notification::discord_sender::DiscordSender;
 use domain::{form::models::WebhookUrl, user::models::DiscordUserId};
 use errors::infra::InfraError;
 use serenity::{
     all::{ExecuteWebhook, UserId},
     async_trait,
 };
-
-use crate::outgoing::{connection::ConnectionPool, discord_sender::DiscordSender};
 
 #[async_trait]
 impl DiscordSender for ConnectionPool {

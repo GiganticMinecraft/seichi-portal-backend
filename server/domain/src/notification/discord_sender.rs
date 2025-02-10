@@ -1,7 +1,9 @@
-use domain::{form::models::WebhookUrl, user::models::DiscordUserId};
+use crate::form::models::WebhookUrl;
+use crate::user::models::DiscordUserId;
+use async_trait::async_trait;
 use errors::infra::InfraError;
 use mockall::automock;
-use serenity::{all::ExecuteWebhook, async_trait};
+use serenity::all::ExecuteWebhook;
 
 #[automock]
 #[async_trait]

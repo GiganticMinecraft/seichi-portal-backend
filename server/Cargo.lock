@@ -1017,7 +1017,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "common",
  "derive-getters",
  "deriving_via",
  "errors",
@@ -1027,11 +1026,10 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "serenity",
  "strum 0.27.0",
  "strum_macros 0.27.0",
  "test-case",
- "tokio",
- "typed-builder",
  "types",
  "uuid",
 ]
@@ -4647,26 +4645,6 @@ dependencies = [
  "thiserror 1.0.69",
  "url",
  "utf-8",
-]
-
-[[package]]
-name = "typed-builder"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e14ed59dc8b7b26cacb2a92bad2e8b1f098806063898ab42a3bd121d7d45e75"
-dependencies = [
- "typed-builder-macro",
-]
-
-[[package]]
-name = "typed-builder-macro"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "560b82d656506509d43abe30e0ba64c56b1953ab3d4fe7ba5902747a7a3cedd5"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.98",
 ]
 
 [[package]]

@@ -1,3 +1,4 @@
+use domain::notification::discord_sender::DiscordSender;
 use domain::{
     form::{
         answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
@@ -18,7 +19,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
     Error,
 };
-use resource::outgoing::{connection::ConnectionPool, discord_sender::DiscordSender};
+use resource::outgoing::connection::ConnectionPool;
 
 pub struct MessageUseCase<
     'a,
