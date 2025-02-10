@@ -64,7 +64,12 @@ jobs:
         name: install sccache
         uses: taiki-e/install-action@v2
         with:
-          tool: sccache,cargo-nextest
+          tool: sccache
+
+      - name: install nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
 
       - name: Install Deps
         run: sudo apt install -y musl-tools build-essential
