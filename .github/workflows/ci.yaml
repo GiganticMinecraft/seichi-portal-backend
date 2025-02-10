@@ -67,11 +67,6 @@ jobs:
         with:
           tool: sccache
 
-      - name: install nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
       - name: Install Deps
         run: sudo apt install -y musl-tools build-essential
 
@@ -88,13 +83,8 @@ jobs:
           deny: warnings
           working-directory: ./server
 
-      - name: Cargo nextest
-        run: cargo nextest run --all-features
-        working-directory: ./server
-
-      # 2025/02/10 時点、nextest は doc test に対応していない
-      - name: Doc tests
-        run: cargo test --doc
+      - name: Cargo test
+        run: cargo test --all-features
         working-directory: ./server
 
       - name: Print sccache stats
