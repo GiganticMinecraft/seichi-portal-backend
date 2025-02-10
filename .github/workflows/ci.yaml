@@ -7,7 +7,6 @@ env:
   RUST_BACKTRACE: full
   SCCACHE_CACHE_SIZE: 2G
   SCCACHE_VERSION: 0.3.3
-  RUSTC_WRAPPER: sccache
   # SCCACHE_RECACHE: 1 # Uncomment this to clear cache, then comment it back out
 
 jobs:
@@ -79,7 +78,7 @@ jobs:
         run: sccache --start-server
 
       - name: Cargo check
-        run: cargo check
+        run: RUSTC_WRAPPER=sccache cargo check
         working-directory: ./server
 
       - uses: LoliGothick/clippy-check@v0.3.2
@@ -89,12 +88,12 @@ jobs:
           working-directory: ./server
 
       - name: Cargo nextest
-        run: cargo nextest run --all-features
+        run: RUSTC_WRAPPER=sccache cargo nextest run --all-features
         working-directory: ./server
 
       # 2025/02/10 時点、nextest は doc test に対応していない
       - name: Doc tests
-        run: cargo test --doc
+        run: RUSTC_WRAPPER=sccache cargo test --doc
         working-directory: ./server
 
       - name: Print sccache stats
