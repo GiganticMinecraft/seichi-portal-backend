@@ -73,8 +73,8 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
 
-      - name: Cargo check
-        run: cargo check
+      - name: Cargo build
+        run: cargo build
         working-directory: ./server
 
       - uses: LoliGothick/clippy-check@v0.3.2
