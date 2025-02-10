@@ -733,7 +733,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "envy",
- "once_cell",
  "proptest",
  "serde",
  "uuid",
@@ -3020,7 +3019,6 @@ dependencies = [
  "meilisearch-sdk",
  "migration",
  "mockall",
- "once_cell",
  "outgoing",
  "redis",
  "regex",
