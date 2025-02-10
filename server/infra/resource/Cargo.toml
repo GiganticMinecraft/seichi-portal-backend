@@ -14,7 +14,6 @@ futures = { workspace = true }
 itertools = { workspace = true }
 migration = { path = "../../migration" }
 mockall = { workspace = true }
-once_cell = { workspace = true }
 outgoing = { path = "../outgoing" }
 sea-orm = { workspace = true }
 serde = { workspace = true }

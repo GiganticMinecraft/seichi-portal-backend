@@ -1,4 +1,5 @@
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -10,7 +11,8 @@ pub struct MySQL {
     pub port: String,
 }
 
-pub static MYSQL: Lazy<MySQL> = Lazy::new(|| envy::prefixed("MYSQL_").from_env::<MySQL>().unwrap());
+pub static MYSQL: LazyLock<MySQL> =
+    LazyLock::new(|| envy::prefixed("MYSQL_").from_env::<MySQL>().unwrap());
 
 #[derive(Deserialize, Debug)]
 pub struct Redis {
@@ -18,7 +20,8 @@ pub struct Redis {
     pub port: String,
 }
 
-pub static REDIS: Lazy<Redis> = Lazy::new(|| envy::prefixed("REDIS_").from_env::<Redis>().unwrap());
+pub static REDIS: LazyLock<Redis> =
+    LazyLock::new(|| envy::prefixed("REDIS_").from_env::<Redis>().unwrap());
 
 #[derive(Deserialize, Debug)]
 pub struct MeiliSearch {
@@ -26,7 +29,7 @@ pub struct MeiliSearch {
     pub api_key: Option<String>,
 }
 
-pub static MEILISEARCH: Lazy<MeiliSearch> = Lazy::new(|| {
+pub static MEILISEARCH: LazyLock<MeiliSearch> = LazyLock::new(|| {
     envy::prefixed("MEILISEARCH_")
         .from_env::<MeiliSearch>()
         .unwrap()
