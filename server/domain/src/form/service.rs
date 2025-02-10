@@ -33,13 +33,14 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
     fn generate_embedded_answer_title(
         default_answer_title: DefaultAnswerTitle,
         answers: &[FormAnswerContent],
+        actor: &User,
     ) -> Result<AnswerTitle, Error> {
         match default_answer_title.into_inner() {
             Some(default_answer_title) => {
                 let default_answer_title = default_answer_title.to_string();
                 let regex = Regex::new(r"\$\d+").unwrap();
 
-                let answer_title: String = regex
+                let answer_replaced_title: String = regex
                     .find_iter(default_answer_title.to_owned().as_str())
                     .fold(default_answer_title, |replaced_title, question_id| {
                         let answer_opt = answers.iter().find(|answer| {
@@ -53,7 +54,10 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
                         )
                     });
 
-                Ok(AnswerTitle::new(Some(answer_title.try_into()?)))
+                let username_replaced_title =
+                    answer_replaced_title.replace("$username", actor.name.as_str());
+
+                Ok(AnswerTitle::new(Some(username_replaced_title.try_into()?)))
             }
             None => Ok(AnswerTitle::new(None)),
         }
@@ -78,7 +82,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
             .default_answer_title()
             .to_owned();
 
-        Self::generate_embedded_answer_title(default_answer_title, answers)
+        Self::generate_embedded_answer_title(default_answer_title, answers, actor)
     }
 }
 
@@ -103,7 +107,7 @@ mod tests {
 
         let default_answer_title = DefaultAnswerTitle::new(Some(
             NonEmptyString::try_new(format!(
-                "Answer to ${}, ${}, ${}",
+                "Answer to ${}, ${}, ${} by $username($username)",
                 first_question_id, second_question_id, third_question_id
             ))
             .unwrap(),
@@ -123,17 +127,24 @@ mod tests {
             },
         ];
 
-        let result =
-            DefaultAnswerTitleDomainService::<
-                MockFormRepository,
-                MockQuestionRepository,
-                MockAnswerRepository,
-            >::generate_embedded_answer_title(default_answer_title, answers.as_slice())
-            .unwrap();
+        let actor = User {
+            name: "respondent_name".to_string(),
+            id: Default::default(),
+            role: Default::default(),
+        };
+
+        let result = DefaultAnswerTitleDomainService::<
+            MockFormRepository,
+            MockQuestionRepository,
+            MockAnswerRepository,
+        >::generate_embedded_answer_title(
+            default_answer_title, answers.as_slice(), &actor
+        )
+        .unwrap();
 
         assert_eq!(
             result.into_inner().unwrap().into_inner(),
-            "Answer to Answer1, Answer2, Answer3"
+            "Answer to Answer1, Answer2, Answer3 by respondent_name(respondent_name)"
         );
     }
 }
