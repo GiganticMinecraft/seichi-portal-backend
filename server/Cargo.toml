@@ -24,7 +24,7 @@ axum = "0.8.1"
 axum-extra = { version = "0.10.0", features = ["typed-header"] }
 serde = { version = "1.0.217", features = ["derive"] }
 anyhow = "1.0.95"
-async-trait = "0.1.85"
+async-trait = "0.1.86"
 sea-orm = { version = "1.1.4", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
 tracing = "0.1.41"
 mockall = "0.13.1"
@@ -34,11 +34,11 @@ strum = "0.27.0"
 strum_macros = "0.27.0"
 proptest = "1.6.0"
 proptest-derive = "0.5.1"
-serde_json = "1.0.137"
+serde_json = "1.0.138"
 itertools = "0.14.0"
 chrono = { version = "0.4.39" }
 futures = "0.3.31"
-uuid = { version = "1.12.1", features = ["v4", "v7"] }
+uuid = { version = "1.13.1", features = ["v4", "v7"] }
 deriving_via = "2.0.0"
 reqwest = { version = "0.12.12", default-features = false, features = ["rustls-tls", "json"] }
 num-traits = "0.2.19"
