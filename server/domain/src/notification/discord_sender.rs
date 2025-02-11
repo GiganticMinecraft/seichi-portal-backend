@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use errors::infra::InfraError;
+use errors::Error;
 use mockall::automock;
 use serenity::all::ExecuteWebhook;
 
@@ -12,10 +12,10 @@ pub trait DiscordSender: Send + Sync {
         &self,
         user_id: DiscordUserId,
         message: String,
-    ) -> Result<(), InfraError>;
+    ) -> Result<(), Error>;
     async fn send_webhook_message(
         &self,
         webhook_url: WebhookUrl,
         message: ExecuteWebhook,
-    ) -> Result<(), InfraError>;
+    ) -> Result<(), Error>;
 }

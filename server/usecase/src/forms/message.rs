@@ -3,7 +3,9 @@ use domain::{
         answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
         message::models::{Message, MessageId},
     },
-    notification::discord_sender::DiscordSender,
+    notification::models::{
+        DiscordDMNotification, DiscordDMNotificationType, NotificationSettings,
+    },
     repository::{
         form::{
             answer_repository::AnswerRepository, form_repository::FormRepository,
@@ -12,7 +14,10 @@ use domain::{
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
-    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{Create, Read},
+    },
     user::models::User,
 };
 use errors::{
@@ -80,8 +85,8 @@ impl<
             })
             .await?;
 
-        let form_id = form_answer.form_id().to_owned().into_inner().to_string();
-        let answer_id = form_answer.id().to_owned().into_inner().to_string();
+        let form_id = form_answer.form_id().to_owned();
+        let answer_id = form_answer.id().to_owned();
 
         match Message::try_new(form_answer, actor.to_owned(), message_body) {
             Ok(message) => {
@@ -101,18 +106,36 @@ impl<
                             .fetch_discord_user_id(&notification_recipient)
                             .await?
                         {
-                            ConnectionPool::new()
-                                .await
-                                .send_direct_message(
+                            let settings = self
+                                .notification_repository
+                                .fetch_notification_settings(notification_recipient.id)
+                                .await?;
+
+                            let settings = match settings {
+                                Some(settings) => settings.try_into_read(actor)?,
+                                None => {
+                                    let settings: AuthorizationGuard<_, Create> =
+                                        NotificationSettings::new(
+                                            notification_recipient.to_owned(),
+                                        )
+                                        .into();
+
+                                    self.notification_repository
+                                        .create_notification_settings(
+                                            &notification_recipient,
+                                            &settings,
+                                        )
+                                        .await?;
+
+                                    settings.into_read().try_into_read(actor)?
+                                }
+                            };
+
+                            DiscordDMNotification::new(ConnectionPool::new().await)
+                                .send_message_notification(
                                     discord_id,
-                                    [
-                                        "あなたの回答にメッセージが送信されました。",
-                                        "メッセージを確認してください。",
-                                        &format!(
-                                            "http://localhost:3000/forms/{form_id}/answers/{answer_id}/messages"
-                                        ),
-                                    ]
-                                    .join("\n"),
+                                    &settings,
+                                    DiscordDMNotificationType::Message { form_id, answer_id },
                                 )
                                 .await?;
                         }
