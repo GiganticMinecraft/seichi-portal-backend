@@ -43,10 +43,11 @@ impl<
         user: User,
     ) -> Result<FormId, Error> {
         let form = Form::new(title, description);
+        let form_id = form.id().to_owned();
 
-        self.form_repository.create(&form, &user).await?;
+        self.form_repository.create(&user, form.into()).await?;
 
-        Ok(form.id().to_owned())
+        Ok(form_id)
     }
 
     /// `actor` が参照可能なフォームのリストを取得する
@@ -89,8 +90,14 @@ impl<
         })
     }
 
-    pub async fn delete_form(&self, form_id: FormId) -> Result<(), Error> {
-        self.form_repository.delete(form_id).await
+    pub async fn delete_form(&self, actor: &User, form_id: FormId) -> Result<(), Error> {
+        let form = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
+
+        self.form_repository.delete(actor, form.into_delete()).await
     }
 
     #[allow(clippy::too_many_arguments)]

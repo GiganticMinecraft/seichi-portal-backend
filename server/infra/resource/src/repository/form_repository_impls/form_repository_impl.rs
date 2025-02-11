@@ -4,13 +4,12 @@ use domain::{
     repository::form::form_repository::FormRepository,
     types::{
         authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Read, Update},
+        authorization_guard_with_context::{Create, Delete, Read, Update},
     },
     user::models::User,
 };
 use errors::Error;
 use itertools::Itertools;
-use outgoing::form_outgoing;
 
 use crate::{
     database::components::{DatabaseComponents, FormDatabase},
@@ -20,10 +19,12 @@ use crate::{
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn create(&self, form: &Form, user: &User) -> Result<(), Error> {
-        self.client
-            .form()
-            .create(form, user)
+    async fn create(
+        &self,
+        actor: &User,
+        form: AuthorizationGuard<Form, Create>,
+    ) -> Result<(), Error> {
+        form.try_create(actor, |form| self.client.form().create(form, actor))?
             .await
             .map_err(Into::into)
     }
@@ -60,16 +61,14 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete(&self, id: FormId) -> Result<(), Error> {
-        let form = self.client.form().get(id).await?;
-
-        match form {
-            None => Ok(()),
-            Some(form) => {
-                form_outgoing::delete(form.try_into()?).await?;
-                self.client.form().delete(id).await.map_err(Into::into)
-            }
-        }
+    async fn delete(
+        &self,
+        actor: &User,
+        form: AuthorizationGuard<Form, Delete>,
+    ) -> Result<(), Error> {
+        form.try_delete(actor, |form| self.client.form().delete(*form.id()))?
+            .await
+            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]

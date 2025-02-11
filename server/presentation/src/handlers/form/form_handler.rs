@@ -110,6 +110,7 @@ pub async fn get_form_handler(
 }
 
 pub async fn delete_form_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
@@ -120,7 +121,7 @@ pub async fn delete_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case.delete_form(form_id).await {
+    match form_use_case.delete_form(&user, form_id).await {
         Ok(form_id) => (StatusCode::OK, Json(json!({ "id": form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
