@@ -1,16 +1,10 @@
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::{
-            models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, FormAnswerContent},
-            settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-        },
+        answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, FormAnswerContent},
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
-        models::{
-            Form, FormDescription, FormId, FormLabel, FormLabelId, FormLabelName, FormTitle,
-            Visibility, WebhookUrl,
-        },
+        models::{Form, FormId, FormLabel, FormLabelId, FormLabelName},
         question::models::Question,
     },
     notification::models::NotificationSettings,
@@ -68,41 +62,7 @@ pub trait FormDatabase: Send + Sync {
     ) -> Result<Vec<FormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
-    async fn update_form_title(
-        &self,
-        form_id: &FormId,
-        form_title: &FormTitle,
-    ) -> Result<(), InfraError>;
-    async fn update_form_description(
-        &self,
-        form_id: &FormId,
-        form_description: &FormDescription,
-    ) -> Result<(), InfraError>;
-    async fn update_form_response_period(
-        &self,
-        form_id: &FormId,
-        response_period: &ResponsePeriod,
-    ) -> Result<(), InfraError>;
-    async fn update_form_webhook_url(
-        &self,
-        form_id: &FormId,
-        webhook_url: &WebhookUrl,
-    ) -> Result<(), InfraError>;
-    async fn update_form_default_answer_title(
-        &self,
-        form_id: &FormId,
-        default_answer_title: &DefaultAnswerTitle,
-    ) -> Result<(), InfraError>;
-    async fn update_form_visibility(
-        &self,
-        form_id: &FormId,
-        visibility: &Visibility,
-    ) -> Result<(), InfraError>;
-    async fn update_form_answer_visibility(
-        &self,
-        form_id: &FormId,
-        visibility: &AnswerVisibility,
-    ) -> Result<(), InfraError>;
+    async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError>;
 }
 
 #[automock]

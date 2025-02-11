@@ -45,7 +45,7 @@ impl FormDescription {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
 pub struct FormSettings {
     #[serde(default)]
     webhook_url: WebhookUrl,
@@ -64,6 +64,24 @@ impl FormSettings {
                 AnswerVisibility::PRIVATE,
                 ResponsePeriod::try_new(None, None).unwrap(),
             ),
+        }
+    }
+
+    pub fn change_webhook_url(self, webhook_url: WebhookUrl) -> Self {
+        Self {
+            webhook_url,
+            ..self
+        }
+    }
+
+    pub fn change_visibility(self, visibility: Visibility) -> Self {
+        Self { visibility, ..self }
+    }
+
+    pub fn change_answer_settings(self, answer_settings: AnswerSettings) -> Self {
+        Self {
+            answer_settings,
+            ..self
         }
     }
 
@@ -174,6 +192,21 @@ impl Form {
             metadata: FormMeta::new(),
             settings: FormSettings::new(),
         }
+    }
+
+    pub fn change_title(self, title: FormTitle) -> Self {
+        Self { title, ..self }
+    }
+
+    pub fn change_description(self, description: FormDescription) -> Self {
+        Self {
+            description,
+            ..self
+        }
+    }
+
+    pub fn change_settings(self, settings: FormSettings) -> Self {
+        Self { settings, ..self }
     }
 
     pub fn from_raw_parts(

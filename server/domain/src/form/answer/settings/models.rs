@@ -81,7 +81,7 @@ impl ResponsePeriod {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
 pub struct AnswerSettings {
     default_answer_title: DefaultAnswerTitle,
     visibility: AnswerVisibility,
@@ -98,6 +98,24 @@ impl AnswerSettings {
             default_answer_title,
             visibility,
             response_period,
+        }
+    }
+
+    pub fn change_default_answer_title(self, title: DefaultAnswerTitle) -> Self {
+        Self {
+            default_answer_title: title,
+            ..self
+        }
+    }
+
+    pub fn change_visibility(self, visibility: AnswerVisibility) -> Self {
+        Self { visibility, ..self }
+    }
+
+    pub fn change_response_period(self, period: ResponsePeriod) -> Self {
+        Self {
+            response_period: period,
+            ..self
         }
     }
 }

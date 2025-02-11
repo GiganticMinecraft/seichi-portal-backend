@@ -127,6 +127,7 @@ pub async fn delete_form_handler(
 }
 
 pub async fn update_form_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
     Json(targets): Json<FormUpdateSchema>,
@@ -140,15 +141,15 @@ pub async fn update_form_handler(
 
     match form_use_case
         .update_form(
-            &form_id,
-            targets.title.as_ref(),
-            targets.description.as_ref(),
-            targets.has_response_period,
-            targets.response_period.as_ref(),
-            targets.webhook.as_ref(),
-            targets.default_answer_title.as_ref(),
-            targets.visibility.as_ref(),
-            targets.answer_visibility.as_ref(),
+            &user,
+            form_id,
+            targets.title,
+            targets.description,
+            targets.response_period,
+            targets.webhook,
+            targets.default_answer_title,
+            targets.visibility,
+            targets.answer_visibility,
         )
         .await
     {

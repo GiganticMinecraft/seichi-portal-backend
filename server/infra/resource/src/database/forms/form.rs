@@ -2,14 +2,12 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use domain::{
-    form::{
-        answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-        models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
-    },
+    form::models::{Form, FormId},
     user::models::User,
 };
 use errors::infra::InfraError;
 use futures::future::try_join;
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 use crate::{
@@ -179,179 +177,62 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn update_form_title(
-        &self,
-        form_id: &FormId,
-        form_title: &FormTitle,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner();
-        let form_title = form_title.to_owned().into_inner();
+    async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError> {
+        let form_meta_update_params = [
+            form.id().into_inner().to_owned().into(),
+            form.title().to_owned().into_inner().into_inner().into(),
+            form.description()
+                .to_owned()
+                .into_inner()
+                .map(NonEmptyString::into_inner)
+                .into(),
+            form.settings().visibility().to_string().into(),
+            form.settings()
+                .answer_settings()
+                .visibility()
+                .to_string()
+                .into(),
+            updated_by.id.into(),
+        ];
+
+        let update_form_webhooks_params = [
+            form.id().into_inner().to_owned().into(),
+            form.settings()
+                .webhook_url()
+                .to_owned()
+                .into_inner()
+                .map(NonEmptyString::into_inner)
+                .into(),
+        ];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r"UPDATE form_meta_data SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    [
-                        form_title.to_string().into(),
-                        form_id.into(),
-                    ],
-                    txn,
+                    r#"INSERT INTO form_meta_data (id, title, description, visibility, answer_visibility, updated_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    title = VALUES(title),
+                    description = VALUES(description),
+                    visibility = VALUES(visibility),
+                    answer_visibility = VALUES(answer_visibility),
+                    updated_by = VALUES(updated_by),
+                    "#,
+                    form_meta_update_params,
+                    txn
+                ).await?;
+
+                execute_and_values(
+                    r#"INSERT INTO form_webhooks (form_id, url)
+                    VALUES (?, ?)
+                    ONDUPLICATE KEY UPDATE
+                    url = VALUES(url)"#,
+                    update_form_webhooks_params,
+                    txn
                 ).await?;
 
                 Ok::<_, InfraError>(())
             })
         }).await
             .map_err(Into::into)
-    }
-
-    #[tracing::instrument]
-    async fn update_form_description(
-        &self,
-        form_id: &FormId,
-        form_description: &FormDescription,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner();
-        let form_description = form_description.to_owned().into_inner();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                execute_and_values(
-                    r"UPDATE form_meta_data SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    [
-                        form_description.map(|des| des.to_string()).into(),
-                        form_id.into(),
-                    ],
-                    txn,
-                ).await?;
-
-                Ok::<_, InfraError>(())
-            })
-        }).await
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument]
-    async fn update_form_response_period(
-        &self,
-        form_id: &FormId,
-        response_period: &ResponsePeriod,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner();
-        let start_at = response_period.start_at().to_owned();
-        let end_at = response_period.end_at().to_owned();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                execute_and_values(
-                    "UPDATE response_period SET start_at = ?, end_at = ? WHERE form_id = ?",
-                    [start_at.into(), end_at.into(), form_id.into()],
-                    txn,
-                )
-                .await?;
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-        .map_err(Into::into)
-    }
-
-    async fn update_form_webhook_url(
-        &self,
-        form_id: &FormId,
-        webhook_url: &WebhookUrl,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner();
-        let webhook_url = webhook_url.to_owned().into_inner();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                execute_and_values(
-                    "UPDATE form_webhooks SET url = ? WHERE form_id = ?",
-                    [webhook_url.map(|s| s.to_string()).into(), form_id.into()],
-                    txn,
-                )
-                .await?;
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-        .map_err(Into::into)
-    }
-
-    async fn update_form_default_answer_title(
-        &self,
-        form_id: &FormId,
-        default_answer_title: &DefaultAnswerTitle,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner();
-        let default_answer_title = default_answer_title.to_owned().into_inner();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                execute_and_values(
-                    "UPDATE default_answer_titles SET title = ? WHERE form_id = ?",
-                    [
-                        default_answer_title.map(|v| v.to_string()).into(),
-                        form_id.into(),
-                    ],
-                    txn,
-                )
-                .await?;
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-        .map_err(Into::into)
-    }
-
-    async fn update_form_visibility(
-        &self,
-        form_id: &FormId,
-        visibility: &Visibility,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner();
-        let visibility = visibility.to_string();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                execute_and_values(
-                    "UPDATE form_meta_data SET visibility = ? WHERE id = ?",
-                    [visibility.into(), form_id.into()],
-                    txn,
-                )
-                .await?;
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-        .map_err(Into::into)
-    }
-
-    async fn update_form_answer_visibility(
-        &self,
-        form_id: &FormId,
-        visibility: &AnswerVisibility,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner();
-        let visibility = visibility.to_string();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                execute_and_values(
-                    "UPDATE form_meta_data SET answer_visibility = ? WHERE id = ?",
-                    [visibility.into(), form_id.into()],
-                    txn,
-                )
-                .await?;
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-        .map_err(Into::into)
     }
 }
