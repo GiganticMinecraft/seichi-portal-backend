@@ -28,8 +28,6 @@ pub struct FormUpdateSchema {
     #[serde(default)]
     pub description: Option<FormDescription>,
     #[serde(default)]
-    pub has_response_period: Option<bool>,
-    #[serde(default)]
     pub response_period: Option<ResponsePeriod>,
     #[serde(default)]
     pub webhook: Option<WebhookUrl>,

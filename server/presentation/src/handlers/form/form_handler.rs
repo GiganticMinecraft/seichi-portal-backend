@@ -110,6 +110,7 @@ pub async fn get_form_handler(
 }
 
 pub async fn delete_form_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
 ) -> impl IntoResponse {
@@ -120,13 +121,14 @@ pub async fn delete_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case.delete_form(form_id).await {
+    match form_use_case.delete_form(&user, form_id).await {
         Ok(form_id) => (StatusCode::OK, Json(json!({ "id": form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
 
 pub async fn update_form_handler(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
     Json(targets): Json<FormUpdateSchema>,
@@ -140,15 +142,15 @@ pub async fn update_form_handler(
 
     match form_use_case
         .update_form(
-            &form_id,
-            targets.title.as_ref(),
-            targets.description.as_ref(),
-            targets.has_response_period,
-            targets.response_period.as_ref(),
-            targets.webhook.as_ref(),
-            targets.default_answer_title.as_ref(),
-            targets.visibility.as_ref(),
-            targets.answer_visibility.as_ref(),
+            &user,
+            form_id,
+            targets.title,
+            targets.description,
+            targets.response_period,
+            targets.webhook,
+            targets.default_answer_title,
+            targets.visibility,
+            targets.answer_visibility,
         )
         .await
     {

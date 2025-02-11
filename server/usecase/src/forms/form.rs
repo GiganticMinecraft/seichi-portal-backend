@@ -13,7 +13,6 @@ use domain::{
     user::models::User,
 };
 use errors::{usecase::UseCaseError::FormNotFound, Error};
-use futures::future::{join_all, OptionFuture};
 
 use crate::dto::FormDto;
 
@@ -44,10 +43,11 @@ impl<
         user: User,
     ) -> Result<FormId, Error> {
         let form = Form::new(title, description);
+        let form_id = form.id().to_owned();
 
-        self.form_repository.create(&form, &user).await?;
+        self.form_repository.create(&user, form.into()).await?;
 
-        Ok(form.id().to_owned())
+        Ok(form_id)
     }
 
     /// `actor` が参照可能なフォームのリストを取得する
@@ -90,71 +90,79 @@ impl<
         })
     }
 
-    pub async fn delete_form(&self, form_id: FormId) -> Result<(), Error> {
-        self.form_repository.delete(form_id).await
+    pub async fn delete_form(&self, actor: &User, form_id: FormId) -> Result<(), Error> {
+        let form = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
+
+        self.form_repository.delete(actor, form.into_delete()).await
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn update_form(
         &self,
-        form_id: &FormId,
-        title: Option<&FormTitle>,
-        description: Option<&FormDescription>,
-        has_response_period: Option<bool>,
-        response_period: Option<&ResponsePeriod>,
-        webhook: Option<&WebhookUrl>,
-        default_answer_title: Option<&DefaultAnswerTitle>,
-        visibility: Option<&Visibility>,
-        answer_visibility: Option<&AnswerVisibility>,
+        actor: &User,
+        form_id: FormId,
+        title: Option<FormTitle>,
+        description: Option<FormDescription>,
+        response_period: Option<ResponsePeriod>,
+        webhook: Option<WebhookUrl>,
+        default_answer_title: Option<DefaultAnswerTitle>,
+        visibility: Option<Visibility>,
+        answer_visibility: Option<AnswerVisibility>,
     ) -> Result<(), Error> {
-        let update_title: OptionFuture<_> = title
-            .map(|title| self.form_repository.update_title(form_id, title))
-            .into();
-        let update_description: OptionFuture<_> = description
-            .map(|description| {
-                self.form_repository
-                    .update_description(form_id, description)
-            })
-            .into();
-        let update_response_period: OptionFuture<_> = if has_response_period.unwrap_or(false) {
-            response_period
-                .map(|response_period| {
-                    self.form_repository
-                        .update_response_period(form_id, response_period)
-                })
-                .into()
-        } else {
-            None.into()
-        };
-        let update_webhook: OptionFuture<_> = webhook
-            .map(|webhook| self.form_repository.update_webhook_url(form_id, webhook))
-            .into();
-        let update_default_answer_title: OptionFuture<_> = default_answer_title
-            .map(|default_answer_title| {
-                self.form_repository
-                    .update_default_answer_title(form_id, default_answer_title)
-            })
-            .into();
-        let update_visibility: OptionFuture<_> = visibility
-            .map(|visibility| self.form_repository.update_visibility(form_id, visibility))
-            .into();
-        let update_answer_visibility: OptionFuture<_> = answer_visibility
-            .map(|visibility| {
-                self.form_repository
-                    .update_answer_visibility(form_id, visibility)
-            })
-            .into();
+        let current_form = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
 
-        join_all(vec![
-            update_title,
-            update_description,
-            update_response_period,
-            update_webhook,
-            update_default_answer_title,
-            update_visibility,
-            update_answer_visibility,
-        ])
-        .await;
+        let updated_form = current_form.into_update().map(|form| {
+            let current_answer_settings = form.settings().answer_settings().to_owned();
+            let updated_answer_settings = match answer_visibility {
+                None => current_answer_settings,
+                Some(visibility) => current_answer_settings.change_visibility(visibility),
+            };
+            let updated_answer_settings = match default_answer_title {
+                None => updated_answer_settings,
+                Some(default_answer_title) => {
+                    updated_answer_settings.change_default_answer_title(default_answer_title)
+                }
+            };
+            let updated_answer_settings = match response_period {
+                None => updated_answer_settings,
+                Some(response_period) => {
+                    updated_answer_settings.change_response_period(response_period)
+                }
+            };
+
+            let current_settings = form.settings().to_owned();
+            let updated_settings = match visibility {
+                None => current_settings,
+                Some(visibility) => current_settings.change_visibility(visibility),
+            };
+            let updated_settings = match webhook {
+                None => updated_settings,
+                Some(webhook) => updated_settings.change_webhook_url(webhook),
+            };
+            let updated_settings = updated_settings.change_answer_settings(updated_answer_settings);
+
+            let updated_form = match title {
+                None => form,
+                Some(title) => form.change_title(title),
+            };
+            let updated_form = match description {
+                None => updated_form,
+                Some(description) => updated_form.change_description(description),
+            };
+            updated_form.change_settings(updated_settings)
+        });
+
+        self.form_repository
+            .update_form(actor, updated_form)
+            .await?;
 
         Ok(())
     }
