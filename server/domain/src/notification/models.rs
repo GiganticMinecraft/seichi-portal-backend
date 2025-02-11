@@ -2,8 +2,9 @@ use derive_getters::Getters;
 use serde::Deserialize;
 
 use crate::{
-    form::message::models::MessageId, types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::User,
+    form::message::models::MessageId,
+    types::authorization_guard::AuthorizationGuardDefinitions,
+    user::models::{Role, User},
 };
 
 #[derive(Deserialize, Debug)]
@@ -108,5 +109,53 @@ impl AuthorizationGuardDefinitions<Notification> for Notification {
 
     fn can_delete(&self, actor: &User) -> bool {
         self.recipient().id == actor.id
+    }
+}
+
+#[derive(Getters, Debug)]
+pub struct NotificationSettings {
+    recipient: User,
+    is_send_message_notification: bool,
+}
+
+impl NotificationSettings {
+    pub fn new(recipient: User) -> Self {
+        Self {
+            recipient,
+            is_send_message_notification: false,
+        }
+    }
+
+    pub fn update_send_message_notification(self, is_send_message_notification: bool) -> Self {
+        Self {
+            is_send_message_notification,
+            ..self
+        }
+    }
+
+    pub fn from_raw_parts(recipient: User, is_send_message_notification: bool) -> Self {
+        Self {
+            recipient,
+            is_send_message_notification,
+        }
+    }
+}
+
+impl AuthorizationGuardDefinitions<NotificationSettings> for NotificationSettings {
+    fn can_create(&self, actor: &User) -> bool {
+        self.recipient() == actor || self.recipient().role == Role::Administrator
+    }
+
+    fn can_read(&self, actor: &User) -> bool {
+        self.recipient() == actor || self.recipient().role == Role::Administrator
+    }
+
+    fn can_update(&self, actor: &User) -> bool {
+        self.recipient() == actor
+    }
+
+    fn can_delete(&self, _actor: &User) -> bool {
+        // NOTE: 明示的に通知設定を削除することはない(削除されるのは User が削除されたときのみ)
+        false
     }
 }

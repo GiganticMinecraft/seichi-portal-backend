@@ -25,3 +25,8 @@ impl From<Notification> for NotificationResponse {
         }
     }
 }
+
+#[derive(Serialize, Debug)]
+pub struct NotificationSettingsResponse {
+    pub is_send_message_notification: bool,
+}

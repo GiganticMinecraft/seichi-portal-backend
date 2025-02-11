@@ -8,13 +8,19 @@ use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
     pub name: String,
     #[cfg_attr(test, proptest(strategy = "arbitrary_uuid_v4()"))]
     pub id: Uuid,
     #[serde(default)]
     pub role: Role,
+}
+
+impl PartialEq for User {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]

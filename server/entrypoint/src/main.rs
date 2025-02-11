@@ -43,7 +43,10 @@ use presentation::{
             },
         },
         health_check_handler::health_check,
-        notification_handler::{fetch_by_request_user, update_read_state},
+        notification_handler::{
+            fetch_by_request_user, get_notification_settings, update_notification_settings,
+            update_read_state,
+        },
         search_handler::cross_search,
         user_handler::{
             end_session, get_my_user_info, link_discord, patch_user_role, start_session,
@@ -179,6 +182,16 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/notifications",
             get(fetch_by_request_user).patch(update_read_state),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/notifications/settings/{uuid}",
+            get(get_notification_settings),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/notifications/settings/me",
+            patch(update_notification_settings),
         )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
