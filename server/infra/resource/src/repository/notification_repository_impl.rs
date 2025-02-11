@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    notification::models::{Notification, NotificationId},
+    notification::models::{Notification, NotificationId, NotificationSettings},
     repository::notification_repository::NotificationRepository,
     types::{
         authorization_guard::AuthorizationGuard,
@@ -77,6 +77,51 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
         self.client
             .notification()
             .update_read_status(update_targets)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn create_notification_settings(
+        &self,
+        actor: &User,
+        notification_settings: &AuthorizationGuard<NotificationSettings, Create>,
+    ) -> Result<(), Error> {
+        notification_settings
+            .try_create(actor, |settings| {
+                self.client
+                    .notification()
+                    .upsert_notification_settings(settings)
+            })?
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_notification_settings(
+        &self,
+        recipient_id: Uuid,
+    ) -> Result<Option<AuthorizationGuard<NotificationSettings, Read>>, Error> {
+        Ok::<_, Error>(
+            self.client
+                .notification()
+                .fetch_notification_settings(recipient_id)
+                .await?
+                .map(TryInto::<NotificationSettings>::try_into)
+                .transpose()?
+                .map(Into::into),
+        )
+    }
+
+    async fn update_notification_settings(
+        &self,
+        actor: &User,
+        notification_settings: AuthorizationGuard<NotificationSettings, Update>,
+    ) -> Result<(), Error> {
+        notification_settings
+            .try_update(actor, |settings| {
+                self.client
+                    .notification()
+                    .upsert_notification_settings(settings)
+            })?
             .await
             .map_err(Into::into)
     }

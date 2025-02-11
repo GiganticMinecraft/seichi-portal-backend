@@ -1,15 +1,23 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Extension, Json,
+};
 use domain::{repository::Repositories, user::models::User};
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::notification::NotificationUseCase;
+use uuid::Uuid;
 
 use crate::{
     handlers::error_handler::handle_error,
     schemas::notification::{
-        notification_request_schemas::NotificationUpdateReadStateSchema,
-        notification_response_schemas::NotificationResponse,
+        notification_request_schemas::{
+            NotificationSettingsUpdateSchema, NotificationUpdateReadStateSchema,
+        },
+        notification_response_schemas::{NotificationResponse, NotificationSettingsResponse},
     },
 };
 
@@ -19,6 +27,7 @@ pub async fn fetch_by_request_user(
 ) -> impl IntoResponse {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
+        user_repository: repository.user_repository(),
     };
 
     let notification_response_or_error = notification_usecase
@@ -51,6 +60,7 @@ pub async fn update_read_state(
 ) -> impl IntoResponse {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
+        user_repository: repository.user_repository(),
     };
 
     let update_targets = update_targets
@@ -77,6 +87,50 @@ pub async fn update_read_state(
         Ok(notification_response) => {
             (StatusCode::OK, Json(json!(notification_response))).into_response()
         }
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn get_notification_settings(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Path(target_user_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let notification_usecase = NotificationUseCase {
+        repository: repository.notification_repository(),
+        user_repository: repository.user_repository(),
+    };
+
+    match notification_usecase
+        .fetch_notification_settings(user, target_user_id)
+        .await
+    {
+        Ok(settings) => {
+            let response = NotificationSettingsResponse {
+                is_send_message_notification: *settings.is_send_message_notification(),
+            };
+
+            (StatusCode::OK, Json(json!(response))).into_response()
+        }
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn update_notification_settings(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Json(notification_settings): Json<NotificationSettingsUpdateSchema>,
+) -> impl IntoResponse {
+    let notification_usecase = NotificationUseCase {
+        repository: repository.notification_repository(),
+        user_repository: repository.user_repository(),
+    };
+
+    match notification_usecase
+        .update_notification_settings(&user, notification_settings.is_send_message_notification)
+        .await
+    {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }

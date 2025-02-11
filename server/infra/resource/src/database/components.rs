@@ -13,7 +13,7 @@ use domain::{
         },
         question::models::Question,
     },
-    notification::models::{Notification, NotificationId},
+    notification::models::{Notification, NotificationId, NotificationSettings},
     user::models::{DiscordUserId, Role, User},
 };
 use errors::infra::InfraError;
@@ -23,7 +23,7 @@ use uuid::Uuid;
 use crate::{
     dto::{
         AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
-        MessageDto, NotificationDto, QuestionDto,
+        MessageDto, NotificationDto, NotificationSettingsDto, QuestionDto,
     },
     external::discord_api::DiscordAPI,
 };
@@ -267,4 +267,12 @@ pub trait NotificationDatabase: Send + Sync {
         &self,
         notification_id_with_is_read: Vec<(NotificationId, bool)>,
     ) -> Result<(), InfraError>;
+    async fn upsert_notification_settings(
+        &self,
+        notification_settings: &NotificationSettings,
+    ) -> Result<(), InfraError>;
+    async fn fetch_notification_settings(
+        &self,
+        recipient_id: Uuid,
+    ) -> Result<Option<NotificationSettingsDto>, InfraError>;
 }

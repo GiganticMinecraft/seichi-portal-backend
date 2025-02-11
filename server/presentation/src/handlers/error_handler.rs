@@ -128,6 +128,14 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        UseCaseError::UserNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "errorCode": "USER_NOT_FOUND",
+                "reason": "User not found"
+            })),
+        )
+            .into_response(),
     }
 }
 

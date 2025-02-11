@@ -1,11 +1,14 @@
-use domain::{form::models::WebhookUrl, user::models::DiscordUserId};
-use errors::infra::InfraError;
+use domain::{
+    form::models::WebhookUrl, notification::discord_sender::DiscordSender,
+    user::models::DiscordUserId,
+};
+use errors::{infra::InfraError, Error};
 use serenity::{
     all::{ExecuteWebhook, UserId},
     async_trait,
 };
 
-use crate::outgoing::{connection::ConnectionPool, discord_sender::DiscordSender};
+use crate::outgoing::connection::ConnectionPool;
 
 #[async_trait]
 impl DiscordSender for ConnectionPool {
@@ -13,7 +16,7 @@ impl DiscordSender for ConnectionPool {
         &self,
         user_id: DiscordUserId,
         message: String,
-    ) -> Result<(), InfraError> {
+    ) -> Result<(), Error> {
         let user_id = UserId::new(
             user_id
                 .into_inner()
@@ -24,9 +27,15 @@ impl DiscordSender for ConnectionPool {
 
         let http = &self.pool.http;
 
-        let dm_channel = user_id.create_dm_channel(http).await?;
+        let dm_channel = user_id
+            .create_dm_channel(http)
+            .await
+            .map_err(Into::<InfraError>::into)?;
 
-        dm_channel.say(&http, message).await?;
+        dm_channel
+            .say(&http, message)
+            .await
+            .map_err(Into::<InfraError>::into)?;
 
         Ok(())
     }
@@ -35,7 +44,7 @@ impl DiscordSender for ConnectionPool {
         &self,
         webhook_url: WebhookUrl,
         message: ExecuteWebhook,
-    ) -> Result<(), InfraError> {
+    ) -> Result<(), Error> {
         if let Some(webhook_url) = webhook_url.into_inner() {
             let http = &self.pool.http;
 
@@ -43,9 +52,13 @@ impl DiscordSender for ConnectionPool {
                 http,
                 webhook_url.into_inner().as_str(),
             )
-            .await?;
+            .await
+            .map_err(Into::<InfraError>::into)?;
 
-            webhook.execute(http, false, message).await?;
+            webhook
+                .execute(http, false, message)
+                .await
+                .map_err(Into::<InfraError>::into)?;
         }
 
         Ok(())

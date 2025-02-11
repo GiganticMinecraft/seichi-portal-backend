@@ -326,3 +326,26 @@ impl TryFrom<NotificationDto> for domain::notification::models::Notification {
         }
     }
 }
+
+pub struct NotificationSettingsDto {
+    pub recipient: UserDto,
+    pub is_send_message_notification: bool,
+}
+
+impl TryFrom<NotificationSettingsDto> for domain::notification::models::NotificationSettings {
+    type Error = errors::domain::DomainError;
+
+    fn try_from(
+        NotificationSettingsDto {
+            recipient,
+            is_send_message_notification,
+        }: NotificationSettingsDto,
+    ) -> Result<Self, Self::Error> {
+        Ok(
+            domain::notification::models::NotificationSettings::from_raw_parts(
+                recipient.try_into()?,
+                is_send_message_notification,
+            ),
+        )
+    }
+}

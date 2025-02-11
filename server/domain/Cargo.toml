@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 async-trait = { workspace = true }
 chrono = { workspace = true }
-common = { path = "../common" }
 derive-getters = "0.5.0"
 deriving_via = { workspace = true }
 errors = { path = "../errors" }
@@ -14,11 +13,10 @@ mockall = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-typed-builder = "0.20.0"
 types = { path = "../types" }
 uuid = { workspace = true }
-tokio = { workspace = true }
 regex = { workspace = true }
+serenity = { workspace = true }
 
 [dev-dependencies]
 chrono = { workspace = true, features = ["arbitrary"] }
@@ -27,3 +25,4 @@ proptest-derive = { workspace = true }
 serde_json = { workspace = true }
 test-case = { workspace = true }
 types = { path = "../types", features = ["arbitrary"] }
+common = { path = "../common" }
