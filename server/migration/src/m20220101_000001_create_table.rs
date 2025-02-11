@@ -231,20 +231,6 @@ impl MigrationTrait for Migration {
             ))
             .await?;
 
-        connection
-            .execute(Statement::from_string(
-                DatabaseBackend::MySql,
-                r"CREATE TABLE IF NOT EXISTS notifications(
-                    id UUID NOT NULL PRIMARY KEY,
-                    source_type ENUM('MESSAGE') NOT NULL,
-                    source_id UUID NOT NULL,
-                    recipient_id CHAR(36) NOT NULL,
-                    is_read BOOL DEFAULT FALSE NOT NULL,
-                    FOREIGN KEY fk_notification_recipient_id(recipient_id) REFERENCES users(id)
-                    )",
-            ))
-            .await?;
-
         Ok(())
     }
 
@@ -269,8 +255,7 @@ impl MigrationTrait for Migration {
                         default_answer_titles,
                         form_answer_comments,
                         form_answer_label_settings,
-                        messages,
-                        notifications;
+                        messages;
                     ",
             ))
             .await?;
