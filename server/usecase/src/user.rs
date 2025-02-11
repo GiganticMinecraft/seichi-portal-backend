@@ -1,6 +1,6 @@
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{Role, User},
+    user::models::{DiscordUserId, Role, User},
 };
 use errors::{usecase::UseCaseError, Error};
 use uuid::Uuid;
@@ -87,5 +87,18 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn unlink_discord_user(&self, user: &User) -> Result<(), Error> {
         self.repository.unlink_discord_user(user).await
+    }
+
+    pub async fn fetch_discord_user(
+        &self,
+        target_user_id: Uuid,
+    ) -> Result<Option<DiscordUserId>, Error> {
+        let user = self
+            .repository
+            .find_by(target_user_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        self.repository.fetch_discord_user_id(&user).await
     }
 }

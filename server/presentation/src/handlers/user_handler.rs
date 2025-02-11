@@ -171,3 +171,25 @@ pub async fn unlink_discord(
         Err(err) => handle_error(err).into_response(),
     }
 }
+
+pub async fn get_discord_link_state(
+    State(repository): State<RealInfrastructureRepository>,
+    Path(uuid): Path<Uuid>,
+) -> impl IntoResponse {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    match user_use_case.fetch_discord_user(uuid).await {
+        Ok(discord_user_id) => {
+            let discord_user_id = discord_user_id.map(|id| id.into_inner());
+
+            (
+                StatusCode::OK,
+                Json(json!({ "discord_user_id": discord_user_id })),
+            )
+                .into_response()
+        }
+        Err(err) => handle_error(err).into_response(),
+    }
+}
