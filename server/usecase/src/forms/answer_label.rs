@@ -1,10 +1,9 @@
-use domain::user::models::User;
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
+    user::models::User,
 };
-use errors::usecase::UseCaseError::LabelNotFound;
-use errors::Error;
+use errors::{usecase::UseCaseError::LabelNotFound, Error};
 
 pub struct AnswerLabelUseCase<'a, AnswerLabelRepo: AnswerLabelRepository> {
     pub answer_label_repository: &'a AnswerLabelRepo,

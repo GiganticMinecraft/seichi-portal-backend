@@ -6,11 +6,10 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
-use crate::types::authorization_guard::AuthorizationGuardDefinitions;
-use crate::user::models::Role;
 use crate::{
     form::{models::FormId, question::models::QuestionId},
-    user::models::User,
+    types::authorization_guard::AuthorizationGuardDefinitions,
+    user::models::{Role, User},
 };
 
 pub type AnswerId = types::Id<AnswerEntry>;

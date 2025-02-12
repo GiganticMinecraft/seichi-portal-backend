@@ -7,7 +7,11 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
-use crate::form::models::FormId;
+use crate::{
+    form::models::FormId,
+    types::authorization_guard::AuthorizationGuardDefinitions,
+    user::models::{Role, User},
+};
 
 pub type QuestionId = types::IntegerId<Question>;
 
@@ -65,6 +69,24 @@ impl Question {
             choices,
             is_required,
         }
+    }
+}
+
+impl AuthorizationGuardDefinitions<Question> for Question {
+    fn can_create(&self, actor: &User) -> bool {
+        actor.role == Role::Administrator
+    }
+
+    fn can_read(&self, _actor: &User) -> bool {
+        true
+    }
+
+    fn can_update(&self, actor: &User) -> bool {
+        actor.role == Role::Administrator
+    }
+
+    fn can_delete(&self, actor: &User) -> bool {
+        actor.role == Role::Administrator
     }
 }
 

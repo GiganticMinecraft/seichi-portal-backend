@@ -4,10 +4,10 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
-use domain::user::models::User;
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::Repositories,
+    user::models::User,
 };
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::answer_label::AnswerLabelUseCase;

@@ -1,16 +1,19 @@
+use async_trait::async_trait;
+use domain::{
+    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
+    repository::form::answer_label_repository::AnswerLabelRepository,
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{Create, Delete, Read, Update},
+    },
+    user::models::User,
+};
+use errors::Error;
+
 use crate::{
     database::components::{DatabaseComponents, FormAnswerLabelDatabase},
     repository::Repository,
 };
-use async_trait::async_trait;
-use domain::types::authorization_guard::AuthorizationGuard;
-use domain::types::authorization_guard_with_context::{Create, Delete, Read, Update};
-use domain::user::models::User;
-use domain::{
-    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
-    repository::form::answer_label_repository::AnswerLabelRepository,
-};
-use errors::Error;
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<Client> {

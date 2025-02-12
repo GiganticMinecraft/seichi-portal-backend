@@ -1,3 +1,11 @@
+use std::str::FromStr;
+
+use async_trait::async_trait;
+use domain::form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId};
+use errors::infra::InfraError;
+use itertools::Itertools;
+use uuid::Uuid;
+
 use crate::{
     database::{
         components::FormAnswerLabelDatabase,
@@ -8,12 +16,6 @@ use crate::{
     },
     dto::AnswerLabelDto,
 };
-use async_trait::async_trait;
-use domain::form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId};
-use errors::infra::InfraError;
-use itertools::Itertools;
-use std::str::FromStr;
-use uuid::Uuid;
 
 #[async_trait]
 impl FormAnswerLabelDatabase for ConnectionPool {

@@ -74,7 +74,13 @@ impl<
             .ok_or(Error::from(FormNotFound))?
             .try_into_read(actor)?;
 
-        let questions = self.question_repository.get_questions(form_id).await?;
+        let questions = self
+            .question_repository
+            .get_questions(form_id)
+            .await?
+            .into_iter()
+            .map(|question| question.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()?;
         let labels = self
             .form_label_repository
             .fetch_labels_by_form_id(form_id)
