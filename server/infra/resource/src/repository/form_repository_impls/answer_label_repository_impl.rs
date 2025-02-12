@@ -63,6 +63,22 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     }
 
     #[tracing::instrument(skip(self))]
+    async fn get_labels_for_answers_by_label_ids(
+        &self,
+        label_ids: Vec<AnswerLabelId>,
+    ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+        Ok(self
+            .client
+            .form_answer_label()
+            .get_labels_for_answers_by_label_ids(label_ids)
+            .await?
+            .into_iter()
+            .map(Into::<AnswerLabel>::into)
+            .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
+            .collect::<Vec<_>>())
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
@@ -113,9 +129,15 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     #[tracing::instrument(skip(self))]
     async fn replace_answer_labels(
         &self,
+        actor: &User,
         answer_id: AnswerId,
-        label_ids: Vec<AnswerLabelId>,
+        labels: Vec<AuthorizationGuard<AnswerLabel, Update>>,
     ) -> Result<(), Error> {
+        let label_ids = labels
+            .into_iter()
+            .map(|guard| guard.try_into_update(actor, |label| *label.id()))
+            .collect::<Result<Vec<_>, _>>()?;
+
         self.client
             .form_answer_label()
             .replace_answer_labels(answer_id, label_ids)

@@ -26,6 +26,10 @@ pub trait AnswerLabelRepository: Send + Sync + 'static {
         &self,
         label_id: AnswerLabelId,
     ) -> Result<Option<AuthorizationGuard<AnswerLabel, Read>>, Error>;
+    async fn get_labels_for_answers_by_label_ids(
+        &self,
+        label_ids: Vec<AnswerLabelId>,
+    ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error>;
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
@@ -42,7 +46,8 @@ pub trait AnswerLabelRepository: Send + Sync + 'static {
     ) -> Result<(), Error>;
     async fn replace_answer_labels(
         &self,
+        actor: &User,
         answer_id: AnswerId,
-        label_ids: Vec<AnswerLabelId>,
+        labels: Vec<AuthorizationGuard<AnswerLabel, Update>>,
     ) -> Result<(), Error>;
 }

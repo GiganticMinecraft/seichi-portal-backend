@@ -60,11 +60,20 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
 
     pub async fn replace_answer_labels(
         &self,
+        actor: &User,
         answer_id: AnswerId,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), Error> {
+        let labels = self
+            .answer_label_repository
+            .get_labels_for_answers_by_label_ids(label_ids)
+            .await?
+            .into_iter()
+            .map(|label| label.into_update())
+            .collect::<Vec<_>>();
+
         self.answer_label_repository
-            .replace_answer_labels(answer_id, label_ids)
+            .replace_answer_labels(actor, answer_id, labels)
             .await
     }
 }

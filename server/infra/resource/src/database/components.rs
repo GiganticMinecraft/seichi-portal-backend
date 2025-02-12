@@ -95,6 +95,10 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
         &self,
         label_id: AnswerLabelId,
     ) -> Result<Option<AnswerLabelDto>, InfraError>;
+    async fn get_labels_for_answers_by_label_ids(
+        &self,
+        label_ids: Vec<AnswerLabelId>,
+    ) -> Result<Vec<AnswerLabelDto>, InfraError>;
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,

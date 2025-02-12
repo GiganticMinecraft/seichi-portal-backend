@@ -87,6 +87,7 @@ pub async fn edit_label_for_answers(
 }
 
 pub async fn replace_answer_labels(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(answer_id): Path<AnswerId>,
     Json(label_ids): Json<ReplaceAnswerLabelSchema>,
@@ -96,7 +97,7 @@ pub async fn replace_answer_labels(
     };
 
     match answer_label_use_case
-        .replace_answer_labels(answer_id, label_ids.labels)
+        .replace_answer_labels(&user, answer_id, label_ids.labels)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),
