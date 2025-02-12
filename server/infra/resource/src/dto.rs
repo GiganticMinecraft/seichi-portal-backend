@@ -204,18 +204,13 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
 }
 
 pub struct AnswerLabelDto {
-    pub id: i32,
+    pub id: Uuid,
     pub name: String,
 }
 
-impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
-    type Error = errors::domain::DomainError;
-
-    fn try_from(AnswerLabelDto { id, name }: AnswerLabelDto) -> Result<Self, Self::Error> {
-        Ok(domain::form::answer::models::AnswerLabel {
-            id: id.into(),
-            name,
-        })
+impl From<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
+    fn from(AnswerLabelDto { id, name }: AnswerLabelDto) -> Self {
+        domain::form::answer::models::AnswerLabel::from_raw_parts(id.into(), name)
     }
 }
 

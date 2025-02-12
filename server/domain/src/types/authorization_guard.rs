@@ -33,6 +33,16 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
             .try_create(actor, f, &())
     }
 
+    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作 `f` を試みます。
+    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
+    pub fn try_into_create<R, F>(self, actor: &User, f: F) -> Result<R, DomainError>
+    where
+        F: FnOnce(T) -> R,
+    {
+        self.authorization_guard_with_context
+            .try_into_create(actor, f, &())
+    }
+
     /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
@@ -55,6 +65,16 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
     {
         self.authorization_guard_with_context
             .try_update(actor, f, &())
+    }
+
+    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
+    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
+    pub fn try_into_update<R, F>(self, actor: &User, f: F) -> Result<R, DomainError>
+    where
+        F: FnOnce(T) -> R,
+    {
+        self.authorization_guard_with_context
+            .try_into_update(actor, f, &())
     }
 
     /// [`T`] の値に対して map 相当の操作を行います。

@@ -87,6 +87,7 @@ pub async fn edit_label_for_forms(
 }
 
 pub async fn replace_form_labels(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
     Json(label_ids): Json<ReplaceFormLabelSchema>,
@@ -96,7 +97,7 @@ pub async fn replace_form_labels(
     };
 
     match form_label_use_case
-        .replace_form_labels(form_id, label_ids.labels)
+        .replace_form_labels(&user, form_id, label_ids.labels)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),

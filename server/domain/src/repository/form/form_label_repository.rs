@@ -20,6 +20,10 @@ pub trait FormLabelRepository: Send + Sync + 'static {
         actor: &User,
     ) -> Result<(), Error>;
     async fn fetch_labels(&self) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error>;
+    async fn fetch_labels_by_ids(
+        &self,
+        ids: Vec<FormLabelId>,
+    ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error>;
     async fn fetch_label(
         &self,
         id: FormLabelId,
@@ -41,7 +45,8 @@ pub trait FormLabelRepository: Send + Sync + 'static {
     ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error>;
     async fn replace_form_labels(
         &self,
+        actor: &User,
         form_id: FormId,
-        label_ids: Vec<FormLabelId>,
+        labels: Vec<AuthorizationGuard<FormLabel, Update>>,
     ) -> Result<(), Error>;
 }

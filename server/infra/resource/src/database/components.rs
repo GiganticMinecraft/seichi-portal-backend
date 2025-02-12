@@ -91,6 +91,14 @@ pub trait FormAnswerDatabase: Send + Sync {
 pub trait FormAnswerLabelDatabase: Send + Sync {
     async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
     async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError>;
+    async fn get_label_for_answers(
+        &self,
+        label_id: AnswerLabelId,
+    ) -> Result<Option<AnswerLabelDto>, InfraError>;
+    async fn get_labels_for_answers_by_label_ids(
+        &self,
+        label_ids: Vec<AnswerLabelId>,
+    ) -> Result<Vec<AnswerLabelDto>, InfraError>;
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
@@ -151,6 +159,10 @@ pub trait FormCommentDatabase: Send + Sync {
 pub trait FormLabelDatabase: Send + Sync {
     async fn create_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError>;
     async fn fetch_labels(&self) -> Result<Vec<FormLabelDto>, InfraError>;
+    async fn fetch_labels_by_ids(
+        &self,
+        ids: Vec<FormLabelId>,
+    ) -> Result<Vec<FormLabelDto>, InfraError>;
     async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError>;
     async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelDto>, InfraError>;
     async fn edit_label_for_forms(

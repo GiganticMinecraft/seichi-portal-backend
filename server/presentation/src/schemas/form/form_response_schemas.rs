@@ -207,15 +207,15 @@ impl From<domain::form::comment::models::Comment> for AnswerComment {
 
 #[derive(Serialize, Debug)]
 pub(crate) struct AnswerLabels {
-    id: i32,
+    id: Uuid,
     name: String,
 }
 
 impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
     fn from(val: domain::form::answer::models::AnswerLabel) -> Self {
         AnswerLabels {
-            id: val.id.into(),
-            name: val.name,
+            id: val.id().to_owned().into(),
+            name: val.name().to_string(),
         }
     }
 }

@@ -70,11 +70,20 @@ impl<R1: FormLabelRepository> FormLabelUseCase<'_, R1> {
 
     pub async fn replace_form_labels(
         &self,
+        actor: &User,
         form_id: FormId,
         label_ids: Vec<FormLabelId>,
     ) -> Result<(), Error> {
+        let labels = self
+            .form_label_repository
+            .fetch_labels_by_ids(label_ids)
+            .await?
+            .into_iter()
+            .map(|label| label.into_update())
+            .collect::<Vec<_>>();
+
         self.form_label_repository
-            .replace_form_labels(form_id, label_ids)
+            .replace_form_labels(actor, form_id, labels)
             .await
     }
 }

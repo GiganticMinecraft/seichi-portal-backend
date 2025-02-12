@@ -82,6 +82,24 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
         }
     }
 
+    /// [`AuthorizationGuardWithContextDefinitions::can_create`] の条件で作成操作 `f` を試みます。
+    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
+    pub fn try_into_create<R, F>(
+        self,
+        actor: &User,
+        f: F,
+        context: &Context,
+    ) -> Result<R, DomainError>
+    where
+        F: FnOnce(T) -> R,
+    {
+        if self.guard_target.can_create(actor, context) {
+            Ok(f(self.guard_target))
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
     /// [`AuthorizationGuardWithContext`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuardWithContext<T, Read, Context> {
         AuthorizationGuardWithContext {
@@ -113,6 +131,24 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     {
         if self.guard_target.can_update(actor, context) {
             Ok(f(&self.guard_target))
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
+    /// [`AuthorizationGuardWithContextDefinitions::can_update`] の条件で更新操作 `f` を試みます。
+    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
+    pub fn try_into_update<R, F>(
+        self,
+        actor: &User,
+        f: F,
+        context: &Context,
+    ) -> Result<R, DomainError>
+    where
+        F: FnOnce(T) -> R,
+    {
+        if self.guard_target.can_update(actor, context) {
+            Ok(f(self.guard_target))
         } else {
             Err(DomainError::Forbidden)
         }

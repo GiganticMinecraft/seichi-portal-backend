@@ -64,6 +64,45 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
+    async fn fetch_labels_by_ids(
+        &self,
+        ids: Vec<FormLabelId>,
+    ) -> Result<Vec<FormLabelDto>, InfraError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let label_ids = ids
+            .into_iter()
+            .map(|id| id.into_inner().to_string())
+            .collect_vec()
+            .join(", ");
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let labels_rs = query_all(
+                    format!("SELECT id, name FROM label_for_forms WHERE id IN ({label_ids})")
+                        .as_str(),
+                    txn,
+                )
+                .await?;
+
+                labels_rs
+                    .into_iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>(FormLabelDto {
+                            id: Uuid::from_str(rs.try_get::<String>("", "id")?.as_str())?,
+                            name: rs.try_get("", "name")?,
+                        })
+                    })
+                    .collect::<Result<Vec<FormLabelDto>, _>>()
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
     async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
