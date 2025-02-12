@@ -46,6 +46,22 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     }
 
     #[tracing::instrument(skip(self))]
+    async fn fetch_labels_by_ids(
+        &self,
+        ids: Vec<FormLabelId>,
+    ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error> {
+        self.client
+            .form_label()
+            .fetch_labels_by_ids(ids)
+            .await?
+            .into_iter()
+            .map(TryInto::<FormLabel>::try_into)
+            .map_ok(Into::<AuthorizationGuard<_, Read>>::into)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn fetch_label(
         &self,
         id: FormLabelId,
@@ -112,9 +128,15 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     #[tracing::instrument(skip(self))]
     async fn replace_form_labels(
         &self,
+        actor: &User,
         form_id: FormId,
-        label_ids: Vec<FormLabelId>,
+        labels: Vec<AuthorizationGuard<FormLabel, Update>>,
     ) -> Result<(), Error> {
+        let label_ids = labels
+            .into_iter()
+            .map(|guard| guard.try_into_update(actor, |label| label.id().to_owned()))
+            .collect::<Result<Vec<_>, _>>()?;
+
         self.client
             .form_label()
             .replace_form_labels(form_id, label_ids)
