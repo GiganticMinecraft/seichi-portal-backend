@@ -149,6 +149,11 @@ impl<
                     &comment_authorization_context.related_answer_entry_guard_context,
                 )?;
 
+            let labels = labels
+                .into_iter()
+                .map(|label| label.try_into_read(user))
+                .collect::<Result<Vec<_>, _>>()?;
+
             Ok(AnswerDto {
                 form_answer,
                 contents,
@@ -228,6 +233,11 @@ impl<
                     actor,
                     &comment_authorization_context.related_answer_entry_guard_context,
                 )?;
+
+            let labels = labels
+                .into_iter()
+                .map(|label| label.try_into_read(actor))
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(AnswerDto {
                 form_answer,
@@ -312,6 +322,11 @@ impl<
                         user,
                         &comment_authorization_context.related_answer_entry_guard_context,
                     )?;
+
+                let labels = labels
+                    .into_iter()
+                    .map(|label| label.try_into_read(user))
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(AnswerDto {
                     form_answer,

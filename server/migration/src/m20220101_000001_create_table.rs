@@ -174,7 +174,7 @@ impl MigrationTrait for Migration {
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS label_for_form_answers(
-                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    id UUID NOT NULL PRIMARY KEY,
                     name TEXT NOT NULL
                 )",
             ))
@@ -186,7 +186,7 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS label_settings_for_form_answers(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     answer_id UUID NOT NULL,
-                    label_id INT NOT NULL,
+                    label_id UUID NOT NULL,
                     FOREIGN KEY fk_label_settings_for_form_answers_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
                     FOREIGN KEY fk_label_settings_for_form_answers_label_id(label_id) REFERENCES label_for_form_answers(id) ON DELETE CASCADE
                 )",

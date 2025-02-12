@@ -6,6 +6,8 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
+use crate::types::authorization_guard::AuthorizationGuardDefinitions;
+use crate::user::models::Role;
 use crate::{
     form::{models::FormId, question::models::QuestionId},
     user::models::User,
@@ -83,11 +85,42 @@ pub struct FormAnswerContent {
     pub answer: String,
 }
 
-pub type AnswerLabelId = types::IntegerId<AnswerLabel>;
+pub type AnswerLabelId = types::Id<AnswerLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct AnswerLabel {
-    pub id: AnswerLabelId,
-    pub name: String,
+    id: AnswerLabelId,
+    name: String,
+}
+
+impl AnswerLabel {
+    pub fn new(name: String) -> Self {
+        Self {
+            id: AnswerLabelId::new(),
+            name,
+        }
+    }
+
+    pub fn from_raw_parts(id: AnswerLabelId, name: String) -> Self {
+        Self { id, name }
+    }
+}
+
+impl AuthorizationGuardDefinitions<AnswerLabel> for AnswerLabel {
+    fn can_create(&self, actor: &User) -> bool {
+        actor.role == Role::Administrator
+    }
+
+    fn can_read(&self, _actor: &User) -> bool {
+        true
+    }
+
+    fn can_update(&self, actor: &User) -> bool {
+        actor.role == Role::Administrator
+    }
+
+    fn can_delete(&self, actor: &User) -> bool {
+        actor.role == Role::Administrator
+    }
 }

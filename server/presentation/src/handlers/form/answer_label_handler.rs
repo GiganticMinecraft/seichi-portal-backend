@@ -2,8 +2,9 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
+use domain::user::models::User;
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::Repositories,
@@ -17,6 +18,7 @@ use crate::{
 };
 
 pub async fn create_label_for_answers(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Json(label): Json<AnswerLabelSchema>,
 ) -> impl IntoResponse {
@@ -25,7 +27,7 @@ pub async fn create_label_for_answers(
     };
 
     match answer_label_use_case
-        .create_label_for_answers(label.name)
+        .create_label_for_answers(&user, label.name)
         .await
     {
         Ok(_) => StatusCode::CREATED.into_response(),
@@ -34,19 +36,21 @@ pub async fn create_label_for_answers(
 }
 
 pub async fn get_labels_for_answers(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
 
-    match answer_label_use_case.get_labels_for_answers().await {
+    match answer_label_use_case.get_labels_for_answers(&user).await {
         Ok(labels) => (StatusCode::OK, Json(labels)).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
 
 pub async fn delete_label_for_answers(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(label_id): Path<AnswerLabelId>,
 ) -> impl IntoResponse {
@@ -55,7 +59,7 @@ pub async fn delete_label_for_answers(
     };
 
     match answer_label_use_case
-        .delete_label_for_answers(label_id)
+        .delete_label_for_answers(&user, label_id)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),
@@ -64,6 +68,7 @@ pub async fn delete_label_for_answers(
 }
 
 pub async fn edit_label_for_answers(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(label_id): Path<AnswerLabelId>,
     Json(label): Json<AnswerLabelSchema>,
@@ -73,10 +78,7 @@ pub async fn edit_label_for_answers(
     };
 
     match answer_label_use_case
-        .edit_label_for_answers(&AnswerLabel {
-            id: label_id,
-            name: label.name,
-        })
+        .edit_label_for_answers(&user, AnswerLabel::from_raw_parts(label_id, label.name))
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),

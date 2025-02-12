@@ -91,6 +91,10 @@ pub trait FormAnswerDatabase: Send + Sync {
 pub trait FormAnswerLabelDatabase: Send + Sync {
     async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
     async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError>;
+    async fn get_label_for_answers(
+        &self,
+        label_id: AnswerLabelId,
+    ) -> Result<Option<AnswerLabelDto>, InfraError>;
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,

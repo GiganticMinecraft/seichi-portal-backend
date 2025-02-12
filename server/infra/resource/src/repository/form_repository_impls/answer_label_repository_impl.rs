@@ -1,74 +1,108 @@
+use crate::{
+    database::components::{DatabaseComponents, FormAnswerLabelDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::types::authorization_guard::AuthorizationGuard;
+use domain::types::authorization_guard_with_context::{Create, Delete, Read, Update};
+use domain::user::models::User;
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
 };
 use errors::Error;
-use futures::{stream, StreamExt};
-
-use crate::{
-    database::components::{DatabaseComponents, FormAnswerLabelDatabase},
-    repository::Repository,
-};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn create_label_for_answers(&self, label_name: String) -> Result<(), Error> {
-        self.client
-            .form_answer_label()
-            .create_label_for_answers(label_name)
+    async fn create_label_for_answers(
+        &self,
+        actor: &User,
+        label: AuthorizationGuard<AnswerLabel, Create>,
+    ) -> Result<(), Error> {
+        label
+            .try_create(actor, |label| {
+                self.client
+                    .form_answer_label()
+                    .create_label_for_answers(label.name().to_owned())
+            })?
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabel>, Error> {
-        stream::iter(
-            self.client
-                .form_answer_label()
-                .get_labels_for_answers()
-                .await?,
-        )
-        .then(|label_dto| async { Ok(label_dto.try_into()?) })
-        .collect::<Vec<Result<_, _>>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
+    async fn get_labels_for_answers(
+        &self,
+    ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+        Ok(self
+            .client
+            .form_answer_label()
+            .get_labels_for_answers()
+            .await?
+            .into_iter()
+            .map(Into::<AnswerLabel>::into)
+            .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
+            .collect::<Vec<_>>())
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_label_for_answers(
+        &self,
+        label_id: AnswerLabelId,
+    ) -> Result<Option<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+        Ok(self
+            .client
+            .form_answer_label()
+            .get_label_for_answers(label_id)
+            .await?
+            .map(Into::<AnswerLabel>::into)
+            .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into))
     }
 
     #[tracing::instrument(skip(self))]
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
-    ) -> Result<Vec<AnswerLabel>, Error> {
-        self.client
+    ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+        Ok(self
+            .client
             .form_answer_label()
             .get_labels_for_answers_by_answer_id(answer_id)
-            .await
-            .map(|labels| {
-                labels
-                    .into_iter()
-                    .map(|label_dto| label_dto.try_into())
-                    .collect::<Result<Vec<AnswerLabel>, _>>()
+            .await?
+            .into_iter()
+            .map(Into::<AnswerLabel>::into)
+            .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
+            .collect::<Vec<_>>())
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_label_for_answers(
+        &self,
+        actor: &User,
+        label: AuthorizationGuard<AnswerLabel, Delete>,
+    ) -> Result<(), Error> {
+        label
+            .try_delete(actor, |label| {
+                self.client
+                    .form_answer_label()
+                    .delete_label_for_answers(*label.id())
             })?
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), Error> {
-        self.client
-            .form_answer_label()
-            .delete_label_for_answers(label_id)
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), Error> {
-        self.client
-            .form_answer_label()
-            .edit_label_for_answers(label)
+    async fn edit_label_for_answers(
+        &self,
+        actor: &User,
+        label: AuthorizationGuard<AnswerLabel, Update>,
+    ) -> Result<(), Error> {
+        label
+            .try_update(actor, |label| {
+                self.client
+                    .form_answer_label()
+                    .edit_label_for_answers(label)
+            })?
             .await
             .map_err(Into::into)
     }
