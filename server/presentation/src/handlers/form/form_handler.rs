@@ -14,7 +14,9 @@ use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
         form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
-        form_response_schemas::{FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema},
+        form_response_schemas::{
+            FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema, ResponsePeriodSchema,
+        },
     },
 };
 
@@ -64,12 +66,41 @@ pub async fn form_list_handler(
         .await
     {
         Ok(forms) => {
-            let form_list_schema = forms
+            let response_schema = forms
                 .into_iter()
-                .map(Into::<FormListSchema>::into)
+                .map(|(form, labels)| FormListSchema {
+                    id: form.id().to_owned(),
+                    title: form.title().to_owned().into_inner().into_inner(),
+                    description: form
+                        .description()
+                        .to_owned()
+                        .into_inner()
+                        .map(|desc| desc.to_string()),
+                    response_period: ResponsePeriodSchema {
+                        start_at: form
+                            .settings()
+                            .answer_settings()
+                            .response_period()
+                            .start_at()
+                            .map(|start_at| start_at.to_owned()),
+                        end_at: form
+                            .settings()
+                            .answer_settings()
+                            .response_period()
+                            .end_at()
+                            .map(|end_at| end_at.to_owned()),
+                    },
+                    answer_visibility: form
+                        .settings()
+                        .answer_settings()
+                        .visibility()
+                        .to_owned()
+                        .into(),
+                    labels,
+                })
                 .collect_vec();
 
-            (StatusCode::OK, Json(form_list_schema)).into_response()
+            (StatusCode::OK, Json(response_schema)).into_response()
         }
         Err(err) => handle_error(err).into_response(),
     }

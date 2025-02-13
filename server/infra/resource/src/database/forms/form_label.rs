@@ -74,7 +74,7 @@ impl FormLabelDatabase for ConnectionPool {
 
         let label_ids = ids
             .into_iter()
-            .map(|id| id.into_inner().to_string())
+            .map(|id| format!("'{}'", id.into_inner()))
             .collect_vec()
             .join(", ");
 
@@ -134,7 +134,7 @@ impl FormLabelDatabase for ConnectionPool {
                 label_rs
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
+                            id: Uuid::from_str(&rs.try_get::<String>("", "id")?)?,
                             name: rs.try_get("", "name")?,
                         })
                     })
@@ -186,7 +186,7 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
+                            id: Uuid::from_str(&rs.try_get::<String>("", "id")?)?,
                             name: rs.try_get("", "name")?,
                         })
                     })
@@ -207,7 +207,7 @@ impl FormLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 multiple_delete(
                     "DELETE FROM label_settings_for_forms WHERE form_id = ?",
-                    vec![form_id.into_inner().into()],
+                    vec![form_id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;
@@ -215,7 +215,10 @@ impl FormLabelDatabase for ConnectionPool {
                 let params = label_ids
                     .into_iter()
                     .flat_map(|label_id| {
-                        [form_id.into_inner().into(), label_id.into_inner().into()]
+                        [
+                            form_id.into_inner().to_string().into(),
+                            label_id.into_inner().to_string().into(),
+                        ]
                     })
                     .collect_vec();
 
