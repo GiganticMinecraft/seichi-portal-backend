@@ -32,6 +32,7 @@ pub async fn get_my_user_info(Extension(user): Extension<User>) -> impl IntoResp
 }
 
 pub async fn patch_user_role(
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(uuid): Path<Uuid>,
     Query(role): Query<RoleQuery>,
@@ -40,20 +41,21 @@ pub async fn patch_user_role(
         repository: repository.user_repository(),
     };
 
-    match user_use_case.patch_user_role(uuid, role.role).await {
+    match user_use_case.patch_user_role(&actor, uuid, role.role).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
 
 pub async fn user_list(
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> impl IntoResponse {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case.fetch_all_users().await {
+    match user_use_case.fetch_all_users(&actor).await {
         Ok(users) => (StatusCode::OK, Json(json!(users))).into_response(),
         Err(err) => handle_error(err).into_response(),
     }
@@ -150,7 +152,7 @@ pub async fn link_discord(
     };
 
     match user_use_case
-        .link_discord_user(discord_token.token, &user)
+        .link_discord_user(discord_token.token, user)
         .await
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
@@ -166,13 +168,14 @@ pub async fn unlink_discord(
         repository: repository.user_repository(),
     };
 
-    match user_use_case.unlink_discord_user(&user).await {
+    match user_use_case.unlink_discord_user(user).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => handle_error(err).into_response(),
     }
 }
 
 pub async fn get_discord_link_state(
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(uuid): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -180,7 +183,7 @@ pub async fn get_discord_link_state(
         repository: repository.user_repository(),
     };
 
-    match user_use_case.fetch_discord_user(uuid).await {
+    match user_use_case.fetch_discord_user(&actor, uuid).await {
         Ok(discord_user_id) => {
             let discord_user_id = discord_user_id.map(|id| id.into_inner());
 

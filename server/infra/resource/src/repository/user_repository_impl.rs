@@ -2,9 +2,14 @@ use async_trait::async_trait;
 use common::config::ENV;
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{DiscordUserId, Role, Role::Administrator, User},
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{Create, Read, Update},
+    },
+    user::models::{DiscordUserId, Role::Administrator, User},
 };
 use errors::{infra::InfraError::Reqwest, Error};
+use itertools::Itertools;
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use uuid::{uuid, Uuid};
 
@@ -16,24 +21,32 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client> {
-    async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, Error> {
-        self.client.user().find_by(uuid).await.map_err(Into::into)
+    async fn find_by(&self, uuid: Uuid) -> Result<Option<AuthorizationGuard<User, Read>>, Error> {
+        Ok(self.client.user().find_by(uuid).await?.map(Into::into))
     }
 
-    async fn upsert_user(&self, user: &User) -> Result<(), Error> {
-        self.client
-            .user()
-            .upsert_user(user)
+    async fn upsert_user(
+        &self,
+        actor: &User,
+        user: AuthorizationGuard<User, Create>,
+    ) -> Result<(), Error> {
+        user.try_create(actor, |user| self.client.user().upsert_user(user))?
             .await
             .map_err(Into::into)
     }
 
-    async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), Error> {
-        self.client
-            .user()
-            .patch_user_role(uuid, role)
-            .await
-            .map_err(Into::into)
+    async fn patch_user_role(
+        &self,
+        actor: &User,
+        user: AuthorizationGuard<User, Update>,
+    ) -> Result<(), Error> {
+        user.try_update(actor, |user| {
+            self.client
+                .user()
+                .patch_user_role(user.id, user.role.to_owned())
+        })?
+        .await
+        .map_err(Into::into)
     }
 
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error> {
@@ -70,12 +83,15 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         })
     }
 
-    async fn fetch_all_users(&self) -> Result<Vec<User>, Error> {
-        self.client
+    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<User, Read>>, Error> {
+        Ok(self
+            .client
             .user()
             .fetch_all_users()
-            .await
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
     }
 
     async fn start_user_session(
@@ -92,11 +108,12 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     }
 
     async fn fetch_user_by_session_id(&self, session_id: String) -> Result<Option<User>, Error> {
-        self.client
+        Ok(self
+            .client
             .user()
             .fetch_user_by_session_id(session_id)
-            .await
-            .map_err(Into::into)
+            .await?
+            .map(Into::into))
     }
 
     async fn end_user_session(&self, session_id: String) -> Result<(), Error> {
@@ -109,25 +126,34 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
 
     async fn link_discord_user(
         &self,
+        actor: &User,
         discord_user_id: &DiscordUserId,
-        user: &User,
+        user: AuthorizationGuard<User, Update>,
     ) -> Result<(), Error> {
-        self.client
-            .user()
-            .link_discord_user(discord_user_id, user)
+        user.try_update(actor, |user| {
+            self.client.user().link_discord_user(discord_user_id, user)
+        })?
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn unlink_discord_user(
+        &self,
+        actor: &User,
+        user: AuthorizationGuard<User, Update>,
+    ) -> Result<(), Error> {
+        user.try_update(actor, |user| self.client.user().unlink_discord_user(user))?
             .await
             .map_err(Into::into)
     }
 
-    async fn unlink_discord_user(&self, user: &User) -> Result<(), Error> {
-        self.client
-            .user()
-            .unlink_discord_user(user)
-            .await
-            .map_err(Into::into)
-    }
+    async fn fetch_discord_user_id(
+        &self,
+        actor: &User,
+        user: AuthorizationGuard<User, Read>,
+    ) -> Result<Option<DiscordUserId>, Error> {
+        let user = user.try_read(actor)?;
 
-    async fn fetch_discord_user_id(&self, user: &User) -> Result<Option<DiscordUserId>, Error> {
         self.client
             .user()
             .fetch_discord_user_id(user)

@@ -36,7 +36,8 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                     .await?
                     .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-                let notification_settings = NotificationSettings::new(target_user).into();
+                let notification_settings =
+                    NotificationSettings::new(target_user.try_into_read(&actor)?).into();
 
                 self.repository
                     .create_notification_settings(&actor, &notification_settings)

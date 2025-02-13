@@ -26,7 +26,7 @@ impl MigrationTrait for Migration {
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS discord_linked_users(
                     user_id CHAR(36) NOT NULL PRIMARY KEY,
-                    discord_id VARCHAR(18) NOT NULL,
+                    discord_id VARCHAR(18) NOT NULL UNIQUE,
                     FOREIGN KEY fk_discord_linked_users_id(user_id) REFERENCES users(id)
                 )",
             ))
@@ -35,10 +35,10 @@ impl MigrationTrait for Migration {
         connection
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
-                r"CREATE TABLE IF NOT EXISTS discord_notificaiton_settings(
+                r"CREATE TABLE IF NOT EXISTS discord_notification_settings(
                     discord_id VARCHAR(18) NOT NULL PRIMARY KEY,
                     is_send_message_notification BOOL NOT NULL,
-                    FOREIGN KEY fk_discord_notificaiton_settings_id(discord_id) REFERENCES discord_linked_users(discord_id) ON DELETE CASCADE
+                    FOREIGN KEY fk_discord_notification_settings_id(discord_id) REFERENCES discord_linked_users(discord_id) ON DELETE CASCADE
                 )",
             ))
             .await?;
@@ -244,7 +244,7 @@ impl MigrationTrait for Migration {
                     DROP TABLE IF EXISTS 
                         users,
                         discord_linked_users,
-                        discord_notificaiton_settings,
+                        discord_notification_settings,
                         form_meta_data, 
                         form_questions,
                         form_choices,

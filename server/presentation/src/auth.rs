@@ -52,7 +52,7 @@ pub async fn auth(
         }
     };
 
-    match user_use_case.upsert_user(&user).await {
+    match user_use_case.upsert_user(&user, user.to_owned()).await {
         Ok(_) => {
             request.extensions_mut().insert(user);
 
