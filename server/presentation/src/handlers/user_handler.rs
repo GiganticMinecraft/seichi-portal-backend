@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 
-pub async fn get_my_user_info(
+pub async fn get_user_info(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(uuid): Path<Uuid>,
