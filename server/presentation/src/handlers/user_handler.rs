@@ -20,6 +20,33 @@ use uuid::Uuid;
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 
 pub async fn get_my_user_info(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+) -> impl IntoResponse {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    match user_use_case.fetch_user_information(&user, user.id).await {
+        Ok(user_dto) => {
+            let discord_user_id = user_dto.discord_user_id.map(|id| id.to_string());
+
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "uuid": user_dto.user.id.to_string(),
+                    "name": user_dto.user.name,
+                    "role": user_dto.user.role.to_string(),
+                    "discord_user_id": discord_user_id,
+                })),
+            )
+                .into_response()
+        }
+        Err(err) => handle_error(err).into_response(),
+    }
+}
+
+pub async fn get_user_info(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(uuid): Path<Uuid>,
