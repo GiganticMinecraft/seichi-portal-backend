@@ -1,7 +1,7 @@
 use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-        models::{Form, FormDescription, FormId, FormTitle, Visibility, WebhookUrl},
+        models::{Form, FormDescription, FormId, FormLabel, FormTitle, Visibility, WebhookUrl},
     },
     repository::{
         form::{
@@ -56,14 +56,36 @@ impl<
         actor: &User,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<Form>, Error> {
-        Ok(self
+    ) -> Result<Vec<(Form, Vec<FormLabel>)>, Error> {
+        let forms = self
             .form_repository
             .list(offset, limit)
             .await?
             .into_iter()
             .flat_map(|form| form.try_into_read(actor))
-            .collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
+            self.form_label_repository
+                .fetch_labels_by_form_id(*form.id())
+        }))
+        .await?;
+
+        let forms_with_labels = forms
+            .into_iter()
+            .zip(form_labels)
+            .map(|(form, labels)| {
+                Ok::<_, Error>((
+                    form,
+                    labels
+                        .into_iter()
+                        .map(|guard| guard.try_into_read(actor))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(forms_with_labels)
     }
 
     pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<FormDto, Error> {

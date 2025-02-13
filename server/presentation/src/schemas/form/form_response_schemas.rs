@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 #[derive(Serialize, Debug)]
 pub(crate) struct ResponsePeriodSchema {
-    start_at: Option<DateTime<Utc>>,
-    end_at: Option<DateTime<Utc>>,
+    pub start_at: Option<DateTime<Utc>>,
+    pub end_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize, Debug)]
@@ -98,45 +98,12 @@ pub(crate) struct FormSchema {
 
 #[derive(Serialize, Debug)]
 pub(crate) struct FormListSchema {
-    id: FormId,
-    title: String,
-    description: Option<String>,
-    response_period: ResponsePeriodSchema,
-    answer_visibility: AnswerVisibility,
-}
-
-impl From<domain::form::models::Form> for FormListSchema {
-    fn from(form: domain::form::models::Form) -> Self {
-        FormListSchema {
-            id: form.id().to_owned(),
-            title: form.title().to_string(),
-            description: form
-                .description()
-                .to_owned()
-                .into_inner()
-                .map(|desc| desc.to_string()),
-            response_period: ResponsePeriodSchema {
-                start_at: form
-                    .settings()
-                    .answer_settings()
-                    .response_period()
-                    .start_at()
-                    .to_owned(),
-                end_at: form
-                    .settings()
-                    .answer_settings()
-                    .response_period()
-                    .end_at()
-                    .to_owned(),
-            },
-            answer_visibility: form
-                .settings()
-                .answer_settings()
-                .visibility()
-                .to_owned()
-                .into(),
-        }
-    }
+    pub id: FormId,
+    pub title: String,
+    pub description: Option<String>,
+    pub response_period: ResponsePeriodSchema,
+    pub answer_visibility: AnswerVisibility,
+    pub labels: Vec<FormLabel>,
 }
 
 #[derive(Serialize, Debug)]
