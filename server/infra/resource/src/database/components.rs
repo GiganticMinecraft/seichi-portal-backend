@@ -8,7 +8,7 @@ use domain::{
         question::models::Question,
     },
     notification::models::NotificationSettings,
-    user::models::{DiscordUserId, Role, User},
+    user::models::{DiscordUser, Role, User},
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 use crate::{
     dto::{
-        AnswerLabelDto, CommentDto, FormAnswerContentDto, FormAnswerDto, FormDto, FormLabelDto,
-        MessageDto, NotificationSettingsDto, QuestionDto,
+        AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerContentDto, FormAnswerDto, FormDto,
+        FormLabelDto, MessageDto, NotificationSettingsDto, QuestionDto,
     },
     external::discord_api::DiscordAPI,
 };
@@ -201,12 +201,11 @@ pub trait UserDatabase: Send + Sync {
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
     async fn link_discord_user(
         &self,
-        discord_user_id: &DiscordUserId,
+        discord_user: &DiscordUser,
         user: &User,
     ) -> Result<(), InfraError>;
     async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError>;
-    async fn fetch_discord_user_id(&self, user: &User)
-        -> Result<Option<DiscordUserId>, InfraError>;
+    async fn fetch_discord_user(&self, user: &User) -> Result<Option<DiscordUserDto>, InfraError>;
 }
 
 #[automock]

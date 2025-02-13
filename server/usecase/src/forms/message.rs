@@ -101,9 +101,9 @@ impl<
 
                 match post_message_result {
                     Ok(_) if message_sender.id != notification_recipient.id => {
-                        if let Some(discord_id) = self
+                        if let Some(discord_user) = self
                             .user_repository
-                            .fetch_discord_user_id(actor, &notification_recipient.to_owned().into())
+                            .fetch_discord_user(actor, &notification_recipient.to_owned().into())
                             .await?
                         {
                             let settings = self
@@ -133,7 +133,7 @@ impl<
 
                             DiscordDMNotification::new(ConnectionPool::new().await)
                                 .send_message_notification(
-                                    discord_id,
+                                    discord_user.id().to_owned(),
                                     &settings,
                                     DiscordDMNotificationType::Message { form_id, answer_id },
                                 )

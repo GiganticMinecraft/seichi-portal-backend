@@ -6,7 +6,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{DiscordUserId, Role::Administrator, User},
+    user::models::{DiscordUser, DiscordUserId, DiscordUserName, Role::Administrator, User},
 };
 use errors::{infra::InfraError::Reqwest, Error};
 use itertools::Itertools;
@@ -127,11 +127,11 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn link_discord_user(
         &self,
         actor: &User,
-        discord_user_id: &DiscordUserId,
+        discord_user: &DiscordUser,
         user: AuthorizationGuard<User, Update>,
     ) -> Result<(), Error> {
         user.try_update(actor, |user| {
-            self.client.user().link_discord_user(discord_user_id, user)
+            self.client.user().link_discord_user(discord_user, user)
         })?
         .await
         .map_err(Into::into)
@@ -147,30 +147,36 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn fetch_discord_user_id(
+    async fn fetch_discord_user(
         &self,
         actor: &User,
         user: &AuthorizationGuard<User, Read>,
-    ) -> Result<Option<DiscordUserId>, Error> {
+    ) -> Result<Option<DiscordUser>, Error> {
         let user = user.try_read(actor)?;
 
-        self.client
+        Ok(self
+            .client
             .user()
-            .fetch_discord_user_id(user)
-            .await
-            .map_err(Into::into)
+            .fetch_discord_user(user)
+            .await?
+            .map(Into::into))
     }
 
-    async fn fetch_discord_user_id_by_token(
+    async fn fetch_discord_user_by_token(
         &self,
         token: String,
-    ) -> Result<Option<DiscordUserId>, Error> {
+    ) -> Result<Option<DiscordUser>, Error> {
         Ok(self
             .client
             .discord_api()
             .fetch_user(token)
             .await
             .ok()
-            .map(|schema| DiscordUserId::new(schema.id)))
+            .map(|schema| {
+                DiscordUser::new(
+                    DiscordUserId::new(schema.id),
+                    DiscordUserName::new(schema.username),
+                )
+            }))
     }
 }

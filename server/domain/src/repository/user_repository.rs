@@ -8,7 +8,7 @@ use crate::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{DiscordUserId, User},
+    user::models::{DiscordUser, User},
 };
 
 #[automock]
@@ -38,7 +38,7 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn link_discord_user(
         &self,
         actor: &User,
-        discord_user_id: &DiscordUserId,
+        discord_user: &DiscordUser,
         user: AuthorizationGuard<User, Update>,
     ) -> Result<(), Error>;
     async fn unlink_discord_user(
@@ -46,13 +46,13 @@ pub trait UserRepository: Send + Sync + 'static {
         actor: &User,
         user: AuthorizationGuard<User, Update>,
     ) -> Result<(), Error>;
-    async fn fetch_discord_user_id(
+    async fn fetch_discord_user(
         &self,
         actor: &User,
         user: &AuthorizationGuard<User, Read>,
-    ) -> Result<Option<DiscordUserId>, Error>;
-    async fn fetch_discord_user_id_by_token(
+    ) -> Result<Option<DiscordUser>, Error>;
+    async fn fetch_discord_user_by_token(
         &self,
         token: String,
-    ) -> Result<Option<DiscordUserId>, Error>;
+    ) -> Result<Option<DiscordUser>, Error>;
 }

@@ -2,17 +2,20 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::user::models::{DiscordUserId, Role, User};
+use domain::user::models::{DiscordUser, Role, User};
 use errors::infra::InfraError;
 use redis::{Commands, JsonCommands};
 use sha256::digest;
 use uuid::Uuid;
 
-use crate::database::{
-    components::UserDatabase,
-    connection::{
-        execute_and_values, query_all, query_one_and_values, redis_connection, ConnectionPool,
+use crate::{
+    database::{
+        components::UserDatabase,
+        connection::{
+            execute_and_values, query_all, query_one_and_values, redis_connection, ConnectionPool,
+        },
     },
+    dto::DiscordUserDto,
 };
 
 #[async_trait]
@@ -152,21 +155,27 @@ impl UserDatabase for ConnectionPool {
 
     async fn link_discord_user(
         &self,
-        discord_user_id: &DiscordUserId,
+        discord_user: &DiscordUser,
         user: &User,
     ) -> Result<(), InfraError> {
         let user_id = user.id.to_string();
-        let discord_user_id = discord_user_id.to_owned().into_inner();
+        let discord_user_id = discord_user.id().to_owned().into_inner();
+        let discord_username = discord_user.name().to_owned().into_inner().to_owned();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r#"INSERT INTO discord_linked_users (user_id, discord_id)
-                    VALUES (?, ?)
+                    r#"INSERT INTO discord_linked_users (user_id, discord_id, discord_username)
+                    VALUES (?, ?, ?)
                     ON DUPLICATE KEY UPDATE
-                    discord_id = VALUES(discord_id)
+                    discord_id = VALUES(discord_id),
+                    discord_username = VALUES(discord_username)
                     "#,
-                    [user_id.into(), discord_user_id.into()],
+                    [
+                        user_id.into(),
+                        discord_user_id.into(),
+                        discord_username.into(),
+                    ],
                     txn,
                 )
                 .await?;
@@ -197,17 +206,15 @@ impl UserDatabase for ConnectionPool {
         .map_err(Into::into)
     }
 
-    async fn fetch_discord_user_id(
-        &self,
-        user: &User,
-    ) -> Result<Option<DiscordUserId>, InfraError> {
+    async fn fetch_discord_user(&self, user: &User) -> Result<Option<DiscordUserDto>, InfraError> {
         let user_id = user.id.to_string();
 
         Ok(self
             .read_only_transaction(|txn| {
                 Box::pin(async move {
                     let query = query_one_and_values(
-                        "SELECT discord_id FROM discord_linked_users WHERE user_id = ?",
+                        "SELECT discord_id, discord_username FROM discord_linked_users WHERE \
+                         user_id = ?",
                         [user_id.into()],
                         txn,
                     )
@@ -215,9 +222,10 @@ impl UserDatabase for ConnectionPool {
 
                     query
                         .map(|rs| {
-                            Ok::<DiscordUserId, InfraError>(DiscordUserId::new(
-                                rs.try_get::<String>("", "discord_id")?,
-                            ))
+                            Ok::<_, InfraError>(DiscordUserDto {
+                                user_id: rs.try_get::<String>("", "discord_id")?,
+                                username: rs.try_get::<String>("", "discord_username")?,
+                            })
                         })
                         .transpose()
                 })

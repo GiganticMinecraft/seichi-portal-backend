@@ -284,3 +284,17 @@ impl TryFrom<NotificationSettingsDto> for domain::notification::models::Notifica
         )
     }
 }
+
+pub struct DiscordUserDto {
+    pub user_id: String,
+    pub username: String,
+}
+
+impl From<DiscordUserDto> for domain::user::models::DiscordUser {
+    fn from(DiscordUserDto { user_id, username }: DiscordUserDto) -> Self {
+        domain::user::models::DiscordUser::new(
+            domain::user::models::DiscordUserId::new(user_id),
+            domain::user::models::DiscordUserName::new(username),
+        )
+    }
+}

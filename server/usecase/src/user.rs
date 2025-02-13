@@ -1,6 +1,6 @@
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{DiscordUserId, Role, User},
+    user::models::{Role, User},
 };
 use errors::{usecase::UseCaseError, Error};
 use uuid::Uuid;
@@ -102,14 +102,14 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         discord_oauth_token: String,
         user: User,
     ) -> Result<(), Error> {
-        let discord_user_id = self
+        let discord_user = self
             .repository
-            .fetch_discord_user_id_by_token(discord_oauth_token)
+            .fetch_discord_user_by_token(discord_oauth_token)
             .await?
             .ok_or(Error::from(UseCaseError::DiscordLinkFailed))?;
 
         self.repository
-            .link_discord_user(&user.to_owned(), &discord_user_id, user.into())
+            .link_discord_user(&user.to_owned(), &discord_user, user.into())
             .await
     }
 
@@ -130,27 +130,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        let discord_user_id = self.repository.fetch_discord_user_id(actor, &guard).await?;
+        let discord_user = self.repository.fetch_discord_user(actor, &guard).await?;
 
         let user = guard.try_into_read(actor)?;
 
-        Ok(UserDto {
-            user,
-            discord_user_id,
-        })
-    }
-
-    pub async fn fetch_discord_user(
-        &self,
-        actor: &User,
-        target_user_id: Uuid,
-    ) -> Result<Option<DiscordUserId>, Error> {
-        let guard = self
-            .repository
-            .find_by(target_user_id)
-            .await?
-            .ok_or(Error::from(UseCaseError::UserNotFound))?;
-
-        self.repository.fetch_discord_user_id(actor, &guard).await
+        Ok(UserDto { user, discord_user })
     }
 }

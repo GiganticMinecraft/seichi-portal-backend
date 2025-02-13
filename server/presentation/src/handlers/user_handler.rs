@@ -29,7 +29,12 @@ pub async fn get_my_user_info(
 
     match user_use_case.fetch_user_information(&user, user.id).await {
         Ok(user_dto) => {
-            let discord_user_id = user_dto.discord_user_id.map(|id| id.to_string());
+            let discord_user_id_with_name = user_dto.discord_user.map(|user| {
+                (
+                    user.id().to_owned().into_inner(),
+                    user.name().to_owned().into_inner(),
+                )
+            });
 
             (
                 StatusCode::OK,
@@ -37,7 +42,8 @@ pub async fn get_my_user_info(
                     "uuid": user_dto.user.id.to_string(),
                     "name": user_dto.user.name,
                     "role": user_dto.user.role.to_string(),
-                    "discord_user_id": discord_user_id,
+                    "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
+                    "discord_username": discord_user_id_with_name.map(|(_, username)| username),
                 })),
             )
                 .into_response()
@@ -57,7 +63,12 @@ pub async fn get_user_info(
 
     match user_use_case.fetch_user_information(&actor, uuid).await {
         Ok(user_dto) => {
-            let discord_user_id = user_dto.discord_user_id.map(|id| id.to_string());
+            let discord_user_id_with_name = user_dto.discord_user.map(|user| {
+                (
+                    user.id().to_owned().into_inner(),
+                    user.name().to_owned().into_inner(),
+                )
+            });
 
             (
                 StatusCode::OK,
@@ -65,7 +76,8 @@ pub async fn get_user_info(
                     "uuid": user_dto.user.id.to_string(),
                     "name": user_dto.user.name,
                     "role": user_dto.user.role.to_string(),
-                    "discord_user_id": discord_user_id,
+                    "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
+                    "discord_username": discord_user_id_with_name.map(|(_, username)| username),
                 })),
             )
                 .into_response()
