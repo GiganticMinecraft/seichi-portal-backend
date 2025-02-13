@@ -27,6 +27,7 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS discord_linked_users(
                     user_id CHAR(36) NOT NULL PRIMARY KEY,
                     discord_id VARCHAR(18) NOT NULL UNIQUE,
+                    discord_username VARCHAR(32) NOT NULL,
                     FOREIGN KEY fk_discord_linked_users_id(user_id) REFERENCES users(id)
                 )",
             ))

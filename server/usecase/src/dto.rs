@@ -5,7 +5,7 @@ use domain::{
         models::{Form, FormLabel},
         question::models::Question,
     },
-    user::models::DiscordUserId,
+    user::models::DiscordUser,
 };
 
 pub struct AnswerDto {
@@ -23,5 +23,5 @@ pub struct FormDto {
 
 pub struct UserDto {
     pub user: domain::user::models::User,
-    pub discord_user_id: Option<DiscordUserId>,
+    pub discord_user: Option<DiscordUser>,
 }

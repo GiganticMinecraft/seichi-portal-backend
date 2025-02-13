@@ -1,5 +1,6 @@
 #[cfg(test)]
 use common::test_utils::arbitrary_uuid_v4;
+use derive_getters::Getters;
 use deriving_via::DerivingVia;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
@@ -79,5 +80,34 @@ impl DiscordUserId {
         );
 
         Self(user_id)
+    }
+}
+
+#[derive(DerivingVia, Debug)]
+#[deriving(From, Into, IntoInner, Clone)]
+pub struct DiscordUserName(String);
+
+impl DiscordUserName {
+    pub fn new(username: String) -> Self {
+        // NOTE: Discord のユーザー名は 2文字以上32文字以下である
+        //  ref: https://support.discord.com/hc/ja/articles/12620128861463
+        assert!(
+            username.len() >= 2 && username.len() <= 32,
+            "Discord user name must be between 2 and 32 characters long"
+        );
+
+        Self(username)
+    }
+}
+
+#[derive(Getters, Debug)]
+pub struct DiscordUser {
+    id: DiscordUserId,
+    name: DiscordUserName,
+}
+
+impl DiscordUser {
+    pub fn new(id: DiscordUserId, name: DiscordUserName) -> Self {
+        Self { id, name }
     }
 }
