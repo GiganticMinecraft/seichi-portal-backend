@@ -21,7 +21,7 @@ impl NotificationDatabase for ConnectionPool {
         notification_settings: &NotificationSettings,
     ) -> Result<(), InfraError> {
         let params = [
-            notification_settings.recipient().id.into(),
+            notification_settings.recipient().id.to_string().into(),
             notification_settings
                 .is_send_message_notification()
                 .to_owned()
@@ -58,7 +58,7 @@ impl NotificationDatabase for ConnectionPool {
                 let rs = query_one_and_values(
                     r"SELECT is_send_message_notification, name, role
                     FROM discord_notification_settings
-                    INNER JOIN discord_linked_users ON notification_settings.discord_id = discord_linked_users.discord_id
+                    INNER JOIN discord_linked_users ON discord_notification_settings.discord_id = discord_linked_users.discord_id
                     INNER JOIN users ON discord_linked_users.user_id = users.id
                     WHERE user_id = ?",
                     [recipient_id.to_string().into()],
