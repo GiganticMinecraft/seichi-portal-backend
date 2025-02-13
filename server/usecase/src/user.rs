@@ -1,10 +1,11 @@
-use crate::dto::UserDto;
 use domain::{
     repository::user_repository::UserRepository,
     user::models::{DiscordUserId, Role, User},
 };
 use errors::{usecase::UseCaseError, Error};
 use uuid::Uuid;
+
+use crate::dto::UserDto;
 
 pub struct UserUseCase<'a, UserRepo: UserRepository> {
     pub repository: &'a UserRepo,

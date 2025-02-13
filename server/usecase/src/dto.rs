@@ -1,10 +1,12 @@
-use domain::form::{
-    answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
-    comment::models::Comment,
-    models::{Form, FormLabel},
-    question::models::Question,
+use domain::{
+    form::{
+        answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
+        comment::models::Comment,
+        models::{Form, FormLabel},
+        question::models::Question,
+    },
+    user::models::DiscordUserId,
 };
-use domain::user::models::DiscordUserId;
 
 pub struct AnswerDto {
     pub form_answer: AnswerEntry,
