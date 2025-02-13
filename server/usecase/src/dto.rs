@@ -4,6 +4,7 @@ use domain::form::{
     models::{Form, FormLabel},
     question::models::Question,
 };
+use domain::user::models::DiscordUserId;
 
 pub struct AnswerDto {
     pub form_answer: AnswerEntry,
@@ -16,4 +17,9 @@ pub struct FormDto {
     pub form: Form,
     pub questions: Vec<Question>,
     pub labels: Vec<FormLabel>,
+}
+
+pub struct UserDto {
+    pub user: domain::user::models::User,
+    pub discord_user_id: Option<DiscordUserId>,
 }

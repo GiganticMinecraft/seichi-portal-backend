@@ -150,7 +150,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn fetch_discord_user_id(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Read>,
+        user: &AuthorizationGuard<User, Read>,
     ) -> Result<Option<DiscordUserId>, Error> {
         let user = user.try_read(actor)?;
 
