@@ -5,6 +5,8 @@ use domain::{
 use errors::{usecase::UseCaseError, Error};
 use uuid::Uuid;
 
+use crate::dto::UserDto;
+
 pub struct UserUseCase<'a, UserRepo: UserRepository> {
     pub repository: &'a UserRepo,
 }
@@ -117,6 +119,27 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await
     }
 
+    pub async fn fetch_user_information(
+        &self,
+        actor: &User,
+        target_user_id: Uuid,
+    ) -> Result<UserDto, Error> {
+        let guard = self
+            .repository
+            .find_by(target_user_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        let discord_user_id = self.repository.fetch_discord_user_id(actor, &guard).await?;
+
+        let user = guard.try_into_read(actor)?;
+
+        Ok(UserDto {
+            user,
+            discord_user_id,
+        })
+    }
+
     pub async fn fetch_discord_user(
         &self,
         actor: &User,
@@ -128,6 +151,6 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        self.repository.fetch_discord_user_id(actor, guard).await
+        self.repository.fetch_discord_user_id(actor, &guard).await
     }
 }

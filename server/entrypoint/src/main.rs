@@ -46,8 +46,8 @@ use presentation::{
         notification_handler::{get_notification_settings, update_notification_settings},
         search_handler::cross_search,
         user_handler::{
-            end_session, get_discord_link_state, get_my_user_info, link_discord, patch_user_role,
-            start_session, unlink_discord, user_list,
+            end_session, get_my_user_info, link_discord, patch_user_role, start_session,
+            unlink_discord, user_list,
         },
     },
 };
@@ -161,10 +161,12 @@ async fn main() -> anyhow::Result<()> {
             post(create_question_handler).put(put_question_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route("/users", get(get_my_user_info))
-        .route("/users/list", get(user_list))
+        .route(
+            "/users/{uuid}",
+            get(get_my_user_info).patch(patch_user_role),
+        )
         .with_state(shared_repository.to_owned())
-        .route("/users/{uuid}", patch(patch_user_role))
+        .route("/users/list", get(user_list))
         .with_state(shared_repository.to_owned())
         .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
@@ -192,8 +194,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/session", post(start_session).delete(end_session))
         .with_state(shared_repository.to_owned())
         .route("/link-discord", post(link_discord).delete(unlink_discord))
-        .with_state(shared_repository.to_owned())
-        .route("/discord/accounts/{uuid}", get(get_discord_link_state))
         .with_state(shared_repository.to_owned())
         .fallback(not_found_handler)
         .layer(layer)

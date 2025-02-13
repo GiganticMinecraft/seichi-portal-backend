@@ -49,7 +49,7 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn fetch_discord_user_id(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Read>,
+        user: &AuthorizationGuard<User, Read>,
     ) -> Result<Option<DiscordUserId>, Error>;
     async fn fetch_discord_user_id_by_token(
         &self,
