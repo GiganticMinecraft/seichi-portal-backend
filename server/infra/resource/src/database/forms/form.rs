@@ -179,7 +179,6 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError> {
         let form_meta_update_params = [
-            form.id().into_inner().to_owned().into(),
             form.title().to_owned().into_inner().into_inner().into(),
             form.description()
                 .to_owned()
@@ -192,47 +191,49 @@ impl FormDatabase for ConnectionPool {
                 .visibility()
                 .to_string()
                 .into(),
-            updated_by.id.into(),
+            updated_by.id.to_string().into(),
+            form.id().into_inner().to_owned().into(),
         ];
 
         let update_form_webhooks_params = [
-            form.id().into_inner().to_owned().into(),
             form.settings()
                 .webhook_url()
                 .to_owned()
                 .into_inner()
                 .map(NonEmptyString::into_inner)
                 .into(),
+            form.id().into_inner().to_owned().into(),
         ];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r#"INSERT INTO form_meta_data (id, title, description, visibility, answer_visibility, updated_by)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                    title = VALUES(title),
-                    description = VALUES(description),
-                    visibility = VALUES(visibility),
-                    answer_visibility = VALUES(answer_visibility),
-                    updated_by = VALUES(updated_by),
+                    r#"UPDATE form_meta_data SET
+                    title = ?,
+                    description = ?,
+                    visibility = ?,
+                    answer_visibility = ?,
+                    updated_by = ?
+                    WHERE id = ?
                     "#,
                     form_meta_update_params,
-                    txn
-                ).await?;
+                    txn,
+                )
+                .await?;
 
                 execute_and_values(
-                    r#"INSERT INTO form_webhooks (form_id, url)
-                    VALUES (?, ?)
-                    ONDUPLICATE KEY UPDATE
-                    url = VALUES(url)"#,
+                    r#"UPDATE form_webhooks SET
+                        url = ?
+                        WHERE form_id = ?"#,
                     update_form_webhooks_params,
-                    txn
-                ).await?;
+                    txn,
+                )
+                .await?;
 
                 Ok::<_, InfraError>(())
             })
-        }).await
-            .map_err(Into::into)
+        })
+        .await
+        .map_err(Into::into)
     }
 }
