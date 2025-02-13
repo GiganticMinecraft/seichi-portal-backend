@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
+use crate::types::authorization_guard::AuthorizationGuardDefinitions;
+
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
@@ -20,6 +22,24 @@ pub struct User {
 impl PartialEq for User {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
+    }
+}
+
+impl AuthorizationGuardDefinitions<User> for User {
+    fn can_create(&self, actor: &User) -> bool {
+        actor == self
+    }
+
+    fn can_read(&self, _actor: &User) -> bool {
+        true
+    }
+
+    fn can_update(&self, actor: &User) -> bool {
+        actor == self
+    }
+
+    fn can_delete(&self, actor: &User) -> bool {
+        actor == self
     }
 }
 

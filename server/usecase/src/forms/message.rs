@@ -103,7 +103,7 @@ impl<
                     Ok(_) if message_sender.id != notification_recipient.id => {
                         if let Some(discord_id) = self
                             .user_repository
-                            .fetch_discord_user_id(&notification_recipient)
+                            .fetch_discord_user_id(actor, notification_recipient.to_owned().into())
                             .await?
                         {
                             let settings = self

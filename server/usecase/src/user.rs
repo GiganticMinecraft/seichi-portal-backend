@@ -10,20 +10,47 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 }
 
 impl<R: UserRepository> UserUseCase<'_, R> {
-    pub async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, Error> {
-        self.repository.find_by(uuid).await
+    pub async fn find_by(&self, actor: &User, uuid: Uuid) -> Result<Option<User>, Error> {
+        self.repository
+            .find_by(uuid)
+            .await?
+            .map(|guard| guard.try_into_read(actor))
+            .transpose()
+            .map_err(Into::into)
     }
 
-    pub async fn upsert_user(&self, user: &User) -> Result<(), Error> {
-        self.repository.upsert_user(user).await
+    pub async fn upsert_user(&self, actor: &User, upsert_target: User) -> Result<(), Error> {
+        self.repository
+            .upsert_user(actor, upsert_target.into())
+            .await
     }
 
-    pub async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), Error> {
-        self.repository.patch_user_role(uuid, role).await
+    pub async fn patch_user_role(&self, actor: &User, uuid: Uuid, role: Role) -> Result<(), Error> {
+        let current_user_guard = self
+            .repository
+            .find_by(uuid)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        let current_user = current_user_guard.try_into_read(actor)?;
+        let new_role_user = User {
+            role,
+            ..current_user
+        };
+
+        self.repository
+            .patch_user_role(actor, new_role_user.into())
+            .await
     }
 
-    pub async fn fetch_all_users(&self) -> Result<Vec<User>, Error> {
-        self.repository.fetch_all_users().await
+    pub async fn fetch_all_users(&self, actor: &User) -> Result<Vec<User>, Error> {
+        self.repository
+            .fetch_all_users()
+            .await?
+            .into_iter()
+            .map(|guard| guard.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     pub async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error> {
@@ -31,8 +58,11 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
         match fetched_user {
             Some(user) => {
-                self.upsert_user(&user).await?;
-                self.find_by(user.id).await
+                let guard = user.to_owned().into();
+                self.repository.upsert_user(&user, guard).await?;
+                // NOTE: リクエスト時点では token しかわからないので
+                //  token で検索したユーザーが操作者であるとする
+                self.find_by(&user, user.id).await
             }
             None => Ok(None),
         }
@@ -53,14 +83,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         session_id: String,
     ) -> Result<Option<User>, Error> {
-        let fetched_user_uuid = self
-            .repository
-            .fetch_user_by_session_id(session_id)
-            .await?
-            .map(|user| user.id);
+        let user = self.repository.fetch_user_by_session_id(session_id).await?;
 
-        match fetched_user_uuid {
-            Some(uuid) => self.find_by(uuid).await,
+        match user {
+            Some(user) => self.find_by(&user, user.id).await,
             None => Ok(None),
         }
     }
@@ -72,7 +98,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn link_discord_user(
         &self,
         discord_oauth_token: String,
-        user: &User,
+        user: User,
     ) -> Result<(), Error> {
         let discord_user_id = self
             .repository
@@ -81,24 +107,27 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .ok_or(Error::from(UseCaseError::DiscordLinkFailed))?;
 
         self.repository
-            .link_discord_user(&discord_user_id, user)
+            .link_discord_user(&user.to_owned(), &discord_user_id, user.into())
             .await
     }
 
-    pub async fn unlink_discord_user(&self, user: &User) -> Result<(), Error> {
-        self.repository.unlink_discord_user(user).await
+    pub async fn unlink_discord_user(&self, user: User) -> Result<(), Error> {
+        self.repository
+            .unlink_discord_user(&user.to_owned(), user.into())
+            .await
     }
 
     pub async fn fetch_discord_user(
         &self,
+        actor: &User,
         target_user_id: Uuid,
     ) -> Result<Option<DiscordUserId>, Error> {
-        let user = self
+        let guard = self
             .repository
             .find_by(target_user_id)
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        self.repository.fetch_discord_user_id(&user).await
+        self.repository.fetch_discord_user_id(actor, guard).await
     }
 }
