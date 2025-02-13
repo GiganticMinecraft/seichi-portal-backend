@@ -166,9 +166,9 @@ impl UserDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     r#"INSERT INTO discord_linked_users (user_id, discord_id, discord_username)
-                    VALUES (?, ?)
+                    VALUES (?, ?, ?)
                     ON DUPLICATE KEY UPDATE
-                    discord_id = VALUES(discord_id)
+                    discord_id = VALUES(discord_id),
                     discord_username = VALUES(discord_username)
                     "#,
                     [
