@@ -31,7 +31,7 @@ impl NotificationDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r"INSERT INTO notification_settings (discord_id, is_send_message_notification)
+                    r"INSERT INTO discord_notification_settings (discord_id, is_send_message_notification)
                     VALUES ((SELECT discord_id FROM discord_linked_users WHERE user_id = ?), ?)
                     ON DUPLICATE KEY UPDATE
                     is_send_message_notification = VALUES(is_send_message_notification)
@@ -57,7 +57,7 @@ impl NotificationDatabase for ConnectionPool {
             Box::pin(async move {
                 let rs = query_one_and_values(
                     r"SELECT is_send_message_notification, name, role
-                    FROM notification_settings
+                    FROM discord_notification_settings
                     INNER JOIN discord_linked_users ON notification_settings.discord_id = discord_linked_users.discord_id
                     INNER JOIN users ON discord_linked_users.user_id = users.id
                     WHERE user_id = ?",
