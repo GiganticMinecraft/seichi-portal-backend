@@ -72,7 +72,7 @@ impl Question {
     }
 }
 
-impl AuthorizationGuardDefinitions<Question> for Question {
+impl AuthorizationGuardDefinitions for Question {
     fn can_create(&self, actor: &User) -> bool {
         actor.role == Role::Administrator
     }

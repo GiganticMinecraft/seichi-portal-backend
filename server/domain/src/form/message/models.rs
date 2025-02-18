@@ -19,7 +19,7 @@ pub struct Message {
     timestamp: DateTime<Utc>,
 }
 
-impl AuthorizationGuardDefinitions<Message> for Message {
+impl AuthorizationGuardDefinitions for Message {
     /// [`Message`] の作成権限があるかどうかを判定します。
     ///
     /// 作成権限は以下の条件のどちらかを満たしている場合に与えられます。

@@ -26,7 +26,7 @@ impl PartialEq for User {
     }
 }
 
-impl AuthorizationGuardDefinitions<User> for User {
+impl AuthorizationGuardDefinitions for User {
     fn can_create(&self, actor: &User) -> bool {
         actor == self
     }

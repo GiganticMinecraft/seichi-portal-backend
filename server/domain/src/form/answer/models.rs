@@ -106,7 +106,7 @@ impl AnswerLabel {
     }
 }
 
-impl AuthorizationGuardDefinitions<AnswerLabel> for AnswerLabel {
+impl AuthorizationGuardDefinitions for AnswerLabel {
     fn can_create(&self, actor: &User) -> bool {
         actor.role == Role::Administrator
     }

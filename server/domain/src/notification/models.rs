@@ -37,7 +37,7 @@ impl NotificationSettings {
     }
 }
 
-impl AuthorizationGuardDefinitions<NotificationSettings> for NotificationSettings {
+impl AuthorizationGuardDefinitions for NotificationSettings {
     fn can_create(&self, actor: &User) -> bool {
         self.recipient() == actor || self.recipient().role == Role::Administrator
     }
