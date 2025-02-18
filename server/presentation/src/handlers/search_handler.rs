@@ -2,9 +2,10 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use domain::repository::Repositories;
+use domain::user::models::User;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::search::SearchUseCase;
@@ -12,6 +13,7 @@ use usecase::search::SearchUseCase;
 use crate::{handlers::error_handler::handle_error, schemas::search_schemas::SearchQuery};
 
 pub async fn cross_search(
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(search_query): Query<SearchQuery>,
 ) -> impl IntoResponse {
@@ -25,9 +27,11 @@ pub async fn cross_search(
             Json(json!({ "reason": "query is required" })),
         )
             .into_response(),
-        SearchQuery { query: Some(query) } => match search_use_case.cross_search(query).await {
-            Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
+        SearchQuery { query: Some(query) } => {
+            match search_use_case.cross_search(&user, query).await {
+                Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+                Err(err) => handle_error(err).into_response(),
+            }
+        }
     }
 }
