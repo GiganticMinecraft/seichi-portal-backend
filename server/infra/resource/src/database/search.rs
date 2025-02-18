@@ -1,17 +1,16 @@
+use crate::database::{components::SearchDatabase, connection::ConnectionPool};
 use async_trait::async_trait;
+use domain::form::comment::models::Comment;
 use domain::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
         models::{Form, FormLabel},
     },
-    search::models::Comment,
     user::models::User,
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
 use meilisearch_sdk::search::Selectors;
-
-use crate::database::{components::SearchDatabase, connection::ConnectionPool};
 
 #[async_trait]
 impl SearchDatabase for ConnectionPool {

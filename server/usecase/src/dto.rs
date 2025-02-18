@@ -33,5 +33,5 @@ pub struct CrossSearchDto {
     pub answers: Vec<FormAnswerContent>,
     pub label_for_forms: Vec<FormLabel>,
     pub label_for_answers: Vec<AnswerLabel>,
-    pub comments: Vec<domain::search::models::Comment>,
+    pub comments: Vec<Comment>,
 }

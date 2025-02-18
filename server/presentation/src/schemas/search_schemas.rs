@@ -1,14 +1,35 @@
-use domain::form::answer::models::{AnswerLabel, FormAnswerContent};
+use domain::form::answer::models::{AnswerId, AnswerLabel, FormAnswerContent};
+use domain::form::comment::models::{Comment, CommentId};
 use domain::form::models::{Form, FormLabel};
-use domain::search::models::Comment;
 use domain::user::models::User;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use usecase::dto::CrossSearchDto;
+use uuid::Uuid;
 
 #[derive(Deserialize, Debug, PartialEq)]
 pub struct SearchQuery {
     #[serde(default)]
     pub query: Option<String>,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct CommentSchema {
+    pub answer_id: AnswerId,
+    pub id: CommentId,
+    pub content: String,
+    pub commented_by: Uuid,
+}
+
+impl From<Comment> for CommentSchema {
+    fn from(value: Comment) -> Self {
+        Self {
+            answer_id: value.answer_id().to_owned(),
+            id: value.comment_id().to_owned(),
+            content: value.content().to_owned().into_inner().into_inner(),
+            commented_by: value.commented_by().id,
+        }
+    }
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -18,7 +39,7 @@ pub struct CrossSearchResult {
     pub answers: Vec<FormAnswerContent>,
     pub label_for_forms: Vec<FormLabel>,
     pub label_for_answers: Vec<AnswerLabel>,
-    pub comments: Vec<Comment>,
+    pub comments: Vec<CommentSchema>,
 }
 
 impl From<CrossSearchDto> for CrossSearchResult {
@@ -29,7 +50,7 @@ impl From<CrossSearchDto> for CrossSearchResult {
             answers: dto.answers,
             label_for_forms: dto.label_for_forms,
             label_for_answers: dto.label_for_answers,
-            comments: dto.comments,
+            comments: dto.comments.into_iter().map(Into::into).collect_vec(),
         }
     }
 }

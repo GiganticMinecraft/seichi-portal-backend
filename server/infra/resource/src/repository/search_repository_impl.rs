@@ -1,22 +1,22 @@
+use crate::{
+    database::components::{DatabaseComponents, SearchDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::form::comment::models::Comment;
+use domain::form::comment::service::CommentAuthorizationContext;
 use domain::types::authorization_guard::AuthorizationGuard;
-use domain::types::authorization_guard_with_context::Read;
+use domain::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Read};
 use domain::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
         models::{Form, FormLabel},
     },
     repository::search_repository::SearchRepository,
-    search::models::Comment,
     user::models::User,
 };
 use errors::Error;
 use itertools::Itertools;
-
-use crate::{
-    database::components::{DatabaseComponents, SearchDatabase},
-    repository::Repository,
-};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Client> {
@@ -84,11 +84,20 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, Error> {
-        self.client
+    async fn search_comments(
+        &self,
+        query: &str,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
+        Error,
+    > {
+        Ok(self
+            .client
             .search()
             .search_comments(query)
-            .await
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .map(|comment| AuthorizationGuardWithContext::new(comment).into_read())
+            .collect())
     }
 }

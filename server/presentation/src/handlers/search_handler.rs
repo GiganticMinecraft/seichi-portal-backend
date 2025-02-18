@@ -20,6 +20,8 @@ pub async fn cross_search(
 ) -> impl IntoResponse {
     let search_use_case = SearchUseCase {
         repository: repository.search_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
     };
 
     match search_query {
