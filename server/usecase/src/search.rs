@@ -1,5 +1,6 @@
+use crate::dto::CrossSearchDto;
+use domain::repository::search_repository::SearchRepository;
 use domain::user::models::User;
-use domain::{repository::search_repository::SearchRepository, search::models::CrossSearchResult};
 use errors::Error;
 use futures::try_join;
 
@@ -8,11 +9,7 @@ pub struct SearchUseCase<'a, SearchRepo: SearchRepository> {
 }
 
 impl<R: SearchRepository> SearchUseCase<'_, R> {
-    pub async fn cross_search(
-        &self,
-        actor: &User,
-        query: String,
-    ) -> Result<CrossSearchResult, Error> {
+    pub async fn cross_search(&self, actor: &User, query: String) -> Result<CrossSearchDto, Error> {
         let (forms, users, label_for_forms, label_for_answers, answers, comments) = try_join!(
             self.repository.search_forms(&query),
             self.repository.search_users(&query),
@@ -42,7 +39,7 @@ impl<R: SearchRepository> SearchUseCase<'_, R> {
             .flat_map(|guard| guard.try_into_read(actor))
             .collect::<Vec<_>>();
 
-        Ok(CrossSearchResult {
+        Ok(CrossSearchDto {
             forms,
             users,
             label_for_forms,

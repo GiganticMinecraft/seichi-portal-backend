@@ -10,6 +10,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::search::SearchUseCase;
 
+use crate::schemas::search_schemas::CrossSearchResult;
 use crate::{handlers::error_handler::handle_error, schemas::search_schemas::SearchQuery};
 
 pub async fn cross_search(
@@ -29,7 +30,9 @@ pub async fn cross_search(
             .into_response(),
         SearchQuery { query: Some(query) } => {
             match search_use_case.cross_search(&user, query).await {
-                Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+                Ok(result) => {
+                    (StatusCode::OK, Json(json!(CrossSearchResult::from(result)))).into_response()
+                }
                 Err(err) => handle_error(err).into_response(),
             }
         }
