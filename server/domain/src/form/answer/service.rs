@@ -22,9 +22,7 @@ pub struct AnswerEntryAuthorizationContext {
 }
 
 // NOTE: FormAnswerEntry は FormAnswerContent と同じ条件でアクセス制御を行う
-impl AuthorizationGuardWithContextDefinitions<AnswerEntry, AnswerEntryAuthorizationContext>
-    for AnswerEntry
-{
+impl AuthorizationGuardWithContextDefinitions<AnswerEntryAuthorizationContext> for AnswerEntry {
     fn can_create(&self, actor: &User, context: &AnswerEntryAuthorizationContext) -> bool {
         let is_public_form = context.form_visibility == Visibility::PUBLIC;
         let is_within_period = context.response_period.is_within_period(Utc::now());
@@ -55,10 +53,8 @@ pub struct FormAnswerContentAuthorizationContext<'a, Action: Actions> {
 
 // NOTE: FormAnswerContent は FormAnswerEntry と同じ条件でアクセス制御を行う
 impl<Action: Actions>
-    AuthorizationGuardWithContextDefinitions<
-        FormAnswerContent,
-        FormAnswerContentAuthorizationContext<'_, Action>,
-    > for FormAnswerContent
+    AuthorizationGuardWithContextDefinitions<FormAnswerContentAuthorizationContext<'_, Action>>
+    for FormAnswerContent
 {
     fn can_create(
         &self,

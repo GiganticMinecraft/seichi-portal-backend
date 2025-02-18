@@ -33,7 +33,7 @@ mod private {
 /// [`guard_target`] に対して CRUD 操作が可能であるかを定義するための抽象です。
 #[derive(Debug)]
 pub struct AuthorizationGuardWithContext<
-    T: AuthorizationGuardWithContextDefinitions<T, Context>,
+    T: AuthorizationGuardWithContextDefinitions<Context>,
     A: Actions,
     Context,
 > {
@@ -55,7 +55,7 @@ pub struct AuthorizationGuardWithContext<
 //  AuthorizationGuardWithContext<T, Delete> から誤って `.into_read()` 関数を呼び出すことで
 //  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
 //  このような事故を防ぐために、AuthorizationGuardWithContext の Action の変換は上記のように限定されています。
-impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
     AuthorizationGuardWithContext<T, Create, Context>
 {
     pub fn new(guard_target: T) -> Self {
@@ -116,7 +116,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
     AuthorizationGuardWithContext<T, Update, Context>
 {
     /// [`AuthorizationGuardWithContextDefinitions::can_update`] の条件で更新操作 `f` を試みます。
@@ -182,7 +182,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
     AuthorizationGuardWithContext<T, Read, Context>
 {
     /// `actor` が `guard_target` の参照を取得することを試みます。
@@ -238,7 +238,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
     AuthorizationGuardWithContext<T, Delete, Context>
 {
     /// [`AuthorizationGuardWithContextDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
@@ -277,7 +277,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Context>
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Action: Actions, Context>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Action: Actions, Context>
     AuthorizationGuardWithContext<T, Action, Context>
 {
     pub async fn create_context<Fut>(
@@ -307,7 +307,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<T, Context>, Action: Actions, C
     }
 }
 
-pub trait AuthorizationGuardWithContextDefinitions<T, Context> {
+pub trait AuthorizationGuardWithContextDefinitions<Context> {
     fn can_create(&self, actor: &User, context: &Context) -> bool;
     fn can_read(&self, actor: &User, context: &Context) -> bool;
     fn can_update(&self, actor: &User, context: &Context) -> bool;
@@ -333,9 +333,7 @@ mod test {
     #[derive(Clone, Debug)]
     struct Context {}
 
-    impl AuthorizationGuardWithContextDefinitions<AuthorizationGuardWithContextTestStruct, Context>
-        for AuthorizationGuardWithContextTestStruct
-    {
+    impl AuthorizationGuardWithContextDefinitions<Context> for AuthorizationGuardWithContextTestStruct {
         fn can_create(&self, actor: &User, _context: &Context) -> bool {
             actor.role == Role::Administrator
         }

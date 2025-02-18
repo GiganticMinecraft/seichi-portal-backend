@@ -189,7 +189,7 @@ pub trait AuthorizationGuardDefinitions {
     fn can_delete(&self, actor: &User) -> bool;
 }
 
-impl<T> AuthorizationGuardWithContextDefinitions<T, ()> for T
+impl<T> AuthorizationGuardWithContextDefinitions<()> for T
 where
     T: AuthorizationGuardDefinitions,
 {
