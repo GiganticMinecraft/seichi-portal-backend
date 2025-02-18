@@ -16,8 +16,7 @@ pub struct CommentAuthorizationContext<Action: Actions> {
     pub related_answer_entry_guard_context: AnswerEntryAuthorizationContext,
 }
 
-impl<Action: Actions>
-    AuthorizationGuardWithContextDefinitions<Comment, CommentAuthorizationContext<Action>>
+impl<Action: Actions> AuthorizationGuardWithContextDefinitions<CommentAuthorizationContext<Action>>
     for Comment
 {
     fn can_create(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {

@@ -226,7 +226,7 @@ impl Form {
     }
 }
 
-impl AuthorizationGuardDefinitions<Form> for Form {
+impl AuthorizationGuardDefinitions for Form {
     /// [`Form`] の作成権限があるかどうかを判定します。
     ///
     /// 作成権限は以下の条件を満たしている場合に与えられます。
@@ -451,7 +451,7 @@ impl FormLabel {
     }
 }
 
-impl AuthorizationGuardDefinitions<FormLabel> for FormLabel {
+impl AuthorizationGuardDefinitions for FormLabel {
     /// [`FormLabel`] の作成権限があるかどうかを判定します。
     ///
     /// 作成権限は以下の条件を満たしている場合に与えられます。

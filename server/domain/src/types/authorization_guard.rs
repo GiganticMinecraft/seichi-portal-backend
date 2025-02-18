@@ -13,11 +13,11 @@ use crate::{
 /// [`AuthorizationGuard`] は、Context を必要としない [`AuthorizationGuardWithContext`] であり、
 /// [`AuthorizationGuardWithContext<T, A, ()>`] と同等の機能を提供します。
 #[derive(Debug)]
-pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions<T>, A: Actions> {
+pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions, A: Actions> {
     authorization_guard_with_context: AuthorizationGuardWithContext<T, A, ()>,
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
+impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Create> {
     pub(crate) fn new(guard_target: T) -> Self {
         Self {
             authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target),
@@ -57,7 +57,7 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Create> {
     }
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
+impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
     /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
     pub fn try_update<'a, R, F>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
     where
@@ -102,7 +102,7 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Update> {
     }
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
+impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
     /// `actor` が `guard_target` の参照を取得することを試みます。
     pub fn try_read(&self, actor: &User) -> Result<&T, DomainError> {
         self.authorization_guard_with_context.try_read(actor, &())
@@ -129,7 +129,7 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Read> {
     }
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
+impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {
     /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
     pub fn try_delete<'a, R, F>(&'a self, actor: &User, f: F) -> Result<R, DomainError>
     where
@@ -164,7 +164,7 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 ///     pub user: User,
 /// }
 ///
-/// impl AuthorizationGuardDefinitions<GuardTarget> for GuardTarget {
+/// impl AuthorizationGuardDefinitions for GuardTarget {
 ///     fn can_create(&self, actor: &User) -> bool {
 ///         actor.role == Role::Administrator
 ///     }
@@ -182,16 +182,16 @@ impl<T: AuthorizationGuardDefinitions<T>> AuthorizationGuard<T, Delete> {
 ///     }
 /// }
 /// ```
-pub trait AuthorizationGuardDefinitions<T> {
+pub trait AuthorizationGuardDefinitions {
     fn can_create(&self, actor: &User) -> bool;
     fn can_read(&self, actor: &User) -> bool;
     fn can_update(&self, actor: &User) -> bool;
     fn can_delete(&self, actor: &User) -> bool;
 }
 
-impl<T> AuthorizationGuardWithContextDefinitions<T, ()> for T
+impl<T> AuthorizationGuardWithContextDefinitions<()> for T
 where
-    T: AuthorizationGuardDefinitions<T>,
+    T: AuthorizationGuardDefinitions,
 {
     fn can_create(&self, actor: &User, _context: &()) -> bool {
         self.can_create(actor)
@@ -210,13 +210,13 @@ where
     }
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Create> {
+impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Create> {
     fn from(guard_target: T) -> Self {
         AuthorizationGuard::new(guard_target)
     }
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Read> {
+impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Read> {
     fn from(guard_target: T) -> Self {
         Self {
             authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target)
@@ -225,7 +225,7 @@ impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Read
     }
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Update> {
+impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Update> {
     fn from(guard_target: T) -> Self {
         Self {
             authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target)
@@ -234,7 +234,7 @@ impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Upda
     }
 }
 
-impl<T: AuthorizationGuardDefinitions<T>> From<T> for AuthorizationGuard<T, Delete> {
+impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Delete> {
     fn from(guard_target: T) -> Self {
         Self {
             authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target)
@@ -258,7 +258,7 @@ mod test {
         pub _value: String,
     }
 
-    impl AuthorizationGuardDefinitions<AuthorizationGuardTestStruct> for AuthorizationGuardTestStruct {
+    impl AuthorizationGuardDefinitions for AuthorizationGuardTestStruct {
         fn can_create(&self, actor: &User) -> bool {
             actor.role == Role::Administrator
         }
