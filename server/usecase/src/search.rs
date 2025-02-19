@@ -1,14 +1,21 @@
+use domain::{
+    form::{
+        answer::service::AnswerEntryAuthorizationContext,
+        comment::service::CommentAuthorizationContext,
+    },
+    repository::{
+        form::{answer_repository::AnswerRepository, form_repository::FormRepository},
+        search_repository::SearchRepository,
+    },
+    user::models::User,
+};
+use errors::{
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
+    Error,
+};
+use futures::{future::try_join_all, try_join};
+
 use crate::dto::CrossSearchDto;
-use domain::form::answer::service::AnswerEntryAuthorizationContext;
-use domain::form::comment::service::CommentAuthorizationContext;
-use domain::repository::form::answer_repository::AnswerRepository;
-use domain::repository::form::form_repository::FormRepository;
-use domain::repository::search_repository::SearchRepository;
-use domain::user::models::User;
-use errors::usecase::UseCaseError::{AnswerNotFound, FormNotFound};
-use errors::Error;
-use futures::future::try_join_all;
-use futures::try_join;
 
 pub struct SearchUseCase<
     'a,

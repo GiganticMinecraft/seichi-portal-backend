@@ -4,14 +4,15 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
-use domain::repository::Repositories;
-use domain::user::models::User;
+use domain::{repository::Repositories, user::models::User};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::search::SearchUseCase;
 
-use crate::schemas::search_schemas::CrossSearchResult;
-use crate::{handlers::error_handler::handle_error, schemas::search_schemas::SearchQuery};
+use crate::{
+    handlers::error_handler::handle_error,
+    schemas::search_schemas::{CrossSearchResult, SearchQuery},
+};
 
 pub async fn cross_search(
     Extension(user): Extension<User>,

@@ -1,22 +1,24 @@
-use crate::{
-    database::components::{DatabaseComponents, SearchDatabase},
-    repository::Repository,
-};
 use async_trait::async_trait;
-use domain::form::comment::models::Comment;
-use domain::form::comment::service::CommentAuthorizationContext;
-use domain::types::authorization_guard::AuthorizationGuard;
-use domain::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Read};
 use domain::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
+        comment::{models::Comment, service::CommentAuthorizationContext},
         models::{Form, FormLabel},
     },
     repository::search_repository::SearchRepository,
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
+    },
     user::models::User,
 };
 use errors::Error;
 use itertools::Itertools;
+
+use crate::{
+    database::components::{DatabaseComponents, SearchDatabase},
+    repository::Repository,
+};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Client> {

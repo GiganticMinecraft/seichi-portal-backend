@@ -1,7 +1,11 @@
-use domain::form::answer::models::{AnswerId, AnswerLabel, FormAnswerContent};
-use domain::form::comment::models::{Comment, CommentId};
-use domain::form::models::{Form, FormLabel};
-use domain::user::models::User;
+use domain::{
+    form::{
+        answer::models::{AnswerId, AnswerLabel, FormAnswerContent},
+        comment::models::{Comment, CommentId},
+        models::{Form, FormLabel},
+    },
+    user::models::User,
+};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use usecase::dto::CrossSearchDto;

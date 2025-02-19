@@ -1,4 +1,3 @@
-use domain::user::models::User;
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
@@ -6,7 +5,7 @@ use domain::{
         models::{Form, FormLabel},
         question::models::Question,
     },
-    user::models::DiscordUser,
+    user::models::{DiscordUser, User},
 };
 
 pub struct AnswerDto {

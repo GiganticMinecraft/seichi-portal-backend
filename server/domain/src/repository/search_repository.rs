@@ -2,14 +2,15 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::comment::models::Comment;
-use crate::form::comment::service::CommentAuthorizationContext;
-use crate::types::authorization_guard::AuthorizationGuard;
-use crate::types::authorization_guard_with_context::{AuthorizationGuardWithContext, Read};
 use crate::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
+        comment::{models::Comment, service::CommentAuthorizationContext},
         models::{Form, FormLabel},
+    },
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
     },
     user::models::User,
 };
