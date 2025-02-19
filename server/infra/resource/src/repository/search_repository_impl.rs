@@ -2,13 +2,18 @@ use async_trait::async_trait;
 use domain::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
+        comment::{models::Comment, service::CommentAuthorizationContext},
         models::{Form, FormLabel},
     },
     repository::search_repository::SearchRepository,
-    search::models::Comment,
+    types::{
+        authorization_guard::AuthorizationGuard,
+        authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
+    },
     user::models::User,
 };
 use errors::Error;
+use itertools::Itertools;
 
 use crate::{
     database::components::{DatabaseComponents, SearchDatabase},
@@ -17,36 +22,60 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Client> {
-    async fn search_users(&self, query: &str) -> Result<Vec<User>, Error> {
-        self.client
+    async fn search_users(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AuthorizationGuard<User, Read>>, Error> {
+        Ok(self
+            .client
             .search()
             .search_users(query)
-            .await
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
     }
 
-    async fn search_forms(&self, query: &str) -> Result<Vec<Form>, Error> {
-        self.client
+    async fn search_forms(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AuthorizationGuard<Form, Read>>, Error> {
+        Ok(self
+            .client
             .search()
             .search_forms(query)
-            .await
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
     }
 
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, Error> {
-        self.client
+    async fn search_labels_for_forms(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error> {
+        Ok(self
+            .client
             .search()
             .search_labels_for_forms(query)
-            .await
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
     }
 
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, Error> {
-        self.client
+    async fn search_labels_for_answers(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+        Ok(self
+            .client
             .search()
             .search_labels_for_answers(query)
-            .await
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
     }
 
     async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, Error> {
@@ -57,11 +86,20 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, Error> {
-        self.client
+    async fn search_comments(
+        &self,
+        query: &str,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
+        Error,
+    > {
+        Ok(self
+            .client
             .search()
             .search_comments(query)
-            .await
-            .map_err(Into::into)
+            .await?
+            .into_iter()
+            .map(|comment| AuthorizationGuardWithContext::new(comment).into_read())
+            .collect())
     }
 }

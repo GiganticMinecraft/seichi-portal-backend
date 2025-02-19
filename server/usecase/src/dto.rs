@@ -5,7 +5,7 @@ use domain::{
         models::{Form, FormLabel},
         question::models::Question,
     },
-    user::models::DiscordUser,
+    user::models::{DiscordUser, User},
 };
 
 pub struct AnswerDto {
@@ -22,6 +22,15 @@ pub struct FormDto {
 }
 
 pub struct UserDto {
-    pub user: domain::user::models::User,
+    pub user: User,
     pub discord_user: Option<DiscordUser>,
+}
+
+pub struct CrossSearchDto {
+    pub forms: Vec<Form>,
+    pub users: Vec<User>,
+    pub answers: Vec<FormAnswerContent>,
+    pub label_for_forms: Vec<FormLabel>,
+    pub label_for_answers: Vec<AnswerLabel>,
+    pub comments: Vec<Comment>,
 }

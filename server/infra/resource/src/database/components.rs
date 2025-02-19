@@ -216,10 +216,7 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError>;
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
     async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError>;
-    async fn search_comments(
-        &self,
-        query: &str,
-    ) -> Result<Vec<domain::search::models::Comment>, InfraError>;
+    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError>;
 }
 
 #[automock]

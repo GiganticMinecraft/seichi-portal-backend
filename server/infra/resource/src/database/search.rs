@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use domain::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
+        comment::models::Comment,
         models::{Form, FormLabel},
     },
-    search::models::Comment,
     user::models::User,
 };
 use errors::infra::InfraError;
