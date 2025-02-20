@@ -11,7 +11,6 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
-use uuid::Uuid;
 
 use crate::{
     database::{
@@ -20,7 +19,7 @@ use crate::{
             execute_and_values, query_all_and_values, query_one_and_values, ConnectionPool,
         },
     },
-    dto::{FormAnswerDto, MessageDto, UserDto},
+    dto::{MessageDto, UserDto},
 };
 
 #[async_trait]
@@ -28,7 +27,7 @@ impl FormMessageDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn post_message(&self, message: &Message) -> Result<(), InfraError> {
         let id = message.id().to_string().to_owned();
-        let related_answer_id = message.related_answer().id().into_inner().to_owned();
+        let related_answer_id = message.related_answer_id().into_inner().to_owned();
         let sender = message.sender().id.to_string().to_owned();
         let body = message.body().to_owned();
         let timestamp = message.timestamp().to_owned();
@@ -116,15 +115,7 @@ impl FormMessageDatabase for ConnectionPool {
             .into_iter()
             .map(|(user, message_id, body, timestamp)| MessageDto {
                 id: message_id,
-                related_answer: FormAnswerDto {
-                    id: answers.id().into_inner().to_owned(),
-                    user_name: answers.user().name.to_owned(),
-                    uuid: answers.user().id,
-                    user_role: answers.user().role.to_owned(),
-                    timestamp: answers.timestamp().to_owned(),
-                    form_id: answers.form_id().into_inner().to_owned(),
-                    title: answers.title().to_owned().into_inner().map(|title| title.to_string()),
-                },
+                related_answer: answer_id,
                 sender: user,
                 body,
                 timestamp,
@@ -142,17 +133,8 @@ impl FormMessageDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rs = query_one_and_values(
-                    r"SELECT sender, message_senders.name, message_senders.role, body, timestamp,
-                    answers.id AS answer_id,
-                    time_stamp,
-                    form_id,
-                    user AS respondent_id,
-                    respondents.name AS respondent_name,
-                    respondents.role AS respondent_role
-                    FROM messages
-                    INNER JOIN answers ON related_answer_id = answers.id
+                    r"SELECT sender, message_senders.name, message_senders.role, body, timestamp, related_answer_id FROM messages
                     INNER JOIN users AS message_senders ON message_senders.id = messages.sender
-                    INNER JOIN users AS respondents ON respondents.id = answers.user
                     WHERE messages.id = ?",
                     [message_id.to_string().into()],
                     txn,
@@ -166,19 +148,9 @@ impl FormMessageDatabase for ConnectionPool {
                         role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                     })?;
 
-                    let related_answer = Ok::<_, InfraError>(FormAnswerDto {
-                        id: rs.try_get("", "answer_id")?,
-                        user_name: rs.try_get("", "respondent_name")?,
-                        uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "respondent_id")?)?,
-                        user_role: Role::from_str(&rs.try_get::<String>("", "respondent_role")?)?,
-                        timestamp: rs.try_get("", "time_stamp")?,
-                        form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
-                        title: rs.try_get("", "title")?,
-                    })?;
-
                     Ok::<_, InfraError>(MessageDto {
                         id: message_id.to_owned(),
-                        related_answer,
+                        related_answer: rs.try_get("", "related_answer_id")?,
                         sender: user,
                         body: rs.try_get("", "body")?,
                         timestamp: rs.try_get("", "timestamp")?,

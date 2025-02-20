@@ -40,7 +40,6 @@ pub async fn get_all_answers(
                 .map(|answer_dto| {
                     FormAnswer::new(
                         answer_dto.form_answer,
-                        answer_dto.contents,
                         answer_dto.comments,
                         answer_dto.labels,
                     )
@@ -75,7 +74,6 @@ pub async fn get_answer_handler(
         StatusCode::OK,
         Json(json!(FormAnswer::new(
             answer_dto.form_answer,
-            answer_dto.contents,
             answer_dto.comments,
             answer_dto.labels
         ))),
@@ -106,7 +104,6 @@ pub async fn get_answer_by_form_id_handler(
                 .map(|answer_dto| {
                     FormAnswer::new(
                         answer_dto.form_answer,
-                        answer_dto.contents,
                         answer_dto.comments,
                         answer_dto.labels,
                     )

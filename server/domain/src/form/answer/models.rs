@@ -25,6 +25,12 @@ impl AnswerTitle {
     }
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct FormAnswerContent {
+    pub question_id: QuestionId,
+    pub answer: String,
+}
+
 #[derive(Serialize, Deserialize, Getters, PartialEq, Debug)]
 pub struct AnswerEntry {
     id: AnswerId,
@@ -32,17 +38,24 @@ pub struct AnswerEntry {
     timestamp: DateTime<Utc>,
     form_id: FormId,
     title: AnswerTitle,
+    contents: Vec<FormAnswerContent>,
 }
 
 impl AnswerEntry {
     /// [`AnswerEntry`] を新しく作成します。
-    pub fn new(user: User, form_id: FormId, title: AnswerTitle) -> Self {
+    pub fn new(
+        user: User,
+        form_id: FormId,
+        title: AnswerTitle,
+        contents: Vec<FormAnswerContent>,
+    ) -> Self {
         Self {
             id: AnswerId::new(),
             user,
             timestamp: Utc::now(),
             form_id,
             title,
+            contents,
         }
     }
 
@@ -57,6 +70,7 @@ impl AnswerEntry {
         timestamp: DateTime<Utc>,
         form_id: FormId,
         title: AnswerTitle,
+        contents: Vec<FormAnswerContent>,
     ) -> Self {
         Self {
             id,
@@ -64,24 +78,13 @@ impl AnswerEntry {
             timestamp,
             form_id,
             title,
+            contents,
         }
     }
 
-    pub fn with_title(&self, title: AnswerTitle) -> Self {
-        Self {
-            id: self.id,
-            user: self.user.to_owned(),
-            form_id: self.form_id,
-            timestamp: self.timestamp,
-            title,
-        }
+    pub fn with_title(self, title: AnswerTitle) -> Self {
+        Self { title, ..self }
     }
-}
-
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct FormAnswerContent {
-    pub question_id: QuestionId,
-    pub answer: String,
 }
 
 pub type AnswerLabelId = types::Id<AnswerLabel>;

@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 use crate::{
     dto::{
-        AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerContentDto, FormAnswerDto, FormDto,
-        FormLabelDto, MessageDto, NotificationSettingsDto, QuestionDto,
+        AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerDto, FormDto, FormLabelDto,
+        MessageDto, NotificationSettingsDto, QuestionDto,
     },
     external::discord_api::DiscordAPI,
 };
@@ -68,16 +68,8 @@ pub trait FormDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormAnswerDatabase: Send + Sync {
-    async fn post_answer(
-        &self,
-        answer: &AnswerEntry,
-        content: Vec<FormAnswerContent>,
-    ) -> Result<(), InfraError>;
+    async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), InfraError>;
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError>;
-    async fn get_answer_contents(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<Vec<FormAnswerContentDto>, InfraError>;
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,

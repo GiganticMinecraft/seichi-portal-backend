@@ -5,8 +5,8 @@ use mockall::automock;
 use crate::{
     form::{
         answer::{
-            models::{AnswerEntry, AnswerId, FormAnswerContent},
-            service::{AnswerEntryAuthorizationContext, FormAnswerContentAuthorizationContext},
+            models::{AnswerEntry, AnswerId},
+            service::AnswerEntryAuthorizationContext,
         },
         models::FormId,
     },
@@ -19,11 +19,10 @@ use crate::{
 #[automock]
 #[async_trait]
 pub trait AnswerRepository: Send + Sync + 'static {
-    async fn post_answer<'a>(
+    async fn post_answer(
         &self,
-        context: &'a AnswerEntryAuthorizationContext,
+        context: &AnswerEntryAuthorizationContext,
         answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
-        content: Vec<FormAnswerContent>,
         actor: &User,
     ) -> Result<(), Error>;
     async fn get_answer(
@@ -31,19 +30,6 @@ pub trait AnswerRepository: Send + Sync + 'static {
         answer_id: AnswerId,
     ) -> Result<
         Option<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
-        Error,
-    >;
-    async fn get_answer_contents<'a>(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<
-        Vec<
-            AuthorizationGuardWithContext<
-                FormAnswerContent,
-                Read,
-                FormAnswerContentAuthorizationContext<'a, Read>,
-            >,
-        >,
         Error,
     >;
     async fn get_answers_by_form_id(
