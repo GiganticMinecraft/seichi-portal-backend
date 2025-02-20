@@ -146,11 +146,11 @@ pub(crate) struct AnswerContent {
     answer: String,
 }
 
-impl From<domain::form::answer::models::FormAnswerContent> for AnswerContent {
-    fn from(val: domain::form::answer::models::FormAnswerContent) -> Self {
+impl AnswerContent {
+    pub fn from_ref(val: &domain::form::answer::models::FormAnswerContent) -> Self {
         AnswerContent {
-            question_id: val.question_id.into(),
-            answer: val.answer,
+            question_id: val.question_id.into_inner(),
+            answer: val.answer.to_string(),
         }
     }
 }
@@ -202,7 +202,6 @@ pub(crate) struct FormAnswer {
 impl FormAnswer {
     pub fn new(
         answer: domain::form::answer::models::AnswerEntry,
-        answer_contents: Vec<domain::form::answer::models::FormAnswerContent>,
         comments: Vec<domain::form::comment::models::Comment>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
@@ -216,7 +215,11 @@ impl FormAnswer {
                 .to_owned()
                 .into_inner()
                 .map(|title| title.to_string()),
-            answers: answer_contents.into_iter().map(Into::into).collect_vec(),
+            answers: answer
+                .contents()
+                .iter()
+                .map(AnswerContent::from_ref)
+                .collect_vec(),
             comments: comments.into_iter().map(Into::into).collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
         }

@@ -98,6 +98,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
     }
 }
 
+#[derive(Clone)]
 pub struct FormAnswerContentDto {
     pub question_id: i32,
     pub answer: String,
@@ -171,6 +172,7 @@ pub struct FormAnswerDto {
     pub timestamp: DateTime<Utc>,
     pub form_id: Uuid,
     pub title: Option<String>,
+    pub contents: Vec<FormAnswerContentDto>,
 }
 
 impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
@@ -185,6 +187,7 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
             timestamp,
             form_id,
             title,
+            contents,
         }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
         unsafe {
@@ -198,6 +201,10 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
                 timestamp,
                 FormId::from(form_id),
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
+                contents
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<_, _>>()?,
             ))
         }
     }
@@ -232,7 +239,7 @@ impl TryFrom<FormLabelDto> for domain::form::models::FormLabel {
 
 pub struct MessageDto {
     pub id: Uuid,
-    pub related_answer: FormAnswerDto,
+    pub related_answer: Uuid,
     pub sender: UserDto,
     pub body: String,
     pub timestamp: DateTime<Utc>,
@@ -253,7 +260,7 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
         unsafe {
             Ok(domain::form::message::models::Message::from_raw_parts(
                 id.into(),
-                related_answer.try_into()?,
+                related_answer.into(),
                 sender.try_into()?,
                 body,
                 timestamp,

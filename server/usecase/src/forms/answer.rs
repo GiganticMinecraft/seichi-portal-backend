@@ -2,7 +2,7 @@ use domain::{
     form::{
         answer::{
             models::{AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent},
-            service::{AnswerEntryAuthorizationContext, FormAnswerContentAuthorizationContext},
+            service::AnswerEntryAuthorizationContext,
         },
         comment::service::CommentAuthorizationContext,
         models::FormId,
@@ -68,7 +68,7 @@ impl<
 
         let form_settings = form.try_read(&user)?.settings();
 
-        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title);
+        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title, answers);
         let context = AnswerEntryAuthorizationContext {
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
@@ -78,7 +78,7 @@ impl<
         let guard = AuthorizationGuardWithContext::new(answer_entry);
 
         self.answer_repository
-            .post_answer(&context, guard, answers, &user)
+            .post_answer(&context, guard, &user)
             .await
     }
 
@@ -113,24 +113,12 @@ impl<
                 })
                 .await?;
 
-            let form_answer_content_context = FormAnswerContentAuthorizationContext {
-                answer_entry_authorization_context: &context,
-                answer_entry: &form_answer_guard,
-            };
-
-            let fetch_contents = self.answer_repository.get_answer_contents(answer_id);
             let fetch_labels = self
                 .answer_label_repository
                 .get_labels_for_answers_by_answer_id(answer_id);
             let fetch_comments = self.comment_repository.get_comments(answer_id);
 
-            let (contents, labels, comments) =
-                try_join!(fetch_contents, fetch_labels, fetch_comments)?;
-
-            let contents = contents
-                .into_iter()
-                .map(|content| content.try_into_read(user, &form_answer_content_context))
-                .collect::<Result<Vec<_>, _>>()?;
+            let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
 
             let comment_authorization_context = CommentAuthorizationContext {
                 related_answer_entry_guard: form_answer_guard,
@@ -156,7 +144,6 @@ impl<
 
             Ok(AnswerDto {
                 form_answer,
-                contents,
                 labels,
                 comments,
             })
@@ -192,26 +179,12 @@ impl<
         .then(|form_answer_guard| async {
             let form_answer = form_answer_guard.try_read(actor, &context)?;
 
-            let fetch_contents = self
-                .answer_repository
-                .get_answer_contents(*form_answer.id());
             let fetch_labels = self
                 .answer_label_repository
                 .get_labels_for_answers_by_answer_id(*form_answer.id());
             let fetch_comments = self.comment_repository.get_comments(*form_answer.id());
 
-            let (contents, labels, comments) =
-                try_join!(fetch_contents, fetch_labels, fetch_comments)?;
-
-            let form_answer_content_context = FormAnswerContentAuthorizationContext {
-                answer_entry_authorization_context: &context,
-                answer_entry: &form_answer_guard,
-            };
-
-            let contents = contents
-                .into_iter()
-                .map(|content| content.try_into_read(actor, &form_answer_content_context))
-                .collect::<Result<Vec<_>, _>>()?;
+            let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
 
             let comment_authorization_context = CommentAuthorizationContext {
                 related_answer_entry_guard: form_answer_guard,
@@ -241,7 +214,6 @@ impl<
 
             Ok(AnswerDto {
                 form_answer,
-                contents,
                 labels,
                 comments,
             })
@@ -284,27 +256,13 @@ impl<
                     })
                     .await?;
 
-                let form_answer_content_context = FormAnswerContentAuthorizationContext {
-                    answer_entry_authorization_context: &context,
-                    answer_entry: &form_answer_guard,
-                };
-
                 let form_answer = form_answer_guard.try_read(user, &context)?;
-                let fetch_contents = self
-                    .answer_repository
-                    .get_answer_contents(*form_answer.id());
                 let fetch_labels = self
                     .answer_label_repository
                     .get_labels_for_answers_by_answer_id(*form_answer.id());
                 let fetch_comments = self.comment_repository.get_comments(*form_answer.id());
 
-                let (contents, labels, comments) =
-                    try_join!(fetch_contents, fetch_labels, fetch_comments)?;
-
-                let contents = contents
-                    .into_iter()
-                    .map(|content| content.try_into_read(user, &form_answer_content_context))
-                    .collect::<Result<Vec<_>, _>>()?;
+                let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
 
                 let comment_authorization_context = CommentAuthorizationContext {
                     related_answer_entry_guard: form_answer_guard,
@@ -330,7 +288,6 @@ impl<
 
                 Ok(AnswerDto {
                     form_answer,
-                    contents,
                     labels,
                     comments,
                 })

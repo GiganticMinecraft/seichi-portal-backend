@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use domain::{
     form::{
         answer::{
-            models::{AnswerEntry, AnswerId, FormAnswerContent},
-            service::{AnswerEntryAuthorizationContext, FormAnswerContentAuthorizationContext},
+            models::{AnswerEntry, AnswerId},
+            service::AnswerEntryAuthorizationContext,
         },
         models::FormId,
     },
@@ -24,17 +24,16 @@ use crate::{
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn post_answer<'a>(
+    async fn post_answer(
         &self,
-        context: &'a AnswerEntryAuthorizationContext,
+        context: &AnswerEntryAuthorizationContext,
         answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
-        content: Vec<FormAnswerContent>,
         actor: &User,
     ) -> Result<(), Error> {
         answer
             .try_create(
                 actor,
-                |entry| self.client.form_answer().post_answer(entry, content),
+                |entry| self.client.form_answer().post_answer(entry),
                 context,
             )?
             .await
@@ -57,31 +56,6 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
             .map(TryInto::<AnswerEntry>::try_into)
             .transpose()?
             .map(|entry| AuthorizationGuardWithContext::new(entry).into_read()))
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_answer_contents<'a>(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<
-        Vec<
-            AuthorizationGuardWithContext<
-                FormAnswerContent,
-                Read,
-                FormAnswerContentAuthorizationContext<'a, Read>,
-            >,
-        >,
-        Error,
-    > {
-        self.client
-            .form_answer()
-            .get_answer_contents(answer_id)
-            .await?
-            .into_iter()
-            .map(TryInto::<FormAnswerContent>::try_into)
-            .map_ok(|content| AuthorizationGuardWithContext::new(content).into_read())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]

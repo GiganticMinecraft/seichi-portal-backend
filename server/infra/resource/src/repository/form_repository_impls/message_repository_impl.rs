@@ -2,12 +2,14 @@ use async_trait::async_trait;
 use domain::{
     form::{
         answer::models::AnswerEntry,
-        message::models::{Message, MessageId},
+        message::{
+            models::{Message, MessageId},
+            service::MessageAuthorizationContext,
+        },
     },
     repository::form::message_repository::MessageRepository,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Delete, Read, Update},
+    types::authorization_guard_with_context::{
+        AuthorizationGuardWithContext, Create, Delete, Read, Update,
     },
     user::models::User,
 };
@@ -24,12 +26,15 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     async fn post_message(
         &self,
         actor: &User,
-        message: AuthorizationGuard<Message, Create>,
+        context: &MessageAuthorizationContext,
+        message: AuthorizationGuardWithContext<Message, Create, MessageAuthorizationContext>,
     ) -> Result<(), Error> {
         Ok(message
-            .try_create(actor, |message: &Message| {
-                self.client.form_message().post_message(message)
-            })?
+            .try_create(
+                actor,
+                |message: &Message| self.client.form_message().post_message(message),
+                context,
+            )?
             .await?)
     }
 
@@ -37,7 +42,8 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     async fn fetch_messages_by_answer(
         &self,
         answers: &AnswerEntry,
-    ) -> Result<Vec<AuthorizationGuard<Message, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuardWithContext<Message, Read, MessageAuthorizationContext>>, Error>
+    {
         self.client
             .form_message()
             .fetch_messages_by_form_answer(answers)
@@ -45,9 +51,9 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
             .into_iter()
             .map(|dto| {
                 Ok::<Message, Error>(dto.try_into()?).map(|message| {
-                    let message: AuthorizationGuard<Message, Create> = message.into();
+                    let guard = AuthorizationGuardWithContext::new(message);
 
-                    message.into_read()
+                    guard.into_read()
                 })
             })
             .collect::<Result<Vec<_>, _>>()
@@ -58,17 +64,22 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     async fn update_message_body(
         &self,
         actor: &User,
-        message: AuthorizationGuard<Message, Update>,
+        context: &MessageAuthorizationContext,
+        message: AuthorizationGuardWithContext<Message, Update, MessageAuthorizationContext>,
         content: String,
     ) -> Result<(), Error> {
         message
-            .try_update(actor, |message: &Message| {
-                let message_id = message.id().to_owned();
+            .try_update(
+                actor,
+                |message: &Message| {
+                    let message_id = message.id().to_owned();
 
-                self.client
-                    .form_message()
-                    .update_message_body(message_id, content)
-            })?
+                    self.client
+                        .form_message()
+                        .update_message_body(message_id, content)
+                },
+                context,
+            )?
             .await
             .map_err(Into::into)
     }
@@ -77,16 +88,19 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     async fn fetch_message(
         &self,
         message_id: &MessageId,
-    ) -> Result<Option<AuthorizationGuard<Message, Read>>, Error> {
+    ) -> Result<
+        Option<AuthorizationGuardWithContext<Message, Read, MessageAuthorizationContext>>,
+        Error,
+    > {
         self.client
             .form_message()
             .fetch_message(message_id)
             .await?
             .map(|dto| {
                 Ok::<Message, Error>(dto.try_into()?).map(|message| {
-                    let message: AuthorizationGuard<Message, Create> = message.into();
+                    let guard = AuthorizationGuardWithContext::new(message);
 
-                    message.into_read()
+                    guard.into_read()
                 })
             })
             .transpose()
@@ -97,14 +111,19 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     async fn delete_message(
         &self,
         actor: &User,
-        message: AuthorizationGuard<Message, Delete>,
+        context: &MessageAuthorizationContext,
+        message: AuthorizationGuardWithContext<Message, Delete, MessageAuthorizationContext>,
     ) -> Result<(), Error> {
         message
-            .try_delete(actor, |message: &Message| {
-                let message_id = message.id().to_owned();
+            .try_delete(
+                actor,
+                |message: &Message| {
+                    let message_id = message.id().to_owned();
 
-                self.client.form_message().delete_message(message_id)
-            })?
+                    self.client.form_message().delete_message(message_id)
+                },
+                context,
+            )?
             .await
             .map_err(Into::into)
     }
