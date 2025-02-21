@@ -3,7 +3,7 @@ use domain::{
     repository::form::answer_label_repository::AnswerLabelRepository,
     user::models::User,
 };
-use errors::{usecase::UseCaseError::LabelNotFound, Error};
+use errors::{Error, usecase::UseCaseError::LabelNotFound};
 
 pub struct AnswerLabelUseCase<'a, AnswerLabelRepo: AnswerLabelRepository> {
     pub answer_label_repository: &'a AnswerLabelRepo,

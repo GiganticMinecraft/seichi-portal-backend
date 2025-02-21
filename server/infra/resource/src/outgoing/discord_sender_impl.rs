@@ -2,7 +2,7 @@ use domain::{
     form::models::WebhookUrl, notification::discord_sender::DiscordSender,
     user::models::DiscordUserId,
 };
-use errors::{infra::InfraError, Error};
+use errors::{Error, infra::InfraError};
 use serenity::{
     all::{ExecuteWebhook, UserId},
     async_trait,

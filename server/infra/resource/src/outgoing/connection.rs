@@ -1,6 +1,6 @@
-use serenity::{all::GatewayIntents, client::ClientBuilder, Client};
+use serenity::{Client, all::GatewayIntents, client::ClientBuilder};
 
-use crate::outgoing::config::{Discord, DISCORD_BOT};
+use crate::outgoing::config::{DISCORD_BOT, Discord};
 
 pub struct ConnectionPool {
     pub pool: Client,

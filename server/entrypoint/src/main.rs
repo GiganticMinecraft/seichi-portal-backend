@@ -1,14 +1,14 @@
 use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
 
 use axum::{
+    Json, Router,
     http::{
-        header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
         Method, StatusCode,
+        header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
     },
     middleware,
     response::IntoResponse,
     routing::{delete, get, patch, post, put},
-    Json, Router,
 };
 use common::config::{ENV, HTTP};
 use futures::future;
@@ -58,7 +58,7 @@ use serenity::all::ShardManager;
 use tokio::{net::TcpListener, signal};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

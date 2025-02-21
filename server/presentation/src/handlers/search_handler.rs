@@ -1,8 +1,8 @@
 use axum::{
+    Extension, Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Extension, Json,
 };
 use domain::{repository::Repositories, user::models::User};
 use resource::repository::RealInfrastructureRepository;

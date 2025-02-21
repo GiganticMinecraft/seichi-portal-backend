@@ -1,4 +1,4 @@
-use errors::{domain::DomainError, Error};
+use errors::{Error, domain::DomainError};
 use regex::Regex;
 
 use crate::{

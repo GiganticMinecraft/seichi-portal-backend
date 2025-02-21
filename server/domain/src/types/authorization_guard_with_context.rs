@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use errors::{domain::DomainError, Error};
+use errors::{Error, domain::DomainError};
 
 use crate::user::models::User;
 

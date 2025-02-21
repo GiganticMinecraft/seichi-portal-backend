@@ -44,7 +44,6 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .map_ok(Into::<AuthorizationGuard<Form, Create>>::into)
             .map_ok(AuthorizationGuard::<_, Create>::into_read)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]

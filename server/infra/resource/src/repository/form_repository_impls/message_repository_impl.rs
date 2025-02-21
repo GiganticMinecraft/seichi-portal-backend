@@ -57,7 +57,6 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
                 })
             })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
@@ -104,7 +103,6 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
                 })
             })
             .transpose()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]

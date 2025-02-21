@@ -7,7 +7,7 @@ use axum::{
 };
 use axum_extra::{
     extract::TypedHeader,
-    headers::{authorization::Bearer, Authorization},
+    headers::{Authorization, authorization::Bearer},
 };
 use common::config::ENV;
 use domain::{

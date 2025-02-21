@@ -24,8 +24,8 @@ use domain::{
     user::models::User,
 };
 use errors::{
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
     Error,
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
 };
 use resource::outgoing::connection::ConnectionPool;
 
@@ -45,12 +45,12 @@ pub struct MessageUseCase<
 }
 
 impl<
-        R1: MessageRepository,
-        R2: AnswerRepository,
-        R3: NotificationRepository,
-        R4: FormRepository,
-        R5: UserRepository,
-    > MessageUseCase<'_, R1, R2, R3, R4, R5>
+    R1: MessageRepository,
+    R2: AnswerRepository,
+    R3: NotificationRepository,
+    R4: FormRepository,
+    R5: UserRepository,
+> MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
     pub async fn post_message(
         &self,

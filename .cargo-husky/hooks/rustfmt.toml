@@ -1,4 +1,4 @@
-edition = "2021"
+style_edition = "2024"
 format_macro_matchers = true
 format_strings = true
 imports_granularity = "Crate"

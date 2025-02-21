@@ -12,7 +12,7 @@ use domain::{
     },
     user::models::User,
 };
-use errors::{usecase::UseCaseError::FormNotFound, Error};
+use errors::{Error, usecase::UseCaseError::FormNotFound};
 
 use crate::dto::FormDto;
 
@@ -30,11 +30,11 @@ pub struct FormUseCase<
 }
 
 impl<
-        R1: FormRepository,
-        R2: NotificationRepository,
-        R3: QuestionRepository,
-        R4: FormLabelRepository,
-    > FormUseCase<'_, R1, R2, R3, R4>
+    R1: FormRepository,
+    R2: NotificationRepository,
+    R3: QuestionRepository,
+    R4: FormLabelRepository,
+> FormUseCase<'_, R1, R2, R3, R4>
 {
     pub async fn create_form(
         &self,

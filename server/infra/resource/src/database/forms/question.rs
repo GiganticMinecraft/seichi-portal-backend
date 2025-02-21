@@ -11,7 +11,7 @@ use crate::{
     database::{
         components::FormQuestionDatabase,
         connection::{
-            batch_insert, multiple_delete, query_all_and_values, query_one, ConnectionPool,
+            ConnectionPool, batch_insert, multiple_delete, query_all_and_values, query_one,
         },
     },
     dto::QuestionDto,

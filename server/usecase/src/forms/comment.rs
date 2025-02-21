@@ -14,8 +14,8 @@ use domain::{
     user::models::User,
 };
 use errors::{
-    usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound},
     Error,
+    usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound},
 };
 
 pub struct CommentUseCase<

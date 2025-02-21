@@ -8,10 +8,10 @@ use domain::{
     },
     user::models::{DiscordUser, DiscordUserId, DiscordUserName, Role::Administrator, User},
 };
-use errors::{infra::InfraError::Reqwest, Error};
+use errors::{Error, infra::InfraError::Reqwest};
 use itertools::Itertools;
-use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
-use uuid::{uuid, Uuid};
+use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
+use uuid::{Uuid, uuid};
 
 use crate::{
     database::components::{DatabaseComponents, UserDatabase},
@@ -112,8 +112,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .client
             .user()
             .fetch_user_by_session_id(session_id)
-            .await?
-            .map(Into::into))
+            .await?)
     }
 
     async fn end_user_session(&self, session_id: String) -> Result<(), Error> {

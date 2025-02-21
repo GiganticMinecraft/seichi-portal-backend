@@ -133,7 +133,7 @@ pub trait FormMessageDatabase: Send + Sync {
         answers: &AnswerEntry,
     ) -> Result<Vec<MessageDto>, InfraError>;
     async fn fetch_message(&self, message_id: &MessageId)
-        -> Result<Option<MessageDto>, InfraError>;
+    -> Result<Option<MessageDto>, InfraError>;
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError>;
 }
 

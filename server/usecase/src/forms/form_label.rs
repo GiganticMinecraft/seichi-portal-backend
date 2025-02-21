@@ -3,7 +3,7 @@ use domain::{
     repository::form::form_label_repository::FormLabelRepository,
     user::models::User,
 };
-use errors::{usecase::UseCaseError, Error};
+use errors::{Error, usecase::UseCaseError};
 
 pub struct FormLabelUseCase<'a, FormLabelRepo: FormLabelRepository> {
     pub form_label_repository: &'a FormLabelRepo,

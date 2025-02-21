@@ -10,8 +10,8 @@ use domain::{
     user::models::User,
 };
 use errors::{
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
     Error,
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
 use futures::{future::try_join_all, try_join};
 

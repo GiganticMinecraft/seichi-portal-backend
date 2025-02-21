@@ -1,7 +1,7 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use errors::{
-    domain::DomainError, infra::InfraError, usecase::UseCaseError, validation::ValidationError,
-    Error,
+    Error, domain::DomainError, infra::InfraError, usecase::UseCaseError,
+    validation::ValidationError,
 };
 use serde_json::json;
 
