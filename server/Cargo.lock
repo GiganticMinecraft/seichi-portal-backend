@@ -763,6 +763,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -954,37 +963,37 @@ dependencies = [
 
 [[package]]
 name = "deriving-via-impl"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6d61ad5d1494e4f30e19204ecd3a2a123a4d460be39eca0f321dbe434ad088f"
+checksum = "2b9a6426900e9c1f0561ef1c80c63fc6fc1ad642bb3f39d433e5491ef494f1d8"
 dependencies = [
- "convert_case",
+ "convert_case 0.7.1",
  "quote",
  "syn 2.0.98",
 ]
 
 [[package]]
 name = "deriving_via"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bd4dd6a9193580288c660303d70813c2dd90fabc4ccb35afbb0eda24986eb39"
+checksum = "210d75e13f849c2b63b64782127e18d26c788d50b5583c091cbe338e9ae584e6"
 dependencies = [
  "deriving_via_macros",
 ]
 
 [[package]]
 name = "deriving_via_macros"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b656380dad9178d5cbe96e44d6a19f48210b48e7e0835b46176215e23e8dc5e"
+checksum = "246315ebd01520975bcee56e2ac37fd3740c28a93b58627a58a5ca833203a65d"
 dependencies = [
  "deriving-via-impl",
- "itertools 0.13.0",
+ "itertools",
  "proc-macro-error2",
  "proc-macro2",
  "quote",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.27.1",
+ "strum_macros",
  "syn 2.0.98",
 ]
 
@@ -1029,7 +1038,7 @@ dependencies = [
  "serde_json",
  "serenity",
  "strum 0.27.1",
- "strum_macros 0.27.1",
+ "strum_macros",
  "test-case",
  "tracing",
  "types",
@@ -1965,15 +1974,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -2118,7 +2118,7 @@ version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "420f67f5943a0236eea7f199720cc465e806c48978d9b0fdc1fb62eceaee7556"
 dependencies = [
- "convert_case",
+ "convert_case 0.6.0",
  "proc-macro2",
  "quote",
  "structmeta",
@@ -2392,7 +2392,7 @@ dependencies = [
  "domain",
  "envy",
  "errors",
- "itertools 0.14.0",
+ "itertools",
  "mockall",
  "reqwest 0.12.12",
  "serde",
@@ -2587,7 +2587,7 @@ dependencies = [
  "common",
  "domain",
  "errors",
- "itertools 0.14.0",
+ "itertools",
  "regex",
  "reqwest 0.12.12",
  "resource",
@@ -3015,7 +3015,7 @@ dependencies = [
  "envy",
  "errors",
  "futures",
- "itertools 0.14.0",
+ "itertools",
  "meilisearch-sdk",
  "migration",
  "mockall",
@@ -3029,7 +3029,7 @@ dependencies = [
  "serenity",
  "sha256",
  "strum 0.27.1",
- "strum_macros 0.27.1",
+ "strum_macros",
  "tracing",
  "types",
  "uuid",
@@ -4122,19 +4122,6 @@ name = "strum"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
-
-[[package]]
-name = "strum_macros"
-version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.98",
-]
 
 [[package]]
 name = "strum_macros"
