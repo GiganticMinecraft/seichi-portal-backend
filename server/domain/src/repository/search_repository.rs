@@ -19,9 +19,9 @@ use crate::{
 #[async_trait]
 pub trait SearchRepository: Send + Sync + 'static {
     async fn search_users(&self, query: &str)
-        -> Result<Vec<AuthorizationGuard<User, Read>>, Error>;
+    -> Result<Vec<AuthorizationGuard<User, Read>>, Error>;
     async fn search_forms(&self, query: &str)
-        -> Result<Vec<AuthorizationGuard<Form, Read>>, Error>;
+    -> Result<Vec<AuthorizationGuard<Form, Read>>, Error>;
     async fn search_labels_for_forms(
         &self,
         query: &str,

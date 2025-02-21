@@ -17,8 +17,8 @@ use crate::{
     database::{
         components::FormAnswerDatabase,
         connection::{
-            batch_insert, execute_and_values, query_all, query_all_and_values,
-            query_one_and_values, ConnectionPool,
+            ConnectionPool, batch_insert, execute_and_values, query_all, query_all_and_values,
+            query_one_and_values,
         },
     },
     dto::{FormAnswerContentDto, FormAnswerDto},

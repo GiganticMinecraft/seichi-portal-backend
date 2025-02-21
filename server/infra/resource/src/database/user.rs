@@ -12,7 +12,7 @@ use crate::{
     database::{
         components::UserDatabase,
         connection::{
-            execute_and_values, query_all, query_one_and_values, redis_connection, ConnectionPool,
+            ConnectionPool, execute_and_values, query_all, query_one_and_values, redis_connection,
         },
     },
     dto::DiscordUserDto,

@@ -5,7 +5,7 @@ use domain::{
     },
     user::models::User,
 };
-use errors::{usecase::UseCaseError, Error};
+use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
 
 pub struct NotificationUseCase<

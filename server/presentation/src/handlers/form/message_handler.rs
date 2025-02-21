@@ -1,8 +1,8 @@
 use axum::{
-    extract::{Path, State},
-    http::{header, HeaderValue, StatusCode},
-    response::IntoResponse,
     Extension, Json,
+    extract::{Path, State},
+    http::{HeaderValue, StatusCode, header},
+    response::IntoResponse,
 };
 use domain::{
     form::{answer::models::AnswerId, message::models::MessageId},
@@ -40,13 +40,10 @@ pub async fn post_message_handler(
         .post_message(&user, message.body, answer_id)
         .await
     {
-        Ok(_) => (
-            StatusCode::CREATED,
-            [(
-                header::LOCATION,
-                HeaderValue::from_str(answer_id.to_string().as_str()).unwrap(),
-            )],
-        )
+        Ok(_) => (StatusCode::CREATED, [(
+            header::LOCATION,
+            HeaderValue::from_str(answer_id.to_string().as_str()).unwrap(),
+        )])
             .into_response(),
         Err(err) => handle_error(err).into_response(),
     }

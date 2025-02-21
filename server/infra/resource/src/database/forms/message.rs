@@ -16,7 +16,7 @@ use crate::{
     database::{
         components::FormMessageDatabase,
         connection::{
-            execute_and_values, query_all_and_values, query_one_and_values, ConnectionPool,
+            ConnectionPool, execute_and_values, query_all_and_values, query_one_and_values,
         },
     },
     dto::{MessageDto, UserDto},

@@ -13,7 +13,7 @@ use sea_orm::{
 
 use crate::database::{
     components::DatabaseComponents,
-    config::{MeiliSearch, MySQL, Redis, MEILISEARCH, MYSQL, REDIS},
+    config::{MEILISEARCH, MYSQL, MeiliSearch, MySQL, REDIS, Redis},
 };
 
 #[derive(Clone, Debug)]

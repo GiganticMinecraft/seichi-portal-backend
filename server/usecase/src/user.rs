@@ -2,7 +2,7 @@ use domain::{
     repository::user_repository::UserRepository,
     user::models::{Role, User},
 };
-use errors::{usecase::UseCaseError, Error};
+use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
 
 use crate::dto::UserDto;

@@ -17,10 +17,10 @@ use domain::{
     user::models::User,
 };
 use errors::{
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
     Error,
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
-use futures::{stream, try_join, StreamExt};
+use futures::{StreamExt, stream, try_join};
 
 use crate::dto::AnswerDto;
 
@@ -40,12 +40,12 @@ pub struct AnswerUseCase<
 }
 
 impl<
-        R1: AnswerRepository,
-        R2: FormRepository,
-        R3: CommentRepository,
-        R4: AnswerLabelRepository,
-        R5: QuestionRepository,
-    > AnswerUseCase<'_, R1, R2, R3, R4, R5>
+    R1: AnswerRepository,
+    R2: FormRepository,
+    R3: CommentRepository,
+    R4: AnswerLabelRepository,
+    R5: QuestionRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
     pub async fn post_answers(
         &self,

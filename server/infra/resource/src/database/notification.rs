@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{
     database::{
         components::NotificationDatabase,
-        connection::{execute_and_values, query_one_and_values, ConnectionPool},
+        connection::{ConnectionPool, execute_and_values, query_one_and_values},
     },
     dto::{NotificationSettingsDto, UserDto},
 };

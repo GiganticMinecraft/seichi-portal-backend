@@ -10,8 +10,8 @@ use crate::{
     database::{
         components::FormAnswerLabelDatabase,
         connection::{
-            batch_insert, execute_and_values, multiple_delete, query_all, query_all_and_values,
-            ConnectionPool,
+            ConnectionPool, batch_insert, execute_and_values, multiple_delete, query_all,
+            query_all_and_values,
         },
     },
     dto::AnswerLabelDto,

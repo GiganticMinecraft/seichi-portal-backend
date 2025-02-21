@@ -39,7 +39,6 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
             .map(TryInto::<Comment>::try_into)
             .map_ok(|comment| AuthorizationGuardWithContext::new(comment).into_read())
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
