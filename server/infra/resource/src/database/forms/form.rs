@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use async_trait::async_trait;
 use domain::{
     form::models::{Form, FormId},
@@ -8,7 +6,6 @@ use domain::{
 use errors::infra::InfraError;
 use futures::future::try_join;
 use types::non_empty_string::NonEmptyString;
-use uuid::Uuid;
 
 use crate::{
     database::{
@@ -97,7 +94,7 @@ impl FormDatabase for ConnectionPool {
                     .into_iter()
                     .map(|query_rs| {
                         Ok::<_, InfraError>(FormDto {
-                            id: Uuid::from_str(query_rs.try_get::<String>("", "form_id")?.as_str())?,
+                            id: query_rs.try_get("", "form_id")?,
                             title: query_rs.try_get("", "form_title")?,
                             description: query_rs.try_get("", "description")?,
                             metadata: (

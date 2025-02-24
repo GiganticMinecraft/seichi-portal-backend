@@ -11,6 +11,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
+use uuid::Uuid;
 
 use crate::{
     database::{
@@ -94,13 +95,13 @@ impl FormMessageDatabase for ConnectionPool {
                             .map(|rs| {
                                 let user = Ok::<_, InfraError>(UserDto {
                                     name: rs.try_get("", "name")?,
-                                    id: uuid::Uuid::from_str(&rs.try_get::<String>("", "sender")?)?,
+                                    id: rs.try_get("", "sender")?,
                                     role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                                 });
 
                                 Ok::<_, InfraError>((
                                     user?,
-                                    uuid::Uuid::from_str(&rs.try_get::<String>("", "message_id")?)?,
+                                    rs.try_get::<Uuid>("", "message_id")?,
                                     rs.try_get::<String>("", "body")?,
                                     rs.try_get::<DateTime<Utc>>("", "timestamp")?,
                                 ))
@@ -144,7 +145,7 @@ impl FormMessageDatabase for ConnectionPool {
                 rs.map(|rs| {
                     let user = Ok::<_, InfraError>(UserDto {
                         name: rs.try_get("", "name")?,
-                        id: uuid::Uuid::from_str(&rs.try_get::<String>("", "sender")?)?,
+                        id: rs.try_get("", "sender")?,
                         role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                     })?;
 

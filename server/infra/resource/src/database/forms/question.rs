@@ -1,11 +1,8 @@
-use std::str::FromStr;
-
 use async_trait::async_trait;
 use domain::form::{models::FormId, question::models::Question};
 use errors::infra::InfraError;
 use itertools::Itertools;
 use sea_orm::DbErr;
-use uuid::Uuid;
 
 use crate::{
     database::{
@@ -216,7 +213,7 @@ impl FormQuestionDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(QuestionDto {
                             id: Some(question_id),
-                            form_id: Uuid::from_str(question_rs.try_get::<String>("", "form_id")?.as_str())?,
+                            form_id: question_rs.try_get("", "form_id")?,
                             title: question_rs.try_get("", "title")?,
                             description: question_rs.try_get("", "description")?,
                             question_type: question_rs.try_get("", "question_type")?,
