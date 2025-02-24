@@ -1,10 +1,7 @@
-use std::str::FromStr;
-
 use async_trait::async_trait;
 use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
 use errors::infra::InfraError;
 use itertools::Itertools;
-use uuid::Uuid;
 
 use crate::{
     database::{
@@ -52,7 +49,7 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: Uuid::from_str(rs.try_get::<String>("", "id")?.as_str())?,
+                            id: rs.try_get("", "id")?,
                             name: rs.try_get("", "name")?,
                         })
                     })
@@ -91,7 +88,7 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: Uuid::from_str(rs.try_get::<String>("", "id")?.as_str())?,
+                            id: rs.try_get("", "id")?,
                             name: rs.try_get("", "name")?,
                         })
                     })
@@ -134,7 +131,7 @@ impl FormLabelDatabase for ConnectionPool {
                 label_rs
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: Uuid::from_str(&rs.try_get::<String>("", "id")?)?,
+                            id: rs.try_get("", "id")?,
                             name: rs.try_get("", "name")?,
                         })
                     })
@@ -186,7 +183,7 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: Uuid::from_str(&rs.try_get::<String>("", "id")?)?,
+                            id: rs.try_get("", "id")?,
                             name: rs.try_get("", "name")?,
                         })
                     })

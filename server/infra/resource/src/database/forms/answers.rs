@@ -108,11 +108,11 @@ impl FormAnswerDatabase for ConnectionPool {
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerDto {
                             id: answer_id.into_inner(),
-                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
+                            uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
-                            form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
+                            form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             contents
                         })
@@ -143,15 +143,15 @@ impl FormAnswerDatabase for ConnectionPool {
                 let form_answer_dtos = answers
                     .iter()
                     .map(|rs| {
-                        let answer_id = uuid::Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?;
+                        let answer_id = rs.try_get::<Uuid>("", "answer_id")?;
 
                         Ok::<_, InfraError>(FormAnswerDto {
                             id: answer_id,
-                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
+                            uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
-                            form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
+                            form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             contents: Vec::new()
                         })
@@ -173,7 +173,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 let answer_id_with_content_dto = contents
                     .iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>((Uuid::from_str(rs.try_get::<String>("", "answer_id")?.as_str())?, FormAnswerContentDto {
+                        Ok::<_, InfraError>((rs.try_get::<Uuid>("", "answer_id")?, FormAnswerContentDto {
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         }))
@@ -215,15 +215,15 @@ impl FormAnswerDatabase for ConnectionPool {
                 let form_answer_dtos = answers
                     .iter()
                     .map(|rs| {
-                        let answer_id = uuid::Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?;
+                        let answer_id = rs.try_get::<Uuid>("", "answer_id")?;
 
                         Ok::<_, InfraError>(FormAnswerDto {
                             id: answer_id,
-                            uuid: uuid::Uuid::from_str(&rs.try_get::<String>("", "user")?)?,
+                            uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                             timestamp: rs.try_get("", "time_stamp")?,
-                            form_id: Uuid::from_str(rs.try_get::<String>("", "form_id")?.as_str())?,
+                            form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             contents: Vec::new()
                         })
@@ -244,7 +244,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 let answer_id_with_content_dto = contents
                     .iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>((Uuid::from_str(rs.try_get::<String>("", "answer_id")?.as_str())?, FormAnswerContentDto {
+                        Ok::<_, InfraError>((rs.try_get::<Uuid>("", "answer_id")?, FormAnswerContentDto {
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         }))
