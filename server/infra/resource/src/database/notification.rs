@@ -69,7 +69,7 @@ impl NotificationDatabase for ConnectionPool {
                     Ok::<_, InfraError>(NotificationSettingsDto {
                         recipient: UserDto {
                             name: rs.try_get("", "name")?,
-                            id: recipient_id,
+                            id: recipient_id.to_string(),
                             role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                         },
                         is_send_message_notification: rs.try_get("", "is_send_message_notification")?,

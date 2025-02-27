@@ -13,12 +13,13 @@ use domain::{
     },
     user::models::{Role, User},
 };
+use errors::infra::InfraError;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct QuestionDto {
     pub id: Option<i32>,
-    pub form_id: Uuid,
+    pub form_id: String,
     pub title: String,
     pub description: Option<String>,
     pub question_type: String,
@@ -27,7 +28,7 @@ pub struct QuestionDto {
 }
 
 impl TryFrom<QuestionDto> for domain::form::question::models::Question {
-    type Error = errors::domain::DomainError;
+    type Error = errors::Error;
 
     fn try_from(
         QuestionDto {
@@ -42,10 +43,10 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
     ) -> Result<Self, Self::Error> {
         Ok(Question::from_raw_parts(
             id.map(Into::into),
-            FormId::from(form_id),
+            FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
             title,
             description,
-            QuestionType::from_str(&question_type)?,
+            QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
             choices,
             is_required,
         ))
@@ -53,7 +54,7 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
 }
 
 pub struct FormDto {
-    pub id: Uuid,
+    pub id: String,
     pub title: String,
     pub description: Option<String>,
     pub metadata: (DateTime<Utc>, DateTime<Utc>),
@@ -83,7 +84,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
         }: FormDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::models::Form::from_raw_parts(
-            FormId::from(id),
+            FormId::from(Uuid::from_str(&id).map_err(Into::<InfraError>::into)?),
             FormTitle::new(title.try_into()?),
             FormDescription::new(description.map(TryInto::try_into).transpose()?),
             FormMeta::from_raw_parts(metadata.0, metadata.1),
@@ -122,21 +123,25 @@ impl TryFrom<FormAnswerContentDto> for domain::form::answer::models::FormAnswerC
 
 pub struct UserDto {
     pub name: String,
-    pub id: Uuid,
+    pub id: String,
     pub role: Role,
 }
 
 impl TryFrom<UserDto> for User {
-    type Error = errors::domain::DomainError;
+    type Error = errors::infra::InfraError;
 
     fn try_from(UserDto { name, id, role }: UserDto) -> Result<Self, Self::Error> {
-        Ok(User { name, id, role })
+        Ok(User {
+            name,
+            id: Uuid::from_str(&id)?,
+            role,
+        })
     }
 }
 
 pub struct CommentDto {
-    pub answer_id: Uuid,
-    pub comment_id: Uuid,
+    pub answer_id: String,
+    pub comment_id: String,
     pub content: String,
     pub timestamp: DateTime<Utc>,
     pub commented_by: UserDto,
@@ -155,8 +160,12 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
         }: CommentDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::comment::models::Comment::from_raw_parts(
-            answer_id.into(),
-            comment_id.into(),
+            Uuid::from_str(&answer_id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
+            Uuid::from_str(&comment_id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
             CommentContent::new(content.try_into()?),
             timestamp,
             commented_by.try_into()?,
@@ -165,12 +174,12 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
 }
 
 pub struct FormAnswerDto {
-    pub id: Uuid,
+    pub id: String,
     pub user_name: String,
-    pub uuid: Uuid,
+    pub uuid: String,
     pub user_role: Role,
     pub timestamp: DateTime<Utc>,
-    pub form_id: Uuid,
+    pub form_id: String,
     pub title: Option<String>,
     pub contents: Vec<FormAnswerContentDto>,
 }
@@ -192,14 +201,16 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
     ) -> Result<Self, Self::Error> {
         unsafe {
             Ok(domain::form::answer::models::AnswerEntry::from_raw_parts(
-                id.into(),
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
                 User {
                     name: user_name,
-                    id: uuid,
+                    id: Uuid::from_str(&uuid).map_err(Into::<InfraError>::into)?,
                     role: user_role,
                 },
                 timestamp,
-                FormId::from(form_id),
+                FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
                 contents
                     .into_iter()
@@ -211,35 +222,44 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
 }
 
 pub struct AnswerLabelDto {
-    pub id: Uuid,
+    pub id: String,
     pub name: String,
 }
 
-impl From<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
-    fn from(AnswerLabelDto { id, name }: AnswerLabelDto) -> Self {
-        domain::form::answer::models::AnswerLabel::from_raw_parts(id.into(), name)
+impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
+    type Error = errors::Error;
+
+    fn try_from(AnswerLabelDto { id, name }: AnswerLabelDto) -> Result<Self, Self::Error> {
+        Ok(domain::form::answer::models::AnswerLabel::from_raw_parts(
+            Uuid::from_str(&id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
+            name,
+        ))
     }
 }
 
 pub struct FormLabelDto {
-    pub id: Uuid,
+    pub id: String,
     pub name: String,
 }
 
 impl TryFrom<FormLabelDto> for domain::form::models::FormLabel {
-    type Error = errors::validation::ValidationError;
+    type Error = errors::Error;
 
     fn try_from(FormLabelDto { id, name }: FormLabelDto) -> Result<Self, Self::Error> {
         Ok(domain::form::models::FormLabel::from_raw_parts(
-            id.into(),
+            Uuid::from_str(&id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
             domain::form::models::FormLabelName::new(name.try_into()?),
         ))
     }
 }
 
 pub struct MessageDto {
-    pub id: Uuid,
-    pub related_answer: Uuid,
+    pub id: String,
+    pub related_answer: String,
     pub sender: UserDto,
     pub body: String,
     pub timestamp: DateTime<Utc>,
@@ -259,8 +279,12 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
     ) -> Result<Self, Self::Error> {
         unsafe {
             Ok(domain::form::message::models::Message::from_raw_parts(
-                id.into(),
-                related_answer.into(),
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                Uuid::from_str(&related_answer)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
                 sender.try_into()?,
                 body,
                 timestamp,
@@ -275,7 +299,7 @@ pub struct NotificationSettingsDto {
 }
 
 impl TryFrom<NotificationSettingsDto> for domain::notification::models::NotificationSettings {
-    type Error = errors::domain::DomainError;
+    type Error = errors::Error;
 
     fn try_from(
         NotificationSettingsDto {

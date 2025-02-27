@@ -136,7 +136,7 @@ impl FormDatabase for ConnectionPool {
                 };
 
                 Ok::<_, InfraError>(Some(FormDto {
-                    id: form_id.into_inner(),
+                    id: form_id.into_inner().to_string(),
                     title: form.try_get("", "form_title")?,
                     description: form.try_get("", "description")?,
                     metadata: (

@@ -69,6 +69,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    restart: always
 networks:
   seichi_portal:
     name: seichi_portal

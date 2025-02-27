@@ -107,7 +107,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 answer_query_result_opt
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerDto {
-                            id: answer_id.into_inner(),
+                            id: answer_id.into_inner().to_string(),
                             uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
@@ -143,10 +143,10 @@ impl FormAnswerDatabase for ConnectionPool {
                 let form_answer_dtos = answers
                     .iter()
                     .map(|rs| {
-                        let answer_id = rs.try_get::<Uuid>("", "answer_id")?;
+                        let answer_id = Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?;
 
                         Ok::<_, InfraError>(FormAnswerDto {
-                            id: answer_id,
+                            id: answer_id.to_string(),
                             uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
@@ -173,7 +173,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 let answer_id_with_content_dto = contents
                     .iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>((rs.try_get::<Uuid>("", "answer_id")?, FormAnswerContentDto {
+                        Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?, FormAnswerContentDto {
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         }))
@@ -189,7 +189,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .into_iter()
                     .map(|dto| {
                         Ok::<_, InfraError>(FormAnswerDto {
-                            contents: grouped_answer_contents.get(&dto.id).cloned()
+                            contents: grouped_answer_contents.get(&Uuid::from_str(&dto.id)?).cloned()
                                 .map(|contents| contents.into_iter().map(|(_, content_dto)| content_dto).collect_vec())
                                 .unwrap_or_default(),
                             ..dto
@@ -215,10 +215,10 @@ impl FormAnswerDatabase for ConnectionPool {
                 let form_answer_dtos = answers
                     .iter()
                     .map(|rs| {
-                        let answer_id = rs.try_get::<Uuid>("", "answer_id")?;
+                        let answer_id = Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?;
 
                         Ok::<_, InfraError>(FormAnswerDto {
-                            id: answer_id,
+                            id: answer_id.to_string(),
                             uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
@@ -244,7 +244,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 let answer_id_with_content_dto = contents
                     .iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>((rs.try_get::<Uuid>("", "answer_id")?, FormAnswerContentDto {
+                        Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?, FormAnswerContentDto {
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         }))
@@ -259,7 +259,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .into_iter()
                     .map(|dto| {
                         Ok::<_, InfraError>(FormAnswerDto {
-                            contents: grouped_answer_contents.get(&dto.id).cloned()
+                            contents: grouped_answer_contents.get(&Uuid::from_str(&dto.id)?).cloned()
                                 .map(|contents| contents.into_iter().map(|(_, content_dto)| content_dto).collect_vec())
                                 .unwrap_or_default(),
                             ..dto

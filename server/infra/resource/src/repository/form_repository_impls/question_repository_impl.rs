@@ -69,6 +69,5 @@ impl<Client: DatabaseComponents + 'static> QuestionRepository for Repository<Cli
             .map(TryInto::<Question>::try_into)
             .map_ok(Into::into)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 }
