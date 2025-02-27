@@ -1,0 +1,33 @@
+{
+  "users": [
+    {
+      "name": "user",
+      "password": "password",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "seichi_portal",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true
+    }
+  ],
+  "permissions": [
+    {
+      "user": "user",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "queues": [],
+  "bindings": []
+}

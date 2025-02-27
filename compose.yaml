@@ -1,10 +1,8 @@
 services:
   db:
-    image: mariadb:10.11.11
+    image: mariadb:11.4.5
     container_name: mariadb
-    # NOTE: binlog-format=ROW は meilisync で必要
-    # ref: https://www.meilisearch.com/docs/guides/database/meilisync_mysql#configure-mysql
-    command: --log-bin --binlog-format=ROW
+    command: --log-bin --binlog-format=ROW --binlog_row_image=FULL
     environment:
       - MYSQL_INITDB_SKIP_TZINFO=1
       - MARIADB_DATABASE=seichi_portal
@@ -19,6 +17,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
     restart: always
   redis:
     image: redislabs/rejson:99.99.98
@@ -42,19 +41,37 @@ services:
     volumes:
       - meili_data:/data.ms
     restart: always
-  meilisync:
-    platform: linux/x86_64
-    # meilisync の Docker イメージで stable を使用すると full sync ができないため、dev を使用する
-    # ref: https://github.com/long2ice/meilisync/issues/94#issuecomment-2270153002
-    image: long2ice/meilisync:dev
+  rabbitmq:
+    image: rabbitmq:3.13.7-management-alpine
+    container_name: rabbitmq
+    environment:
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_management load_definitions "/etc/rabbitmq/definitions.json"
     volumes:
-      - ./docker/meilisync/config.yml:/meilisync/config.yml
+      - ./docker/rabbitmq_definitions.json:/etc/rabbitmq/definitions.json
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 5s
+      timeout: 30s
+      retries: 3
     networks:
       - seichi_portal
-    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+  debezium:
+    image: quay.io/debezium/server:3.1
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/debezium_conf:/debezium/config
+    networks:
+      - seichi_portal
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 networks:
   seichi_portal:
-    name: seichi-portal-backend-network
+    name: seichi_portal
     external: false
 volumes:
   mysql_data:
