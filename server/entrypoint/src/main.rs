@@ -96,6 +96,8 @@ async fn main() -> anyhow::Result<()> {
 
     let mut discord_connection = resource::outgoing::connection::ConnectionPool::new().await;
 
+    let messaging_conn = resource::messaging::connection::ConnectionPool::new().await;
+
     let shared_repository = Repository::new(conn).into_shared();
 
     let router = Router::new()
@@ -221,12 +223,14 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await.unwrap();
 
     let shared_manager = discord_connection.pool.shard_manager.clone();
+    let messaging_conn = Arc::new(messaging_conn);
 
-    let (_discord, _axum) = future::join(
+    let (_discord, _axum, _messaging) = future::join3(
         discord_connection.pool.start(),
         axum::serve(listener, router)
-            .with_graceful_shutdown(graceful_handler(shared_manager))
+            .with_graceful_shutdown(graceful_handler(shared_manager, messaging_conn.clone()))
             .into_future(),
+        messaging_conn.consumer(),
     )
     .await;
 
@@ -241,7 +245,10 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
-async fn graceful_handler(serenity_shared_manager: Arc<ShardManager>) {
+async fn graceful_handler(
+    serenity_shared_manager: Arc<ShardManager>,
+    messaging_connection: Arc<resource::messaging::connection::ConnectionPool>,
+) {
     let ctrl_c = async {
         signal::ctrl_c()
             .await
@@ -263,6 +270,7 @@ async fn graceful_handler(serenity_shared_manager: Arc<ShardManager>) {
         _ = ctrl_c => {
             info!("Gracefully shutdown...");
             serenity_shared_manager.shutdown_all().await;
+            messaging_connection.shutdown().await;
         },
         _ = terminate => {},
     }

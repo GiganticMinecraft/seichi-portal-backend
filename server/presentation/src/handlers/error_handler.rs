@@ -285,6 +285,18 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
             )
                 .into_response()
         }
+        InfraError::AMQP { source } => {
+            tracing::error!("AMQP Error: {}", source);
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "errorCode": "INTERNAL_SERVER_ERROR",
+                    "reason": "AMQP Error",
+                })),
+            )
+                .into_response()
+        }
     }
 }
 

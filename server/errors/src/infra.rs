@@ -40,6 +40,11 @@ pub enum InfraError {
     SerdeJson { cause: String },
     #[error("SerdeJson Error: {}", .cause)]
     SerenityError { cause: String },
+    #[error("AMQP Error: {}", .source)]
+    AMQP {
+        #[from]
+        source: lapin::Error,
+    },
 }
 
 impl<E> From<sea_orm::TransactionError<E>> for InfraError
