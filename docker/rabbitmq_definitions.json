@@ -28,6 +28,24 @@
       "read": ".*"
     }
   ],
-  "queues": [],
-  "bindings": []
+  "queues": [
+    {
+      "name": "seichi_portal",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "seichi_portal",
+      "vhost": "/",
+      "destination": "seichi_portal",
+      "destination_type": "queue",
+      "routing_key": "seichi_portal",
+      "arguments": {}
+    }
+  ]
 }
