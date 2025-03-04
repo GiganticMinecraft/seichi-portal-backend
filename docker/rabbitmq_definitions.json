@@ -32,7 +32,7 @@
     {
       "name": "seichi_portal",
       "vhost": "/",
-      "durable": false,
+      "durable": true,
       "auto_delete": false,
       "internal": false,
       "arguments": {}
