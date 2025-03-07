@@ -1,19 +1,28 @@
-use crate::messaging::config::{RABBITMQ, RabbitMQ};
+use std::sync::Arc;
+
+use domain::search::models::SearchableFields;
 use errors::infra::InfraError;
 use futures::StreamExt;
-use lapin::options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions};
-use lapin::types::FieldTable;
-use lapin::{Channel, Connection, ConnectionProperties};
-use std::sync::Arc;
-use tokio::sync::Notify;
+use lapin::{
+    Channel, Connection, ConnectionProperties,
+    options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
+    types::FieldTable,
+};
+use tokio::sync::{Notify, mpsc};
 
-pub struct ConnectionPool {
+use crate::messaging::{
+    config::{RABBITMQ, RabbitMQ},
+    schema::RabbitMQSchema,
+};
+
+pub struct MessagingConnectionPool {
     pub(crate) rabbitmq_client: Connection,
     shutdown_notify: Arc<Notify>,
+    sender: mpsc::Sender<SearchableFields>,
 }
 
-impl ConnectionPool {
-    pub async fn new() -> Self {
+impl MessagingConnectionPool {
+    pub async fn new(sender: mpsc::Sender<SearchableFields>) -> Self {
         let RabbitMQ {
             user,
             password,
@@ -31,6 +40,7 @@ impl ConnectionPool {
         Self {
             rabbitmq_client: connection,
             shutdown_notify: Arc::new(Notify::new()),
+            sender,
         }
     }
 
@@ -65,6 +75,7 @@ impl ConnectionPool {
 
         tokio::spawn({
             let shutdown_notify = self.shutdown_notify.clone();
+            let sender = self.sender.clone();
             async move {
                 loop {
                     tokio::select! {
@@ -74,7 +85,12 @@ impl ConnectionPool {
                         _ = async {
                             if let Some(Ok(delivery)) = consumer.next().await {
                                 let data = String::from_utf8_lossy(&delivery.data);
-                                println!("Received message: {:?}", data);
+                                let payload = serde_json::from_str::<RabbitMQSchema>(&data)?.payload;
+                                let after = payload.try_into_after()?;
+
+                                if let Some(after) = after {
+                                    sender.send(SearchableFields::try_from(after)?).await?;
+                                }
 
                                 delivery.ack(BasicAckOptions::default()).await?;
                             }

@@ -297,6 +297,18 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
             )
                 .into_response()
         }
+        InfraError::Send { cause } => {
+            tracing::error!("Send Error: {}", cause);
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "errorCode": "INTERNAL_SERVER_ERROR",
+                    "reason": "Send Error",
+                })),
+            )
+                .into_response()
+        }
     }
 }
 

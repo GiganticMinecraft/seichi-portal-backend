@@ -1,5 +1,6 @@
-use serde::Deserialize;
 use std::sync::LazyLock;
+
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct RabbitMQ {

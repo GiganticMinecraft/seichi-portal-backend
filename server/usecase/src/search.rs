@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use domain::{
     form::{
         answer::service::AnswerEntryAuthorizationContext,
@@ -7,6 +9,7 @@ use domain::{
         form::{answer_repository::AnswerRepository, form_repository::FormRepository},
         search_repository::SearchRepository,
     },
+    search::models::SearchableFields,
     user::models::User,
 };
 use errors::{
@@ -14,6 +17,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
 use futures::{future::try_join_all, try_join};
+use tokio::sync::{Notify, mpsc::Receiver};
 
 use crate::dto::CrossSearchDto;
 
@@ -126,5 +130,15 @@ impl<R1: SearchRepository, R2: AnswerRepository, R3: FormRepository> SearchUseCa
             answers,
             comments,
         })
+    }
+
+    pub async fn start_sync(
+        &self,
+        receiver: Receiver<SearchableFields>,
+        shutdown_notifier: Arc<Notify>,
+    ) -> Result<(), Error> {
+        self.repository
+            .start_sync(receiver, shutdown_notifier)
+            .await
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use domain::{
     form::{
@@ -8,10 +10,12 @@ use domain::{
         question::models::Question,
     },
     notification::models::NotificationSettings,
+    search::models::SearchableFields,
     user::models::{DiscordUser, Role, User},
 };
 use errors::infra::InfraError;
 use mockall::automock;
+use tokio::sync::{Notify, mpsc::Receiver};
 use uuid::Uuid;
 
 use crate::{
@@ -209,6 +213,11 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
     async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError>;
     async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError>;
+    async fn start_sync(
+        &self,
+        receiver: Receiver<SearchableFields>,
+        shutdown_notifier: Arc<Notify>,
+    ) -> Result<(), InfraError>;
 }
 
 #[automock]

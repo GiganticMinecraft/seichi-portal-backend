@@ -1,12 +1,16 @@
+use std::sync::Arc;
+
 use axum::{
     Extension, Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use domain::{repository::Repositories, user::models::User};
+use domain::{repository::Repositories, search::models::SearchableFields, user::models::User};
+use errors::Error;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
+use tokio::sync::{Notify, mpsc::Receiver};
 use usecase::search::SearchUseCase;
 
 use crate::{
@@ -40,4 +44,20 @@ pub async fn cross_search(
             }
         }
     }
+}
+
+pub async fn start_sync(
+    repository: RealInfrastructureRepository,
+    receiver: Receiver<SearchableFields>,
+    shutdown_notifier: Arc<Notify>,
+) -> Result<(), Error> {
+    let search_use_case = SearchUseCase {
+        repository: repository.search_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
+    };
+
+    search_use_case
+        .start_sync(receiver, shutdown_notifier)
+        .await
 }

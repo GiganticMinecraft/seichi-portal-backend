@@ -38,13 +38,15 @@ pub enum InfraError {
     MeiliSearch { cause: String },
     #[error("SerdeJson Error: {}", .cause)]
     SerdeJson { cause: String },
-    #[error("SerdeJson Error: {}", .cause)]
+    #[error("Serenity Error: {}", .cause)]
     SerenityError { cause: String },
     #[error("AMQP Error: {}", .source)]
     AMQP {
         #[from]
         source: lapin::Error,
     },
+    #[error("Send Error: {}", .cause)]
+    Send { cause: String },
 }
 
 impl<E> From<sea_orm::TransactionError<E>> for InfraError
@@ -77,6 +79,14 @@ impl From<serde_json::Error> for InfraError {
 impl From<serenity::Error> for InfraError {
     fn from(value: serenity::Error) -> Self {
         InfraError::SerenityError {
+            cause: value.to_string(),
+        }
+    }
+}
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for InfraError {
+    fn from(value: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        InfraError::Send {
             cause: value.to_string(),
         }
     }

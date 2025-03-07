@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
+use tokio::sync::{Notify, mpsc::Receiver};
 
 use crate::{
     form::{
@@ -8,6 +11,7 @@ use crate::{
         comment::{models::Comment, service::CommentAuthorizationContext},
         models::{Form, FormLabel},
     },
+    search::models::SearchableFields,
     types::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
@@ -38,4 +42,9 @@ pub trait SearchRepository: Send + Sync + 'static {
         Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
         Error,
     >;
+    async fn start_sync(
+        &self,
+        receiver: Receiver<SearchableFields>,
+        shutdown_notifier: Arc<Notify>,
+    ) -> Result<(), Error>;
 }

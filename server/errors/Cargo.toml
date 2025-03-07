@@ -16,3 +16,4 @@ meilisearch-sdk = { workspace = true }
 serde_json = { workspace = true }
 serenity = { workspace = true }
 lapin = { workspace = true }
+tokio = { workspace = true }
