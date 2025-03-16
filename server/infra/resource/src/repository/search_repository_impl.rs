@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use domain::{
     form::{
@@ -6,6 +8,7 @@ use domain::{
         models::{Form, FormLabel},
     },
     repository::search_repository::SearchRepository,
+    search::models::SearchableFields,
     types::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
@@ -14,6 +17,7 @@ use domain::{
 };
 use errors::Error;
 use itertools::Itertools;
+use tokio::sync::{Notify, mpsc::Receiver};
 
 use crate::{
     database::components::{DatabaseComponents, SearchDatabase},
@@ -101,5 +105,17 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .into_iter()
             .map(|comment| AuthorizationGuardWithContext::new(comment).into_read())
             .collect())
+    }
+
+    async fn start_sync(
+        &self,
+        receiver: Receiver<SearchableFields>,
+        shutdown_notifier: Arc<Notify>,
+    ) -> Result<(), Error> {
+        self.client
+            .search()
+            .start_sync(receiver, shutdown_notifier)
+            .await
+            .map_err(Into::into)
     }
 }

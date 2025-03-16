@@ -123,7 +123,7 @@ impl FormLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 let label_rs = query_one_and_values(
                     "SELECT id, name FROM label_for_forms WHERE id = ?",
-                    [id.into_inner().into()],
+                    [id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;
@@ -174,7 +174,7 @@ impl FormLabelDatabase for ConnectionPool {
                 let labels_rs = query_all_and_values(
                     "SELECT id, name FROM label_for_forms WHERE id IN (SELECT label_id FROM \
                      label_settings_for_forms WHERE form_id = ?)",
-                    [form_id.into_inner().into()],
+                    [form_id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;

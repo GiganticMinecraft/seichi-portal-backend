@@ -11,3 +11,4 @@ types = { path = "../types" }
 uuid = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+tokio = { workspace = true }

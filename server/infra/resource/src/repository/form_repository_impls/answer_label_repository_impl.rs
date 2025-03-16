@@ -9,6 +9,7 @@ use domain::{
     user::models::User,
 };
 use errors::Error;
+use itertools::Itertools;
 
 use crate::{
     database::components::{DatabaseComponents, FormAnswerLabelDatabase},
@@ -37,15 +38,14 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     async fn get_labels_for_answers(
         &self,
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
-        Ok(self
-            .client
+        self.client
             .form_answer_label()
             .get_labels_for_answers()
             .await?
             .into_iter()
-            .map(Into::<AnswerLabel>::into)
-            .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
-            .collect::<Vec<_>>())
+            .map(TryInto::<AnswerLabel>::try_into)
+            .map_ok(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
+            .collect::<Result<Vec<_>, _>>()
     }
 
     #[tracing::instrument(skip(self))]
@@ -58,7 +58,8 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .form_answer_label()
             .get_label_for_answers(label_id)
             .await?
-            .map(Into::<AnswerLabel>::into)
+            .map(TryInto::<AnswerLabel>::try_into)
+            .transpose()?
             .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into))
     }
 
@@ -67,15 +68,14 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
         &self,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
-        Ok(self
-            .client
+        self.client
             .form_answer_label()
             .get_labels_for_answers_by_label_ids(label_ids)
             .await?
             .into_iter()
-            .map(Into::<AnswerLabel>::into)
-            .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
-            .collect::<Vec<_>>())
+            .map(TryInto::<AnswerLabel>::try_into)
+            .map_ok(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
+            .collect::<Result<Vec<_>, _>>()
     }
 
     #[tracing::instrument(skip(self))]
@@ -83,15 +83,14 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
         &self,
         answer_id: AnswerId,
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
-        Ok(self
-            .client
+        self.client
             .form_answer_label()
             .get_labels_for_answers_by_answer_id(answer_id)
             .await?
             .into_iter()
-            .map(Into::<AnswerLabel>::into)
-            .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
-            .collect::<Vec<_>>())
+            .map(TryInto::<AnswerLabel>::try_into)
+            .map_ok(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
+            .collect::<Result<Vec<_>, _>>()
     }
 
     #[tracing::instrument(skip(self))]

@@ -42,7 +42,6 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map(TryInto::<FormLabel>::try_into)
             .map_ok(Into::<AuthorizationGuard<_, Read>>::into)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
@@ -58,7 +57,6 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map(TryInto::<FormLabel>::try_into)
             .map_ok(Into::<AuthorizationGuard<_, Read>>::into)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
@@ -122,7 +120,6 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map(TryInto::<FormLabel>::try_into)
             .map_ok(Into::<AuthorizationGuard<_, Read>>::into)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]

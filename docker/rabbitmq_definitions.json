@@ -1,0 +1,51 @@
+{
+  "users": [
+    {
+      "name": "user",
+      "password": "password",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "seichi_portal",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true
+    }
+  ],
+  "permissions": [
+    {
+      "user": "user",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "queues": [
+    {
+      "name": "seichi_portal",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "seichi_portal",
+      "vhost": "/",
+      "destination": "seichi_portal",
+      "destination_type": "queue",
+      "routing_key": "seichi_portal",
+      "arguments": {}
+    }
+  ]
+}

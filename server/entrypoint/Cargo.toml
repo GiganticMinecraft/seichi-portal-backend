@@ -23,6 +23,7 @@ tracing-subscriber = { version = "0.3.19", features = ["std", "registry", "env-f
 serde_json = { workspace = true }
 futures = { workspace = true }
 serenity = { workspace = true }
+domain = { path = "../domain" }
 
 [package.metadata.cargo-udeps.ignore]
 development = ["cargo-husky"]

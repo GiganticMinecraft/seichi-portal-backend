@@ -101,7 +101,7 @@ impl FormMessageDatabase for ConnectionPool {
 
                                 Ok::<_, InfraError>((
                                     user?,
-                                    rs.try_get::<Uuid>("", "message_id")?,
+                                    Uuid::from_str(&rs.try_get::<String>("", "message_id")?)?,
                                     rs.try_get::<String>("", "body")?,
                                     rs.try_get::<DateTime<Utc>>("", "timestamp")?,
                                 ))
@@ -115,8 +115,8 @@ impl FormMessageDatabase for ConnectionPool {
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(|(user, message_id, body, timestamp)| MessageDto {
-                id: message_id,
-                related_answer: answer_id,
+                id: message_id.to_string(),
+                related_answer: answer_id.to_string(),
                 sender: user,
                 body,
                 timestamp,
@@ -150,7 +150,7 @@ impl FormMessageDatabase for ConnectionPool {
                     })?;
 
                     Ok::<_, InfraError>(MessageDto {
-                        id: message_id.to_owned(),
+                        id: message_id.to_owned().to_string(),
                         related_answer: rs.try_get("", "related_answer_id")?,
                         sender: user,
                         body: rs.try_get("", "body")?,

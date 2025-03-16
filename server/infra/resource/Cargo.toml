@@ -30,3 +30,5 @@ meilisearch-sdk = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 serenity = { workspace = true }
+lapin = { workspace = true }
+tokio = { workspace = true }

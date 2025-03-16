@@ -11,6 +11,7 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use common::config::{ENV, HTTP};
+use domain::search::models::SearchableFields;
 use futures::future;
 use hyper::header::SET_COOKIE;
 use presentation::{
@@ -44,7 +45,7 @@ use presentation::{
         },
         health_check_handler::health_check,
         notification_handler::{get_notification_settings, update_notification_settings},
-        search_handler::cross_search,
+        search_handler::{cross_search, start_sync},
         user_handler::{
             end_session, get_my_user_info, get_user_info, link_discord, patch_user_role,
             start_session, unlink_discord, user_list,
@@ -55,7 +56,11 @@ use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde_json::json;
 use serenity::all::ShardManager;
-use tokio::{net::TcpListener, signal};
+use tokio::{
+    net::TcpListener,
+    signal,
+    sync::{Notify, mpsc},
+};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
@@ -95,6 +100,11 @@ async fn main() -> anyhow::Result<()> {
     conn.migrate().await?;
 
     let mut discord_connection = resource::outgoing::connection::ConnectionPool::new().await;
+
+    let (sender, receiver) = mpsc::channel::<SearchableFields>(100);
+
+    let messaging_conn =
+        resource::messaging::connection::MessagingConnectionPool::new(sender).await;
 
     let shared_repository = Repository::new(conn).into_shared();
 
@@ -221,12 +231,24 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await.unwrap();
 
     let shared_manager = discord_connection.pool.shard_manager.clone();
+    let messaging_conn = Arc::new(messaging_conn);
+    let search_engine_syncer_shutdown_notifier = Arc::new(Notify::new());
 
-    let (_discord, _axum) = future::join(
+    let (_discord, _axum, _syncer, _messaging) = future::join4(
         discord_connection.pool.start(),
         axum::serve(listener, router)
-            .with_graceful_shutdown(graceful_handler(shared_manager))
+            .with_graceful_shutdown(graceful_handler(
+                shared_manager,
+                messaging_conn.clone(),
+                search_engine_syncer_shutdown_notifier.clone(),
+            ))
             .into_future(),
+        start_sync(
+            shared_repository.to_owned(),
+            receiver,
+            search_engine_syncer_shutdown_notifier.clone(),
+        ),
+        messaging_conn.consumer(),
     )
     .await;
 
@@ -241,7 +263,11 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
-async fn graceful_handler(serenity_shared_manager: Arc<ShardManager>) {
+async fn graceful_handler(
+    serenity_shared_manager: Arc<ShardManager>,
+    messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
+    search_engine_syncer_shutdown_notifier: Arc<Notify>,
+) {
     let ctrl_c = async {
         signal::ctrl_c()
             .await
@@ -263,6 +289,8 @@ async fn graceful_handler(serenity_shared_manager: Arc<ShardManager>) {
         _ = ctrl_c => {
             info!("Gracefully shutdown...");
             serenity_shared_manager.shutdown_all().await;
+            messaging_connection.shutdown().await;
+            search_engine_syncer_shutdown_notifier.notify_waiters();
         },
         _ = terminate => {},
     }
