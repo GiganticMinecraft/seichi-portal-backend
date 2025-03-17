@@ -31,6 +31,7 @@ command = "cargo"
 args = ["clippy", "--", "-D", "warnings"]
 
 [tasks.format]
+toolchain = "nightly"
 command = "cargo"
 args = ["fmt", "--", "--config-path=${REPOSITORY_ROOT}/.cargo-husky/hooks/rustfmt.toml", "--emit=files"]
 

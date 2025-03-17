@@ -213,7 +213,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 multiple_delete(
                     "DELETE FROM label_settings_for_form_answers WHERE answer_id = ?",
-                    vec![answer_id.into_inner().into()],
+                    vec![answer_id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;
@@ -221,7 +221,10 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                 let params = label_ids
                     .into_iter()
                     .flat_map(|label_id| {
-                        [answer_id.into_inner().into(), label_id.into_inner().into()]
+                        [
+                            answer_id.into_inner().to_string().into(),
+                            label_id.into_inner().to_string().into(),
+                        ]
                     })
                     .collect_vec();
 
