@@ -34,7 +34,7 @@ impl FormQuestionDatabase for ConnectionPool {
                         .into_iter()
                         .flat_map(|question|
                             vec![
-                                form_id.into_inner().into(),
+                                form_id.into_inner().to_string().into(),
                                 question.title.clone().into(),
                                 question.description.clone().into(),
                                 question.question_type.to_string().into(),
@@ -91,7 +91,7 @@ impl FormQuestionDatabase for ConnectionPool {
         self.read_write_transaction(|txn| Box::pin(async move {
             let current_form_question_ids = query_all_and_values(
                 r"SELECT question_id FROM form_questions WHERE form_id = ?",
-                [form_id.into_inner().into()],
+                [form_id.into_inner().to_string().into()],
                 txn,
             ).await?
                 .into_iter()
@@ -120,7 +120,7 @@ impl FormQuestionDatabase for ConnectionPool {
                 is_required = VALUES(is_required)",
                 questions.iter().flat_map(|question| vec![
                     question.id.map(|id| id.into_inner()).into(),
-                    form_id.into_inner().into(),
+                    form_id.into_inner().to_string().into(),
                     question.title.clone().into(),
                     question.description.clone().into(),
                     question.question_type.to_string().into(),
@@ -179,7 +179,7 @@ impl FormQuestionDatabase for ConnectionPool {
             Box::pin(async move {
                 let questions_rs = query_all_and_values(
                     r"SELECT question_id, form_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
-                    [form_id.into_inner().into()],
+                    [form_id.into_inner().to_string().into()],
                     txn,
                 ).await?;
 
@@ -187,7 +187,7 @@ impl FormQuestionDatabase for ConnectionPool {
                     r"SELECT form_choices.question_id, choice FROM form_choices
                                 INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
                                 WHERE form_id = ?",
-                    [form_id.into_inner().into()],
+                    [form_id.into_inner().to_string().into()],
                     txn,
                 )
                     .await?;

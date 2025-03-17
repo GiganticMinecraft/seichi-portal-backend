@@ -28,7 +28,7 @@ impl FormCommentDatabase for ConnectionPool {
                     r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
                     WHERE form_answer_comments.id = ?",
-                    [comment_id.into_inner().into()],
+                    [comment_id.into_inner().to_string().into()],
                     txn,
                 ).await?;
 
@@ -59,7 +59,7 @@ impl FormCommentDatabase for ConnectionPool {
                     r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
                     WHERE answer_id = ?",
-                    [answer_id.into_inner().into()],
+                    [answer_id.into_inner().to_string().into()],
                     txn,
                 ).await?;
 
@@ -86,7 +86,7 @@ impl FormCommentDatabase for ConnectionPool {
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError> {
         let params = [
             comment.comment_id().into_inner().to_string().into(),
-            answer_id.into_inner().into(),
+            answer_id.into_inner().to_string().into(),
             comment.commented_by().id.to_string().into(),
             comment
                 .content()
@@ -119,7 +119,7 @@ impl FormCommentDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     "DELETE FROM form_answer_comments WHERE id = ?",
-                    [comment_id.into_inner().into()],
+                    [comment_id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;

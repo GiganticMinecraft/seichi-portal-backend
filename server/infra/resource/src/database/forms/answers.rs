@@ -41,7 +41,12 @@ impl FormAnswerDatabase for ConnectionPool {
             .flat_map(|content| {
                 [
                     answer_id.into(),
-                    content.question_id.to_owned().into_inner().into(),
+                    content
+                        .question_id
+                        .to_owned()
+                        .into_inner()
+                        .to_string()
+                        .into(),
                     content.answer.to_owned().into(),
                 ]
             })
@@ -83,13 +88,13 @@ impl FormAnswerDatabase for ConnectionPool {
                     r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id = ?",
-                    [answer_id.into_inner().into()],
+                    [answer_id.into_inner().to_string().into()],
                     txn,
                 ).await?;
 
                 let contents = query_all_and_values(
                     r"SELECT question_id, answer FROM real_answers WHERE answer_id = ?",
-                    [answer_id.into_inner().into()],
+                    [answer_id.into_inner().to_string().into()],
                     txn,
                 )
                     .await?;
@@ -136,7 +141,7 @@ impl FormAnswerDatabase for ConnectionPool {
                         INNER JOIN users ON answers.user = users.id
                         WHERE form_id = ?
                         ORDER BY answers.time_stamp",
-                    [form_id.into_inner().into()],
+                    [form_id.into_inner().to_string().into()],
                     txn,
                 ).await?;
 

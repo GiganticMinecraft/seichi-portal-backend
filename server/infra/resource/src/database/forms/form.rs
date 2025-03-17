@@ -125,7 +125,7 @@ impl FormDatabase for ConnectionPool {
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
                             LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
                             WHERE form_meta_data.id = ?",
-                    [form_id.into_inner().into()],
+                    [form_id.into_inner().to_string().into()],
                     txn,
                 )
                     .await?;
@@ -161,7 +161,7 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     "DELETE FROM form_meta_data WHERE id = ?",
-                    [form_id.into_inner().into()],
+                    [form_id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;
@@ -189,7 +189,7 @@ impl FormDatabase for ConnectionPool {
                 .to_string()
                 .into(),
             updated_by.id.to_string().into(),
-            form.id().into_inner().to_owned().into(),
+            form.id().into_inner().to_owned().to_string().into(),
         ];
 
         let update_form_webhooks_params = [
@@ -199,7 +199,7 @@ impl FormDatabase for ConnectionPool {
                 .into_inner()
                 .map(NonEmptyString::into_inner)
                 .into(),
-            form.id().into_inner().to_owned().into(),
+            form.id().into_inner().to_string().to_owned().into(),
         ];
 
         self.read_write_transaction(|txn| {
