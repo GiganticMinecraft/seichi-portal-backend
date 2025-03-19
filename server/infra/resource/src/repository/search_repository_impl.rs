@@ -8,7 +8,7 @@ use domain::{
         models::{Form, FormLabel},
     },
     repository::search_repository::SearchRepository,
-    search::models::SearchableFields,
+    search::models::SearchableFieldsWithOperation,
     types::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
@@ -109,7 +109,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
 
     async fn start_sync(
         &self,
-        receiver: Receiver<SearchableFields>,
+        receiver: Receiver<SearchableFieldsWithOperation>,
         shutdown_notifier: Arc<Notify>,
     ) -> Result<(), Error> {
         self.client

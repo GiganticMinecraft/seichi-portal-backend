@@ -11,7 +11,7 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use common::config::{ENV, HTTP};
-use domain::search::models::SearchableFields;
+use domain::search::models::SearchableFieldsWithOperation;
 use futures::future;
 use hyper::header::SET_COOKIE;
 use presentation::{
@@ -101,7 +101,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut discord_connection = resource::outgoing::connection::ConnectionPool::new().await;
 
-    let (sender, receiver) = mpsc::channel::<SearchableFields>(100);
+    let (sender, receiver) = mpsc::channel::<SearchableFieldsWithOperation>(100);
 
     let messaging_conn =
         resource::messaging::connection::MessagingConnectionPool::new(sender).await;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use domain::search::models::SearchableFields;
+use domain::search::models::{SearchableFields, SearchableFieldsWithOperation};
 use errors::infra::InfraError;
 use futures::StreamExt;
 use lapin::{
@@ -12,17 +12,17 @@ use tokio::sync::{Notify, mpsc};
 
 use crate::messaging::{
     config::{RABBITMQ, RabbitMQ},
-    schema::RabbitMQSchema,
+    schema::{Operation, RabbitMQSchema},
 };
 
 pub struct MessagingConnectionPool {
     pub(crate) rabbitmq_client: Connection,
     shutdown_notify: Arc<Notify>,
-    sender: mpsc::Sender<SearchableFields>,
+    sender: mpsc::Sender<SearchableFieldsWithOperation>,
 }
 
 impl MessagingConnectionPool {
-    pub async fn new(sender: mpsc::Sender<SearchableFields>) -> Self {
+    pub async fn new(sender: mpsc::Sender<SearchableFieldsWithOperation>) -> Self {
         let RabbitMQ {
             user,
             password,
@@ -86,10 +86,23 @@ impl MessagingConnectionPool {
                             if let Some(Ok(delivery)) = consumer.next().await {
                                 let data = String::from_utf8_lossy(&delivery.data);
                                 let payload = serde_json::from_str::<RabbitMQSchema>(&data)?.payload;
-                                let after = payload.try_into_after()?;
 
-                                if let Some(after) = after {
-                                    sender.send(SearchableFields::try_from(after)?).await?;
+                                let operation = match payload.op.to_owned() {
+                                    Operation::Create => domain::search::models::Operation::Create,
+                                    Operation::Update => domain::search::models::Operation::Update,
+                                    Operation::Delete => domain::search::models::Operation::Delete,
+                                };
+                                let data_fields = match operation {
+                                    domain::search::models::Operation::Create | domain::search::models::Operation::Update => {
+                                        payload.try_into_after()?
+                                    }
+                                    domain::search::models::Operation::Delete => {
+                                        payload.try_into_before()?
+                                    }
+                                };
+
+                                if let Some(data_fields) = data_fields {
+                                    sender.send((SearchableFields::try_from(data_fields)?, operation)).await?;
                                 }
 
                                 delivery.ack(BasicAckOptions::default()).await?;

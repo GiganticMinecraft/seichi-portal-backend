@@ -6,7 +6,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use domain::{repository::Repositories, search::models::SearchableFields, user::models::User};
+use domain::{
+    repository::Repositories, search::models::SearchableFieldsWithOperation, user::models::User,
+};
 use errors::Error;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -48,7 +50,7 @@ pub async fn cross_search(
 
 pub async fn start_sync(
     repository: RealInfrastructureRepository,
-    receiver: Receiver<SearchableFields>,
+    receiver: Receiver<SearchableFieldsWithOperation>,
     shutdown_notifier: Arc<Notify>,
 ) -> Result<(), Error> {
     let search_use_case = SearchUseCase {
