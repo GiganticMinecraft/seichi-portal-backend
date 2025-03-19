@@ -10,20 +10,20 @@ jobs:
   rustfmt:
     name: rustfmt check
     runs-on: ubuntu-latest
+    env:
+      RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
-      - uses: actions/checkout@v4
-      - run: echo "date=$(date -d '1 month ago' +'%Y-%m-%d')" >> $GITHUB_ENV
-      - uses: dtolnay/rust-toolchain@master
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Setup rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly-${{ env.date }}
+          toolchain: ${{ env.RUST_VERSION }}
+          target: ${{ matrix.cross-target }}
           components: rustfmt
-      - uses: LoliGothick/rustfmt-check@v0.5.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          toolchain: nightly-${{ env.date }}
-          flags: --all
-          args: --config-path=./.cargo-husky/hooks/rustfmt.toml
-          working-directory: ./server
+      - name: Rustfmt check
+        run: cargo fmt --all -- --check
+        working-directory: ./server
 
   lint-and-test:
     needs: [ rustfmt ]

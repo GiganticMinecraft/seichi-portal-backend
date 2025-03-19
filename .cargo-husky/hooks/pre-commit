@@ -1,5 +1,5 @@
 #!/bin/sh
 
 cd server &&
-  cargo fmt -- --check &&
+  cargo fmt -- --config-path=../.cargo-husky/hooks/rustfmt.toml --check &&
   cargo clippy -- -D warnings
