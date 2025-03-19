@@ -28,8 +28,8 @@ use crate::{
 impl FormAnswerDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), InfraError> {
-        let answer_id = answer.id().to_owned().into_inner();
-        let form_id = answer.form_id().to_owned().into_inner();
+        let answer_id = answer.id().to_owned().into_inner().to_string();
+        let form_id = answer.form_id().to_owned().into_inner().to_string();
         let user_id = answer.user().to_owned().id.to_string().to_owned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
             .map(|title| title.into_inner());
@@ -40,7 +40,7 @@ impl FormAnswerDatabase for ConnectionPool {
             .iter()
             .flat_map(|content| {
                 [
-                    answer_id.into(),
+                    answer_id.to_owned().into(),
                     content
                         .question_id
                         .to_owned()
