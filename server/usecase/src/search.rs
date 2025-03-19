@@ -9,7 +9,7 @@ use domain::{
         form::{answer_repository::AnswerRepository, form_repository::FormRepository},
         search_repository::SearchRepository,
     },
-    search::models::SearchableFields,
+    search::models::SearchableFieldsWithOperation,
     user::models::User,
 };
 use errors::{
@@ -134,7 +134,7 @@ impl<R1: SearchRepository, R2: AnswerRepository, R3: FormRepository> SearchUseCa
 
     pub async fn start_sync(
         &self,
-        receiver: Receiver<SearchableFields>,
+        receiver: Receiver<SearchableFieldsWithOperation>,
         shutdown_notifier: Arc<Notify>,
     ) -> Result<(), Error> {
         self.repository

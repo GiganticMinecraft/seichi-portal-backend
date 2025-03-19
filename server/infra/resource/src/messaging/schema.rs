@@ -12,14 +12,14 @@ use uuid::Uuid;
 // Debezium の Snapshot mode が有効のときのみ存在するからである。
 // 詳細は https://debezium.io/documentation/reference/stable/connectors/mariadb.html#mariadb-events の
 // Table 11. Descriptions of create event value fields を参照
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Copy, Clone, Debug)]
 pub enum Operation {
     #[serde(rename = "c")]
-    C,
+    Create,
     #[serde(rename = "u")]
-    U,
+    Update,
     #[serde(rename = "d")]
-    D,
+    Delete,
 }
 
 #[derive(Deserialize, Debug)]
@@ -31,41 +31,61 @@ pub struct Source {
 pub struct Payload {
     pub op: Operation,
     pub source: Source,
-    pub after: Value, // after は source によってテーブル名が判別するまで型が不定
+    // before, after は source によってテーブル名が判別するまで型が不定
+    pub before: Value,
+    pub after: Value,
 }
 
 impl Payload {
-    pub fn try_into_after(self) -> Result<Option<After>, InfraError> {
-        let table_name = self.source.table.as_str();
-        let after = self.after;
-
+    fn try_into_actual_data_fields(
+        table_name: &str,
+        value: Value,
+    ) -> Result<Option<ActualDataFields>, InfraError> {
         match table_name {
             "form_meta_data" => {
-                let form_meta_data: FormMetaData = serde_json::from_value(after)?;
-                Ok(Some(After::FormMetaData(form_meta_data)))
+                let form_meta_data: FormMetaData = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::FormMetaData(form_meta_data)))
             }
             "real_answers" => {
-                let real_answers: RealAnswers = serde_json::from_value(after)?;
-                Ok(Some(After::RealAnswers(real_answers)))
+                let real_answers: RealAnswers = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::RealAnswers(real_answers)))
             }
             "form_answer_comments" => {
-                let form_answer_comments: FormAnswerComments = serde_json::from_value(after)?;
-                Ok(Some(After::FormAnswerComments(form_answer_comments)))
+                let form_answer_comments: FormAnswerComments = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::FormAnswerComments(
+                    form_answer_comments,
+                )))
             }
             "label_for_form_answers" => {
-                let label_for_form_answers: LabelForFormAnswers = serde_json::from_value(after)?;
-                Ok(Some(After::LabelForFormAnswers(label_for_form_answers)))
+                let label_for_form_answers: LabelForFormAnswers = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::LabelForFormAnswers(
+                    label_for_form_answers,
+                )))
             }
             "label_for_forms" => {
-                let label_for_forms: LabelForForms = serde_json::from_value(after)?;
-                Ok(Some(After::LabelForForms(label_for_forms)))
+                let label_for_forms: LabelForForms = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::LabelForForms(label_for_forms)))
             }
             "users" => {
-                let users: Users = serde_json::from_value(after)?;
-                Ok(Some(After::Users(users)))
+                let users: Users = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::Users(users)))
             }
             _ => Ok(None),
         }
+    }
+
+    pub fn try_into_after(self) -> Result<Option<ActualDataFields>, InfraError> {
+        let table_name = self.source.table.as_str();
+        let after = self.after;
+
+        Self::try_into_actual_data_fields(table_name, after)
+    }
+
+    pub fn try_into_before(self) -> Result<Option<ActualDataFields>, InfraError> {
+        let table_name = self.source.table.as_str();
+        let before = self.before;
+
+        Self::try_into_actual_data_fields(table_name, before)
     }
 }
 
@@ -246,7 +266,7 @@ impl TryFrom<Users> for domain::search::models::Users {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum After {
+pub enum ActualDataFields {
     FormMetaData(FormMetaData),
     RealAnswers(RealAnswers),
     FormAnswerComments(FormAnswerComments),
@@ -255,34 +275,44 @@ pub enum After {
     Users(Users),
 }
 
-impl From<SearchableFields> for After {
+impl From<SearchableFields> for ActualDataFields {
     fn from(value: SearchableFields) -> Self {
         match value {
-            SearchableFields::FormMetaData(data) => After::FormMetaData(data.into()),
-            SearchableFields::RealAnswers(data) => After::RealAnswers(data.into()),
-            SearchableFields::FormAnswerComments(data) => After::FormAnswerComments(data.into()),
-            SearchableFields::LabelForFormAnswers(data) => After::LabelForFormAnswers(data.into()),
-            SearchableFields::LabelForForms(data) => After::LabelForForms(data.into()),
-            SearchableFields::Users(data) => After::Users(data.into()),
+            SearchableFields::FormMetaData(data) => ActualDataFields::FormMetaData(data.into()),
+            SearchableFields::RealAnswers(data) => ActualDataFields::RealAnswers(data.into()),
+            SearchableFields::FormAnswerComments(data) => {
+                ActualDataFields::FormAnswerComments(data.into())
+            }
+            SearchableFields::LabelForFormAnswers(data) => {
+                ActualDataFields::LabelForFormAnswers(data.into())
+            }
+            SearchableFields::LabelForForms(data) => ActualDataFields::LabelForForms(data.into()),
+            SearchableFields::Users(data) => ActualDataFields::Users(data.into()),
         }
     }
 }
 
-impl TryFrom<After> for SearchableFields {
+impl TryFrom<ActualDataFields> for SearchableFields {
     type Error = InfraError;
 
-    fn try_from(value: After) -> Result<Self, Self::Error> {
+    fn try_from(value: ActualDataFields) -> Result<Self, Self::Error> {
         match value {
-            After::FormMetaData(data) => Ok(SearchableFields::FormMetaData(data.try_into()?)),
-            After::RealAnswers(data) => Ok(SearchableFields::RealAnswers(data.try_into()?)),
-            After::FormAnswerComments(data) => {
+            ActualDataFields::FormMetaData(data) => {
+                Ok(SearchableFields::FormMetaData(data.try_into()?))
+            }
+            ActualDataFields::RealAnswers(data) => {
+                Ok(SearchableFields::RealAnswers(data.try_into()?))
+            }
+            ActualDataFields::FormAnswerComments(data) => {
                 Ok(SearchableFields::FormAnswerComments(data.try_into()?))
             }
-            After::LabelForFormAnswers(data) => {
+            ActualDataFields::LabelForFormAnswers(data) => {
                 Ok(SearchableFields::LabelForFormAnswers(data.try_into()?))
             }
-            After::LabelForForms(data) => Ok(SearchableFields::LabelForForms(data.try_into()?)),
-            After::Users(data) => Ok(SearchableFields::Users(data.try_into()?)),
+            ActualDataFields::LabelForForms(data) => {
+                Ok(SearchableFields::LabelForForms(data.try_into()?))
+            }
+            ActualDataFields::Users(data) => Ok(SearchableFields::Users(data.try_into()?)),
         }
     }
 }

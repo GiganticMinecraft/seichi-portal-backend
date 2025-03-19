@@ -11,7 +11,7 @@ use crate::{
         comment::{models::Comment, service::CommentAuthorizationContext},
         models::{Form, FormLabel},
     },
-    search::models::SearchableFields,
+    search::models::SearchableFieldsWithOperation,
     types::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
@@ -44,7 +44,7 @@ pub trait SearchRepository: Send + Sync + 'static {
     >;
     async fn start_sync(
         &self,
-        receiver: Receiver<SearchableFields>,
+        receiver: Receiver<SearchableFieldsWithOperation>,
         shutdown_notifier: Arc<Notify>,
     ) -> Result<(), Error>;
 }

@@ -1,3 +1,4 @@
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::form::{
@@ -6,6 +7,13 @@ use crate::form::{
     models::{FormDescription, FormId, FormLabelId, FormTitle},
     question::models::QuestionId,
 };
+
+#[derive(Debug)]
+pub enum Operation {
+    Create,
+    Update,
+    Delete,
+}
 
 #[derive(Debug)]
 pub enum SearchableFields {
@@ -17,14 +25,16 @@ pub enum SearchableFields {
     Users(Users),
 }
 
-#[derive(Debug)]
+pub type SearchableFieldsWithOperation = (SearchableFields, Operation);
+
+#[derive(Serialize, Debug)]
 pub struct FormMetaData {
     pub id: FormId,
     pub title: FormTitle,
     pub description: FormDescription,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct RealAnswers {
     pub id: u32,
     pub answer_id: AnswerId,
@@ -32,26 +42,26 @@ pub struct RealAnswers {
     pub answer: String,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct FormAnswerComments {
     pub id: CommentId,
     pub answer_id: AnswerId,
     pub content: String,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct LabelForFormAnswers {
     pub id: AnswerLabelId,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct LabelForForms {
     pub id: FormLabelId,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct Users {
     pub id: Uuid,
     pub name: String,

@@ -10,7 +10,7 @@ use domain::{
         question::models::Question,
     },
     notification::models::NotificationSettings,
-    search::models::SearchableFields,
+    search::models::SearchableFieldsWithOperation,
     user::models::{DiscordUser, Role, User},
 };
 use errors::infra::InfraError;
@@ -215,7 +215,7 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError>;
     async fn start_sync(
         &self,
-        receiver: Receiver<SearchableFields>,
+        receiver: Receiver<SearchableFieldsWithOperation>,
         shutdown_notifier: Arc<Notify>,
     ) -> Result<(), InfraError>;
 }
