@@ -1,6 +1,7 @@
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::form::answer::models::FormAnswerContentId;
 use crate::form::{
     answer::models::{AnswerId, AnswerLabelId},
     comment::models::CommentId,
@@ -36,7 +37,7 @@ pub struct FormMetaData {
 
 #[derive(Serialize, Debug)]
 pub struct RealAnswers {
-    pub id: u32,
+    pub id: FormAnswerContentId,
     pub answer_id: AnswerId,
     pub question_id: QuestionId,
     pub answer: String,

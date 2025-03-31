@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
-use tokio::sync::{Notify, mpsc::Receiver};
 
+use crate::search_engine_out_of_sync_notifier::model::NumberOfRecordsPerAggregate;
 use crate::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
@@ -42,9 +40,7 @@ pub trait SearchRepository: Send + Sync + 'static {
         Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
         Error,
     >;
-    async fn start_sync(
-        &self,
-        receiver: Receiver<SearchableFieldsWithOperation>,
-        shutdown_notifier: Arc<Notify>,
-    ) -> Result<(), Error>;
+    async fn sync_search_engine(&self, data: &[SearchableFieldsWithOperation])
+    -> Result<(), Error>;
+    async fn fetch_search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, Error>;
 }

@@ -2,15 +2,13 @@ use errors::validation::ValidationError;
 use errors::validation::ValidationError::NegativeValue;
 #[cfg(feature = "arbitrary")]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::iter::Sum;
 use std::ops::{Add, Div};
-use std::{ops::Deref, str::FromStr};
 
 /// f32 の範囲で非負数を表す型
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct NonNegativeF32(f32);
 
 impl NonNegativeF32 {
@@ -26,11 +24,11 @@ impl NonNegativeF32 {
     ///
     /// # Safety
     /// [`value`] が負の値を持たないことを確実に保証している場合にのみ使用してください。
-    pub unsafe fn new_unchecked(value: f32) -> Self {
+    pub const unsafe fn new_unchecked(value: f32) -> Self {
         Self(value)
     }
 
-    pub fn into_inner(self) -> f32 {
+    pub const fn into_inner(self) -> f32 {
         self.0
     }
 }
@@ -79,14 +77,6 @@ impl PartialOrd<f32> for NonNegativeF32 {
     }
 }
 
-impl Deref for NonNegativeF32 {
-    type Target = f32;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 #[cfg(feature = "proptest")]
 #[cfg(test)]
 mod tests {
@@ -97,9 +87,9 @@ mod tests {
     proptest! {
         #[test]
         fn non_negative_f32(value: f32) {
-            let result = NonNegativeF32::try_new(value.clone());
+            let result = NonNegativeF32::try_new(value);
 
-            prop_assert_eq!(result.is_ok(), value > 0.0);
+            prop_assert_eq!(result.is_ok(), value >= 0.0);
         }
     }
 }

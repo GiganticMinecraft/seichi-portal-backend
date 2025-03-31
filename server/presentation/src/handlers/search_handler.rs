@@ -26,9 +26,13 @@ pub async fn cross_search(
     Query(search_query): Query<SearchQuery>,
 ) -> impl IntoResponse {
     let search_use_case = SearchUseCase {
-        repository: repository.search_repository(),
+        search_repository: repository.search_repository(),
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
+        comment_repository: repository.form_comment_repository(),
+        form_answer_label_repository: repository.answer_label_repository(),
+        form_label_repository: repository.form_label_repository(),
+        user_repository: repository.user_repository(),
     };
 
     match search_query {
@@ -54,12 +58,35 @@ pub async fn start_sync(
     shutdown_notifier: Arc<Notify>,
 ) -> Result<(), Error> {
     let search_use_case = SearchUseCase {
-        repository: repository.search_repository(),
+        search_repository: repository.search_repository(),
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
+        comment_repository: repository.form_comment_repository(),
+        form_answer_label_repository: repository.answer_label_repository(),
+        form_label_repository: repository.form_label_repository(),
+        user_repository: repository.user_repository(),
     };
 
     search_use_case
         .start_sync(receiver, shutdown_notifier)
+        .await
+}
+
+pub async fn start_watch_out_of_sync(
+    repository: RealInfrastructureRepository,
+    shutdown_notifier: Arc<Notify>,
+) -> Result<(), Error> {
+    let search_use_case = SearchUseCase {
+        search_repository: repository.search_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
+        comment_repository: repository.form_comment_repository(),
+        form_answer_label_repository: repository.answer_label_repository(),
+        form_label_repository: repository.form_label_repository(),
+        user_repository: repository.user_repository(),
+    };
+
+    search_use_case
+        .start_watch_out_of_sync(shutdown_notifier)
         .await
 }

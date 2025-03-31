@@ -134,7 +134,7 @@ impl MigrationTrait for Migration {
             .execute(Statement::from_string(
                 DatabaseBackend::MySql,
                 r"CREATE TABLE IF NOT EXISTS real_answers(
-                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    id CHAR(36) NOT NULL PRIMARY KEY,
                     answer_id CHAR(36) NOT NULL,
                     question_id INT NOT NULL,
                     answer TEXT NOT NULL,

@@ -25,8 +25,11 @@ impl AnswerTitle {
     }
 }
 
+pub type FormAnswerContentId = types::Id<FormAnswerContent>;
+
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct FormAnswerContent {
+    pub id: FormAnswerContentId,
     pub question_id: QuestionId,
     pub answer: String,
 }

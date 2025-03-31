@@ -14,20 +14,8 @@ impl DiscordAPI for ConnectionPool {
             .get("https://discord.com/api/users/@me")
             .header("Authorization", format!("Bearer {}", token))
             .send()
-            .await
-            .map_err(|err| InfraError::Reqwest {
-                cause: err.to_string(),
-            })?;
+            .await?;
 
-        serde_json::from_str(
-            response
-                .text()
-                .await
-                .map_err(|err| InfraError::Reqwest {
-                    cause: err.to_string(),
-                })?
-                .as_str(),
-        )
-        .map_err(Into::into)
+        serde_json::from_str(response.text().await?.as_str()).map_err(Into::into)
     }
 }

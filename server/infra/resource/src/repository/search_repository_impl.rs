@@ -1,6 +1,9 @@
-use std::sync::Arc;
-
+use crate::{
+    database::components::{DatabaseComponents, SearchDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::search_engine_out_of_sync_notifier::model::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
@@ -17,12 +20,6 @@ use domain::{
 };
 use errors::Error;
 use itertools::Itertools;
-use tokio::sync::{Notify, mpsc::Receiver};
-
-use crate::{
-    database::components::{DatabaseComponents, SearchDatabase},
-    repository::Repository,
-};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Client> {
@@ -107,14 +104,21 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .collect())
     }
 
-    async fn start_sync(
+    async fn sync_search_engine(
         &self,
-        receiver: Receiver<SearchableFieldsWithOperation>,
-        shutdown_notifier: Arc<Notify>,
+        data: &[SearchableFieldsWithOperation],
     ) -> Result<(), Error> {
         self.client
             .search()
-            .start_sync(receiver, shutdown_notifier)
+            .sync_search_engine(data)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, Error> {
+        self.client
+            .search()
+            .search_engine_stats()
             .await
             .map_err(Into::into)
     }

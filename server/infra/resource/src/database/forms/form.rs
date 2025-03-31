@@ -7,6 +7,7 @@ use errors::infra::InfraError;
 use futures::future::try_join;
 use types::non_empty_string::NonEmptyString;
 
+use crate::database::connection::query_one;
 use crate::{
     database::{
         components::FormDatabase,
@@ -228,6 +229,24 @@ impl FormDatabase for ConnectionPool {
                 .await?;
 
                 Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn size(&self) -> Result<u32, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let query = query_one("SELECT COUNT(*) AS count FROM form_meta_data", txn).await?;
+
+                let size = query
+                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .transpose()?
+                    .unwrap_or(0);
+
+                Ok::<_, InfraError>(size as u32)
             })
         })
         .await

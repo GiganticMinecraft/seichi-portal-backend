@@ -91,6 +91,7 @@ mod tests {
     use types::non_empty_string::NonEmptyString;
 
     use super::*;
+    use crate::form::answer::models::FormAnswerContentId;
     use crate::{
         form::{answer::models::FormAnswerContent, question::models::QuestionId},
         repository::form::{
@@ -114,14 +115,17 @@ mod tests {
         ));
         let answers = vec![
             FormAnswerContent {
+                id: FormAnswerContentId::new(),
                 question_id: first_question_id,
                 answer: "Answer1".to_string(),
             },
             FormAnswerContent {
+                id: FormAnswerContentId::new(),
                 question_id: second_question_id,
                 answer: "Answer2".to_string(),
             },
             FormAnswerContent {
+                id: FormAnswerContentId::new(),
                 question_id: third_question_id,
                 answer: "Answer3".to_string(),
             },

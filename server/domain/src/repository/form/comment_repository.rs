@@ -26,6 +26,12 @@ pub trait CommentRepository: Send + Sync + 'static {
         Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
         Error,
     >;
+    async fn get_all_comments(
+        &self,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
+        Error,
+    >;
     async fn get_comment(
         &self,
         comment_id: CommentId,
@@ -46,4 +52,5 @@ pub trait CommentRepository: Send + Sync + 'static {
         actor: &User,
         comment: AuthorizationGuardWithContext<Comment, Delete, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error>;
+    async fn size(&self) -> Result<u32, Error>;
 }

@@ -1,5 +1,12 @@
-use std::sync::Arc;
-
+use crate::dto::CrossSearchDto;
+use domain::repository::form::answer_label_repository::AnswerLabelRepository;
+use domain::repository::form::comment_repository::CommentRepository;
+use domain::repository::form::form_label_repository::FormLabelRepository;
+use domain::repository::user_repository::UserRepository;
+use domain::search::models::Operation;
+use domain::search_engine_out_of_sync_notifier::model::{
+    NumberOfRecords, NumberOfRecordsPerAggregate,
+};
 use domain::{
     form::{
         answer::service::AnswerEntryAuthorizationContext,
@@ -17,30 +24,48 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
 use futures::{future::try_join_all, try_join};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
-
-use crate::dto::CrossSearchDto;
+use tokio::time;
 
 pub struct SearchUseCase<
     'a,
     SearchRepo: SearchRepository,
     AnswerRepo: AnswerRepository,
     FormRepo: FormRepository,
+    CommentRepo: CommentRepository,
+    FormAnswerLabelRepo: AnswerLabelRepository,
+    FormLabelRepo: FormLabelRepository,
+    UserRepo: UserRepository,
 > {
-    pub repository: &'a SearchRepo,
+    pub search_repository: &'a SearchRepo,
     pub answer_repository: &'a AnswerRepo,
     pub form_repository: &'a FormRepo,
+    pub comment_repository: &'a CommentRepo,
+    pub form_answer_label_repository: &'a FormAnswerLabelRepo,
+    pub form_label_repository: &'a FormLabelRepo,
+    pub user_repository: &'a UserRepo,
 }
 
-impl<R1: SearchRepository, R2: AnswerRepository, R3: FormRepository> SearchUseCase<'_, R1, R2, R3> {
+impl<
+    R1: SearchRepository,
+    R2: AnswerRepository,
+    R3: FormRepository,
+    R4: CommentRepository,
+    R5: AnswerLabelRepository,
+    R6: FormLabelRepository,
+    R7: UserRepository,
+> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
+{
     pub async fn cross_search(&self, actor: &User, query: String) -> Result<CrossSearchDto, Error> {
         let (forms, users, label_for_forms, label_for_answers, answers, comments) = try_join!(
-            self.repository.search_forms(&query),
-            self.repository.search_users(&query),
-            self.repository.search_labels_for_forms(&query),
-            self.repository.search_labels_for_answers(&query),
-            self.repository.search_answers(&query),
-            self.repository.search_comments(&query)
+            self.search_repository.search_forms(&query),
+            self.search_repository.search_users(&query),
+            self.search_repository.search_labels_for_forms(&query),
+            self.search_repository.search_labels_for_answers(&query),
+            self.search_repository.search_answers(&query),
+            self.search_repository.search_comments(&query)
         )?;
 
         let forms = forms
@@ -137,8 +162,200 @@ impl<R1: SearchRepository, R2: AnswerRepository, R3: FormRepository> SearchUseCa
         receiver: Receiver<SearchableFieldsWithOperation>,
         shutdown_notifier: Arc<Notify>,
     ) -> Result<(), Error> {
-        self.repository
-            .start_sync(receiver, shutdown_notifier)
-            .await
+        let mut receiver = receiver;
+        loop {
+            tokio::select! {
+                _ = shutdown_notifier.notified() => {
+                    break;
+                },
+                _ = async {
+                    if let Some(data) = receiver.recv().await {
+                        self.search_repository.sync_search_engine(&[data]).await?
+                    }
+
+                    Ok::<_, Error>(())
+                } => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn start_watch_out_of_sync(
+        &self,
+        shutdown_notifier: Arc<Notify>,
+    ) -> Result<(), Error> {
+        let mut interval = time::interval(Duration::from_secs(60));
+
+        loop {
+            tokio::select! {
+                _ = shutdown_notifier.notified() => {
+                    break
+                },
+                _ = interval.tick() => {
+                    let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
+
+                    let repository_records = NumberOfRecordsPerAggregate {
+                        form_meta_data: NumberOfRecords(self.form_repository.size().await?),
+                        real_answers: NumberOfRecords(self.answer_repository.size().await?),
+                        form_answer_comments: NumberOfRecords(self.comment_repository.size().await?),
+                        label_for_form_answers: NumberOfRecords(
+                            self.form_answer_label_repository.size().await?,
+                        ),
+                        label_for_forms: NumberOfRecords(self.form_label_repository.size().await?),
+                        users: NumberOfRecords(self.user_repository.size().await?),
+                    };
+
+                    let sync_rate = search_engine_records.try_into_sync_rate(&repository_records)?;
+
+                    if sync_rate.is_out_of_sync() {
+                        let forms = self
+                            .form_repository
+                            .list(None, None)
+                            .await?
+                            .into_iter()
+                            .map(|guard| {
+                                let form = unsafe { guard.into_read_unchecked() };
+
+                                (
+                                    domain::search::models::SearchableFields::FormMetaData(
+                                        domain::search::models::FormMetaData {
+                                            id: form.id().to_owned(),
+                                            title: form.title().to_owned(),
+                                            description: form.description().to_owned(),
+                                        },
+                                    ),
+                                    Operation::Update,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        let answers = self
+                            .answer_repository
+                            .get_all_answers()
+                            .await?
+                            .into_iter()
+                            .flat_map(|guard| {
+                                let entry = unsafe { guard.into_read_unchecked() };
+
+                                entry
+                                    .contents()
+                                    .iter()
+                                    .map(|content| {
+                                        (
+                                            domain::search::models::SearchableFields::RealAnswers(
+                                                domain::search::models::RealAnswers {
+                                                    id: content.id,
+                                                    answer_id: entry.id().to_owned(),
+                                                    question_id: content.question_id,
+                                                    answer: content.answer.to_owned(),
+                                                },
+                                            ),
+                                            Operation::Update,
+                                        )
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .collect::<Vec<_>>();
+
+                        let comments = self
+                            .comment_repository
+                            .get_all_comments()
+                            .await?
+                            .into_iter()
+                            .map(|guard| {
+                                let comment = unsafe { guard.into_read_unchecked() };
+
+                                (
+                                    domain::search::models::SearchableFields::FormAnswerComments(
+                                        domain::search::models::FormAnswerComments {
+                                            id: comment.comment_id().to_owned(),
+                                            answer_id: comment.answer_id().to_owned(),
+                                            content: comment.content().to_owned().into_inner().into_inner(),
+                                        },
+                                    ),
+                                    Operation::Update,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        let labels_for_forms = self
+                            .form_label_repository
+                            .fetch_labels()
+                            .await?
+                            .into_iter()
+                            .map(|guard| {
+                                let label = unsafe { guard.into_read_unchecked() };
+
+                                (
+                                    domain::search::models::SearchableFields::LabelForForms(
+                                        domain::search::models::LabelForForms {
+                                            id: label.id().to_owned(),
+                                            name: label.name().to_owned().into_inner().into_inner(),
+                                        },
+                                    ),
+                                    Operation::Update,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        let labels_for_answers = self
+                            .form_answer_label_repository
+                            .get_labels_for_answers()
+                            .await?
+                            .into_iter()
+                            .map(|guard| {
+                                let label = unsafe { guard.into_read_unchecked() };
+
+                                (
+                                    domain::search::models::SearchableFields::LabelForFormAnswers(
+                                        domain::search::models::LabelForFormAnswers {
+                                            id: label.id().to_owned(),
+                                            name: label.name().to_owned(),
+                                        },
+                                    ),
+                                    Operation::Update,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        let users = self
+                            .user_repository
+                            .fetch_all_users()
+                            .await?
+                            .into_iter()
+                            .map(|guard| {
+                                let user = unsafe { guard.into_read_unchecked() };
+
+                                (
+                                    domain::search::models::SearchableFields::Users(
+                                        domain::search::models::Users {
+                                            id: user.id,
+                                            name: user.name,
+                                        },
+                                    ),
+                                    Operation::Update,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        let data = forms
+                            .into_iter()
+                            .chain(answers)
+                            .chain(comments)
+                            .chain(labels_for_forms)
+                            .chain(labels_for_answers)
+                            .chain(users)
+                            .collect::<Vec<_>>();
+
+                        self.search_repository
+                            .sync_search_engine(data.as_slice())
+                            .await?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }

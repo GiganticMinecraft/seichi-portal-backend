@@ -8,6 +8,7 @@ use redis::{Commands, JsonCommands};
 use sha256::digest;
 use uuid::Uuid;
 
+use crate::database::connection::query_one;
 use crate::{
     database::{
         components::UserDatabase,
@@ -231,5 +232,22 @@ impl UserDatabase for ConnectionPool {
                 })
             })
             .await?)
+    }
+
+    async fn fetch_size(&self) -> Result<u32, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let query = query_one("SELECT COUNT(*) as count FROM users", txn).await?;
+
+                let size = query
+                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .transpose()?
+                    .unwrap_or(0);
+
+                Ok::<_, InfraError>(size as u32)
+            })
+        })
+        .await
+        .map_err(Into::into)
     }
 }

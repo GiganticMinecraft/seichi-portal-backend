@@ -13,6 +13,7 @@ use itertools::Itertools;
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
+use crate::database::connection::query_one;
 use crate::{
     database::{
         components::FormAnswerDatabase,
@@ -93,7 +94,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 ).await?;
 
                 let contents = query_all_and_values(
-                    r"SELECT question_id, answer FROM real_answers WHERE answer_id = ?",
+                    r"SELECT id, question_id, answer FROM real_answers WHERE answer_id = ?",
                     [answer_id.into_inner().to_string().into()],
                     txn,
                 )
@@ -103,6 +104,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerContentDto {
+                            id: rs.try_get("", "id")?,
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         })
@@ -168,7 +170,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     Vec::new()
                 } else {
                     query_all_and_values(
-                        format!("SELECT question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
+                        format!("SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
                         answer_ids.into_iter().map(|id| id.to_string().into()),
                         txn,
                     ).await?
@@ -179,6 +181,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .iter()
                     .map(|rs| {
                         Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?, FormAnswerContentDto {
+                            id: rs.try_get("", "id")?,
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         }))
@@ -240,7 +243,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     Vec::new()
                 } else {
                     query_all_and_values(
-                        format!("SELECT question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
+                        format!("SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
                         answer_ids.into_iter().map(|id| id.to_string().into()),
                         txn,
                     ).await?
@@ -250,6 +253,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .iter()
                     .map(|rs| {
                         Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?, FormAnswerContentDto {
+                            id: rs.try_get("", "id")?,
                             question_id: rs.try_get("", "question_id")?,
                             answer: rs.try_get("", "answer")?,
                         }))
@@ -296,6 +300,24 @@ impl FormAnswerDatabase for ConnectionPool {
                 )
                 .await?;
                 Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn size(&self) -> Result<u32, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let query = query_one("SELECT COUNT(*) AS count FROM real_answers", txn).await?;
+
+                let size = query
+                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .transpose()?
+                    .unwrap_or(0);
+
+                Ok::<_, InfraError>(size as u32)
             })
         })
         .await

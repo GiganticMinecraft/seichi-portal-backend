@@ -50,4 +50,5 @@ pub trait AnswerLabelRepository: Send + Sync + 'static {
         answer_id: AnswerId,
         labels: Vec<AuthorizationGuard<AnswerLabel, Update>>,
     ) -> Result<(), Error>;
+    async fn size(&self) -> Result<u32, Error>;
 }
