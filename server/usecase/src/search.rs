@@ -3,10 +3,8 @@ use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
-use domain::search::models::Operation;
-use domain::search_engine_out_of_sync_notifier::model::{
-    NumberOfRecords, NumberOfRecordsPerAggregate,
-};
+use domain::search::models::NumberOfRecords;
+use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
     form::{
         answer::service::AnswerEntryAuthorizationContext,

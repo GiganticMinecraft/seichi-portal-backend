@@ -1,6 +1,5 @@
-use domain::search_engine_out_of_sync_notifier::model::{
-    NumberOfRecords, NumberOfRecordsPerAggregate,
-};
+use domain::search::models::NumberOfRecords;
+use domain::search::models::NumberOfRecordsPerAggregate;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]

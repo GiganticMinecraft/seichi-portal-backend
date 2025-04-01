@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::search_engine_out_of_sync_notifier::model::NumberOfRecordsPerAggregate;
+use crate::search::models::NumberOfRecordsPerAggregate;
 use crate::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},

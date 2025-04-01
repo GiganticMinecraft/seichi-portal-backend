@@ -6,7 +6,7 @@ use crate::{
     external::discord_api::DiscordAPI,
 };
 use async_trait::async_trait;
-use domain::search_engine_out_of_sync_notifier::model::NumberOfRecordsPerAggregate;
+use domain::search::models::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, FormAnswerContent},

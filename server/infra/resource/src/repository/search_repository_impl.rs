@@ -3,7 +3,7 @@ use crate::{
     repository::Repository,
 };
 use async_trait::async_trait;
-use domain::search_engine_out_of_sync_notifier::model::NumberOfRecordsPerAggregate;
+use domain::search::models::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
         answer::models::{AnswerLabel, FormAnswerContent},
