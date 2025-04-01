@@ -1293,7 +1293,6 @@ dependencies = [
  "strum 0.27.1",
  "strum_macros",
  "test-case",
- "tokio",
  "tracing",
  "types",
  "uuid",
@@ -1340,8 +1339,6 @@ dependencies = [
  "domain",
  "futures",
  "hyper 1.6.0",
- "migration",
- "outgoing",
  "presentation",
  "resource",
  "sentry",
@@ -2790,10 +2787,8 @@ name = "outgoing"
 version = "0.1.0"
 dependencies = [
  "domain",
- "envy",
  "errors",
  "itertools",
- "mockall",
  "reqwest 0.12.15",
  "serde",
  "serde_json",
@@ -3576,7 +3571,6 @@ dependencies = [
  "meilisearch-sdk",
  "migration",
  "mockall",
- "outgoing",
  "redis",
  "regex",
  "reqwest 0.12.15",
@@ -3585,8 +3579,6 @@ dependencies = [
  "serde_json",
  "serenity",
  "sha256",
- "strum 0.27.1",
- "strum_macros",
  "tokio",
  "tracing",
  "types",
@@ -5485,7 +5477,6 @@ dependencies = [
 name = "usecase"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "domain",
  "errors",
  "futures",
