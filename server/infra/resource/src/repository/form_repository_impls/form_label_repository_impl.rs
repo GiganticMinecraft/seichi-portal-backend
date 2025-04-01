@@ -140,4 +140,9 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .await
             .map_err(Into::into)
     }
+
+    #[tracing::instrument(skip(self))]
+    async fn size(&self) -> Result<u32, Error> {
+        self.client.form_label().size().await.map_err(Into::into)
+    }
 }

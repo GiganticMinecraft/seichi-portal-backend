@@ -3,6 +3,7 @@ use domain::form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId};
 use errors::infra::InfraError;
 use itertools::Itertools;
 
+use crate::database::connection::query_one;
 use crate::{
     database::{
         components::FormAnswerLabelDatabase,
@@ -237,6 +238,25 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                 .await?;
 
                 Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn size(&self) -> Result<u32, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let query =
+                    query_one("SELECT COUNT(*) AS count FROM label_for_form_answers", txn).await?;
+
+                let size = query
+                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .transpose()?
+                    .unwrap_or(0);
+
+                Ok::<_, InfraError>(size as u32)
             })
         })
         .await

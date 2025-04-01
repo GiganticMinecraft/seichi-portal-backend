@@ -1,3 +1,4 @@
+pub mod natural_f32;
 pub mod non_empty_string;
 
 #[cfg(feature = "arbitrary")]

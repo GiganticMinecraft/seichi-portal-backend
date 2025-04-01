@@ -127,6 +127,22 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
             authorization_guard_with_context: self.authorization_guard_with_context.into_delete(),
         }
     }
+
+    /// 認可処理を行わずに、`guard_target` の参照を取得します。
+    ///
+    /// # Safety
+    /// システム側で実行する処理で、認可を必要としない場合にのみ使用してください。
+    pub unsafe fn read_unchecked(&self) -> &T {
+        unsafe { self.authorization_guard_with_context.read_unchecked() }
+    }
+
+    /// 認可処理を行わずに、所有権を含めて `guard_target` を取得します。
+    ///
+    /// # Safety
+    /// システム側で実行する処理で、認可を必要としない場合にのみ使用してください。
+    pub unsafe fn into_read_unchecked(self) -> T {
+        unsafe { self.authorization_guard_with_context.into_read_unchecked() }
+    }
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {

@@ -128,7 +128,7 @@ impl TryFrom<FormMetaData> for domain::search::models::FormMetaData {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RealAnswers {
-    pub id: u32,
+    pub id: String,
     pub answer_id: String,
     pub question_id: i32,
     pub answer: String,
@@ -137,7 +137,7 @@ pub struct RealAnswers {
 impl From<domain::search::models::RealAnswers> for RealAnswers {
     fn from(real_answers: domain::search::models::RealAnswers) -> Self {
         Self {
-            id: real_answers.id,
+            id: real_answers.id.to_string(),
             answer_id: real_answers.answer_id.to_string(),
             question_id: real_answers.question_id.into_inner(),
             answer: real_answers.answer,
@@ -150,7 +150,7 @@ impl TryFrom<RealAnswers> for domain::search::models::RealAnswers {
 
     fn try_from(real_answers: RealAnswers) -> Result<Self, Self::Error> {
         Ok(Self {
-            id: real_answers.id,
+            id: Uuid::from_str(&real_answers.id)?.into(),
             answer_id: Uuid::from_str(&real_answers.answer_id)?.into(),
             question_id: real_answers.question_id.into(),
             answer: real_answers.answer,

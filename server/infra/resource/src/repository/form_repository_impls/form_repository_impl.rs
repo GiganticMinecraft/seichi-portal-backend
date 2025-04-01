@@ -81,4 +81,9 @@ impl<Client: DatabaseComponents + 'static> FormRepository for Repository<Client>
             .await
             .map_err(Into::into)
     }
+
+    #[tracing::instrument(skip(self))]
+    async fn size(&self) -> Result<u32, Error> {
+        self.client.form().size().await.map_err(Into::into)
+    }
 }

@@ -143,4 +143,13 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .await
             .map_err(Into::into)
     }
+
+    #[tracing::instrument(skip(self))]
+    async fn size(&self) -> Result<u32, Error> {
+        self.client
+            .form_answer_label()
+            .size()
+            .await
+            .map_err(Into::into)
+    }
 }

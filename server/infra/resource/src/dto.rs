@@ -101,20 +101,23 @@ impl TryFrom<FormDto> for domain::form::models::Form {
 
 #[derive(Clone)]
 pub struct FormAnswerContentDto {
+    pub id: String,
     pub question_id: i32,
     pub answer: String,
 }
 
 impl TryFrom<FormAnswerContentDto> for domain::form::answer::models::FormAnswerContent {
-    type Error = errors::domain::DomainError;
+    type Error = InfraError;
 
     fn try_from(
         FormAnswerContentDto {
+            id,
             question_id,
             answer,
         }: FormAnswerContentDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::answer::models::FormAnswerContent {
+            id: Uuid::parse_str(&id)?.into(),
             question_id: question_id.into(),
             answer,
         })

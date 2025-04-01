@@ -1,6 +1,12 @@
-use std::sync::Arc;
-
+use crate::{
+    dto::{
+        AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerDto, FormDto, FormLabelDto,
+        MessageDto, NotificationSettingsDto, QuestionDto,
+    },
+    external::discord_api::DiscordAPI,
+};
 use async_trait::async_trait;
+use domain::search::models::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, FormAnswerContent},
@@ -15,16 +21,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use mockall::automock;
-use tokio::sync::{Notify, mpsc::Receiver};
 use uuid::Uuid;
-
-use crate::{
-    dto::{
-        AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerDto, FormDto, FormLabelDto,
-        MessageDto, NotificationSettingsDto, QuestionDto,
-    },
-    external::discord_api::DiscordAPI,
-};
 
 #[async_trait]
 pub trait DatabaseComponents: Send + Sync {
@@ -67,6 +64,7 @@ pub trait FormDatabase: Send + Sync {
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError>;
+    async fn size(&self) -> Result<u32, InfraError>;
 }
 
 #[automock]
@@ -80,6 +78,7 @@ pub trait FormAnswerDatabase: Send + Sync {
     ) -> Result<Vec<FormAnswerDto>, InfraError>;
     async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError>;
     async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError>;
+    async fn size(&self) -> Result<u32, InfraError>;
 }
 
 #[automock]
@@ -106,6 +105,7 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
         answer_id: AnswerId,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), InfraError>;
+    async fn size(&self) -> Result<u32, InfraError>;
 }
 
 #[automock]
@@ -146,8 +146,10 @@ pub trait FormMessageDatabase: Send + Sync {
 pub trait FormCommentDatabase: Send + Sync {
     async fn get_comment(&self, comment_id: CommentId) -> Result<Option<CommentDto>, InfraError>;
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError>;
+    async fn get_all_comments(&self) -> Result<Vec<CommentDto>, InfraError>;
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
+    async fn size(&self) -> Result<u32, InfraError>;
 }
 
 #[automock]
@@ -175,6 +177,7 @@ pub trait FormLabelDatabase: Send + Sync {
         form_id: FormId,
         label_ids: Vec<FormLabelId>,
     ) -> Result<(), InfraError>;
+    async fn size(&self) -> Result<u32, InfraError>;
 }
 
 #[automock]
@@ -202,6 +205,7 @@ pub trait UserDatabase: Send + Sync {
     ) -> Result<(), InfraError>;
     async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError>;
     async fn fetch_discord_user(&self, user: &User) -> Result<Option<DiscordUserDto>, InfraError>;
+    async fn fetch_size(&self) -> Result<u32, InfraError>;
 }
 
 #[automock]
@@ -213,11 +217,11 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
     async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError>;
     async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError>;
-    async fn start_sync(
+    async fn sync_search_engine(
         &self,
-        receiver: Receiver<SearchableFieldsWithOperation>,
-        shutdown_notifier: Arc<Notify>,
+        data: &[SearchableFieldsWithOperation],
     ) -> Result<(), InfraError>;
+    async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError>;
 }
 
 #[automock]

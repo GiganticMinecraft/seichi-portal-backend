@@ -12,8 +12,9 @@ use axum::{
 };
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
-use futures::future;
+use futures::join;
 use hyper::header::SET_COOKIE;
+use presentation::handlers::search_handler::start_watch_out_of_sync;
 use presentation::{
     auth::auth,
     handlers::{
@@ -232,25 +233,25 @@ async fn main() -> anyhow::Result<()> {
 
     let shared_manager = discord_connection.pool.shard_manager.clone();
     let messaging_conn = Arc::new(messaging_conn);
-    let search_engine_syncer_shutdown_notifier = Arc::new(Notify::new());
+    let shutdown_notifier = Arc::new(Notify::new());
 
-    let (_discord, _axum, _syncer, _messaging) = future::join4(
+    let (_discord, _axum, _syncer, _messaging, _auto_of_sync_watcher) = join!(
         discord_connection.pool.start(),
         axum::serve(listener, router)
             .with_graceful_shutdown(graceful_handler(
                 shared_manager,
                 messaging_conn.clone(),
-                search_engine_syncer_shutdown_notifier.clone(),
+                shutdown_notifier.clone(),
             ))
             .into_future(),
         start_sync(
             shared_repository.to_owned(),
             receiver,
-            search_engine_syncer_shutdown_notifier.clone(),
+            shutdown_notifier.clone(),
         ),
         messaging_conn.consumer(),
-    )
-    .await;
+        start_watch_out_of_sync(shared_repository.to_owned(), shutdown_notifier.clone())
+    );
 
     Ok(())
 }

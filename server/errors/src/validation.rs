@@ -4,4 +4,6 @@ use thiserror::Error;
 pub enum ValidationError {
     #[error("Empty value.")]
     EmptyValue,
+    #[error("Negative value.")]
+    NegativeValue,
 }

@@ -236,6 +236,22 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
             _phantom_data: std::marker::PhantomData,
         }
     }
+
+    /// 認可処理を行わずに、`guard_target` の参照を取得します。
+    ///
+    /// # Safety
+    /// システム側で実行する処理で、認可を必要としない場合にのみ使用してください。
+    pub unsafe fn read_unchecked(&self) -> &T {
+        &self.guard_target
+    }
+
+    /// 認可処理を行わずに、所有権を含めて `guard_target` を取得します。
+    ///
+    /// # Safety
+    /// システム側で実行する処理で、認可を必要としない場合にのみ使用してください。
+    pub unsafe fn into_read_unchecked(self) -> T {
+        self.guard_target
+    }
 }
 
 impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>

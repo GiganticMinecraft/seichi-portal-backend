@@ -55,4 +55,5 @@ pub trait UserRepository: Send + Sync + 'static {
         &self,
         token: String,
     ) -> Result<Option<DiscordUser>, Error>;
+    async fn size(&self) -> Result<u32, Error>;
 }

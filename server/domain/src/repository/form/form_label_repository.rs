@@ -49,4 +49,5 @@ pub trait FormLabelRepository: Send + Sync + 'static {
         form_id: FormId,
         labels: Vec<AuthorizationGuard<FormLabel, Update>>,
     ) -> Result<(), Error>;
+    async fn size(&self) -> Result<u32, Error>;
 }

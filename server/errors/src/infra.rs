@@ -91,3 +91,11 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for InfraError {
         }
     }
 }
+
+impl From<reqwest::Error> for InfraError {
+    fn from(value: reqwest::Error) -> Self {
+        InfraError::Reqwest {
+            cause: value.to_string(),
+        }
+    }
+}

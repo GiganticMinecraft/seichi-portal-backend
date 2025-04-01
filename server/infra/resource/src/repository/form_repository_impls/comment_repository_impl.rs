@@ -42,6 +42,23 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
     }
 
     #[tracing::instrument(skip(self))]
+    async fn get_all_comments(
+        &self,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
+        Error,
+    > {
+        self.client
+            .form_comment()
+            .get_all_comments()
+            .await?
+            .into_iter()
+            .map(TryInto::<Comment>::try_into)
+            .map_ok(|comment| AuthorizationGuardWithContext::new(comment).into_read())
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn get_comment(
         &self,
         comment_id: CommentId,
@@ -96,5 +113,10 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
             )?
             .await
             .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn size(&self) -> Result<u32, Error> {
+        self.client.form_comment().size().await.map_err(Into::into)
     }
 }

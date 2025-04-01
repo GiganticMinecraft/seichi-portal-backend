@@ -178,4 +178,8 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
                 )
             }))
     }
+
+    async fn size(&self) -> Result<u32, Error> {
+        self.client.user().fetch_size().await.map_err(Into::into)
+    }
 }

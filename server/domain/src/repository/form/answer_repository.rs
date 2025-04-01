@@ -55,4 +55,5 @@ pub trait AnswerRepository: Send + Sync + 'static {
             AnswerEntryAuthorizationContext,
         >,
     ) -> Result<(), Error>;
+    async fn size(&self) -> Result<u32, Error>;
 }

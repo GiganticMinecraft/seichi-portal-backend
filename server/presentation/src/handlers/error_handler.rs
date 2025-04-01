@@ -322,6 +322,14 @@ pub fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        ValidationError::NegativeValue => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "NEGATIVE_VALUE",
+                "reason": "Negative value error."
+            })),
+        )
+            .into_response(),
     }
 }
 

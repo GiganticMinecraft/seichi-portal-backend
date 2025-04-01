@@ -10,6 +10,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 
+use crate::database::connection::{query_all, query_one};
 use crate::{
     database::{
         components::FormCommentDatabase,
@@ -83,6 +84,35 @@ impl FormCommentDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
+    async fn get_all_comments(&self) -> Result<Vec<CommentDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let comments = query_all(
+                    r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
+                    INNER JOIN users ON form_answer_comments.commented_by = users.id",
+                    txn,
+                ).await?;
+
+                comments.into_iter().map(|rs| {
+                    Ok::<_, InfraError>(CommentDto {
+                        answer_id: rs.try_get("", "answer_id")?,
+                        comment_id: rs.try_get("", "id")?,
+                        content: rs.try_get("", "content")?,
+                        timestamp: rs.try_get("", "time_stamp")?,
+                        commented_by: UserDto {
+                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("", "commented_by")?,
+                            role: Role::from_str(rs.try_get::<String>("", "role")?.as_str())?,
+                        },
+                    })
+                }).collect::<Result<Vec<_>, _>>()
+            })
+        })
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
     async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError> {
         let params = [
             comment.comment_id().into_inner().to_string().into(),
@@ -125,6 +155,25 @@ impl FormCommentDatabase for ConnectionPool {
                 .await?;
 
                 Ok::<_, InfraError>(())
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
+    async fn size(&self) -> Result<u32, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let query =
+                    query_one("SELECT COUNT(*) AS count FROM form_answer_comments", txn).await?;
+
+                let size = query
+                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .transpose()?
+                    .unwrap_or(0);
+
+                Ok::<_, InfraError>(size as u32)
             })
         })
         .await

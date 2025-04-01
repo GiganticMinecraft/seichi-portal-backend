@@ -35,4 +35,5 @@ pub trait FormRepository: Send + Sync + 'static {
         actor: &User,
         updated_form: AuthorizationGuard<Form, Update>,
     ) -> Result<(), Error>;
+    async fn size(&self) -> Result<u32, Error>;
 }
