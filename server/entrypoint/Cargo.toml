@@ -9,10 +9,8 @@ anyhow = { workspace = true }
 axum = { workspace = true }
 common = { path = "../common" }
 hyper = { version = "1.6.0", features = ["full"] }
-migration = { path = "../migration" }
 presentation = { path = "../presentation" }
 resource = { path = "../infra/resource" }
-outgoing = { path = "../infra/outgoing" }
 # default featureは推移的にnative-tls featureを有効しているため、native-tls (LinuxではOpenSSL) を連れてくる。これをオプトアウトするためにrustlsを使う。
 sentry = { version = "0.36.0", default-features = false, features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "tracing", "debug-images", "rustls", "tower", "tower-http"] }
 tokio = { workspace = true }
