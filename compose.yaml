@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:11.7.2
+    image: mariadb:lts
     container_name: mariadb
     command: --log-bin --binlog-format=ROW --binlog_row_image=FULL
     environment:
