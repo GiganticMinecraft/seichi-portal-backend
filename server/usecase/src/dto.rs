@@ -1,6 +1,6 @@
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
+        answer::models::{AnswerEntry, AnswerLabel},
         comment::models::Comment,
         models::{Form, FormLabel},
         question::models::Question,
@@ -28,7 +28,7 @@ pub struct UserDto {
 pub struct CrossSearchDto {
     pub forms: Vec<Form>,
     pub users: Vec<User>,
-    pub answers: Vec<FormAnswerContent>,
+    pub answers: Vec<AnswerEntry>,
     pub label_for_forms: Vec<FormLabel>,
     pub label_for_answers: Vec<AnswerLabel>,
     pub comments: Vec<Comment>,

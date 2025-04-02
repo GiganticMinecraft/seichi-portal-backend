@@ -86,6 +86,46 @@ impl<
             .flat_map(|guard| guard.try_into_read(actor))
             .collect::<Vec<_>>();
 
+        let answers_futs = answers
+            .into_iter()
+            .map(|guard| async {
+                let context = guard
+                    .create_context(|entry| {
+                        let form_id = entry.form_id().to_owned();
+
+                        async move {
+                            let form_guard = self
+                                .form_repository
+                                .get(form_id)
+                                .await?
+                                .ok_or(Error::from(FormNotFound))?;
+
+                            let form = form_guard.try_read(actor)?;
+                            let form_settings = form.settings();
+
+                            Ok(AnswerEntryAuthorizationContext {
+                                form_visibility: form_settings.visibility().to_owned(),
+                                response_period: form_settings
+                                    .answer_settings()
+                                    .response_period()
+                                    .to_owned(),
+                                answer_visibility: form_settings
+                                    .answer_settings()
+                                    .visibility()
+                                    .to_owned(),
+                            })
+                        }
+                    })
+                    .await?;
+
+                guard
+                    .try_into_read(actor, &context)
+                    .map_err(Into::<Error>::into)
+            })
+            .collect::<Vec<_>>();
+
+        let answers = try_join_all(answers_futs).await?;
+
         let comment_futs = comments
             .into_iter()
             .map(|guard| async {

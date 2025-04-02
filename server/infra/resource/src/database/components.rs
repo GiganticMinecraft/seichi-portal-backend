@@ -6,10 +6,10 @@ use crate::{
     external::discord_api::DiscordAPI,
 };
 use async_trait::async_trait;
-use domain::search::models::NumberOfRecordsPerAggregate;
+use domain::search::models::{NumberOfRecordsPerAggregate, RealAnswers};
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, FormAnswerContent},
+        answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{Form, FormId, FormLabel, FormLabelId, FormLabelName},
@@ -77,6 +77,10 @@ pub trait FormAnswerDatabase: Send + Sync {
         form_id: FormId,
     ) -> Result<Vec<FormAnswerDto>, InfraError>;
     async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError>;
+    async fn get_answers_by_answer_ids(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<FormAnswerDto>, InfraError>;
     async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
@@ -215,7 +219,7 @@ pub trait SearchDatabase: Send + Sync {
     async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError>;
     async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError>;
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<RealAnswers>, InfraError>;
     async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError>;
     async fn sync_search_engine(
         &self,

@@ -2,10 +2,12 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
+use crate::form::answer::models::AnswerEntry;
+use crate::form::answer::service::AnswerEntryAuthorizationContext;
 use crate::search::models::NumberOfRecordsPerAggregate;
 use crate::{
     form::{
-        answer::models::{AnswerLabel, FormAnswerContent},
+        answer::models::AnswerLabel,
         comment::{models::Comment, service::CommentAuthorizationContext},
         models::{Form, FormLabel},
     },
@@ -32,7 +34,13 @@ pub trait SearchRepository: Send + Sync + 'static {
         &self,
         query: &str,
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, Error>;
+    async fn search_answers(
+        &self,
+        query: &str,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    >;
     async fn search_comments(
         &self,
         query: &str,

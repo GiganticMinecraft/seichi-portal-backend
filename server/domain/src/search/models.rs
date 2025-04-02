@@ -8,7 +8,7 @@ use crate::form::{
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use errors::Error;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use types::natural_f32::NonNegativeF32;
 use uuid::Uuid;
 #[derive(Debug)]
@@ -37,7 +37,7 @@ pub struct FormMetaData {
     pub description: FormDescription,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RealAnswers {
     pub id: FormAnswerContentId,
     pub answer_id: AnswerId,
