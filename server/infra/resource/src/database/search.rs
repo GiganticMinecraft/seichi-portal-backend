@@ -2,10 +2,10 @@ use crate::database::config::{MEILISEARCH, MeiliSearch};
 use crate::database::meilisearch_schemas::MeilisearchStatsSchema;
 use crate::database::{components::SearchDatabase, connection::ConnectionPool};
 use async_trait::async_trait;
-use domain::search::models::NumberOfRecordsPerAggregate;
+use domain::search::models::{NumberOfRecordsPerAggregate, RealAnswers};
 use domain::{
     form::{
-        answer::models::{AnswerLabel, FormAnswerContent},
+        answer::models::AnswerLabel,
         comment::models::Comment,
         models::{Form, FormLabel},
     },
@@ -83,14 +83,14 @@ impl SearchDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, InfraError> {
+    async fn search_answers(&self, query: &str) -> Result<Vec<RealAnswers>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("real_answers")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<FormAnswerContent>()
+            .execute::<RealAnswers>()
             .await?
             .hits
             .into_iter()

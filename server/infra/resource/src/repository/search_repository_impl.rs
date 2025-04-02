@@ -1,12 +1,15 @@
+use crate::database::components::FormAnswerDatabase;
 use crate::{
     database::components::{DatabaseComponents, SearchDatabase},
     repository::Repository,
 };
 use async_trait::async_trait;
+use domain::form::answer::models::AnswerEntry;
+use domain::form::answer::service::AnswerEntryAuthorizationContext;
 use domain::search::models::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
-        answer::models::{AnswerLabel, FormAnswerContent},
+        answer::models::AnswerLabel,
         comment::{models::Comment, service::CommentAuthorizationContext},
         models::{Form, FormLabel},
     },
@@ -79,12 +82,27 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .collect_vec())
     }
 
-    async fn search_answers(&self, query: &str) -> Result<Vec<FormAnswerContent>, Error> {
+    async fn search_answers(
+        &self,
+        query: &str,
+    ) -> Result<
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Error,
+    > {
+        let real_answers = self.client.search().search_answers(query).await?;
+        let answer_ids = real_answers
+            .iter()
+            .map(|answer| answer.answer_id)
+            .collect_vec();
+
         self.client
-            .search()
-            .search_answers(query)
-            .await
-            .map_err(Into::into)
+            .form_answer()
+            .get_answers_by_answer_ids(answer_ids)
+            .await?
+            .into_iter()
+            .map(TryInto::<AnswerEntry>::try_into)
+            .map_ok(|entry| AuthorizationGuardWithContext::new(entry).into_read())
+            .collect::<Result<Vec<_>, _>>()
     }
 
     async fn search_comments(

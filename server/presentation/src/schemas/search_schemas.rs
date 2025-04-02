@@ -1,6 +1,7 @@
+use domain::form::answer::models::AnswerEntry;
 use domain::{
     form::{
-        answer::models::{AnswerId, AnswerLabel, FormAnswerContent},
+        answer::models::{AnswerId, AnswerLabel},
         comment::models::{Comment, CommentId},
         models::{Form, FormLabel},
     },
@@ -40,7 +41,7 @@ impl From<Comment> for CommentSchema {
 pub struct CrossSearchResult {
     pub forms: Vec<Form>,
     pub users: Vec<User>,
-    pub answers: Vec<FormAnswerContent>,
+    pub answers: Vec<AnswerEntry>,
     pub label_for_forms: Vec<FormLabel>,
     pub label_for_answers: Vec<AnswerLabel>,
     pub comments: Vec<CommentSchema>,

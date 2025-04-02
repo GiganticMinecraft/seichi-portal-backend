@@ -281,6 +281,89 @@ impl FormAnswerDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
+    async fn get_answers_by_answer_ids(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<FormAnswerDto>, InfraError> {
+        let ids = answer_ids
+            .iter()
+            .map(|id| id.into_inner().to_string().into())
+            .collect_vec();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let answers = query_all_and_values(
+                    format!("SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
+                        INNER JOIN users ON answers.user = users.id
+                        WHERE answers.id IN ({})
+                        ORDER BY answers.time_stamp", &vec!["?"; ids.len()].iter().join(", ")).as_str(),
+                    ids,
+                    txn,
+                ).await?;
+
+                let form_answer_dtos = answers
+                    .iter()
+                    .map(|rs| {
+                        let answer_id = Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?;
+
+                        Ok::<_, InfraError>(FormAnswerDto {
+                            id: answer_id.to_string(),
+                            uuid: rs.try_get("", "user")?,
+                            user_name: rs.try_get("", "name")?,
+                            user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                            timestamp: rs.try_get("", "time_stamp")?,
+                            form_id: rs.try_get("", "form_id")?,
+                            title: rs.try_get("", "title")?,
+                            contents: Vec::new()
+                        })
+                    }).collect::<Result<Vec<_>, _>>()?;
+
+                let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
+
+                let contents = if answer_ids.is_empty() {
+                    Vec::new()
+                } else {
+                    query_all_and_values(
+                        format!("SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
+                        answer_ids.into_iter().map(|id| id.to_string().into()),
+                        txn,
+                    ).await?
+                };
+
+
+                let answer_id_with_content_dto = contents
+                    .iter()
+                    .map(|rs| {
+                        Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String>("", "answer_id")?)?, FormAnswerContentDto {
+                            id: rs.try_get("", "id")?,
+                            question_id: rs.try_get("", "question_id")?,
+                            answer: rs.try_get("", "answer")?,
+                        }))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let grouped_answer_contents = answer_id_with_content_dto
+                    .into_iter()
+                    .into_group_map_by(|(answer_id, _)| answer_id.to_owned());
+
+
+                form_answer_dtos
+                    .into_iter()
+                    .map(|dto| {
+                        Ok::<_, InfraError>(FormAnswerDto {
+                            contents: grouped_answer_contents.get(&Uuid::from_str(&dto.id)?).cloned()
+                                .map(|contents| contents.into_iter().map(|(_, content_dto)| content_dto).collect_vec())
+                                .unwrap_or_default(),
+                            ..dto
+                        })
+                    }).collect()
+
+            })
+        }).await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument]
     async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError> {
         let answer_id = answer_entry.id().to_owned().into_inner().to_string();
         let form_id = answer_entry.form_id().to_owned().to_string();
