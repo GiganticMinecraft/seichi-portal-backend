@@ -20,7 +20,7 @@ services:
       - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
     restart: always
   redis:
-    image: redislabs/rejson:99.99.98
+    image: redis/redis-stack:7.4.0-v3
     container_name: redis
     ports:
       - "6379:6379"
