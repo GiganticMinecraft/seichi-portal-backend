@@ -1,3 +1,4 @@
+use common::config::FRONTEND;
 use derive_getters::Getters;
 use errors::Error;
 
@@ -82,6 +83,8 @@ impl<Sender: DiscordSender> DiscordDMNotification<Sender> {
         settings: &NotificationSettings,
         notification_type: DiscordDMNotificationType,
     ) -> Result<(), Error> {
+        let url = &*FRONTEND.url;
+
         match notification_type {
             DiscordDMNotificationType::Message { form_id, answer_id } => {
                 // NOTE: ここでガード節を使っていないのは、
@@ -94,11 +97,9 @@ impl<Sender: DiscordSender> DiscordDMNotification<Sender> {
                             [
                                 "あなたの回答にメッセージが送信されました。",
                                 "メッセージを確認してください。",
-                                &format!(
-                                    "http://localhost:3000/forms/{form_id}/answers/{answer_id}/messages"
-                                ),
+                                &format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
                             ]
-                                .join("\n"),
+                            .join("\n"),
                         )
                         .await?;
                 }
