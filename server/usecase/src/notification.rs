@@ -1,5 +1,7 @@
+pub mod discord_dm_notificator_impl;
+
 use domain::{
-    notification::models::NotificationSettings,
+    notification::models::NotificationPreference,
     repository::{
         notification_repository::NotificationRepository, user_repository::UserRepository,
     },
@@ -22,7 +24,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         &self,
         actor: User,
         target: Uuid,
-    ) -> Result<NotificationSettings, Error> {
+    ) -> Result<NotificationPreference, Error> {
         let notification_settings = self.repository.fetch_notification_settings(target).await?;
 
         match notification_settings {
@@ -37,7 +39,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                     .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
                 let notification_settings =
-                    NotificationSettings::new(target_user.try_into_read(&actor)?).into();
+                    NotificationPreference::new(target_user.try_into_read(&actor)?).into();
 
                 self.repository
                     .create_notification_settings(&actor, &notification_settings)
@@ -61,7 +63,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         let current_settings = match current_settings {
             Some(settings) => settings,
             None => {
-                let notification_settings = NotificationSettings::new(actor.to_owned()).into();
+                let notification_settings = NotificationPreference::new(actor.to_owned()).into();
 
                 self.repository
                     .create_notification_settings(actor, &notification_settings)

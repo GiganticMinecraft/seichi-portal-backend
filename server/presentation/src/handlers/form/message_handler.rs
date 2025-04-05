@@ -12,6 +12,7 @@ use domain::{
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
+use std::sync::Arc;
 use usecase::forms::message::MessageUseCase;
 
 use crate::{
@@ -21,23 +22,38 @@ use crate::{
         form_response_schemas::{MessageContentSchema, SenderSchema},
     },
 };
+use domain::notification::notification_api::NotificationAPI;
 
-pub async fn post_message_handler(
+pub struct RealInfrastructureRepositoryWithNotificationAPI<API: NotificationAPI + Send + Sync> {
+    pub repository: RealInfrastructureRepository,
+    pub notification_api: API,
+}
+
+impl<API: NotificationAPI + Send + Sync> RealInfrastructureRepositoryWithNotificationAPI<API> {
+    pub const fn new(repository: RealInfrastructureRepository, notification_api: API) -> Self {
+        Self {
+            repository,
+            notification_api,
+        }
+    }
+}
+
+pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
     Extension(user): Extension<User>,
-    State(repository): State<RealInfrastructureRepository>,
+    State(state): State<Arc<RealInfrastructureRepositoryWithNotificationAPI<API>>>,
     Path(answer_id): Path<AnswerId>,
     Json(message): Json<PostedMessageSchema>,
 ) -> impl IntoResponse {
     let form_message_use_case = MessageUseCase {
-        message_repository: repository.form_message_repository(),
-        answer_repository: repository.form_answer_repository(),
-        notification_repository: repository.notification_repository(),
-        form_repository: repository.form_repository(),
-        user_repository: repository.user_repository(),
+        message_repository: state.repository.form_message_repository(),
+        answer_repository: state.repository.form_answer_repository(),
+        notification_repository: state.repository.notification_repository(),
+        form_repository: state.repository.form_repository(),
+        user_repository: state.repository.user_repository(),
     };
 
     match form_message_use_case
-        .post_message(&user, message.body, answer_id)
+        .post_message(&user, message.body, answer_id, &state.notification_api)
         .await
     {
         Ok(_) => (

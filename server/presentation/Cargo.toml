@@ -19,3 +19,4 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 itertools = { workspace = true }
 tokio = { workspace = true }
+async-trait = { workspace = true }

@@ -16,3 +16,11 @@ pub struct Env {
 }
 
 pub static ENV: LazyLock<Env> = LazyLock::new(|| envy::prefixed("ENV_").from_env::<Env>().unwrap());
+
+#[derive(Deserialize, Debug)]
+pub struct Frontend {
+    pub url: String,
+}
+
+pub static FRONTEND: LazyLock<Frontend> =
+    LazyLock::new(|| envy::prefixed("FRONTEND_").from_env::<Frontend>().unwrap());

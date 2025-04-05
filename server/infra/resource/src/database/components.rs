@@ -15,7 +15,7 @@ use domain::{
         models::{Form, FormId, FormLabel, FormLabelId, FormLabelName},
         question::models::Question,
     },
-    notification::models::NotificationSettings,
+    notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
     user::models::{DiscordUser, Role, User},
 };
@@ -233,7 +233,7 @@ pub trait SearchDatabase: Send + Sync {
 pub trait NotificationDatabase: Send + Sync {
     async fn upsert_notification_settings(
         &self,
-        notification_settings: &NotificationSettings,
+        notification_settings: &NotificationPreference,
     ) -> Result<(), InfraError>;
     async fn fetch_notification_settings(
         &self,

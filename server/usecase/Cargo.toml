@@ -11,3 +11,5 @@ types = { path = "../types" }
 uuid = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
+common = { path = "../common" }
+async-trait = { workspace = true }

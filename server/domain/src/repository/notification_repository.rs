@@ -3,7 +3,7 @@ use errors::Error;
 use uuid::Uuid;
 
 use crate::{
-    notification::models::NotificationSettings,
+    notification::models::NotificationPreference,
     types::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
@@ -16,15 +16,15 @@ pub trait NotificationRepository: Send + Sync + 'static {
     async fn create_notification_settings(
         &self,
         actor: &User,
-        notification_settings: &AuthorizationGuard<NotificationSettings, Create>,
+        notification_settings: &AuthorizationGuard<NotificationPreference, Create>,
     ) -> Result<(), Error>;
     async fn fetch_notification_settings(
         &self,
         recipient_id: Uuid,
-    ) -> Result<Option<AuthorizationGuard<NotificationSettings, Read>>, Error>;
+    ) -> Result<Option<AuthorizationGuard<NotificationPreference, Read>>, Error>;
     async fn update_notification_settings(
         &self,
         actor: &User,
-        notification_settings: AuthorizationGuard<NotificationSettings, Update>,
+        notification_settings: AuthorizationGuard<NotificationPreference, Update>,
     ) -> Result<(), Error>;
 }

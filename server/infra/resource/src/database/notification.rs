@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use domain::{notification::models::NotificationSettings, user::models::Role};
+use domain::{notification::models::NotificationPreference, user::models::Role};
 use errors::infra::InfraError;
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ impl NotificationDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn upsert_notification_settings(
         &self,
-        notification_settings: &NotificationSettings,
+        notification_settings: &NotificationPreference,
     ) -> Result<(), InfraError> {
         let params = [
             notification_settings.recipient().id.to_string().into(),
