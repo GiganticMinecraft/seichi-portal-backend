@@ -1,12 +1,8 @@
-use common::config::FRONTEND;
 use derive_getters::Getters;
-use errors::Error;
 
 use crate::{
-    form::{answer::models::AnswerId, models::FormId},
-    notification::discord_sender::DiscordSender,
     types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{DiscordUserId, Role, User},
+    user::models::{Role, User},
 };
 
 #[derive(Getters, Debug)]
@@ -54,58 +50,5 @@ impl AuthorizationGuardDefinitions for NotificationPreference {
     fn can_delete(&self, _actor: &User) -> bool {
         // NOTE: 明示的に通知設定を削除することはない(削除されるのは User が削除されたときのみ)
         false
-    }
-}
-
-/// Discord の DM に送信する通知の種類
-///
-/// - Message
-///     自身が送信した回答に対してメッセージが送信されたときの通知
-pub enum DiscordDMNotificationType {
-    Message {
-        form_id: FormId,
-        answer_id: AnswerId,
-    },
-}
-
-pub struct DiscordDMNotification<Sender: DiscordSender> {
-    discord_sender: Sender,
-}
-
-impl<Sender: DiscordSender> DiscordDMNotification<Sender> {
-    pub fn new(discord_sender: Sender) -> Self {
-        Self { discord_sender }
-    }
-
-    pub async fn send_message_notification(
-        &self,
-        discord_id: DiscordUserId,
-        settings: &NotificationPreference,
-        notification_type: DiscordDMNotificationType,
-    ) -> Result<(), Error> {
-        let url = &*FRONTEND.url;
-
-        match notification_type {
-            DiscordDMNotificationType::Message { form_id, answer_id } => {
-                // NOTE: ここでガード節を使っていないのは、
-                //  notification_type へのパターンマッチの網羅性を保証するため
-                //  (ガード節を使うとその他を示すパターンが必要になるが、それを使うと網羅性が保証されなくなる)
-                if settings.is_send_message_notification {
-                    self.discord_sender
-                        .send_direct_message(
-                            discord_id,
-                            [
-                                "あなたの回答にメッセージが送信されました。",
-                                "メッセージを確認してください。",
-                                &format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
-                            ]
-                            .join("\n"),
-                        )
-                        .await?;
-                }
-            }
-        }
-
-        Ok(())
     }
 }
