@@ -10,12 +10,12 @@ use crate::{
 };
 
 #[derive(Getters, Debug)]
-pub struct NotificationSettings {
+pub struct NotificationPreference {
     recipient: User,
     is_send_message_notification: bool,
 }
 
-impl NotificationSettings {
+impl NotificationPreference {
     pub fn new(recipient: User) -> Self {
         Self {
             recipient,
@@ -38,7 +38,7 @@ impl NotificationSettings {
     }
 }
 
-impl AuthorizationGuardDefinitions for NotificationSettings {
+impl AuthorizationGuardDefinitions for NotificationPreference {
     fn can_create(&self, actor: &User) -> bool {
         self.recipient() == actor || self.recipient().role == Role::Administrator
     }
@@ -80,7 +80,7 @@ impl<Sender: DiscordSender> DiscordDMNotification<Sender> {
     pub async fn send_message_notification(
         &self,
         discord_id: DiscordUserId,
-        settings: &NotificationSettings,
+        settings: &NotificationPreference,
         notification_type: DiscordDMNotificationType,
     ) -> Result<(), Error> {
         let url = &*FRONTEND.url;

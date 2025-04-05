@@ -1,3 +1,8 @@
+use common::config::FRONTEND;
+use domain::notification::discord_dm_notificator::{
+    DiscordDMNotificationType, DiscordDMSendContents,
+};
+use domain::notification::notification_api::NotificationAPI;
 use domain::{
     form::{
         answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
@@ -6,9 +11,7 @@ use domain::{
             service::MessageAuthorizationContext,
         },
     },
-    notification::models::{
-        DiscordDMNotification, DiscordDMNotificationType, NotificationSettings,
-    },
+    notification::models::NotificationPreference,
     repository::{
         form::{
             answer_repository::AnswerRepository, form_repository::FormRepository,
@@ -27,7 +30,6 @@ use errors::{
     Error,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
 };
-use resource::outgoing::connection::ConnectionPool;
 
 pub struct MessageUseCase<
     'a,
@@ -52,11 +54,12 @@ impl<
     R5: UserRepository,
 > MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
-    pub async fn post_message(
+    pub async fn post_message<API: NotificationAPI>(
         &self,
         actor: &User,
         message_body: String,
         answer_id: AnswerId,
+        notification_api: &API,
     ) -> Result<(), Error> {
         let form_answer = self
             .answer_repository
@@ -116,16 +119,16 @@ impl<
                             .fetch_discord_user(actor, &notification_recipient.to_owned().into())
                             .await?
                         {
-                            let settings = self
+                            let fetched_notification_preference = self
                                 .notification_repository
                                 .fetch_notification_settings(notification_recipient.id)
                                 .await?;
 
-                            let settings = match settings {
+                            let notification_preference = match fetched_notification_preference {
                                 Some(settings) => settings.try_into_read(actor)?,
                                 None => {
                                     let settings: AuthorizationGuard<_, Create> =
-                                        NotificationSettings::new(
+                                        NotificationPreference::new(
                                             notification_recipient.to_owned(),
                                         )
                                         .into();
@@ -141,11 +144,19 @@ impl<
                                 }
                             };
 
-                            DiscordDMNotification::new(ConnectionPool::new().await)
-                                .send_message_notification(
+                            let url = &*FRONTEND.url;
+                            notification_api
+                                .send_discord_dm_notification(
                                     discord_user.id().to_owned(),
-                                    &settings,
-                                    DiscordDMNotificationType::Message { form_id, answer_id },
+                                    DiscordDMNotificationType::Message,
+                                    &notification_preference,
+                                    &DiscordDMSendContents::new(vec![
+                                        "あなたの回答にメッセージが送信されました。".to_string(),
+                                        "メッセージを確認してください。".to_string(),
+                                        format!(
+                                            "{url}/forms/{form_id}/answers/{answer_id}/messages"
+                                        ),
+                                    ]),
                                 )
                                 .await?;
                         }

@@ -14,6 +14,8 @@ use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
 use futures::join;
 use hyper::header::SET_COOKIE;
+use presentation::api::notification_api_impl::NotificationAPIImpl;
+use presentation::handlers::form::message_handler::RealInfrastructureRepositoryWithNotificationAPI;
 use presentation::handlers::search_handler::start_watch_out_of_sync;
 use presentation::{
     auth::auth,
@@ -65,6 +67,7 @@ use tokio::{
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
+use usecase::notification::discord_dm_notificator_impl::DiscordDMNotificatorImpl;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -108,6 +111,10 @@ async fn main() -> anyhow::Result<()> {
         resource::messaging::connection::MessagingConnectionPool::new(sender).await;
 
     let shared_repository = Repository::new(conn).into_shared();
+
+    let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;
+    let notificator_impl = DiscordDMNotificatorImpl::new();
+    let notification_api = NotificationAPIImpl::new(discord_sender, notificator_impl);
 
     let router = Router::new()
         .route("/forms", post(create_form_handler).get(form_list_handler))
@@ -182,9 +189,19 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/answers/{answer_id}/messages",
-            get(get_messages_handler).post(post_message_handler),
+            get(get_messages_handler),
         )
         .with_state(shared_repository.to_owned())
+        .route(
+            "/forms/answers/{answer_id}/messages",
+            post(post_message_handler),
+        )
+        .with_state(Arc::new(
+            RealInfrastructureRepositoryWithNotificationAPI::new(
+                shared_repository.to_owned(),
+                notification_api,
+            ),
+        ))
         .route(
             "/forms/answers/{answer_id}/messages/{message_id}",
             delete(delete_message_handler).patch(update_message_handler),
