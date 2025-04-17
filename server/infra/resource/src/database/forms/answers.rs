@@ -56,7 +56,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_write_transaction(move |txn| {
             Box::pin(async move {
                 execute_and_values(
-                    r"INSERT INTO answers (id, form_id, user, title, time_stamp) VALUES (?, ?, ?, ?, ?)",
+                    r"INSERT INTO answers (id, form_id, user, title, timestamp) VALUES (?, ?, ?, ?, ?)",
                     [
                         answer_id.into(),
                         form_id.into(),
@@ -86,7 +86,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answer_query_result_opt = query_one_and_values(
-                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id = ?",
                     [answer_id.into_inner().to_string().into()],
@@ -118,7 +118,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
-                            timestamp: rs.try_get("", "time_stamp")?,
+                            timestamp: rs.try_get("", "timestamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             contents
@@ -139,10 +139,10 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = query_all_and_values(
-                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE form_id = ?
-                        ORDER BY answers.time_stamp",
+                        ORDER BY answers.timestamp",
                     [form_id.into_inner().to_string().into()],
                     txn,
                 ).await?;
@@ -157,7 +157,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
-                            timestamp: rs.try_get("", "time_stamp")?,
+                            timestamp: rs.try_get("", "timestamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             contents: Vec::new()
@@ -214,9 +214,9 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = query_all(
-                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
+                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
-                        ORDER BY answers.time_stamp",
+                        ORDER BY answers.timestamp",
                     txn,
                 ).await?;
 
@@ -230,7 +230,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
-                            timestamp: rs.try_get("", "time_stamp")?,
+                            timestamp: rs.try_get("", "timestamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             contents: Vec::new()
@@ -293,10 +293,10 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = query_all_and_values(
-                    format!("SELECT form_id, answers.id AS answer_id, title, user, name, role, time_stamp FROM answers
+                    format!("SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id IN ({})
-                        ORDER BY answers.time_stamp", &vec!["?"; ids.len()].iter().join(", ")).as_str(),
+                        ORDER BY answers.timestamp", &vec!["?"; ids.len()].iter().join(", ")).as_str(),
                     ids,
                     txn,
                 ).await?;
@@ -311,7 +311,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             uuid: rs.try_get("", "user")?,
                             user_name: rs.try_get("", "name")?,
                             user_role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
-                            timestamp: rs.try_get("", "time_stamp")?,
+                            timestamp: rs.try_get("", "timestamp")?,
                             form_id: rs.try_get("", "form_id")?,
                             title: rs.try_get("", "title")?,
                             contents: Vec::new()

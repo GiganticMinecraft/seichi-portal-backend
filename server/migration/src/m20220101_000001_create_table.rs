@@ -123,7 +123,7 @@ impl MigrationTrait for Migration {
                     form_id CHAR(36) NOT NULL,
                     user CHAR(36) NOT NULL,
                     title TEXT,
-                    time_stamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY fk_answers_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
                     FOREIGN KEY fk_answers_user(user) REFERENCES users(id)
                 )",
