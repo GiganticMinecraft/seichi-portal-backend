@@ -38,7 +38,7 @@ impl FormCommentDatabase for ConnectionPool {
                         answer_id: rs.try_get("", "answer_id")?,
                         comment_id: rs.try_get("", "id")?,
                         content: rs.try_get("", "content")?,
-                        timestamp: rs.try_get("", "time_stamp")?,
+                        timestamp: rs.try_get("", "timestamp")?,
                         commented_by: UserDto {
                             name: rs.try_get("", "name")?,
                             id: rs.try_get("", "commented_by")?,
@@ -69,7 +69,7 @@ impl FormCommentDatabase for ConnectionPool {
                         answer_id: rs.try_get("", "answer_id")?,
                         comment_id: rs.try_get("", "id")?,
                         content: rs.try_get("", "content")?,
-                        timestamp: rs.try_get("", "time_stamp")?,
+                        timestamp: rs.try_get("", "timestamp")?,
                         commented_by: UserDto {
                             name: rs.try_get("", "name")?,
                             id: rs.try_get("", "commented_by")?,
@@ -98,7 +98,7 @@ impl FormCommentDatabase for ConnectionPool {
                         answer_id: rs.try_get("", "answer_id")?,
                         comment_id: rs.try_get("", "id")?,
                         content: rs.try_get("", "content")?,
-                        timestamp: rs.try_get("", "time_stamp")?,
+                        timestamp: rs.try_get("", "timestamp")?,
                         commented_by: UserDto {
                             name: rs.try_get("", "name")?,
                             id: rs.try_get("", "commented_by")?,
