@@ -19,13 +19,13 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-tokio = { version = "1.44.1", features = ["full"] }
-axum = "0.8.1"
-axum-extra = { version = "0.10.0", features = ["typed-header"] }
+tokio = { version = "1.44.2", features = ["full"] }
+axum = "0.8.3"
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
 serde = { version = "1.0.219", features = ["derive"] }
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 async-trait = "0.1.88"
-sea-orm = { version = "1.1.7", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
+sea-orm = { version = "1.1.10", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
 tracing = "0.1.41"
 mockall = "0.13.1"
 envy = "0.4.2"
@@ -42,8 +42,8 @@ uuid = { version = "1.16.0", features = ["v4", "v7"] }
 deriving_via = "2.1.0"
 reqwest = { version = "0.12.15", default-features = false, features = ["rustls-tls", "json"] }
 regex = "1.11.1"
-redis = { version = "0.29.2", features = ["tokio-comp", "json"] }
+redis = { version = "0.29.5", features = ["tokio-comp", "json"] }
 meilisearch-sdk = "0.28.0"
 serenity = "0.12.4"
-lapin = "2.5.1"
+lapin = "2.5.3"
 
