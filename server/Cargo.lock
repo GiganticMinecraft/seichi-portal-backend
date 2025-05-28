@@ -1387,7 +1387,7 @@ dependencies = [
  "lapin",
  "meilisearch-sdk",
  "redis",
- "reqwest 0.12.16",
+ "reqwest 0.12.18",
  "sea-orm",
  "serde_json",
  "serenity",
@@ -2517,7 +2517,7 @@ dependencies = [
  "log",
  "meilisearch-index-setting-macro",
  "pin-project-lite",
- "reqwest 0.12.16",
+ "reqwest 0.12.18",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2799,7 +2799,7 @@ dependencies = [
  "domain",
  "errors",
  "itertools",
- "reqwest 0.12.16",
+ "reqwest 0.12.18",
  "serde",
  "serde_json",
  "serenity",
@@ -3519,9 +3519,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.16"
+version = "0.12.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bf597b113be201cb2269b4c39b39a804d01b99ee95a4278f0ed04e45cff1c71"
+checksum = "e98ff6b0dbbe4d5a37318f433d4fc82babd21631f194d370409ceb2e40b2f0b5"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3582,7 +3582,7 @@ dependencies = [
  "mockall",
  "redis",
  "regex",
- "reqwest 0.12.16",
+ "reqwest 0.12.18",
  "sea-orm",
  "serde",
  "serde_json",
@@ -4160,7 +4160,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "255914a8e53822abd946e2ce8baa41d4cded6b8e938913b7f7b9da5b7ab44335"
 dependencies = [
  "httpdate",
- "reqwest 0.12.16",
+ "reqwest 0.12.18",
  "rustls 0.23.26",
  "sentry-anyhow",
  "sentry-backtrace",
