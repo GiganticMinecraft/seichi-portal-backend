@@ -1,4 +1,5 @@
 use axum::{
+    RequestExt,
     body::Body,
     extract::State,
     http::{Request, StatusCode},
@@ -20,7 +21,6 @@ use uuid::uuid;
 
 pub async fn auth(
     State(repository): State<RealInfrastructureRepository>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
@@ -32,6 +32,11 @@ pub async fn auth(
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
+
+    let auth = request
+        .extract_parts::<TypedHeader<Authorization<Bearer>>>()
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let session_id = auth.token();
 
