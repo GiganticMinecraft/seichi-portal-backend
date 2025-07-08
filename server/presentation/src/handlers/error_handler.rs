@@ -1,3 +1,5 @@
+use axum::extract::rejection::JsonRejection;
+use axum::response::Response;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use errors::{
     Error, domain::DomainError, infra::InfraError, usecase::UseCaseError,
@@ -340,4 +342,15 @@ pub fn handle_error(err: Error) -> impl IntoResponse {
         Error::Infra { source } => handle_infra_error(source).into_response(),
         Error::Validation { source } => handle_validation_error(source).into_response(),
     }
+}
+
+pub fn handle_json_rejection(json_rejection: JsonRejection) -> Response {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({
+            "errorCode": "UNPROCESSABLE_CONTENT",
+            "reason": json_rejection.body_text()
+        })),
+    )
+        .into_response()
 }

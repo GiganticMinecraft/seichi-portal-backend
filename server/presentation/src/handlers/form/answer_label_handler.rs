@@ -1,8 +1,8 @@
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, State, rejection::JsonRejection},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
@@ -13,26 +13,30 @@ use resource::repository::RealInfrastructureRepository;
 use usecase::forms::answer_label::AnswerLabelUseCase;
 
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{handle_error, handle_json_rejection},
     schemas::form::form_request_schemas::{AnswerLabelSchema, ReplaceAnswerLabelSchema},
 };
 
 pub async fn create_label_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(label): Json<AnswerLabelSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<AnswerLabelSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
 
-    match answer_label_use_case
-        .create_label_for_answers(&user, label.name)
-        .await
-    {
-        Ok(_) => StatusCode::CREATED.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(label) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match answer_label_use_case
+            .create_label_for_answers(&user, label.name)
+            .await
+        {
+            Ok(_) => StatusCode::CREATED.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn get_labels_for_answers(

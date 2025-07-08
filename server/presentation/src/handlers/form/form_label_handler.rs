@@ -1,9 +1,13 @@
+use crate::handlers::error_handler::handle_json_rejection;
+use axum::extract::rejection::JsonRejection;
+use axum::response::Response;
 use axum::{
-    Extension, Json,
-    extract::{Path, State},
+    Extension,
+    extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
+
 use domain::{
     form::models::{FormId, FormLabelId, FormLabelName},
     repository::Repositories,
@@ -20,19 +24,23 @@ use crate::{
 pub async fn create_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(label): Json<FormLabelSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<FormLabelSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_label_use_case
-        .create_label_for_forms(&user, FormLabelName::new(label.name))
-        .await
-    {
-        Ok(_) => StatusCode::CREATED.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(label) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_label_use_case
+            .create_label_for_forms(&user, FormLabelName::new(label.name))
+            .await
+        {
+            Ok(_) => StatusCode::CREATED.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn get_labels_for_forms(
@@ -71,36 +79,44 @@ pub async fn edit_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(label_id): Path<FormLabelId>,
-    Json(label): Json<FormLabelSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<FormLabelSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_label_use_case
-        .edit_label_for_forms(label_id, FormLabelName::new(label.name), &user)
-        .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(label) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_label_use_case
+            .edit_label_for_forms(label_id, FormLabelName::new(label.name), &user)
+            .await
+        {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn replace_form_labels(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-    Json(label_ids): Json<ReplaceFormLabelSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<ReplaceFormLabelSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_label_use_case
-        .replace_form_labels(&user, form_id, label_ids.labels)
-        .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(label_ids) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_label_use_case
+            .replace_form_labels(&user, form_id, label_ids.labels)
+            .await
+        {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }

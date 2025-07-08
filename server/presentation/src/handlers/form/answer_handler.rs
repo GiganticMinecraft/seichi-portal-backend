@@ -1,3 +1,5 @@
+use axum::extract::rejection::JsonRejection;
+use axum::response::Response;
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -14,6 +16,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::answer::AnswerUseCase;
 
+use crate::handlers::error_handler::handle_json_rejection;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -119,8 +122,8 @@ pub async fn get_answer_by_form_id_handler(
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(schema): Json<AnswersPostSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<AnswersPostSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -128,21 +131,26 @@ pub async fn post_answer_handler(
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
     };
-    match form_answer_use_case
-        .post_answers(user, schema.form_id, schema.answers)
-        .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+
+    let Json(schema) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_answer_use_case
+            .post_answers(user, schema.form_id, schema.answers)
+            .await
+        {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn update_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(answer_id): Path<AnswerId>,
-    Json(schema): Json<AnswerUpdateSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<AnswerUpdateSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -151,11 +159,15 @@ pub async fn update_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    match form_answer_use_case
-        .update_answer_meta(answer_id, &user, schema.title)
-        .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(schema) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_answer_use_case
+            .update_answer_meta(answer_id, &user, schema.title)
+            .await
+        {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
