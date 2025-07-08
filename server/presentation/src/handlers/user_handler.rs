@@ -17,6 +17,10 @@ use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::Uuid;
 
+use crate::handlers::error_handler::handle_json_rejection;
+use axum::extract::rejection::JsonRejection;
+use axum::response::Response;
+
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 
 pub async fn get_my_user_info(
@@ -193,19 +197,23 @@ pub async fn end_session(
 pub async fn link_discord(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(discord_token): Json<DiscordOAuthToken>,
-) -> impl IntoResponse {
+    json: Result<Json<DiscordOAuthToken>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case
-        .link_discord_user(discord_token.token, user)
-        .await
-    {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(discord_token) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match user_use_case
+            .link_discord_user(discord_token.token, user)
+            .await
+        {
+            Ok(_) => StatusCode::NO_CONTENT.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn unlink_discord(

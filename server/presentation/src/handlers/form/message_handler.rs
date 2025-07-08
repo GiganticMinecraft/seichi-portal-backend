@@ -1,7 +1,7 @@
 use axum::{
     Extension, Json,
     extract::{Path, State},
-    http::{HeaderValue, StatusCode, header},
+    http::StatusCode,
     response::IntoResponse,
 };
 use domain::{
@@ -16,12 +16,14 @@ use std::sync::Arc;
 use usecase::forms::message::MessageUseCase;
 
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{handle_error, handle_json_rejection},
     schemas::form::{
         form_request_schemas::{MessageUpdateSchema, PostedMessageSchema},
         form_response_schemas::{MessageContentSchema, SenderSchema},
     },
 };
+use axum::extract::rejection::JsonRejection;
+use axum::response::Response;
 use domain::notification::notification_api::NotificationAPI;
 
 pub struct RealInfrastructureRepositoryWithNotificationAPI<API: NotificationAPI + Send + Sync> {
@@ -42,8 +44,8 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
     Extension(user): Extension<User>,
     State(state): State<Arc<RealInfrastructureRepositoryWithNotificationAPI<API>>>,
     Path(answer_id): Path<AnswerId>,
-    Json(message): Json<PostedMessageSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<PostedMessageSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: state.repository.form_message_repository(),
         answer_repository: state.repository.form_answer_repository(),
@@ -52,28 +54,25 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
         user_repository: state.repository.user_repository(),
     };
 
-    match form_message_use_case
-        .post_message(&user, message.body, answer_id, &state.notification_api)
-        .await
-    {
-        Ok(_) => (
-            StatusCode::CREATED,
-            [(
-                header::LOCATION,
-                HeaderValue::from_str(answer_id.to_string().as_str()).unwrap(),
-            )],
-        )
-            .into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(message) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_message_use_case
+            .post_message(&user, message.body, answer_id, &state.notification_api)
+            .await
+        {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn update_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path((answer_id, message_id)): Path<(AnswerId, MessageId)>,
-    Json(body_schema): Json<MessageUpdateSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<MessageUpdateSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
@@ -82,13 +81,17 @@ pub async fn update_message_handler(
         user_repository: repository.user_repository(),
     };
 
-    match form_message_use_case
-        .update_message_body(&user, answer_id, &message_id, body_schema.body)
-        .await
-    {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(body_schema) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_message_use_case
+            .update_message_body(&user, answer_id, &message_id, body_schema.body)
+            .await
+        {
+            Ok(_) => StatusCode::NO_CONTENT.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn get_messages_handler(

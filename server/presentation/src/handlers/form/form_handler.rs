@@ -1,3 +1,5 @@
+use axum::extract::rejection::JsonRejection;
+use axum::response::Response;
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
@@ -10,6 +12,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{dto::FormDto, forms::form::FormUseCase};
 
+use crate::handlers::error_handler::handle_json_rejection;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -23,8 +26,8 @@ use crate::{
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Json(form): Json<FormCreateSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<FormCreateSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -32,21 +35,25 @@ pub async fn create_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case
-        .create_form(form.title, form.description, user)
-        .await
-    {
-        Ok(id) => (
-            StatusCode::CREATED,
-            [(
-                header::LOCATION,
-                HeaderValue::from_str(id.to_string().as_str()).unwrap(),
-            )],
-            Json(json!({ "id": id })),
-        )
-            .into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(form) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_use_case
+            .create_form(form.title, form.description, user)
+            .await
+        {
+            Ok(id) => (
+                StatusCode::CREATED,
+                [(
+                    header::LOCATION,
+                    HeaderValue::from_str(id.to_string().as_str()).unwrap(),
+                )],
+                Json(json!({ "id": id })),
+            )
+                .into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn form_list_handler(
@@ -162,8 +169,8 @@ pub async fn update_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-    Json(targets): Json<FormUpdateSchema>,
-) -> impl IntoResponse {
+    json: Result<Json<FormUpdateSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -171,21 +178,25 @@ pub async fn update_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case
-        .update_form(
-            &user,
-            form_id,
-            targets.title,
-            targets.description,
-            targets.response_period,
-            targets.webhook,
-            targets.default_answer_title,
-            targets.visibility,
-            targets.answer_visibility,
-        )
-        .await
-    {
-        Ok(form) => (StatusCode::OK, Json(form)).into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Json(targets) = json.map_err(handle_json_rejection)?;
+
+    Ok(
+        match form_use_case
+            .update_form(
+                &user,
+                form_id,
+                targets.title,
+                targets.description,
+                targets.response_period,
+                targets.webhook,
+                targets.default_answer_title,
+                targets.visibility,
+                targets.answer_visibility,
+            )
+            .await
+        {
+            Ok(form) => (StatusCode::OK, Json(form)).into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
