@@ -43,7 +43,7 @@ pub async fn get_my_user_info(
             (
                 StatusCode::OK,
                 Json(json!({
-                    "uuid": user_dto.user.id.to_string(),
+                    "id": user_dto.user.id.to_string(),
                     "name": user_dto.user.name,
                     "role": user_dto.user.role.to_string(),
                     "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
@@ -77,7 +77,7 @@ pub async fn get_user_info(
             (
                 StatusCode::OK,
                 Json(json!({
-                    "uuid": user_dto.user.id.to_string(),
+                    "id": user_dto.user.id.to_string(),
                     "name": user_dto.user.name,
                     "role": user_dto.user.role.to_string(),
                     "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
