@@ -1,5 +1,6 @@
+use axum::response::IntoResponse;
 use axum::{
-    RequestExt,
+    Json, RequestExt,
     body::Body,
     extract::State,
     http::{Request, StatusCode},
@@ -16,6 +17,7 @@ use domain::{
     user::models::{Role::Administrator, User},
 };
 use resource::repository::RealInfrastructureRepository;
+use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::uuid;
 
@@ -23,7 +25,7 @@ pub async fn auth(
     State(repository): State<RealInfrastructureRepository>,
     mut request: Request<Body>,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, Response> {
     let ignore_auth_paths = ["/session"];
     if ignore_auth_paths.contains(&request.uri().path()) {
         return Ok(next.run(request).await);
@@ -36,7 +38,7 @@ pub async fn auth(
     let auth = request
         .extract_parts::<TypedHeader<Authorization<Bearer>>>()
         .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "UNAUTHORIZED", "reason": "Authorization header is missing."}))).into_response())?;
 
     let session_id = auth.token();
 
@@ -50,10 +52,10 @@ pub async fn auth(
         match user_use_case
             .fetch_user_by_session_id(session_id.to_string())
             .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?
+            .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "UNAUTHORIZED", "reason": "Failed to retrieve user by session id."}))).into_response())?
         {
             Some(user) => user,
-            None => return Err(StatusCode::UNAUTHORIZED),
+            None => return Err((StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "UNAUTHORIZED", "reason": "Invalid session id."}))).into_response()),
         }
     };
 
@@ -66,7 +68,7 @@ pub async fn auth(
         }
         Err(err) => {
             tracing::error!("{}", err);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            Err((StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "Internal server error", "reason": "Authentication middleware error."}))).into_response())
         }
     }
 }
