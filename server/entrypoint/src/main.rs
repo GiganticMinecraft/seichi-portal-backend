@@ -183,7 +183,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/users/me", get(get_my_user_info))
         .with_state(shared_repository.to_owned())
-        .route("/users/list", get(user_list))
+        .route("/users", get(user_list))
         .with_state(shared_repository.to_owned())
         .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
