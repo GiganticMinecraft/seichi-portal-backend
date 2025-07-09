@@ -39,7 +39,10 @@ pub async fn cross_search(
     match search_query {
         SearchQuery { query: None } => Ok((
             StatusCode::BAD_REQUEST,
-            Json(json!({ "reason": "query is required" })),
+            Json(json!({
+                "errorCode": "BAD_REQUEST",
+                "reason": "query is required"
+            })),
         )
             .into_response()),
         SearchQuery { query: Some(query) } => {
