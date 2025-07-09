@@ -129,11 +129,13 @@ pub async fn user_list(
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
     header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
-    Json(expires): Json<UserSessionExpires>,
+    json: Result<Json<UserSessionExpires>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
+
+    let Json(expires) = json.map_err_to_error().map_err(handle_error)?;
 
     let TypedHeader(auth) = header.map_err_to_error().map_err(handle_error)?;
 
