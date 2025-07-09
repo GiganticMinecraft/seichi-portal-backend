@@ -56,15 +56,12 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
 
     let Json(message) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match form_message_use_case
-            .post_message(&user, message.body, answer_id, &state.notification_api)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_message_use_case
+        .post_message(&user, message.body, answer_id, &state.notification_api)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 pub async fn update_message_handler(
@@ -83,22 +80,19 @@ pub async fn update_message_handler(
 
     let Json(body_schema) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match form_message_use_case
-            .update_message_body(&user, answer_id, &message_id, body_schema.body)
-            .await
-        {
-            Ok(_) => StatusCode::NO_CONTENT.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_message_use_case
+        .update_message_body(&user, answer_id, &message_id, body_schema.body)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 pub async fn get_messages_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(answer_id): Path<AnswerId>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
@@ -107,33 +101,32 @@ pub async fn get_messages_handler(
         user_repository: repository.user_repository(),
     };
 
-    match form_message_use_case.get_messages(&user, answer_id).await {
-        Ok(messages) => {
-            let response = messages
-                .into_iter()
-                .map(|message| MessageContentSchema {
-                    id: message.id().into_inner(),
-                    body: message.body().to_owned(),
-                    sender: SenderSchema {
-                        uuid: message.sender().id.to_string(),
-                        name: message.sender().name.to_owned(),
-                        role: message.sender().role.to_string(),
-                    },
-                    timestamp: message.timestamp().to_owned(),
-                })
-                .collect_vec();
+    let messages = form_message_use_case
+        .get_messages(&user, answer_id)
+        .await
+        .map_err(handle_error)?;
+    let response = messages
+        .into_iter()
+        .map(|message| MessageContentSchema {
+            id: message.id().into_inner(),
+            body: message.body().to_owned(),
+            sender: SenderSchema {
+                uuid: message.sender().id.to_string(),
+                name: message.sender().name.to_owned(),
+                role: message.sender().role.to_string(),
+            },
+            timestamp: message.timestamp().to_owned(),
+        })
+        .collect_vec();
 
-            (StatusCode::OK, Json(json!(response))).into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+    Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
 pub async fn delete_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path((answer_id, message_id)): Path<(AnswerId, MessageId)>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
@@ -142,11 +135,10 @@ pub async fn delete_message_handler(
         user_repository: repository.user_repository(),
     };
 
-    match form_message_use_case
+    form_message_use_case
         .delete_message(&user, answer_id, &message_id)
         .await
-    {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }

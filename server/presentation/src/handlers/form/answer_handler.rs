@@ -28,7 +28,7 @@ use crate::{
 pub async fn get_all_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -36,23 +36,24 @@ pub async fn get_all_answers(
         answer_label_repository: repository.answer_label_repository(),
         question_repository: repository.form_question_repository(),
     };
-    match form_answer_use_case.get_all_answers(&user).await {
-        Ok(answers) => {
-            let response = answers
-                .into_iter()
-                .map(|answer_dto| {
-                    FormAnswer::new(
-                        answer_dto.form_answer,
-                        answer_dto.comments,
-                        answer_dto.labels,
-                    )
-                })
-                .collect_vec();
 
-            (StatusCode::OK, Json(json!(response))).into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+    let answers = form_answer_use_case
+        .get_all_answers(&user)
+        .await
+        .map_err(handle_error)?;
+
+    let response = answers
+        .into_iter()
+        .map(|answer_dto| {
+            FormAnswer::new(
+                answer_dto.form_answer,
+                answer_dto.comments,
+                answer_dto.labels,
+            )
+        })
+        .collect_vec();
+
+    Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
 pub async fn get_answer_handler(
@@ -70,10 +71,10 @@ pub async fn get_answer_handler(
 
     let Path(answer_id) = path.map_err(handle_path_rejection)?;
 
-    let answer_dto = match form_answer_use_case.get_answers(answer_id, &user).await {
-        Ok(answer) => answer,
-        Err(err) => return Ok(handle_error(err).into_response()),
-    };
+    let answer_dto = form_answer_use_case
+        .get_answers(answer_id, &user)
+        .await
+        .map_err(handle_error)?;
 
     Ok((
         StatusCode::OK,
@@ -101,28 +102,23 @@ pub async fn get_answer_by_form_id_handler(
 
     let Path(form_id) = path.map_err(handle_path_rejection)?;
 
-    Ok(
-        match form_answer_use_case
-            .get_answers_by_form_id(form_id, &user)
-            .await
-        {
-            Ok(answers) => {
-                let response = answers
-                    .into_iter()
-                    .map(|answer_dto| {
-                        FormAnswer::new(
-                            answer_dto.form_answer,
-                            answer_dto.comments,
-                            answer_dto.labels,
-                        )
-                    })
-                    .collect_vec();
+    let answers = form_answer_use_case
+        .get_answers_by_form_id(form_id, &user)
+        .await
+        .map_err(handle_error)?;
 
-                (StatusCode::OK, Json(response)).into_response()
-            }
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    let response = answers
+        .into_iter()
+        .map(|answer_dto| {
+            FormAnswer::new(
+                answer_dto.form_answer,
+                answer_dto.comments,
+                answer_dto.labels,
+            )
+        })
+        .collect_vec();
+
+    Ok((StatusCode::OK, Json(response)).into_response())
 }
 
 pub async fn post_answer_handler(
@@ -140,15 +136,12 @@ pub async fn post_answer_handler(
 
     let Json(schema) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match form_answer_use_case
-            .post_answers(user, schema.form_id, schema.answers)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_answer_use_case
+        .post_answers(user, schema.form_id, schema.answers)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 pub async fn update_answer_handler(
@@ -167,13 +160,10 @@ pub async fn update_answer_handler(
 
     let Json(schema) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match form_answer_use_case
-            .update_answer_meta(answer_id, &user, schema.title)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_answer_use_case
+        .update_answer_meta(answer_id, &user, schema.title)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }

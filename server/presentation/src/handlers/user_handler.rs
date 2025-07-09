@@ -27,34 +27,31 @@ use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthTo
 pub async fn get_my_user_info(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case.fetch_user_information(&user, user.id).await {
-        Ok(user_dto) => {
-            let discord_user_id_with_name = user_dto.discord_user.map(|user| {
-                (
-                    user.id().to_owned().into_inner(),
-                    user.name().to_owned().into_inner(),
-                )
-            });
-
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "id": user_dto.user.id.to_string(),
-                    "name": user_dto.user.name,
-                    "role": user_dto.user.role.to_string(),
-                    "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
-                    "discord_username": discord_user_id_with_name.map(|(_, username)| username),
-                })),
-            )
-                .into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+    let user_dto = user_use_case
+        .fetch_user_information(&user, user.id)
+        .await
+        .map_err(handle_error)?;
+    let discord_user_id_with_name = user_dto.discord_user.map(|user| {
+        (
+            user.id().to_owned().into_inner(),
+            user.name().to_owned().into_inner(),
+        )
+    });
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "id": user_dto.user.id.to_string(),
+            "name": user_dto.user.name,
+            "role": user_dto.user.role.to_string(),
+            "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
+            "discord_username": discord_user_id_with_name.map(|(_, username)| username),
+        })),
+    ).into_response())
 }
 
 pub async fn get_user_info(
@@ -67,32 +64,26 @@ pub async fn get_user_info(
     };
 
     let Path(uuid) = path.map_err(handle_path_rejection)?;
-
-    Ok(
-        match user_use_case.fetch_user_information(&actor, uuid).await {
-            Ok(user_dto) => {
-                let discord_user_id_with_name = user_dto.discord_user.map(|user| {
-                    (
-                        user.id().to_owned().into_inner(),
-                        user.name().to_owned().into_inner(),
-                    )
-                });
-
-                (
-                StatusCode::OK,
-                Json(json!({
-                    "id": user_dto.user.id.to_string(),
-                    "name": user_dto.user.name,
-                    "role": user_dto.user.role.to_string(),
-                    "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
-                    "discord_username": discord_user_id_with_name.map(|(_, username)| username),
-                })),
-            )
-                .into_response()
-            }
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    let user_dto = user_use_case
+        .fetch_user_information(&actor, uuid)
+        .await
+        .map_err(handle_error)?;
+    let discord_user_id_with_name = user_dto.discord_user.map(|user| {
+        (
+            user.id().to_owned().into_inner(),
+            user.name().to_owned().into_inner(),
+        )
+    });
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "id": user_dto.user.id.to_string(),
+            "name": user_dto.user.name,
+            "role": user_dto.user.role.to_string(),
+            "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
+            "discord_username": discord_user_id_with_name.map(|(_, username)| username),
+        })),
+    ).into_response())
 }
 
 pub async fn patch_user_role(
@@ -108,101 +99,99 @@ pub async fn patch_user_role(
     let Path(uuid) = path.map_err(handle_path_rejection)?;
     let Json(user) = json.map_err(handle_json_rejection)?;
 
-    Ok(if let Some(role) = user.role {
-        match user_use_case.patch_user_role(&actor, uuid, role).await {
-            Ok(user) => (StatusCode::OK, Json(user)).into_response(),
-            Err(err) => handle_error(err).into_response(),
-        }
+    if let Some(role) = user.role {
+        let user = user_use_case
+            .patch_user_role(&actor, uuid, role)
+            .await
+            .map_err(handle_error)?;
+        Ok((StatusCode::OK, Json(user)).into_response())
     } else {
         match user_use_case.find_by(&actor, uuid).await {
-            Ok(Some(user)) => (StatusCode::OK, Json(user)).into_response(),
-            Ok(None) => (
+            Ok(Some(user)) => Ok((StatusCode::OK, Json(user)).into_response()),
+            Ok(None) => Ok((
                 StatusCode::NOT_FOUND,
                 Json(json!({
                     "errorCode": "USER_NOT_FOUND",
                     "reason": "User not found."
                 })),
             )
-                .into_response(),
-            Err(err) => handle_error(err).into_response(),
+                .into_response()),
+            Err(err) => Err(handle_error(err)),
         }
-    })
+    }
 }
 
 pub async fn user_list(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case.fetch_all_users(&actor).await {
-        Ok(users) => (StatusCode::OK, Json(json!(users))).into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let users = user_use_case
+        .fetch_all_users(&actor)
+        .await
+        .map_err(handle_error)?;
+    Ok((StatusCode::OK, Json(json!(users))).into_response())
 }
 
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     Json(expires): Json<UserSessionExpires>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
     let token = auth.token();
-
     match user_use_case
         .fetch_user_by_xbox_token(token.to_string())
         .await
     {
         Ok(Some(user)) => {
             let expires = expires.expires;
-
-            match user_use_case
+            let session_id = user_use_case
                 .start_user_session(token.to_string(), &user, expires)
                 .await
-            {
-                Ok(session_id) => (StatusCode::OK, [(
-                    header::SET_COOKIE,
-                    HeaderValue::from_str(
-                        format!(
-                            "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={expires}; Path=/; \
-                             Secure; HttpOnly"
-                        )
-                        .as_str(),
+                .map_err(handle_error)?;
+            Ok((StatusCode::OK, [(
+                header::SET_COOKIE,
+                HeaderValue::from_str(
+                    format!(
+                        "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={expires}; Path=/; Secure; HttpOnly"
                     )
-                    .unwrap(),
-                )])
-                    .into_response(),
-                Err(err) => handle_error(err).into_response(),
-            }
+                    .as_str(),
+                )
+                .unwrap(),
+            )]).into_response())
         }
-        Ok(None) => {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({ "reason": "invalid token" })),
-            )
-        }
-        .into_response(),
-        Err(err) => handle_error(err).into_response(),
+        Ok(None) => Ok((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "reason": "invalid token" })),
+        )
+            .into_response()),
+        Err(err) => Err(handle_error(err)),
     }
 }
 
 pub async fn end_session(
     State(repository): State<RealInfrastructureRepository>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
     let session_id = auth.token();
-
-    match user_use_case.end_user_session(session_id.to_string()).await {
-        Ok(_) => (StatusCode::OK, [(
+    user_use_case
+        .end_user_session(session_id.to_string())
+        .await
+        .map_err(handle_error)?;
+    Ok((
+        StatusCode::OK,
+        [(
             header::SET_COOKIE,
             HeaderValue::from_str(
                 format!(
@@ -211,10 +200,9 @@ pub async fn end_session(
                 .as_str(),
             )
             .unwrap(),
-        )])
-            .into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+        )],
+    )
+        .into_response())
 }
 
 pub async fn link_discord(
@@ -228,27 +216,25 @@ pub async fn link_discord(
 
     let Json(discord_token) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match user_use_case
-            .link_discord_user(discord_token.token, user)
-            .await
-        {
-            Ok(_) => StatusCode::NO_CONTENT.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    user_use_case
+        .link_discord_user(discord_token.token, user)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 pub async fn unlink_discord(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case.unlink_discord_user(user).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    user_use_case
+        .unlink_discord_user(user)
+        .await
+        .map_err(handle_error)?;
+    Ok(StatusCode::NO_CONTENT.into_response())
 }

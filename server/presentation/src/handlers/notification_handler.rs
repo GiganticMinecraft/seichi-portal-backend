@@ -22,25 +22,22 @@ pub async fn get_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(target_user_id): Path<Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
     };
 
-    match notification_usecase
+    let settings = notification_usecase
         .fetch_notification_settings(user, target_user_id)
         .await
-    {
-        Ok(settings) => {
-            let response = NotificationSettingsResponse {
-                is_send_message_notification: *settings.is_send_message_notification(),
-            };
+        .map_err(handle_error)?;
 
-            (StatusCode::OK, Json(json!(response))).into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+    let response = NotificationSettingsResponse {
+        is_send_message_notification: *settings.is_send_message_notification(),
+    };
+
+    Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
 pub async fn update_notification_settings(
@@ -55,13 +52,10 @@ pub async fn update_notification_settings(
 
     let Json(notification_settings) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match notification_usecase
-            .update_notification_settings(&user, notification_settings.is_send_message_notification)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    notification_usecase
+        .update_notification_settings(&user, notification_settings.is_send_message_notification)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }

@@ -335,7 +335,7 @@ pub fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
     }
 }
 
-pub fn handle_error(err: Error) -> impl IntoResponse {
+pub fn handle_error(err: Error) -> Response {
     match err {
         Error::Domain { source } => handle_domain_error(source).into_response(),
         Error::UseCase { source } => handle_usecase_error(source).into_response(),

@@ -18,15 +18,16 @@ pub async fn get_questions_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Path(form_id): Path<FormId>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let question_use_case = QuestionUseCase {
         question_repository: repository.form_question_repository(),
     };
 
-    match question_use_case.get_questions(&user, form_id).await {
-        Ok(questions) => (StatusCode::OK, Json(questions)).into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let questions = question_use_case
+        .get_questions(&user, form_id)
+        .await
+        .map_err(handle_error)?;
+    Ok((StatusCode::OK, Json(questions)).into_response())
 }
 
 pub async fn create_question_handler(
@@ -40,15 +41,12 @@ pub async fn create_question_handler(
 
     let Json(questions) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match question_use_case
-            .create_questions(&user, questions.form_id, questions.questions)
-            .await
-        {
-            Ok(_) => (StatusCode::CREATED, Json(json!({"id": questions.form_id }))).into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    question_use_case
+        .create_questions(&user, questions.form_id, questions.questions)
+        .await
+        .map_err(handle_error)?;
+
+    Ok((StatusCode::CREATED, Json(json!({"id": questions.form_id }))).into_response())
 }
 
 pub async fn put_question_handler(
@@ -62,13 +60,10 @@ pub async fn put_question_handler(
 
     let Json(questions) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match question_use_case
-            .put_questions(&user, questions.form_id, questions.questions)
-            .await
-        {
-            Ok(_) => (StatusCode::OK, Json(json!({"id": questions.form_id }))).into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    question_use_case
+        .put_questions(&user, questions.form_id, questions.questions)
+        .await
+        .map_err(handle_error)?;
+
+    Ok((StatusCode::OK, Json(json!({"id": questions.form_id }))).into_response())
 }

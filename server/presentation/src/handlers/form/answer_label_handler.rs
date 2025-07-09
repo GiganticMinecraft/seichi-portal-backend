@@ -29,29 +29,27 @@ pub async fn create_label_for_answers(
 
     let Json(label) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match answer_label_use_case
-            .create_label_for_answers(&user, label.name)
-            .await
-        {
-            Ok(_) => StatusCode::CREATED.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    answer_label_use_case
+        .create_label_for_answers(&user, label.name)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::CREATED.into_response())
 }
 
 pub async fn get_labels_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
 
-    match answer_label_use_case.get_labels_for_answers(&user).await {
-        Ok(labels) => (StatusCode::OK, Json(labels)).into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let labels = answer_label_use_case
+        .get_labels_for_answers(&user)
+        .await
+        .map_err(handle_error)?;
+    Ok((StatusCode::OK, Json(labels)).into_response())
 }
 
 pub async fn delete_label_for_answers(
@@ -65,15 +63,12 @@ pub async fn delete_label_for_answers(
 
     let Path(label_id) = path.map_err(handle_path_rejection)?;
 
-    Ok(
-        match answer_label_use_case
-            .delete_label_for_answers(&user, label_id)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    answer_label_use_case
+        .delete_label_for_answers(&user, label_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 pub async fn edit_label_for_answers(
@@ -88,15 +83,12 @@ pub async fn edit_label_for_answers(
 
     let Path(label_id) = path.map_err(handle_path_rejection)?;
 
-    Ok(
-        match answer_label_use_case
-            .edit_label_for_answers(&user, AnswerLabel::from_raw_parts(label_id, label.name))
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    answer_label_use_case
+        .edit_label_for_answers(&user, AnswerLabel::from_raw_parts(label_id, label.name))
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 pub async fn replace_answer_labels(
@@ -111,13 +103,10 @@ pub async fn replace_answer_labels(
 
     let Path(answer_id) = path.map_err(handle_path_rejection)?;
 
-    Ok(
-        match answer_label_use_case
-            .replace_answer_labels(&user, answer_id, label_ids.labels)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    answer_label_use_case
+        .replace_answer_labels(&user, answer_id, label_ids.labels)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }

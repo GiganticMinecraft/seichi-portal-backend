@@ -32,23 +32,24 @@ pub async fn post_form_comment(
 
     let Json(comment_schema) = json.map_err(handle_json_rejection)?;
 
-    let post_comment_result = async {
-        let comment = Comment::new(
-            comment_schema.answer_id,
-            CommentContent::new(comment_schema.content.try_into()?),
-            user.to_owned(),
-        );
+    let comment = Comment::new(
+        comment_schema.answer_id,
+        CommentContent::new(
+            comment_schema
+                .content
+                .try_into()
+                .map_err(Into::into)
+                .map_err(handle_error)?,
+        ),
+        user.to_owned(),
+    );
 
-        form_comment_use_case
-            .post_comment(&user, comment, comment_schema.answer_id)
-            .await
-    }
-    .await;
+    form_comment_use_case
+        .post_comment(&user, comment, comment_schema.answer_id)
+        .await
+        .map_err(handle_error)?;
 
-    Ok(match post_comment_result {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    })
+    Ok(StatusCode::OK.into_response())
 }
 
 pub async fn delete_form_comment_handler(
@@ -64,13 +65,10 @@ pub async fn delete_form_comment_handler(
 
     let Path(comment_id) = path.map_err(handle_path_rejection)?;
 
-    Ok(
-        match form_comment_use_case
-            .delete_comment(&user, comment_id)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_comment_use_case
+        .delete_comment(&user, comment_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }

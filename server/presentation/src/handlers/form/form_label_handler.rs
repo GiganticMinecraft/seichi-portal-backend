@@ -32,29 +32,27 @@ pub async fn create_label_for_forms(
 
     let Json(label) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match form_label_use_case
-            .create_label_for_forms(&user, FormLabelName::new(label.name))
-            .await
-        {
-            Ok(_) => StatusCode::CREATED.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_label_use_case
+        .create_label_for_forms(&user, FormLabelName::new(label.name))
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::CREATED.into_response())
 }
 
 pub async fn get_labels_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_label_use_case.get_labels_for_forms(&user).await {
-        Ok(labels) => (StatusCode::OK, Json(labels)).into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let labels = form_label_use_case
+        .get_labels_for_forms(&user)
+        .await
+        .map_err(handle_error)?;
+    Ok((StatusCode::OK, Json(labels)).into_response())
 }
 
 pub async fn delete_label_for_forms(
@@ -68,15 +66,12 @@ pub async fn delete_label_for_forms(
 
     let Path(label_id) = path.map_err(handle_path_rejection)?;
 
-    Ok(
-        match form_label_use_case
-            .delete_label_for_forms(label_id, &user)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_label_use_case
+        .delete_label_for_forms(label_id, &user)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 pub async fn edit_label_for_forms(
@@ -92,15 +87,12 @@ pub async fn edit_label_for_forms(
     let Path(label_id) = path.map_err(handle_path_rejection)?;
     let Json(label) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match form_label_use_case
-            .edit_label_for_forms(label_id, FormLabelName::new(label.name), &user)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_label_use_case
+        .edit_label_for_forms(label_id, FormLabelName::new(label.name), &user)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 pub async fn replace_form_labels(
@@ -116,13 +108,10 @@ pub async fn replace_form_labels(
     let Path(form_id) = path.map_err(handle_path_rejection)?;
     let Json(label_ids) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match form_label_use_case
-            .replace_form_labels(&user, form_id, label_ids.labels)
-            .await
-        {
-            Ok(_) => StatusCode::OK.into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
-    )
+    form_label_use_case
+        .replace_form_labels(&user, form_id, label_ids.labels)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }
