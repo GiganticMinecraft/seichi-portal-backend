@@ -21,6 +21,7 @@ use crate::schemas::user::UserUpdateSchema;
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
+use axum_extra::typed_header::TypedHeaderRejection;
 use errors::presentation::PresentationError;
 use errors::{Error, ErrorExtra};
 
@@ -127,12 +128,14 @@ pub async fn user_list(
 
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
     Json(expires): Json<UserSessionExpires>,
 ) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
+
+    let TypedHeader(auth) = header.map_err_to_error().map_err(handle_error)?;
 
     let token = auth.token();
     match user_use_case
@@ -167,11 +170,13 @@ pub async fn start_session(
 
 pub async fn end_session(
     State(repository): State<RealInfrastructureRepository>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    typed_header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
+
+    let TypedHeader(auth) = typed_header.map_err_to_error().map_err(handle_error)?;
 
     let session_id = auth.token();
     user_use_case

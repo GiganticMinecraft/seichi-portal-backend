@@ -353,6 +353,14 @@ fn handle_presentation_error(err: PresentationError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        PresentationError::TypedHeaderRejection { cause } => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "errorCode": "UNAUTHORIZED",
+                "reason": cause
+            })),
+        )
+            .into_response(),
     }
 }
 
