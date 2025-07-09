@@ -100,26 +100,14 @@ pub async fn patch_user_role(
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
     let Json(user) = json.map_err_to_error().map_err(handle_error)?;
 
-    if let Some(role) = user.role {
-        let user = user_use_case
-            .patch_user_role(&actor, uuid, role)
-            .await
-            .map_err(handle_error)?;
-        Ok((StatusCode::OK, Json(user)).into_response())
+    let user = if let Some(role) = user.role {
+        user_use_case.patch_user_role(&actor, uuid, role).await
     } else {
-        match user_use_case.find_by(&actor, uuid).await {
-            Ok(Some(user)) => Ok((StatusCode::OK, Json(user)).into_response()),
-            Ok(None) => Ok((
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "errorCode": "USER_NOT_FOUND",
-                    "reason": "User not found."
-                })),
-            )
-                .into_response()),
-            Err(err) => Err(handle_error(err)),
-        }
+        user_use_case.find_by(&actor, uuid).await
     }
+    .map_err(handle_error)?;
+
+    Ok((StatusCode::OK, Json(user)).into_response())
 }
 
 pub async fn user_list(

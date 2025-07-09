@@ -12,14 +12,13 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 }
 
 impl<R: UserRepository> UserUseCase<'_, R> {
-    // FIXME: Option を返さずに NotFound エラーを返す
-    pub async fn find_by(&self, actor: &User, uuid: Uuid) -> Result<Option<User>, Error> {
+    pub async fn find_by(&self, actor: &User, uuid: Uuid) -> Result<User, Error> {
         self.repository
             .find_by(uuid)
             .await?
             .map(|guard| guard.try_into_read(actor))
-            .transpose()
-            .map_err(Into::into)
+            .transpose()?
+            .ok_or(Error::from(UseCaseError::UserNotFound))
     }
 
     pub async fn upsert_user(&self, actor: &User, upsert_target: User) -> Result<(), Error> {
@@ -78,7 +77,12 @@ impl<R: UserRepository> UserUseCase<'_, R> {
                 self.repository.upsert_user(&user, guard).await?;
                 // NOTE: リクエスト時点では token しかわからないので
                 //  token で検索したユーザーが操作者であるとする
-                self.find_by(&user, user.id).await
+                self.repository
+                    .find_by(user.id)
+                    .await?
+                    .map(|guard| guard.try_into_read(&user))
+                    .transpose()
+                    .map_err(Into::into)
             }
             None => Ok(None),
         }
@@ -99,12 +103,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         session_id: String,
     ) -> Result<Option<User>, Error> {
-        let user = self.repository.fetch_user_by_session_id(session_id).await?;
-
-        match user {
-            Some(user) => self.find_by(&user, user.id).await,
-            None => Ok(None),
-        }
+        self.repository.fetch_user_by_session_id(session_id).await
     }
 
     pub async fn end_user_session(&self, session_id: String) -> Result<(), Error> {
