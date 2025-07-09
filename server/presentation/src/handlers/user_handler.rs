@@ -17,8 +17,8 @@ use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::Uuid;
 
-use crate::handlers::error_handler::handle_json_rejection;
-use axum::extract::rejection::JsonRejection;
+use crate::handlers::error_handler::{handle_json_rejection, handle_path_rejection};
+use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
@@ -59,22 +59,25 @@ pub async fn get_my_user_info(
 pub async fn get_user_info(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(uuid): Path<Uuid>,
-) -> impl IntoResponse {
+    path: Result<Path<Uuid>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case.fetch_user_information(&actor, uuid).await {
-        Ok(user_dto) => {
-            let discord_user_id_with_name = user_dto.discord_user.map(|user| {
-                (
-                    user.id().to_owned().into_inner(),
-                    user.name().to_owned().into_inner(),
-                )
-            });
+    let Path(uuid) = path.map_err(handle_path_rejection)?;
 
-            (
+    Ok(
+        match user_use_case.fetch_user_information(&actor, uuid).await {
+            Ok(user_dto) => {
+                let discord_user_id_with_name = user_dto.discord_user.map(|user| {
+                    (
+                        user.id().to_owned().into_inner(),
+                        user.name().to_owned().into_inner(),
+                    )
+                });
+
+                (
                 StatusCode::OK,
                 Json(json!({
                     "id": user_dto.user.id.to_string(),
@@ -85,25 +88,30 @@ pub async fn get_user_info(
                 })),
             )
                 .into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+            }
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn patch_user_role(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(uuid): Path<Uuid>,
+    path: Result<Path<Uuid>, PathRejection>,
     Query(role): Query<RoleQuery>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    match user_use_case.patch_user_role(&actor, uuid, role.role).await {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Path(uuid) = path.map_err(handle_path_rejection)?;
+
+    Ok(
+        match user_use_case.patch_user_role(&actor, uuid, role.role).await {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn user_list(

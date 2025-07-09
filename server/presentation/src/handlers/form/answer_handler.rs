@@ -1,4 +1,4 @@
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{
     Extension, Json,
@@ -16,7 +16,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::answer::AnswerUseCase;
 
-use crate::handlers::error_handler::handle_json_rejection;
+use crate::handlers::error_handler::{handle_json_rejection, handle_path_rejection};
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -58,8 +58,8 @@ pub async fn get_all_answers(
 pub async fn get_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(answer_id): Path<AnswerId>,
-) -> impl IntoResponse {
+    path: Result<Path<AnswerId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -68,12 +68,14 @@ pub async fn get_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
+    let Path(answer_id) = path.map_err(handle_path_rejection)?;
+
     let answer_dto = match form_answer_use_case.get_answers(answer_id, &user).await {
         Ok(answer) => answer,
-        Err(err) => return handle_error(err).into_response(),
+        Err(err) => return Ok(handle_error(err).into_response()),
     };
 
-    (
+    Ok((
         StatusCode::OK,
         Json(json!(FormAnswer::new(
             answer_dto.form_answer,
@@ -81,14 +83,14 @@ pub async fn get_answer_handler(
             answer_dto.labels
         ))),
     )
-        .into_response()
+        .into_response())
 }
 
 pub async fn get_answer_by_form_id_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
-) -> impl IntoResponse {
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -97,26 +99,30 @@ pub async fn get_answer_by_form_id_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    match form_answer_use_case
-        .get_answers_by_form_id(form_id, &user)
-        .await
-    {
-        Ok(answers) => {
-            let response = answers
-                .into_iter()
-                .map(|answer_dto| {
-                    FormAnswer::new(
-                        answer_dto.form_answer,
-                        answer_dto.comments,
-                        answer_dto.labels,
-                    )
-                })
-                .collect_vec();
+    let Path(form_id) = path.map_err(handle_path_rejection)?;
 
-            (StatusCode::OK, Json(response)).into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+    Ok(
+        match form_answer_use_case
+            .get_answers_by_form_id(form_id, &user)
+            .await
+        {
+            Ok(answers) => {
+                let response = answers
+                    .into_iter()
+                    .map(|answer_dto| {
+                        FormAnswer::new(
+                            answer_dto.form_answer,
+                            answer_dto.comments,
+                            answer_dto.labels,
+                        )
+                    })
+                    .collect_vec();
+
+                (StatusCode::OK, Json(response)).into_response()
+            }
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn post_answer_handler(

@@ -1,4 +1,4 @@
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use errors::{
@@ -350,6 +350,17 @@ pub fn handle_json_rejection(json_rejection: JsonRejection) -> Response {
         Json(json!({
             "errorCode": "UNPROCESSABLE_CONTENT",
             "reason": json_rejection.body_text()
+        })),
+    )
+        .into_response()
+}
+
+pub fn handle_path_rejection(path_rejection: PathRejection) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({
+            "errorCode": "BAD_REQUEST",
+            "reason": path_rejection.body_text()
         })),
     )
         .into_response()

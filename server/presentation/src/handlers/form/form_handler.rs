@@ -12,14 +12,13 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{dto::FormDto, forms::form::FormUseCase};
 
-use crate::handlers::error_handler::handle_json_rejection;
-use crate::{
-    handlers::error_handler::handle_error,
-    schemas::form::{
-        form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
-        form_response_schemas::{
-            FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema, ResponsePeriodSchema,
-        },
+use crate::handlers::error_handler::{handle_error, handle_json_rejection, handle_path_rejection};
+use axum::extract::rejection::PathRejection;
+
+use crate::schemas::form::{
+    form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
+    form_response_schemas::{
+        FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema, ResponsePeriodSchema,
     },
 };
 
@@ -116,8 +115,8 @@ pub async fn form_list_handler(
 pub async fn get_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
-) -> impl IntoResponse {
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -125,7 +124,9 @@ pub async fn get_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case.get_form(&user, form_id).await {
+    let Path(form_id) = path.map_err(handle_path_rejection)?;
+
+    Ok(match form_use_case.get_form(&user, form_id).await {
         Ok(FormDto {
             form,
             questions,
@@ -144,14 +145,14 @@ pub async fn get_form_handler(
             (StatusCode::OK, Json(json!(response))).into_response()
         }
         Err(err) => handle_error(err).into_response(),
-    }
+    })
 }
 
 pub async fn delete_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
-) -> impl IntoResponse {
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -159,16 +160,18 @@ pub async fn delete_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case.delete_form(&user, form_id).await {
+    let Path(form_id) = path.map_err(handle_path_rejection)?;
+
+    Ok(match form_use_case.delete_form(&user, form_id).await {
         Ok(form_id) => (StatusCode::OK, Json(json!({ "id": form_id }))).into_response(),
         Err(err) => handle_error(err).into_response(),
-    }
+    })
 }
 
 pub async fn update_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
+    path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
@@ -178,6 +181,7 @@ pub async fn update_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
+    let Path(form_id) = path.map_err(handle_path_rejection)?;
     let Json(targets) = json.map_err(handle_json_rejection)?;
 
     Ok(

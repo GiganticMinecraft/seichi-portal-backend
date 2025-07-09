@@ -1,4 +1,4 @@
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{
     Extension, Json,
@@ -15,7 +15,7 @@ use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
 use crate::{
-    handlers::error_handler::{handle_error, handle_json_rejection},
+    handlers::error_handler::{handle_error, handle_json_rejection, handle_path_rejection},
     schemas::form::form_request_schemas::CommentPostSchema,
 };
 
@@ -54,19 +54,23 @@ pub async fn post_form_comment(
 pub async fn delete_form_comment_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(comment_id): Path<CommentId>,
-) -> impl IntoResponse {
+    path: Result<Path<CommentId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
     };
 
-    match form_comment_use_case
-        .delete_comment(&user, comment_id)
-        .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Path(comment_id) = path.map_err(handle_path_rejection)?;
+
+    Ok(
+        match form_comment_use_case
+            .delete_comment(&user, comment_id)
+            .await
+        {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }

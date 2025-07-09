@@ -1,5 +1,5 @@
-use crate::handlers::error_handler::handle_json_rejection;
-use axum::extract::rejection::JsonRejection;
+use crate::handlers::error_handler::{handle_json_rejection, handle_path_rejection};
+use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{
     Extension,
@@ -60,31 +60,36 @@ pub async fn get_labels_for_forms(
 pub async fn delete_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(label_id): Path<FormLabelId>,
-) -> impl IntoResponse {
+    path: Result<Path<FormLabelId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_label_use_case
-        .delete_label_for_forms(label_id, &user)
-        .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Path(label_id) = path.map_err(handle_path_rejection)?;
+
+    Ok(
+        match form_label_use_case
+            .delete_label_for_forms(label_id, &user)
+            .await
+        {
+            Ok(_) => StatusCode::OK.into_response(),
+            Err(err) => handle_error(err).into_response(),
+        },
+    )
 }
 
 pub async fn edit_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(label_id): Path<FormLabelId>,
+    path: Result<Path<FormLabelId>, PathRejection>,
     json: Result<Json<FormLabelSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
+    let Path(label_id) = path.map_err(handle_path_rejection)?;
     let Json(label) = json.map_err(handle_json_rejection)?;
 
     Ok(
@@ -101,13 +106,14 @@ pub async fn edit_label_for_forms(
 pub async fn replace_form_labels(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
+    path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<ReplaceFormLabelSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
 
+    let Path(form_id) = path.map_err(handle_path_rejection)?;
     let Json(label_ids) = json.map_err(handle_json_rejection)?;
 
     Ok(
