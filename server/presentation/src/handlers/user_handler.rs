@@ -150,7 +150,7 @@ pub async fn start_session(
                 .start_user_session(token.to_string(), &user, expires)
                 .await
                 .map_err(handle_error)?;
-            Ok((StatusCode::OK, [(
+            Ok((StatusCode::CREATED, [(
                 header::SET_COOKIE,
                 HeaderValue::from_str(
                     format!(
@@ -186,7 +186,7 @@ pub async fn end_session(
         .await
         .map_err(handle_error)?;
     Ok((
-        StatusCode::OK,
+        StatusCode::NO_CONTENT,
         [(
             header::SET_COOKIE,
             HeaderValue::from_str(
