@@ -27,7 +27,12 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await
     }
 
-    pub async fn patch_user_role(&self, actor: &User, uuid: Uuid, role: Role) -> Result<(), Error> {
+    pub async fn patch_user_role(
+        &self,
+        actor: &User,
+        uuid: Uuid,
+        role: Role,
+    ) -> Result<User, Error> {
         let current_user_guard = self
             .repository
             .find_by(uuid)
@@ -42,7 +47,15 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
         self.repository
             .patch_user_role(actor, new_role_user.into())
-            .await
+            .await?;
+
+        let updated_user_guard = self
+            .repository
+            .find_by(uuid)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        updated_user_guard.try_into_read(actor).map_err(Into::into)
     }
 
     pub async fn fetch_all_users(&self, actor: &User) -> Result<Vec<User>, Error> {

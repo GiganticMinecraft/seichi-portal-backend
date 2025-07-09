@@ -1,6 +1,6 @@
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderValue, StatusCode, header},
     response::IntoResponse,
 };
@@ -10,7 +10,7 @@ use axum_extra::{
 };
 use domain::{
     repository::Repositories,
-    user::models::{RoleQuery, User, UserSessionExpires},
+    user::models::{User, UserSessionExpires},
 };
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -21,6 +21,7 @@ use crate::handlers::error_handler::{handle_json_rejection, handle_path_rejectio
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 
+use crate::schemas::user::UserUpdateSchema;
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 
 pub async fn get_my_user_info(
@@ -98,20 +99,34 @@ pub async fn patch_user_role(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-    Query(role): Query<RoleQuery>,
+    json: Result<Json<UserUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
     let Path(uuid) = path.map_err(handle_path_rejection)?;
+    let Json(user) = json.map_err(handle_json_rejection)?;
 
-    Ok(
-        match user_use_case.patch_user_role(&actor, uuid, role.role).await {
-            Ok(_) => StatusCode::OK.into_response(),
+    Ok(if let Some(role) = user.role {
+        match user_use_case.patch_user_role(&actor, uuid, role).await {
+            Ok(user) => (StatusCode::OK, Json(user)).into_response(),
             Err(err) => handle_error(err).into_response(),
-        },
-    )
+        }
+    } else {
+        match user_use_case.find_by(&actor, uuid).await {
+            Ok(Some(user)) => (StatusCode::OK, Json(user)).into_response(),
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "errorCode": "USER_NOT_FOUND",
+                    "reason": "User not found."
+                })),
+            )
+                .into_response(),
+            Err(err) => handle_error(err).into_response(),
+        }
+    })
 }
 
 pub async fn user_list(
