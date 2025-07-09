@@ -11,12 +11,12 @@ use domain::{
     repository::Repositories,
     user::models::User,
 };
+use errors::ErrorExtra;
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::answer::AnswerUseCase;
 
-use crate::handlers::error_handler::{handle_json_rejection, handle_path_rejection};
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -69,7 +69,7 @@ pub async fn get_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    let Path(answer_id) = path.map_err(handle_path_rejection)?;
+    let Path(answer_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let answer_dto = form_answer_use_case
         .get_answers(answer_id, &user)
@@ -100,7 +100,7 @@ pub async fn get_answer_by_form_id_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    let Path(form_id) = path.map_err(handle_path_rejection)?;
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let answers = form_answer_use_case
         .get_answers_by_form_id(form_id, &user)
@@ -134,7 +134,7 @@ pub async fn post_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    let Json(schema) = json.map_err(handle_json_rejection)?;
+    let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
     form_answer_use_case
         .post_answers(user, schema.form_id, schema.answers)
@@ -158,7 +158,7 @@ pub async fn update_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    let Json(schema) = json.map_err(handle_json_rejection)?;
+    let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
     form_answer_use_case
         .update_answer_meta(answer_id, &user, schema.title)

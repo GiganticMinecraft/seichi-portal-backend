@@ -10,11 +10,12 @@ use domain::{
     repository::Repositories,
     user::models::User,
 };
+use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::answer_label::AnswerLabelUseCase;
 
 use crate::{
-    handlers::error_handler::{handle_error, handle_json_rejection, handle_path_rejection},
+    handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::{AnswerLabelSchema, ReplaceAnswerLabelSchema},
 };
 
@@ -27,7 +28,7 @@ pub async fn create_label_for_answers(
         answer_label_repository: repository.answer_label_repository(),
     };
 
-    let Json(label) = json.map_err(handle_json_rejection)?;
+    let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
     answer_label_use_case
         .create_label_for_answers(&user, label.name)
@@ -61,7 +62,7 @@ pub async fn delete_label_for_answers(
         answer_label_repository: repository.answer_label_repository(),
     };
 
-    let Path(label_id) = path.map_err(handle_path_rejection)?;
+    let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
 
     answer_label_use_case
         .delete_label_for_answers(&user, label_id)
@@ -81,7 +82,7 @@ pub async fn edit_label_for_answers(
         answer_label_repository: repository.answer_label_repository(),
     };
 
-    let Path(label_id) = path.map_err(handle_path_rejection)?;
+    let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
 
     answer_label_use_case
         .edit_label_for_answers(&user, AnswerLabel::from_raw_parts(label_id, label.name))
@@ -101,7 +102,7 @@ pub async fn replace_answer_labels(
         answer_label_repository: repository.answer_label_repository(),
     };
 
-    let Path(answer_id) = path.map_err(handle_path_rejection)?;
+    let Path(answer_id) = path.map_err_to_error().map_err(handle_error)?;
 
     answer_label_use_case
         .replace_answer_labels(&user, answer_id, label_ids.labels)

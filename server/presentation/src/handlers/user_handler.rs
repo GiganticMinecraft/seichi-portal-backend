@@ -17,12 +17,12 @@ use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::Uuid;
 
-use crate::handlers::error_handler::{handle_json_rejection, handle_path_rejection};
-use axum::extract::rejection::{JsonRejection, PathRejection};
-use axum::response::Response;
-
 use crate::schemas::user::UserUpdateSchema;
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
+use axum::extract::rejection::{JsonRejection, PathRejection};
+use axum::response::Response;
+use errors::presentation::PresentationError;
+use errors::{Error, ErrorExtra};
 
 pub async fn get_my_user_info(
     Extension(user): Extension<User>,
@@ -63,7 +63,8 @@ pub async fn get_user_info(
         repository: repository.user_repository(),
     };
 
-    let Path(uuid) = path.map_err(handle_path_rejection)?;
+    let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
+
     let user_dto = user_use_case
         .fetch_user_information(&actor, uuid)
         .await
@@ -96,8 +97,8 @@ pub async fn patch_user_role(
         repository: repository.user_repository(),
     };
 
-    let Path(uuid) = path.map_err(handle_path_rejection)?;
-    let Json(user) = json.map_err(handle_json_rejection)?;
+    let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(user) = json.map_err_to_error().map_err(handle_error)?;
 
     if let Some(role) = user.role {
         let user = user_use_case
@@ -214,7 +215,10 @@ pub async fn link_discord(
         repository: repository.user_repository(),
     };
 
-    let Json(discord_token) = json.map_err(handle_json_rejection)?;
+    let Json(discord_token) = json
+        .map_err(Into::<PresentationError>::into)
+        .map_err(Into::<Error>::into)
+        .map_err(handle_error)?;
 
     user_use_case
         .link_discord_user(discord_token.token, user)

@@ -12,15 +12,15 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{dto::FormDto, forms::form::FormUseCase};
 
-use crate::handlers::error_handler::{handle_error, handle_json_rejection, handle_path_rejection};
-use axum::extract::rejection::PathRejection;
-
+use crate::handlers::error_handler::handle_error;
 use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
     form_response_schemas::{
         FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema, ResponsePeriodSchema,
     },
 };
+use axum::extract::rejection::PathRejection;
+use errors::ErrorExtra;
 
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
@@ -34,7 +34,7 @@ pub async fn create_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Json(form) = json.map_err(handle_json_rejection)?;
+    let Json(form) = json.map_err_to_error().map_err(handle_error)?;
 
     let id = form_use_case
         .create_form(form.title, form.description, user)
@@ -118,7 +118,7 @@ pub async fn get_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Path(form_id) = path.map_err(handle_path_rejection)?;
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let FormDto {
         form,
@@ -154,7 +154,7 @@ pub async fn delete_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Path(form_id) = path.map_err(handle_path_rejection)?;
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
     form_use_case
         .delete_form(&user, form_id)
@@ -177,8 +177,8 @@ pub async fn update_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Path(form_id) = path.map_err(handle_path_rejection)?;
-    let Json(targets) = json.map_err(handle_json_rejection)?;
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(targets) = json.map_err_to_error().map_err(handle_error)?;
 
     form_use_case
         .update_form(

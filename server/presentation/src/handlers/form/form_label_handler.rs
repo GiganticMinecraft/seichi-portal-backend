@@ -1,4 +1,3 @@
-use crate::handlers::error_handler::{handle_json_rejection, handle_path_rejection};
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{
@@ -13,6 +12,7 @@ use domain::{
     repository::Repositories,
     user::models::User,
 };
+use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::form_label::FormLabelUseCase;
 
@@ -30,7 +30,7 @@ pub async fn create_label_for_forms(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Json(label) = json.map_err(handle_json_rejection)?;
+    let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
     form_label_use_case
         .create_label_for_forms(&user, FormLabelName::new(label.name))
@@ -64,7 +64,7 @@ pub async fn delete_label_for_forms(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Path(label_id) = path.map_err(handle_path_rejection)?;
+    let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
 
     form_label_use_case
         .delete_label_for_forms(label_id, &user)
@@ -84,8 +84,8 @@ pub async fn edit_label_for_forms(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Path(label_id) = path.map_err(handle_path_rejection)?;
-    let Json(label) = json.map_err(handle_json_rejection)?;
+    let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
     form_label_use_case
         .edit_label_for_forms(label_id, FormLabelName::new(label.name), &user)
@@ -105,8 +105,8 @@ pub async fn replace_form_labels(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Path(form_id) = path.map_err(handle_path_rejection)?;
-    let Json(label_ids) = json.map_err(handle_json_rejection)?;
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(label_ids) = json.map_err_to_error().map_err(handle_error)?;
 
     form_label_use_case
         .replace_form_labels(&user, form_id, label_ids.labels)

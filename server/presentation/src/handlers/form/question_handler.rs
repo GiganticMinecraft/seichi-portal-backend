@@ -5,12 +5,13 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use domain::{form::models::FormId, repository::Repositories, user::models::User};
+use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::question::QuestionUseCase;
 
 use crate::{
-    handlers::error_handler::{handle_error, handle_json_rejection},
+    handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::FormQuestionUpdateSchema,
 };
 
@@ -39,7 +40,7 @@ pub async fn create_question_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    let Json(questions) = json.map_err(handle_json_rejection)?;
+    let Json(questions) = json.map_err_to_error().map_err(handle_error)?;
 
     question_use_case
         .create_questions(&user, questions.form_id, questions.questions)
@@ -58,7 +59,7 @@ pub async fn put_question_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    let Json(questions) = json.map_err(handle_json_rejection)?;
+    let Json(questions) = json.map_err_to_error().map_err(handle_error)?;
 
     question_use_case
         .put_questions(&user, questions.form_id, questions.questions)

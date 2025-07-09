@@ -16,7 +16,7 @@ use std::sync::Arc;
 use usecase::forms::message::MessageUseCase;
 
 use crate::{
-    handlers::error_handler::{handle_error, handle_json_rejection},
+    handlers::error_handler::handle_error,
     schemas::form::{
         form_request_schemas::{MessageUpdateSchema, PostedMessageSchema},
         form_response_schemas::{MessageContentSchema, SenderSchema},
@@ -25,6 +25,7 @@ use crate::{
 use axum::extract::rejection::JsonRejection;
 use axum::response::Response;
 use domain::notification::notification_api::NotificationAPI;
+use errors::ErrorExtra;
 
 pub struct RealInfrastructureRepositoryWithNotificationAPI<API: NotificationAPI + Send + Sync> {
     pub repository: RealInfrastructureRepository,
@@ -54,7 +55,7 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
         user_repository: state.repository.user_repository(),
     };
 
-    let Json(message) = json.map_err(handle_json_rejection)?;
+    let Json(message) = json.map_err_to_error().map_err(handle_error)?;
 
     form_message_use_case
         .post_message(&user, message.body, answer_id, &state.notification_api)
@@ -78,7 +79,7 @@ pub async fn update_message_handler(
         user_repository: repository.user_repository(),
     };
 
-    let Json(body_schema) = json.map_err(handle_json_rejection)?;
+    let Json(body_schema) = json.map_err_to_error().map_err(handle_error)?;
 
     form_message_use_case
         .update_message_body(&user, answer_id, &message_id, body_schema.body)

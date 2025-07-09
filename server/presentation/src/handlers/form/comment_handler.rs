@@ -11,12 +11,12 @@ use domain::{
     repository::Repositories,
     user::models::User,
 };
+use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
 use crate::{
-    handlers::error_handler::{handle_error, handle_json_rejection, handle_path_rejection},
-    schemas::form::form_request_schemas::CommentPostSchema,
+    handlers::error_handler::handle_error, schemas::form::form_request_schemas::CommentPostSchema,
 };
 
 pub async fn post_form_comment(
@@ -30,7 +30,7 @@ pub async fn post_form_comment(
         form_repository: repository.form_repository(),
     };
 
-    let Json(comment_schema) = json.map_err(handle_json_rejection)?;
+    let Json(comment_schema) = json.map_err_to_error().map_err(handle_error)?;
 
     let comment = Comment::new(
         comment_schema.answer_id,
@@ -63,7 +63,7 @@ pub async fn delete_form_comment_handler(
         form_repository: repository.form_repository(),
     };
 
-    let Path(comment_id) = path.map_err(handle_path_rejection)?;
+    let Path(comment_id) = path.map_err_to_error().map_err(handle_error)?;
 
     form_comment_use_case
         .delete_comment(&user, comment_id)

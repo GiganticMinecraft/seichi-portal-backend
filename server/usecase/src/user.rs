@@ -12,6 +12,7 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 }
 
 impl<R: UserRepository> UserUseCase<'_, R> {
+    // FIXME: Option を返さずに NotFound エラーを返す
     pub async fn find_by(&self, actor: &User, uuid: Uuid) -> Result<Option<User>, Error> {
         self.repository
             .find_by(uuid)
