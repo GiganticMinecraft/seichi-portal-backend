@@ -5,6 +5,7 @@ use crate::{
         notification_response_schemas::NotificationSettingsResponse,
     },
 };
+use axum::extract::rejection::PathRejection;
 use axum::{
     Extension, Json,
     extract::{Path, State, rejection::JsonRejection},
@@ -21,12 +22,14 @@ use uuid::Uuid;
 pub async fn get_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(target_user_id): Path<Uuid>,
+    path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
     };
+
+    let Path(target_user_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let settings = notification_usecase
         .fetch_notification_settings(user, target_user_id)
