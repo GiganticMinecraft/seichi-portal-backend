@@ -20,4 +20,6 @@ pub enum UseCaseError {
     DiscordLinkFailed,
     #[error("User not found.")]
     UserNotFound,
+    #[error("Discord not linked.")]
+    DiscordNotLinked,
 }

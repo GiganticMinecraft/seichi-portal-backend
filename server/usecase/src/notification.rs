@@ -55,6 +55,22 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         actor: &User,
         is_send_message_notification: bool,
     ) -> Result<(), Error> {
+        // NOTE: Discord への通知設定は、Discord への連携がすでに行われていなければならない
+        let user = self
+            .user_repository
+            .find_by(actor.id)
+            .await?
+            .ok_or(UseCaseError::UserNotFound)?;
+
+        let discord_user = self
+            .user_repository
+            .fetch_discord_user(actor, &user)
+            .await?;
+
+        if discord_user.is_none() {
+            return Err(Error::from(UseCaseError::DiscordNotLinked));
+        }
+
         let current_settings = self
             .repository
             .fetch_notification_settings(actor.id)

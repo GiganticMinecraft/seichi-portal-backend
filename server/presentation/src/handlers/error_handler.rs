@@ -138,6 +138,14 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        UseCaseError::DiscordNotLinked => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "DISCORD_NOT_LINKED",
+                "reason": "Discord is not linked"
+            })),
+        )
+            .into_response(),
     }
 }
 
