@@ -53,7 +53,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
     pub async fn update_notification_settings(
         &self,
         actor: &User,
-        is_send_message_notification: bool,
+        is_send_message_notification: Option<bool>,
     ) -> Result<(), Error> {
         // NOTE: Discord への通知設定は、Discord への連携がすでに行われていなければならない
         let user = self
@@ -89,12 +89,18 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
             }
         };
 
-        let updated_notification_settings = current_settings.into_update().map(|settings| {
-            settings.update_send_message_notification(is_send_message_notification)
-        });
+        match is_send_message_notification {
+            Some(is_send_message_notification) => {
+                let updated_notification_settings =
+                    current_settings.into_update().map(|settings| {
+                        settings.update_send_message_notification(is_send_message_notification)
+                    });
 
-        self.repository
-            .update_notification_settings(actor, updated_notification_settings)
-            .await
+                self.repository
+                    .update_notification_settings(actor, updated_notification_settings)
+                    .await
+            }
+            None => Ok(()),
+        }
     }
 }
