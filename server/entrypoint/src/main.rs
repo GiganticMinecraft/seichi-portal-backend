@@ -8,7 +8,7 @@ use axum::{
     },
     middleware,
     response::IntoResponse,
-    routing::{delete, get, patch, post, put},
+    routing::{delete, get, post, put},
 };
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
@@ -16,6 +16,7 @@ use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
 use presentation::handlers::form::message_handler::RealInfrastructureRepositoryWithNotificationAPI;
+use presentation::handlers::notification_handler::get_my_notification_settings;
 use presentation::handlers::search_handler::start_watch_out_of_sync;
 use presentation::{
     auth::auth,
@@ -214,7 +215,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route(
             "/notifications/settings/me",
-            patch(update_notification_settings),
+            get(get_my_notification_settings).patch(update_notification_settings),
         )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))

@@ -43,6 +43,29 @@ pub async fn get_notification_settings(
     Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
+pub async fn get_my_notification_settings(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+) -> Result<impl IntoResponse, Response> {
+    let notification_usecase = NotificationUseCase {
+        repository: repository.notification_repository(),
+        user_repository: repository.user_repository(),
+    };
+
+    let user_id = user.id.to_owned();
+
+    let settings = notification_usecase
+        .fetch_notification_settings(user, user_id)
+        .await
+        .map_err(handle_error)?;
+
+    let response = NotificationSettingsResponse {
+        is_send_message_notification: *settings.is_send_message_notification(),
+    };
+
+    Ok((StatusCode::OK, Json(json!(response))).into_response())
+}
+
 pub async fn update_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
