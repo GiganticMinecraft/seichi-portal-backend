@@ -70,7 +70,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 let label_rs = query_all_and_values(
                     "SELECT id, name FROM label_for_form_answers WHERE id = ?",
-                    [label_id.into()],
+                    [label_id.to_string().into()],
                     txn,
                 )
                 .await?;
@@ -169,7 +169,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     "DELETE FROM label_for_form_answers WHERE id = ?",
-                    [label_id.to_string().into()],
+                    [label_id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;
