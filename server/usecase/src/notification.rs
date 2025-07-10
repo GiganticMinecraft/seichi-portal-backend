@@ -1,5 +1,7 @@
 pub mod discord_dm_notificator_impl;
 
+use domain::types::authorization_guard::AuthorizationGuard;
+use domain::types::authorization_guard_with_context::Create;
 use domain::{
     notification::models::NotificationPreference,
     repository::{
@@ -38,12 +40,8 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                     .await?
                     .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-                let notification_settings =
+                let notification_settings: AuthorizationGuard<NotificationPreference, Create> =
                     NotificationPreference::new(target_user.try_into_read(&actor)?).into();
-
-                self.repository
-                    .create_notification_settings(&actor, &notification_settings)
-                    .await?;
 
                 Ok(notification_settings.into_read().try_into_read(&actor)?)
             }
