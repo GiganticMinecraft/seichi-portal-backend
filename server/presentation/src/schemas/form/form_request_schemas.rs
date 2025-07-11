@@ -75,6 +75,11 @@ pub struct AnswerLabelSchema {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct AnswerLabelUpdateSchema {
+    pub name: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct ReplaceAnswerLabelSchema {
     pub labels: Vec<AnswerLabelId>,
 }

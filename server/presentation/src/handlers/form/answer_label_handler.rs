@@ -14,9 +14,10 @@ use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::answer_label::AnswerLabelUseCase;
 
+use crate::schemas::form::form_request_schemas::AnswerLabelSchema;
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::form::form_request_schemas::{AnswerLabelSchema, ReplaceAnswerLabelSchema},
+    schemas::form::form_request_schemas::{AnswerLabelUpdateSchema, ReplaceAnswerLabelSchema},
 };
 
 pub async fn create_label_for_answers(
@@ -76,7 +77,7 @@ pub async fn edit_label_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<AnswerLabelId>, PathRejection>,
-    Json(label): Json<AnswerLabelSchema>,
+    Json(label): Json<AnswerLabelUpdateSchema>,
 ) -> Result<impl IntoResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
@@ -84,10 +85,12 @@ pub async fn edit_label_for_answers(
 
     let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    answer_label_use_case
-        .edit_label_for_answers(&user, AnswerLabel::from_raw_parts(label_id, label.name))
-        .await
-        .map_err(handle_error)?;
+    if let Some(name) = label.name {
+        answer_label_use_case
+            .edit_label_for_answers(&user, AnswerLabel::from_raw_parts(label_id, name))
+            .await
+            .map_err(handle_error)?;
+    }
 
     Ok(StatusCode::OK.into_response())
 }
