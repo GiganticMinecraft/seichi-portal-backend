@@ -88,7 +88,7 @@ pub trait FormAnswerDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormAnswerLabelDatabase: Send + Sync {
-    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
+    async fn create_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
     async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError>;
     async fn get_label_for_answers(
         &self,

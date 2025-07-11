@@ -28,7 +28,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .try_create(actor, |label| {
                 self.client
                     .form_answer_label()
-                    .create_label_for_answers(label.name().to_owned())
+                    .create_label_for_answers(label)
             })?
             .await
             .map_err(Into::into)
