@@ -21,11 +21,13 @@ use crate::{
 pub async fn get_questions_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
+    path: Result<Path<FormId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let question_use_case = QuestionUseCase {
         question_repository: repository.form_question_repository(),
     };
+
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let questions = question_use_case
         .get_questions(&user, form_id)
