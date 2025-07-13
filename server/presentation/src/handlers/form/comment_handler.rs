@@ -17,6 +17,7 @@ use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
+use crate::schemas::form::form_request_schemas::CommentUpdateSchema;
 use crate::{
     handlers::error_handler::handle_error, schemas::form::form_request_schemas::CommentPostSchema,
 };
@@ -54,7 +55,7 @@ pub async fn update_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
-    json: Result<Json<CommentPostSchema>, JsonRejection>,
+    json: Result<Json<CommentUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
@@ -71,7 +72,7 @@ pub async fn update_form_comment(
             form_id,
             answer_id,
             comment_id,
-            CommentContent::new(comment_schema.content),
+            comment_schema.content.map(CommentContent::new),
         )
         .await
         .map_err(handle_error)?;

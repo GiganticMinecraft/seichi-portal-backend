@@ -80,7 +80,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
         form_id: FormId,
         answer_id: AnswerId,
         comment_id: CommentId,
-        content: CommentContent,
+        content: Option<CommentContent>,
     ) -> Result<(), Error> {
         let answer_guard = self
             .answer_repository
@@ -114,13 +114,17 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .await?
             .ok_or(CommentNotFound)?;
 
-        let updated_comment = current_comment_guard
-            .into_update()
-            .map(|comment| comment.with_updated_content(content));
+        if let Some(content) = content {
+            let updated_comment = current_comment_guard
+                .into_update()
+                .map(|comment| comment.with_updated_content(content));
 
-        self.comment_repository
-            .update_comment(answer_id, &comment_context, actor, updated_comment)
-            .await
+            self.comment_repository
+                .update_comment(answer_id, &comment_context, actor, updated_comment)
+                .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn delete_comment(
