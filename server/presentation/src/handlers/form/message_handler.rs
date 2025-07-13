@@ -137,7 +137,7 @@ pub async fn get_messages_handler(
 pub async fn delete_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path((form_id, answer_id, message_id)): Path<(FormId, AnswerId, MessageId)>,
+    path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
@@ -146,6 +146,8 @@ pub async fn delete_message_handler(
         form_repository: repository.form_repository(),
         user_repository: repository.user_repository(),
     };
+
+    let Path((form_id, answer_id, message_id)) = path.map_err_to_error().map_err(handle_error)?;
 
     form_message_use_case
         .delete_message(&user, form_id, answer_id, &message_id)
