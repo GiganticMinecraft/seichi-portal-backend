@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use domain::{
-    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
+    form::answer::models::{AnswerId, AnswerLabelId},
     repository::Repositories,
     user::models::User,
 };
@@ -86,14 +86,12 @@ pub async fn edit_label_for_answers(
     let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
-    if let Some(name) = label.name {
-        answer_label_use_case
-            .edit_label_for_answers(&user, AnswerLabel::from_raw_parts(label_id, name))
-            .await
-            .map_err(handle_error)?;
-    }
+    let updated_label = answer_label_use_case
+        .edit_label_for_answers(&user, label_id, label.name)
+        .await
+        .map_err(handle_error)?;
 
-    Ok(StatusCode::OK.into_response())
+    Ok((StatusCode::OK, Json(updated_label)).into_response())
 }
 
 pub async fn replace_answer_labels(

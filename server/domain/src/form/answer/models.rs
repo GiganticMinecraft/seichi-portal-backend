@@ -110,6 +110,10 @@ impl AnswerLabel {
     pub fn from_raw_parts(id: AnswerLabelId, name: NonEmptyString) -> Self {
         Self { id, name }
     }
+
+    pub fn renamed(self, name: NonEmptyString) -> Self {
+        Self { name, ..self }
+    }
 }
 
 impl AuthorizationGuardDefinitions for AnswerLabel {
