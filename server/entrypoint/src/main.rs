@@ -190,7 +190,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/{answer_id}/messages",
+            "/forms/{form_id}/answers/{answer_id}/messages",
             post(post_message_handler),
         )
         .with_state(Arc::new(
@@ -200,7 +200,7 @@ async fn main() -> anyhow::Result<()> {
             ),
         ))
         .route(
-            "/forms/answers/{answer_id}/messages/{message_id}",
+            "/forms/{form_id}/answers/{answer_id}/messages/{message_id}",
             delete(delete_message_handler).patch(update_message_handler),
         )
         .with_state(shared_repository.to_owned())
