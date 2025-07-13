@@ -64,7 +64,8 @@ pub struct QuestionSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct FormQuestionCreateSchema {
+pub struct FormQuestionPutSchema {
+    #[serde(default)]
     pub questions: Vec<QuestionSchema>,
 }
 

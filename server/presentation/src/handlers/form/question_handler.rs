@@ -15,7 +15,7 @@ use usecase::forms::question::QuestionUseCase;
 
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::form::form_request_schemas::FormQuestionCreateSchema,
+    schemas::form::form_request_schemas::FormQuestionPutSchema,
 };
 
 pub async fn get_questions_handler(
@@ -38,7 +38,7 @@ pub async fn put_question_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-    json: Result<Json<FormQuestionCreateSchema>, JsonRejection>,
+    json: Result<Json<FormQuestionPutSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let question_use_case = QuestionUseCase {
         question_repository: repository.form_question_repository(),
