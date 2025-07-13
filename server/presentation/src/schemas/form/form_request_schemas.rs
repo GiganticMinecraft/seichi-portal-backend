@@ -75,8 +75,13 @@ pub struct CommentPostSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct FormLabelSchema {
+pub struct FormLabelCreateSchema {
     pub name: NonEmptyString,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormLabelUpdateSchema {
+    pub name: Option<NonEmptyString>,
 }
 
 #[derive(Deserialize, Debug)]

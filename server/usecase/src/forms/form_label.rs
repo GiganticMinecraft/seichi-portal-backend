@@ -50,7 +50,7 @@ impl<R1: FormLabelRepository> FormLabelUseCase<'_, R1> {
     pub async fn edit_label_for_forms(
         &self,
         id: FormLabelId,
-        form_label_name: FormLabelName,
+        form_label_name: Option<FormLabelName>,
         actor: &User,
     ) -> Result<(), Error> {
         let current_label = self
@@ -59,13 +59,15 @@ impl<R1: FormLabelRepository> FormLabelUseCase<'_, R1> {
             .await?
             .ok_or(UseCaseError::LabelNotFound)?;
 
-        let renamed_label = current_label
-            .into_update()
-            .map(|label| label.renamed(form_label_name));
+        if let Some(name) = form_label_name {
+            let renamed_label = current_label.into_update().map(|label| label.renamed(name));
 
-        self.form_label_repository
-            .edit_label_for_forms(id, renamed_label, actor)
-            .await
+            self.form_label_repository
+                .edit_label_for_forms(id, renamed_label, actor)
+                .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn replace_form_labels(

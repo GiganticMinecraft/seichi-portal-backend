@@ -16,15 +16,16 @@ use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::form_label::FormLabelUseCase;
 
+use crate::schemas::form::form_request_schemas::FormLabelCreateSchema;
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::form::form_request_schemas::{FormLabelSchema, ReplaceFormLabelSchema},
+    schemas::form::form_request_schemas::{FormLabelUpdateSchema, ReplaceFormLabelSchema},
 };
 
 pub async fn create_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    json: Result<Json<FormLabelSchema>, JsonRejection>,
+    json: Result<Json<FormLabelCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
@@ -78,7 +79,7 @@ pub async fn edit_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormLabelId>, PathRejection>,
-    json: Result<Json<FormLabelSchema>, JsonRejection>,
+    json: Result<Json<FormLabelUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
@@ -88,7 +89,7 @@ pub async fn edit_label_for_forms(
     let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
     form_label_use_case
-        .edit_label_for_forms(label_id, FormLabelName::new(label.name), &user)
+        .edit_label_for_forms(label_id, label.name.map(FormLabelName::new), &user)
         .await
         .map_err(handle_error)?;
 
