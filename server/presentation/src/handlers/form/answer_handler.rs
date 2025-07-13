@@ -161,10 +161,18 @@ pub async fn update_answer_handler(
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
-    form_answer_use_case
+    let answer_dto = form_answer_use_case
         .update_answer_meta(form_id, answer_id, &user, schema.title)
         .await
         .map_err(handle_error)?;
 
-    Ok(StatusCode::OK.into_response())
+    Ok((
+        StatusCode::OK,
+        Json(FormAnswer::new(
+            answer_dto.form_answer,
+            answer_dto.comments,
+            answer_dto.labels,
+        )),
+    )
+        .into_response())
 }

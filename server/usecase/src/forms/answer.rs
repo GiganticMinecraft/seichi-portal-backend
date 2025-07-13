@@ -295,37 +295,73 @@ impl<
         answer_id: AnswerId,
         actor: &User,
         title: Option<AnswerTitle>,
-    ) -> Result<(), Error> {
-        match title {
-            Some(title) => {
-                let answer_entry = self
-                    .answer_repository
-                    .get_answer(answer_id)
-                    .await?
-                    .ok_or(Error::from(AnswerNotFound))?
-                    .into_update()
-                    .map(|entry| entry.with_title(title));
+    ) -> Result<AnswerDto, Error> {
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
 
-                let form_guard = self
-                    .form_repository
-                    .get(form_id)
-                    .await?
-                    .ok_or(FormNotFound)?;
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
 
-                let form = form_guard.try_read(actor)?;
-                let form_settings = form.settings();
+        let context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
 
-                let context = AnswerEntryAuthorizationContext {
-                    form_visibility: form_settings.visibility().to_owned(),
-                    response_period: form_settings.answer_settings().response_period().to_owned(),
-                    answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                };
+        if let Some(title) = title {
+            let answer_entry = self
+                .answer_repository
+                .get_answer(answer_id)
+                .await?
+                .ok_or(Error::from(AnswerNotFound))?
+                .into_update()
+                .map(|entry| entry.with_title(title));
 
-                self.answer_repository
-                    .update_answer_entry(actor, &context, answer_entry)
-                    .await
-            }
-            None => Ok(()),
+            self.answer_repository
+                .update_answer_entry(actor, &context, answer_entry)
+                .await?;
         }
+
+        let answer_guard = self
+            .answer_repository
+            .get_answer(answer_id)
+            .await?
+            .ok_or(Error::from(AnswerNotFound))?;
+
+        let fetch_labels = self
+            .answer_label_repository
+            .get_labels_for_answers_by_answer_id(answer_id);
+        let fetch_comments = self.comment_repository.get_comments(answer_id);
+
+        let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
+
+        let labels = labels
+            .into_iter()
+            .map(|label| label.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let comment_authorization_context = CommentAuthorizationContext {
+            related_answer_entry_guard: answer_guard,
+            related_answer_entry_guard_context: context,
+        };
+
+        let comments = comments
+            .into_iter()
+            .map(|comment| comment.try_into_read(actor, &comment_authorization_context))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(AnswerDto {
+            form_answer: comment_authorization_context
+                .related_answer_entry_guard
+                .try_into_read(
+                    actor,
+                    &comment_authorization_context.related_answer_entry_guard_context,
+                )?,
+            labels,
+            comments,
+        })
     }
 }
