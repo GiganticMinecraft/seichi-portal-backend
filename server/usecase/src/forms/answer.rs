@@ -82,36 +82,27 @@ impl<
             .await
     }
 
-    pub async fn get_answers(&self, answer_id: AnswerId, user: &User) -> Result<AnswerDto, Error> {
+    pub async fn get_answers(
+        &self,
+        form_id: FormId,
+        answer_id: AnswerId,
+        user: &User,
+    ) -> Result<AnswerDto, Error> {
         if let Some(form_answer_guard) = self.answer_repository.get_answer(answer_id).await? {
-            let context = form_answer_guard
-                .create_context(move |entry| {
-                    let form_id = entry.form_id().to_owned();
+            let form_guard = self
+                .form_repository
+                .get(form_id)
+                .await?
+                .ok_or(FormNotFound)?;
 
-                    async move {
-                        let guard = self
-                            .form_repository
-                            .get(form_id)
-                            .await?
-                            .ok_or(FormNotFound)?;
+            let form = form_guard.try_read(user)?;
+            let form_settings = form.settings();
 
-                        let form = guard.try_read(user)?;
-                        let form_settings = form.settings();
-
-                        Ok(AnswerEntryAuthorizationContext {
-                            form_visibility: form_settings.visibility().to_owned(),
-                            response_period: form_settings
-                                .answer_settings()
-                                .response_period()
-                                .to_owned(),
-                            answer_visibility: form_settings
-                                .answer_settings()
-                                .visibility()
-                                .to_owned(),
-                        })
-                    }
-                })
-                .await?;
+            let context = AnswerEntryAuthorizationContext {
+                form_visibility: form_settings.visibility().to_owned(),
+                response_period: form_settings.answer_settings().response_period().to_owned(),
+                answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            };
 
             let fetch_labels = self
                 .answer_label_repository
@@ -300,6 +291,7 @@ impl<
 
     pub async fn update_answer_meta(
         &self,
+        form_id: FormId,
         answer_id: AnswerId,
         actor: &User,
         title: Option<AnswerTitle>,
@@ -314,34 +306,20 @@ impl<
                     .into_update()
                     .map(|entry| entry.with_title(title));
 
-                let context = answer_entry
-                    .create_context(|entry| {
-                        let form_id = entry.form_id().to_owned();
+                let form_guard = self
+                    .form_repository
+                    .get(form_id)
+                    .await?
+                    .ok_or(FormNotFound)?;
 
-                        async move {
-                            let guard = self
-                                .form_repository
-                                .get(form_id)
-                                .await?
-                                .ok_or(FormNotFound)?;
+                let form = form_guard.try_read(actor)?;
+                let form_settings = form.settings();
 
-                            let form = guard.try_read(actor)?;
-                            let form_settings = form.settings();
-
-                            Ok(AnswerEntryAuthorizationContext {
-                                form_visibility: form_settings.visibility().to_owned(),
-                                response_period: form_settings
-                                    .answer_settings()
-                                    .response_period()
-                                    .to_owned(),
-                                answer_visibility: form_settings
-                                    .answer_settings()
-                                    .visibility()
-                                    .to_owned(),
-                            })
-                        }
-                    })
-                    .await?;
+                let context = AnswerEntryAuthorizationContext {
+                    form_visibility: form_settings.visibility().to_owned(),
+                    response_period: form_settings.answer_settings().response_period().to_owned(),
+                    answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+                };
 
                 self.answer_repository
                     .update_answer_entry(actor, &context, answer_entry)

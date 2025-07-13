@@ -59,7 +59,7 @@ pub async fn get_all_answers(
 pub async fn get_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    path: Result<Path<AnswerId>, PathRejection>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
@@ -69,10 +69,10 @@ pub async fn get_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
-    let Path(answer_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
 
     let answer_dto = form_answer_use_case
-        .get_answers(answer_id, &user)
+        .get_answers(form_id, answer_id, &user)
         .await
         .map_err(handle_error)?;
 
@@ -147,7 +147,7 @@ pub async fn post_answer_handler(
 pub async fn update_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(answer_id): Path<AnswerId>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<AnswerUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
@@ -158,10 +158,11 @@ pub async fn update_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
     form_answer_use_case
-        .update_answer_meta(answer_id, &user, schema.title)
+        .update_answer_meta(form_id, answer_id, &user, schema.title)
         .await
         .map_err(handle_error)?;
 
