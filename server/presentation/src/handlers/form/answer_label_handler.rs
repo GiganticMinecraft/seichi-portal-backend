@@ -77,13 +77,14 @@ pub async fn edit_label_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<AnswerLabelId>, PathRejection>,
-    Json(label): Json<AnswerLabelUpdateSchema>,
+    json: Result<Json<AnswerLabelUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
 
     let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
     if let Some(name) = label.name {
         answer_label_use_case
