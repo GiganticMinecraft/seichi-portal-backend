@@ -76,7 +76,7 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
 pub async fn update_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path((form_id, answer_id, message_id)): Path<(FormId, AnswerId, MessageId)>,
+    path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
     json: Result<Json<MessageUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
@@ -87,6 +87,7 @@ pub async fn update_message_handler(
         user_repository: repository.user_repository(),
     };
 
+    let Path((form_id, answer_id, message_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Json(body_schema) = json.map_err_to_error().map_err(handle_error)?;
 
     form_message_use_case
