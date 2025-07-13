@@ -101,7 +101,7 @@ pub async fn update_message_handler(
 pub async fn get_messages_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(answer_id): Path<AnswerId>,
+    path: Result<Path<AnswerId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
@@ -110,6 +110,8 @@ pub async fn get_messages_handler(
         form_repository: repository.form_repository(),
         user_repository: repository.user_repository(),
     };
+
+    let Path(answer_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let messages = form_message_use_case
         .get_messages(&user, answer_id)
