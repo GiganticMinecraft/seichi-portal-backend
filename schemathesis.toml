@@ -1,0 +1,6 @@
+headers = { Authorization = "Bearer debug_user" }
+continue-on-failure = true
+
+[[operations]]
+include-path = "/link-discord"
+enabled = false
