@@ -168,37 +168,29 @@ impl<
     pub async fn get_messages(
         &self,
         actor: &User,
+        form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<Message>, Error> {
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
+        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
         let answers = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read_with_context_fn(actor, move |entry| {
-                let form_id = entry.form_id().to_owned();
-
-                async move {
-                    let guard = self
-                        .form_repository
-                        .get(form_id)
-                        .await?
-                        .ok_or(FormNotFound)?;
-
-                    let form = guard.try_read(actor)?;
-                    let form_settings = form.settings();
-
-                    Ok(AnswerEntryAuthorizationContext {
-                        form_visibility: form_settings.visibility().to_owned(),
-                        response_period: form_settings
-                            .answer_settings()
-                            .response_period()
-                            .to_owned(),
-                        answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                    })
-                }
-            })
-            .await?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answers,

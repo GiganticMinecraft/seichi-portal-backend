@@ -185,7 +185,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/{answer_id}/messages",
+            "/forms/{form_id}/answers/{answer_id}/messages",
             get(get_messages_handler),
         )
         .with_state(shared_repository.to_owned())
