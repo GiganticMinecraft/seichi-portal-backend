@@ -14,6 +14,7 @@ use domain::{
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -237,7 +238,7 @@ impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
             Uuid::from_str(&id)
                 .map_err(Into::<InfraError>::into)?
                 .into(),
-            name,
+            NonEmptyString::try_new(name)?,
         ))
     }
 }

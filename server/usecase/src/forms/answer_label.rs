@@ -4,6 +4,7 @@ use domain::{
     user::models::User,
 };
 use errors::{Error, usecase::UseCaseError::LabelNotFound};
+use types::non_empty_string::NonEmptyString;
 
 pub struct AnswerLabelUseCase<'a, AnswerLabelRepo: AnswerLabelRepository> {
     pub answer_label_repository: &'a AnswerLabelRepo,
@@ -13,7 +14,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
     pub async fn create_label_for_answers(
         &self,
         actor: &User,
-        label_name: String,
+        label_name: NonEmptyString,
     ) -> Result<(), Error> {
         let answer_label = AnswerLabel::new(label_name);
 

@@ -21,7 +21,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     async fn create_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError> {
         let params = [
             label.id().into_inner().to_string().into(),
-            label.name().to_owned().into(),
+            label.name().to_owned().into_inner().into(),
         ];
 
         self.read_write_transaction(|txn| {
@@ -187,7 +187,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError> {
         let params = [
-            label.name().to_owned().into(),
+            label.name().to_owned().into_inner().into(),
             label.id().to_string().into(),
         ];
 

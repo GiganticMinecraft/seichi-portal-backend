@@ -86,12 +86,12 @@ pub struct FormLabelUpdateSchema {
 
 #[derive(Deserialize, Debug)]
 pub struct AnswerLabelSchema {
-    pub name: String,
+    pub name: NonEmptyString,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct AnswerLabelUpdateSchema {
-    pub name: Option<String>,
+    pub name: Option<NonEmptyString>,
 }
 
 #[derive(Deserialize, Debug)]

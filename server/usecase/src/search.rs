@@ -349,7 +349,7 @@ impl<
                                     domain::search::models::SearchableFields::LabelForFormAnswers(
                                         domain::search::models::LabelForFormAnswers {
                                             id: label.id().to_owned(),
-                                            name: label.name().to_owned(),
+                                            name: label.name().to_owned().into_inner(),
                                         },
                                     ),
                                     Operation::Update,
