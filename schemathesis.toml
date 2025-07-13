@@ -4,3 +4,11 @@ continue-on-failure = true
 [[operations]]
 include-path = "/link-discord"
 enabled = false
+
+[[operations]]
+include-name = "PUT /forms/{form_id}/questions"
+
+[operations.checks]
+# NOTE: Body に本当に何も指定されなかったとき(json 的に空配列が与えられたわけではない、
+#   本当になにも指定されなかったとき)に、422 が返ってくることを期待している。
+positive_data_acceptance.expected-statuses = ["2XX", 422]
