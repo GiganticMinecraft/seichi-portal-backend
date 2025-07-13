@@ -143,13 +143,13 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/labels/forms",
-            get(get_labels_for_forms).post(create_label_for_forms),
+            "/labels/answers/{label_id}",
+            delete(delete_label_for_answers).patch(edit_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/labels/answers/{label_id}",
-            delete(delete_label_for_answers).patch(edit_label_for_answers),
+            "/labels/forms",
+            get(get_labels_for_forms).post(create_label_for_forms),
         )
         .with_state(shared_repository.to_owned())
         .route(
