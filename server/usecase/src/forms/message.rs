@@ -211,7 +211,7 @@ impl<
         form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,
-        body: String,
+        body: Option<String>,
     ) -> Result<(), Error> {
         let message = self
             .message_repository
@@ -252,9 +252,13 @@ impl<
             return Err(Error::from(MessageNotFound));
         }
 
-        self.message_repository
-            .update_message_body(actor, &message_context, message.into_update(), body)
-            .await
+        if let Some(body) = body {
+            self.message_repository
+                .update_message_body(actor, &message_context, message.into_update(), body)
+                .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn delete_message(

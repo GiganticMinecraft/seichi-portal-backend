@@ -111,5 +111,5 @@ pub struct PostedMessageSchema {
 
 #[derive(Deserialize, Debug)]
 pub struct MessageUpdateSchema {
-    pub body: String,
+    pub body: Option<String>,
 }
