@@ -73,7 +73,13 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .await
     }
 
-    pub async fn delete_comment(&self, actor: &User, comment_id: CommentId) -> Result<(), Error> {
+    pub async fn delete_comment(
+        &self,
+        actor: &User,
+        form_id: FormId,
+        answer_id: AnswerId,
+        comment_id: CommentId,
+    ) -> Result<(), Error> {
         let comment_guard = self
             .comment_repository
             .get_comment(comment_id)
@@ -81,51 +87,31 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .ok_or(Error::from(CommentNotFound))?
             .into_delete();
 
-        let comment_context = comment_guard
-            .create_context(move |comment| {
-                let answer_id = comment.answer_id().to_owned();
-                async move {
-                    let answer_guard = self
-                        .answer_repository
-                        .get_answer(answer_id)
-                        .await?
-                        .ok_or(Error::from(AnswerNotFound))?;
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
 
-                    let answer_context = answer_guard
-                        .create_context(move |entry| {
-                            let form_id = entry.form_id().to_owned();
-                            async move {
-                                let guard = self
-                                    .form_repository
-                                    .get(form_id)
-                                    .await?
-                                    .ok_or(FormNotFound)?;
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
 
-                                let form = guard.try_read(actor)?;
-                                let form_settings = form.settings();
+        let answer_entry_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
 
-                                Ok(AnswerEntryAuthorizationContext {
-                                    form_visibility: form_settings.visibility().to_owned(),
-                                    response_period: form_settings
-                                        .answer_settings()
-                                        .response_period()
-                                        .to_owned(),
-                                    answer_visibility: form_settings
-                                        .answer_settings()
-                                        .visibility()
-                                        .to_owned(),
-                                })
-                            }
-                        })
-                        .await?;
+        let answer_guard = self
+            .answer_repository
+            .get_answer(answer_id)
+            .await?
+            .ok_or(Error::from(AnswerNotFound))?;
 
-                    Ok(CommentAuthorizationContext {
-                        related_answer_entry_guard: answer_guard,
-                        related_answer_entry_guard_context: answer_context,
-                    })
-                }
-            })
-            .await?;
+        let comment_context = CommentAuthorizationContext {
+            related_answer_entry_guard: answer_guard,
+            related_answer_entry_guard_context: answer_entry_context,
+        };
 
         self.comment_repository
             .delete_comment(comment_context, actor, comment_guard)

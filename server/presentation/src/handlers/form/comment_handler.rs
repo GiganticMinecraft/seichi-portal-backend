@@ -59,7 +59,7 @@ pub async fn post_form_comment(
 pub async fn delete_form_comment_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    path: Result<Path<CommentId>, PathRejection>,
+    path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
@@ -67,10 +67,10 @@ pub async fn delete_form_comment_handler(
         form_repository: repository.form_repository(),
     };
 
-    let Path(comment_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;
 
     form_comment_use_case
-        .delete_comment(&user, comment_id)
+        .delete_comment(&user, form_id, answer_id, comment_id)
         .await
         .map_err(handle_error)?;
 

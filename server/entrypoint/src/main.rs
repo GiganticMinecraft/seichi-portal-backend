@@ -175,7 +175,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/comments/{comment_id}",
+            "/forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
             delete(delete_form_comment_handler),
         )
         .with_state(shared_repository.to_owned())
