@@ -171,7 +171,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/forms/{form_id}/labels", put(replace_form_labels))
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/{form_id}/answers/{answer_id}/comment",
+            "/forms/{form_id}/answers/{answer_id}/comments",
             get(get_form_comment).post(post_form_comment),
         )
         .with_state(shared_repository.to_owned())
