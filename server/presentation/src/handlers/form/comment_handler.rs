@@ -14,13 +14,41 @@ use domain::{
     user::models::User,
 };
 use errors::ErrorExtra;
+use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
 use crate::schemas::form::form_request_schemas::CommentUpdateSchema;
+use crate::schemas::form::form_response_schemas::AnswerComment;
 use crate::{
     handlers::error_handler::handle_error, schemas::form::form_request_schemas::CommentPostSchema,
 };
+
+pub async fn get_form_comment(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
+    let form_comment_use_case = CommentUseCase {
+        comment_repository: repository.form_comment_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
+    };
+
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
+
+    let comments = form_comment_use_case
+        .get_comments(&user, form_id, answer_id)
+        .await
+        .map_err(handle_error)?;
+
+    let response = comments
+        .into_iter()
+        .map(Into::<AnswerComment>::into)
+        .collect_vec();
+
+    Ok((StatusCode::OK, Json(response)).into_response())
+}
 
 pub async fn post_form_comment(
     Extension(user): Extension<User>,

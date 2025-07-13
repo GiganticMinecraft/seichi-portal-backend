@@ -15,7 +15,7 @@ use domain::search::models::SearchableFieldsWithOperation;
 use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
-use presentation::handlers::form::comment_handler::update_form_comment;
+use presentation::handlers::form::comment_handler::{get_form_comment, update_form_comment};
 use presentation::handlers::form::message_handler::RealInfrastructureRepositoryWithNotificationAPI;
 use presentation::handlers::notification_handler::get_my_notification_settings;
 use presentation::handlers::search_handler::start_watch_out_of_sync;
@@ -172,7 +172,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/{form_id}/answers/{answer_id}/comment",
-            post(post_form_comment),
+            get(get_form_comment).post(post_form_comment),
         )
         .with_state(shared_repository.to_owned())
         .route(

@@ -34,6 +34,47 @@ pub struct CommentUseCase<
 impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
     CommentUseCase<'_, R1, R2, R3>
 {
+    pub async fn get_comments(
+        &self,
+        actor: &User,
+        form_id: FormId,
+        answer_id: AnswerId,
+    ) -> Result<Vec<Comment>, Error> {
+        let answer_guard = self
+            .answer_repository
+            .get_answer(answer_id)
+            .await?
+            .ok_or(Error::from(AnswerNotFound))?;
+
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
+
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
+
+        let answer_entry_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
+        let comment_context = CommentAuthorizationContext {
+            related_answer_entry_guard: answer_guard,
+            related_answer_entry_guard_context: answer_entry_context,
+        };
+
+        let comments = self.comment_repository.get_comments(answer_id).await?;
+
+        comments
+            .into_iter()
+            .map(|guard| guard.try_into_read(actor, &comment_context))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
     pub async fn post_comment(
         &self,
         actor: &User,
