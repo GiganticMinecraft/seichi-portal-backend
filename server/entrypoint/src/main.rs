@@ -43,9 +43,7 @@ use presentation::{
                 delete_message_handler, get_messages_handler, post_message_handler,
                 update_message_handler,
             },
-            question_handler::{
-                create_question_handler, get_questions_handler, put_question_handler,
-            },
+            question_handler::{get_questions_handler, put_question_handler},
         },
         health_check_handler::health_check,
         notification_handler::{get_notification_settings, update_notification_settings},
@@ -129,7 +127,10 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/forms/{id}/answers", get(get_answer_by_form_id_handler))
         .with_state(shared_repository.to_owned())
-        .route("/forms/{id}/questions", get(get_questions_handler))
+        .route(
+            "/forms/{id}/questions",
+            get(get_questions_handler).put(put_question_handler),
+        )
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/answers",
@@ -173,11 +174,6 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/forms/answers/comments/{comment_id}",
             delete(delete_form_comment_handler),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/questions",
-            post(create_question_handler).put(put_question_handler),
         )
         .with_state(shared_repository.to_owned())
         .route("/users/{uuid}", get(get_user_info).patch(patch_user_role))

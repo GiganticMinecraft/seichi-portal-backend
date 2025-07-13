@@ -1,18 +1,21 @@
+use axum::extract::rejection::PathRejection;
 use axum::{
     Extension, Json,
     extract::{Path, State, rejection::JsonRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use domain::form::question::models::Question;
 use domain::{form::models::FormId, repository::Repositories, user::models::User};
 use errors::ErrorExtra;
+use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::question::QuestionUseCase;
 
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::form::form_request_schemas::FormQuestionUpdateSchema,
+    schemas::form::form_request_schemas::FormQuestionCreateSchema,
 };
 
 pub async fn get_questions_handler(
@@ -31,40 +34,39 @@ pub async fn get_questions_handler(
     Ok((StatusCode::OK, Json(questions)).into_response())
 }
 
-pub async fn create_question_handler(
-    Extension(user): Extension<User>,
-    State(repository): State<RealInfrastructureRepository>,
-    json: Result<Json<FormQuestionUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
-    let question_use_case = QuestionUseCase {
-        question_repository: repository.form_question_repository(),
-    };
-
-    let Json(questions) = json.map_err_to_error().map_err(handle_error)?;
-
-    question_use_case
-        .create_questions(&user, questions.form_id, questions.questions)
-        .await
-        .map_err(handle_error)?;
-
-    Ok((StatusCode::CREATED, Json(json!({"id": questions.form_id }))).into_response())
-}
-
 pub async fn put_question_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    json: Result<Json<FormQuestionUpdateSchema>, JsonRejection>,
+    path: Result<Path<FormId>, PathRejection>,
+    json: Result<Json<FormQuestionCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let question_use_case = QuestionUseCase {
         question_repository: repository.form_question_repository(),
     };
 
-    let Json(questions) = json.map_err_to_error().map_err(handle_error)?;
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
-    question_use_case
-        .put_questions(&user, questions.form_id, questions.questions)
+    let questions = schema
+        .questions
+        .iter()
+        .map(|question| {
+            Question::new(
+                question.id,
+                form_id,
+                question.title.clone(),
+                question.description.clone(),
+                question.question_type,
+                question.choices.clone(),
+                question.is_required,
+            )
+        })
+        .collect_vec();
+
+    let questions = question_use_case
+        .put_questions(&user, form_id, questions)
         .await
         .map_err(handle_error)?;
 
-    Ok((StatusCode::OK, Json(json!({"id": questions.form_id }))).into_response())
+    Ok((StatusCode::OK, Json(json!({"questions": questions }))).into_response())
 }

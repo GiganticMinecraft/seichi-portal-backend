@@ -1,10 +1,10 @@
+use domain::form::question::models::{QuestionId, QuestionType};
 use domain::form::{
     answer::{
         models::{AnswerId, AnswerLabelId, AnswerTitle, FormAnswerContent},
         settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     },
     models::{FormDescription, FormId, FormLabelId, FormTitle, Visibility, WebhookUrl},
-    question::models::Question,
 };
 use serde::Deserialize;
 use types::non_empty_string::NonEmptyString;
@@ -53,9 +53,19 @@ pub struct AnswerUpdateSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct FormQuestionUpdateSchema {
-    pub form_id: FormId,
-    pub questions: Vec<Question>,
+pub struct QuestionSchema {
+    pub id: Option<QuestionId>,
+    pub title: String,
+    pub question_type: QuestionType,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub choices: Vec<String>,
+    pub is_required: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormQuestionCreateSchema {
+    pub questions: Vec<QuestionSchema>,
 }
 
 #[derive(Deserialize, Debug)]
