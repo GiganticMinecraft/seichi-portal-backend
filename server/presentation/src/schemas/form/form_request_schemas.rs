@@ -1,7 +1,7 @@
 use domain::form::question::models::{QuestionId, QuestionType};
 use domain::form::{
     answer::{
-        models::{AnswerId, AnswerLabelId, AnswerTitle, FormAnswerContent},
+        models::{AnswerLabelId, AnswerTitle, FormAnswerContent},
         settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     },
     models::{FormDescription, FormId, FormLabelId, FormTitle, Visibility, WebhookUrl},
@@ -71,7 +71,6 @@ pub struct FormQuestionPutSchema {
 
 #[derive(Deserialize, Debug)]
 pub struct CommentPostSchema {
-    pub answer_id: AnswerId,
     pub content: String,
 }
 

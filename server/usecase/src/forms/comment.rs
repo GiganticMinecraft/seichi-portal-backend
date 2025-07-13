@@ -1,3 +1,4 @@
+use domain::form::models::FormId;
 use domain::{
     form::{
         answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
@@ -35,8 +36,9 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
     pub async fn post_comment(
         &self,
         actor: &User,
-        comment: Comment,
+        form_id: FormId,
         answer_id: AnswerId,
+        comment: Comment,
     ) -> Result<(), Error> {
         let answer_guard = self
             .answer_repository
@@ -44,31 +46,20 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .await?
             .ok_or(Error::from(AnswerNotFound))?;
 
-        let answer_entry_context = answer_guard
-            .create_context(move |entry| {
-                let form_id = entry.form_id().to_owned();
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
 
-                async move {
-                    let guard = self
-                        .form_repository
-                        .get(form_id)
-                        .await?
-                        .ok_or(FormNotFound)?;
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
 
-                    let form = guard.try_read(actor)?;
-                    let form_settings = form.settings();
-
-                    Ok(AnswerEntryAuthorizationContext {
-                        form_visibility: form_settings.visibility().to_owned(),
-                        response_period: form_settings
-                            .answer_settings()
-                            .response_period()
-                            .to_owned(),
-                        answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                    })
-                }
-            })
-            .await?;
+        let answer_entry_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
 
         let comment_context = CommentAuthorizationContext {
             related_answer_entry_guard: answer_guard,

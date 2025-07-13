@@ -6,6 +6,8 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use domain::form::answer::models::AnswerId;
+use domain::form::models::FormId;
 use domain::{
     form::comment::models::{Comment, CommentContent, CommentId},
     repository::Repositories,
@@ -22,6 +24,7 @@ use crate::{
 pub async fn post_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<CommentPostSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
@@ -30,10 +33,11 @@ pub async fn post_form_comment(
         form_repository: repository.form_repository(),
     };
 
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Json(comment_schema) = json.map_err_to_error().map_err(handle_error)?;
 
     let comment = Comment::new(
-        comment_schema.answer_id,
+        answer_id,
         CommentContent::new(
             comment_schema
                 .content
@@ -45,7 +49,7 @@ pub async fn post_form_comment(
     );
 
     form_comment_use_case
-        .post_comment(&user, comment, comment_schema.answer_id)
+        .post_comment(&user, form_id, answer_id, comment)
         .await
         .map_err(handle_error)?;
 
