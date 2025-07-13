@@ -71,7 +71,7 @@ pub struct FormQuestionPutSchema {
 
 #[derive(Deserialize, Debug)]
 pub struct CommentPostSchema {
-    pub content: String,
+    pub content: NonEmptyString,
 }
 
 #[derive(Deserialize, Debug)]

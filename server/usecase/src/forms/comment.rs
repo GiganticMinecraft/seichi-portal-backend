@@ -1,3 +1,4 @@
+use domain::form::comment::models::CommentContent;
 use domain::form::models::FormId;
 use domain::{
     form::{
@@ -69,7 +70,56 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
         let comment_guard = AuthorizationGuardWithContext::new(comment);
 
         self.comment_repository
-            .post_comment(answer_id, &comment_context, actor, comment_guard)
+            .create_comment(answer_id, &comment_context, actor, comment_guard)
+            .await
+    }
+
+    pub async fn update_comment(
+        &self,
+        actor: &User,
+        form_id: FormId,
+        answer_id: AnswerId,
+        comment_id: CommentId,
+        content: CommentContent,
+    ) -> Result<(), Error> {
+        let answer_guard = self
+            .answer_repository
+            .get_answer(answer_id)
+            .await?
+            .ok_or(Error::from(AnswerNotFound))?;
+
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
+
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
+
+        let answer_entry_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
+        let comment_context = CommentAuthorizationContext {
+            related_answer_entry_guard: answer_guard,
+            related_answer_entry_guard_context: answer_entry_context,
+        };
+
+        let current_comment_guard = self
+            .comment_repository
+            .get_comment(comment_id)
+            .await?
+            .ok_or(CommentNotFound)?;
+
+        let updated_comment = current_comment_guard
+            .into_update()
+            .map(|comment| comment.with_updated_content(content));
+
+        self.comment_repository
+            .update_comment(answer_id, &comment_context, actor, updated_comment)
             .await
     }
 

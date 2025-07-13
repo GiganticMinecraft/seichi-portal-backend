@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
+use crate::types::authorization_guard_with_context::Update;
 use crate::{
     form::{
         answer::models::AnswerId,
@@ -39,12 +40,19 @@ pub trait CommentRepository: Send + Sync + 'static {
         Option<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
         Error,
     >;
-    async fn post_comment(
+    async fn create_comment(
         &self,
         answer_id: AnswerId,
         context: &CommentAuthorizationContext<Read>,
         actor: &User,
         comment: AuthorizationGuardWithContext<Comment, Create, CommentAuthorizationContext<Read>>,
+    ) -> Result<(), Error>;
+    async fn update_comment(
+        &self,
+        answer_id: AnswerId,
+        context: &CommentAuthorizationContext<Read>,
+        actor: &User,
+        comment: AuthorizationGuardWithContext<Comment, Update, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error>;
     async fn delete_comment(
         &self,

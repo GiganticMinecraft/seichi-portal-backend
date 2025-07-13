@@ -8,13 +8,14 @@ use axum::{
     },
     middleware,
     response::IntoResponse,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
 use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
+use presentation::handlers::form::comment_handler::update_form_comment;
 use presentation::handlers::form::message_handler::RealInfrastructureRepositoryWithNotificationAPI;
 use presentation::handlers::notification_handler::get_my_notification_settings;
 use presentation::handlers::search_handler::start_watch_out_of_sync;
@@ -176,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
-            delete(delete_form_comment_handler),
+            patch(update_form_comment).delete(delete_form_comment_handler),
         )
         .with_state(shared_repository.to_owned())
         .route("/users/{uuid}", get(get_user_info).patch(patch_user_role))

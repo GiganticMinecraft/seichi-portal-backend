@@ -38,18 +38,41 @@ pub async fn post_form_comment(
 
     let comment = Comment::new(
         answer_id,
-        CommentContent::new(
-            comment_schema
-                .content
-                .try_into()
-                .map_err(Into::into)
-                .map_err(handle_error)?,
-        ),
+        CommentContent::new(comment_schema.content),
         user.to_owned(),
     );
 
     form_comment_use_case
         .post_comment(&user, form_id, answer_id, comment)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
+}
+
+pub async fn update_form_comment(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
+    json: Result<Json<CommentPostSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
+    let form_comment_use_case = CommentUseCase {
+        comment_repository: repository.form_comment_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
+    };
+
+    let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(comment_schema) = json.map_err_to_error().map_err(handle_error)?;
+
+    form_comment_use_case
+        .update_comment(
+            &user,
+            form_id,
+            answer_id,
+            comment_id,
+            CommentContent::new(comment_schema.content),
+        )
         .await
         .map_err(handle_error)?;
 
