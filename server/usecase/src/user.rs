@@ -92,7 +92,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         xbox_token: String,
         user: &User,
-        expires: i32,
+        expires: u32,
     ) -> Result<String, Error> {
         self.repository
             .start_user_session(xbox_token, user, expires)

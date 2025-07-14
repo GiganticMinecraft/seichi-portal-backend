@@ -63,7 +63,7 @@ pub struct RoleQuery {
 
 #[derive(Deserialize)]
 pub struct UserSessionExpires {
-    pub expires: i32,
+    pub expires: u32,
 }
 
 #[derive(DerivingVia, Debug)]
