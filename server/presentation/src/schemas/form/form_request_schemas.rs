@@ -4,7 +4,7 @@ use domain::form::{
         models::{AnswerLabelId, AnswerTitle},
         settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     },
-    models::{FormDescription, FormLabelId, FormTitle, Visibility, WebhookUrl},
+    models::{FormLabelId, FormTitle, Visibility, WebhookUrl},
 };
 use serde::Deserialize;
 use types::non_empty_string::NonEmptyString;
@@ -26,7 +26,7 @@ pub struct FormUpdateSchema {
     #[serde(default)]
     pub title: Option<FormTitle>,
     #[serde(default)]
-    pub description: Option<FormDescription>,
+    pub description: Option<String>,
     #[serde(default)]
     pub response_period: Option<ResponsePeriod>,
     #[serde(default)]

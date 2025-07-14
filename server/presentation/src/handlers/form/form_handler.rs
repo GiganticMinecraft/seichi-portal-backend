@@ -184,12 +184,16 @@ pub async fn update_form_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(targets) = json.map_err_to_error().map_err(handle_error)?;
 
+    let description = targets
+        .description
+        .map(|desc| FormDescription::new(NonEmptyString::try_new(desc).ok()));
+
     form_use_case
         .update_form(
             &user,
             form_id,
             targets.title,
-            targets.description,
+            description,
             targets.response_period,
             targets.webhook,
             targets.default_answer_title,
