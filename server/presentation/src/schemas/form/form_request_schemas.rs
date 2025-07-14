@@ -18,7 +18,7 @@ pub struct OffsetAndLimit {
 #[derive(Deserialize, Debug)]
 pub struct FormCreateSchema {
     pub title: FormTitle,
-    pub description: FormDescription,
+    pub description: String,
 }
 
 #[derive(Deserialize, Debug)]

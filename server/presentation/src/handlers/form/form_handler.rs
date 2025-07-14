@@ -20,7 +20,9 @@ use crate::schemas::form::{
     },
 };
 use axum::extract::rejection::PathRejection;
+use domain::form::models::FormDescription;
 use errors::ErrorExtra;
+use types::non_empty_string::NonEmptyString;
 
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
@@ -36,8 +38,10 @@ pub async fn create_form_handler(
 
     let Json(form) = json.map_err_to_error().map_err(handle_error)?;
 
+    let form_description = FormDescription::new(NonEmptyString::try_new(form.description).ok());
+
     let id = form_use_case
-        .create_form(form.title, form.description, user)
+        .create_form(form.title, form_description, user)
         .await
         .map_err(handle_error)?;
 
