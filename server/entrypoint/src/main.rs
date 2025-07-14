@@ -126,17 +126,17 @@ async fn main() -> anyhow::Result<()> {
                 .patch(update_form_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route("/forms/{id}/answers", get(get_answer_by_form_id_handler))
+        .route(
+            "/forms/{id}/answers",
+            get(get_answer_by_form_id_handler).post(post_answer_handler),
+        )
         .with_state(shared_repository.to_owned())
         .route(
             "/forms/{id}/questions",
             get(get_questions_handler).put(put_question_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/answers",
-            post(post_answer_handler).get(get_all_answers),
-        )
+        .route("/forms/answers", get(get_all_answers))
         .with_state(shared_repository.to_owned())
         .route(
             "/labels/answers",

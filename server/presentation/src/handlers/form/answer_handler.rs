@@ -124,6 +124,7 @@ pub async fn get_answer_by_form_id_handler(
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<AnswersPostSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
@@ -134,10 +135,11 @@ pub async fn post_answer_handler(
         question_repository: repository.form_question_repository(),
     };
 
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
     form_answer_use_case
-        .post_answers(user, schema.form_id, schema.answers)
+        .post_answers(user, form_id, schema.answers)
         .await
         .map_err(handle_error)?;
 
