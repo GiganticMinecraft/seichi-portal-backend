@@ -1,7 +1,7 @@
 use domain::form::question::models::{QuestionId, QuestionType};
 use domain::form::{
     answer::{
-        models::{AnswerLabelId, AnswerTitle, FormAnswerContent},
+        models::{AnswerLabelId, AnswerTitle},
         settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     },
     models::{FormDescription, FormLabelId, FormTitle, Visibility, WebhookUrl},
@@ -40,9 +40,14 @@ pub struct FormUpdateSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct AnswersPostSchema {
-    pub title: DefaultAnswerTitle,
-    pub answers: Vec<FormAnswerContent>,
+pub struct AnswerContentSchema {
+    pub question_id: QuestionId,
+    pub answer: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AnswerCreateSchema {
+    pub contents: Vec<AnswerContentSchema>,
 }
 
 #[derive(Deserialize, Debug)]

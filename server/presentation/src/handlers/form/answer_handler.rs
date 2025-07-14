@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use domain::form::answer::models::{FormAnswerContent, FormAnswerContentId};
 use domain::{
     form::{answer::models::AnswerId, models::FormId},
     repository::Repositories,
@@ -20,7 +21,7 @@ use usecase::forms::answer::AnswerUseCase;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
-        form_request_schemas::{AnswerUpdateSchema, AnswersPostSchema},
+        form_request_schemas::{AnswerCreateSchema, AnswerUpdateSchema},
         form_response_schemas::FormAnswer,
     },
 };
@@ -125,7 +126,7 @@ pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-    json: Result<Json<AnswersPostSchema>, JsonRejection>,
+    json: Result<Json<AnswerCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
@@ -138,8 +139,18 @@ pub async fn post_answer_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
+    let answer_contents = schema
+        .contents
+        .into_iter()
+        .map(|schema| FormAnswerContent {
+            id: FormAnswerContentId::new(),
+            question_id: schema.question_id,
+            answer: schema.answer,
+        })
+        .collect_vec();
+
     form_answer_use_case
-        .post_answers(user, form_id, schema.answers)
+        .post_answers(user, form_id, answer_contents)
         .await
         .map_err(handle_error)?;
 
