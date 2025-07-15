@@ -22,11 +22,7 @@ pub async fn create(form: Form) -> Result<(), InfraError> {
             .field("フォーム名".to_string(), form.title().to_string(), false)
             .field(
                 "フォーム説明".to_owned(),
-                form.description()
-                    .to_owned()
-                    .into_inner()
-                    .map(|description| description.to_string())
-                    .unwrap_or("フォームの説明は設定されていません。".to_string()),
+                form.description().to_owned().into_inner(),
                 false,
             )
             .send(Color::Aqua)

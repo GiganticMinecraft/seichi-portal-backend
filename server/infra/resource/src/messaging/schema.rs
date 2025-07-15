@@ -101,7 +101,7 @@ pub struct RabbitMQSchema {
 pub struct FormMetaData {
     pub id: String,
     pub title: NonEmptyString,
-    pub description: Option<NonEmptyString>,
+    pub description: String,
 }
 
 impl From<domain::search::models::FormMetaData> for FormMetaData {

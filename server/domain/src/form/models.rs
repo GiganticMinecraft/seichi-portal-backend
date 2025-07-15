@@ -34,12 +34,12 @@ impl FormTitle {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Default, Debug, PartialOrd, PartialEq)]
-#[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
+#[deriving(From, Into, IntoInner, Serialize(via: String), Deserialize(via: String
 ))]
-pub struct FormDescription(Option<NonEmptyString>);
+pub struct FormDescription(String);
 
 impl FormDescription {
-    pub fn new(description: Option<NonEmptyString>) -> Self {
+    pub fn new(description: String) -> Self {
         Self(description)
     }
 }
@@ -257,7 +257,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///
     /// let form = Form::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(None)
+    ///     FormDescription::new("")
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -302,7 +302,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// let private_form = Form::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(None),
+    ///     FormDescription::new(""),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
     ///         ResponsePeriod::try_new(None, None).unwrap(),
@@ -316,7 +316,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///  let public_form = Form::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(None),
+    ///     FormDescription::new(""),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
     ///         ResponsePeriod::try_new(None, None).unwrap(),
@@ -365,7 +365,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///
     /// let form = Form::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(None)
+    ///     FormDescription::new("")
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -404,7 +404,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///
     /// let form = Form::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(None)
+    ///     FormDescription::new("")
     /// );
     ///
     /// assert!(form.can_delete(&administrator));

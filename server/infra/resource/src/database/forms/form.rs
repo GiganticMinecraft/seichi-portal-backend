@@ -22,11 +22,7 @@ impl FormDatabase for ConnectionPool {
     async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError> {
         let form_id = form.id().to_owned();
         let form_title = form.title().to_owned();
-        let description = form
-            .description()
-            .to_owned()
-            .into_inner()
-            .map(|d| d.to_string());
+        let description = form.description().to_owned().into_inner();
         let user_id = user.id.to_owned();
 
         self.read_write_transaction(|txn| {
@@ -178,11 +174,7 @@ impl FormDatabase for ConnectionPool {
     async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError> {
         let form_meta_update_params = [
             form.title().to_owned().into_inner().into_inner().into(),
-            form.description()
-                .to_owned()
-                .into_inner()
-                .map(NonEmptyString::into_inner)
-                .into(),
+            form.description().to_owned().into_inner().into(),
             form.settings().visibility().to_string().into(),
             form.settings()
                 .answer_settings()

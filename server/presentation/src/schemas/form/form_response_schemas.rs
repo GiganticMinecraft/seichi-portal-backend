@@ -100,7 +100,7 @@ pub(crate) struct FormSchema {
 pub(crate) struct FormListSchema {
     pub id: FormId,
     pub title: String,
-    pub description: Option<String>,
+    pub description: String,
     pub response_period: ResponsePeriodSchema,
     pub answer_visibility: AnswerVisibility,
     pub labels: Vec<FormLabel>,

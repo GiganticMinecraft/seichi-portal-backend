@@ -50,7 +50,7 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS form_meta_data(
                     id CHAR(36) NOT NULL PRIMARY KEY,
                     title TEXT NOT NULL,
-                    description TEXT,
+                    description TEXT NOT NULL,
                     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
                     answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

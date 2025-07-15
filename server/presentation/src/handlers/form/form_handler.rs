@@ -22,7 +22,6 @@ use crate::schemas::form::{
 use axum::extract::rejection::PathRejection;
 use domain::form::models::FormDescription;
 use errors::ErrorExtra;
-use types::non_empty_string::NonEmptyString;
 
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
@@ -38,7 +37,7 @@ pub async fn create_form_handler(
 
     let Json(form) = json.map_err_to_error().map_err(handle_error)?;
 
-    let form_description = FormDescription::new(NonEmptyString::try_new(form.description).ok());
+    let form_description = FormDescription::new(form.description);
 
     let id = form_use_case
         .create_form(form.title, form_description, user)
@@ -78,11 +77,7 @@ pub async fn form_list_handler(
         .map(|(form, labels)| FormListSchema {
             id: form.id().to_owned(),
             title: form.title().to_owned().into_inner().into_inner(),
-            description: form
-                .description()
-                .to_owned()
-                .into_inner()
-                .map(|desc| desc.to_string()),
+            description: form.description().to_owned().into_inner(),
             response_period: ResponsePeriodSchema {
                 start_at: form
                     .settings()
@@ -184,9 +179,7 @@ pub async fn update_form_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(targets) = json.map_err_to_error().map_err(handle_error)?;
 
-    let description = targets
-        .description
-        .map(|desc| FormDescription::new(NonEmptyString::try_new(desc).ok()));
+    let description = targets.description.map(FormDescription::new);
 
     form_use_case
         .update_form(
