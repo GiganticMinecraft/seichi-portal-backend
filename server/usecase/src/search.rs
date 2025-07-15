@@ -396,4 +396,8 @@ impl<
 
         Ok(())
     }
+
+    pub async fn initialize_search_engine(&self) -> Result<(), Error> {
+        self.search_repository.initialize_search_engine().await
+    }
 }

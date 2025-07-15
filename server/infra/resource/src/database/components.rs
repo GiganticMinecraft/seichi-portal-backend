@@ -230,6 +230,7 @@ pub trait SearchDatabase: Send + Sync {
         data: &[SearchableFieldsWithOperation],
     ) -> Result<(), InfraError>;
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError>;
+    async fn initialize_search_engine(&self) -> Result<(), InfraError>;
 }
 
 #[automock]

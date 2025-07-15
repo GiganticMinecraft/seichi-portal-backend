@@ -226,4 +226,25 @@ impl SearchDatabase for ConnectionPool {
                 .into(),
         )
     }
+
+    #[tracing::instrument]
+    async fn initialize_search_engine(&self) -> Result<(), InfraError> {
+        let index_with_uid = vec![
+            ("form_meta_data", "id"),
+            ("real_answers", "id"),
+            ("form_answer_comments", "id"),
+            ("label_for_form_answers", "id"),
+            ("label_for_forms", "id"),
+            ("users", "id"),
+        ];
+
+        let futures = index_with_uid
+            .into_iter()
+            .map(|(index, uid)| self.meilisearch_client.create_index(index, Some(uid)))
+            .collect_vec();
+
+        futures::future::try_join_all(futures).await?;
+
+        Ok(())
+    }
 }

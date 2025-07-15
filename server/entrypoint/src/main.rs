@@ -18,7 +18,7 @@ use presentation::api::notification_api_impl::NotificationAPIImpl;
 use presentation::handlers::form::comment_handler::{get_form_comment, update_form_comment};
 use presentation::handlers::form::message_handler::RealInfrastructureRepositoryWithNotificationAPI;
 use presentation::handlers::notification_handler::get_my_notification_settings;
-use presentation::handlers::search_handler::start_watch_out_of_sync;
+use presentation::handlers::search_handler::{initialize_search_engine, start_watch_out_of_sync};
 use presentation::{
     auth::auth,
     handlers::{
@@ -252,6 +252,8 @@ async fn main() -> anyhow::Result<()> {
     let shared_manager = discord_connection.pool.shard_manager.clone();
     let messaging_conn = Arc::new(messaging_conn);
     let shutdown_notifier = Arc::new(Notify::new());
+
+    initialize_search_engine(shared_repository.to_owned()).await?;
 
     let (_discord, _axum, _syncer, _messaging, _auto_of_sync_watcher) = join!(
         discord_connection.pool.start(),

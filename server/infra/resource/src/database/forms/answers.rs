@@ -285,6 +285,10 @@ impl FormAnswerDatabase for ConnectionPool {
         &self,
         answer_ids: Vec<AnswerId>,
     ) -> Result<Vec<FormAnswerDto>, InfraError> {
+        if answer_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let ids = answer_ids
             .iter()
             .map(|id| id.into_inner().to_string().into())

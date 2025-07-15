@@ -51,4 +51,5 @@ pub trait SearchRepository: Send + Sync + 'static {
     async fn sync_search_engine(&self, data: &[SearchableFieldsWithOperation])
     -> Result<(), Error>;
     async fn fetch_search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, Error>;
+    async fn initialize_search_engine(&self) -> Result<(), Error>;
 }

@@ -361,6 +361,14 @@ fn handle_presentation_error(err: PresentationError) -> impl IntoResponse {
             })),
         )
             .into_response(),
+        PresentationError::QueryRejection { cause } => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "BAD_REQUEST",
+                "reason": cause
+            })),
+        )
+            .into_response(),
         PresentationError::TypedHeaderRejection { cause } => (
             StatusCode::UNAUTHORIZED,
             Json(json!({

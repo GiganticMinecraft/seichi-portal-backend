@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::extract::rejection::QueryRejection;
 use axum::response::Response;
 use axum::{
     Extension, Json,
@@ -10,7 +11,7 @@ use axum::{
 use domain::{
     repository::Repositories, search::models::SearchableFieldsWithOperation, user::models::User,
 };
-use errors::Error;
+use errors::{Error, ErrorExtra};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use tokio::sync::{Notify, mpsc::Receiver};
@@ -24,7 +25,7 @@ use crate::{
 pub async fn cross_search(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Query(search_query): Query<SearchQuery>,
+    query: Result<Query<SearchQuery>, QueryRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
@@ -35,6 +36,8 @@ pub async fn cross_search(
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
     };
+
+    let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
 
     match search_query {
         SearchQuery { query: None } => Ok((
@@ -47,7 +50,7 @@ pub async fn cross_search(
             .into_response()),
         SearchQuery { query: Some(query) } => {
             let result = search_use_case
-                .cross_search(&user, query)
+                .cross_search(&user, query.into_inner())
                 .await
                 .map_err(handle_error)?;
             Ok((StatusCode::OK, Json(json!(CrossSearchResult::from(result)))).into_response())
@@ -92,4 +95,20 @@ pub async fn start_watch_out_of_sync(
     search_use_case
         .start_watch_out_of_sync(shutdown_notifier)
         .await
+}
+
+pub async fn initialize_search_engine(
+    repository: RealInfrastructureRepository,
+) -> Result<(), Error> {
+    let search_use_case = SearchUseCase {
+        search_repository: repository.search_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
+        comment_repository: repository.form_comment_repository(),
+        form_answer_label_repository: repository.answer_label_repository(),
+        form_label_repository: repository.form_label_repository(),
+        user_repository: repository.user_repository(),
+    };
+
+    search_use_case.initialize_search_engine().await
 }

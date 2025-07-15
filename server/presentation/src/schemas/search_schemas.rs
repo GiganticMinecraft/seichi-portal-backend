@@ -9,13 +9,14 @@ use domain::{
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use types::non_empty_string::NonEmptyString;
 use usecase::dto::CrossSearchDto;
 use uuid::Uuid;
 
 #[derive(Deserialize, Debug, PartialEq)]
 pub struct SearchQuery {
     #[serde(default)]
-    pub query: Option<String>,
+    pub query: Option<NonEmptyString>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
