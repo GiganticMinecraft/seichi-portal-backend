@@ -41,7 +41,7 @@ pub struct FormSettingsSchema {
     pub answer_settings: Option<AnswerSettingsSchema>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct WebhookUrlSchema(pub(crate) Option<WebhookUrl>);
 
 impl<'de> Deserialize<'de> for WebhookUrlSchema {

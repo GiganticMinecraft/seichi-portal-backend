@@ -160,32 +160,56 @@ pub async fn update_form_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(targets) = json.map_err_to_error().map_err(handle_error)?;
 
+    let title = targets.title;
     let description = targets.description.map(FormDescription::new);
+    let (response_period, webhook_url, default_answer_title, visibility, answer_visibility) =
+        if let Some(settings) = &targets.settings {
+            (
+                settings
+                    .answer_settings
+                    .as_ref()
+                    .and_then(|answer_settings| answer_settings.response_period.to_owned()),
+                settings.webhook_url.to_owned().and_then(|url| url.0),
+                settings
+                    .answer_settings
+                    .as_ref()
+                    .and_then(|answer_settings| answer_settings.default_answer_title.to_owned()),
+                settings.visibility,
+                settings
+                    .answer_settings
+                    .as_ref()
+                    .and_then(|answer_settings| answer_settings.visibility.to_owned()),
+            )
+        } else {
+            (None, None, None, None, None)
+        };
 
-    if let Some(future) = targets.settings.map(|settings| {
-        form_use_case.update_form(
+    let (updated_form, questions, labels) = form_use_case
+        .update_form(
             &user,
             form_id,
-            targets.title,
+            title,
             description,
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.response_period.to_owned()),
-            settings.webhook_url.and_then(|url| url.0),
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.default_answer_title.to_owned()),
-            settings.visibility,
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.visibility.to_owned()),
+            response_period,
+            webhook_url,
+            default_answer_title,
+            visibility,
+            answer_visibility,
         )
-    }) {
-        future.await.map_err(handle_error)?;
-    }
+        .await
+        .map_err(handle_error)?;
 
-    Ok((StatusCode::OK, Json(())).into_response())
+    Ok((
+        StatusCode::OK,
+        Json(FormSchema {
+            id: updated_form.id().to_owned(),
+            title: updated_form.title().to_owned(),
+            description: updated_form.description().to_owned(),
+            settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
+            metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
+            questions,
+            labels,
+        }),
+    )
+        .into_response())
 }

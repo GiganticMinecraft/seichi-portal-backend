@@ -153,7 +153,7 @@ impl<
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
-    ) -> Result<(), Error> {
+    ) -> Result<(Form, Vec<Question>, Vec<FormLabel>), Error> {
         let current_form = self
             .form_repository
             .get(form_id)
@@ -205,6 +205,31 @@ impl<
             .update_form(actor, updated_form)
             .await?;
 
-        Ok(())
+        let updated_form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
+
+        let updated_form = updated_form_guard
+            .try_into_read(actor)
+            .map_err(|_| Error::from(FormNotFound))?;
+
+        let question_guards = self.question_repository.get_questions(form_id).await?;
+        let questions = question_guards
+            .into_iter()
+            .map(|question| question.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let label_guards = self
+            .form_label_repository
+            .fetch_labels_by_form_id(form_id)
+            .await?;
+        let labels = label_guards
+            .into_iter()
+            .map(|label| label.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok((updated_form, questions, labels))
     }
 }
