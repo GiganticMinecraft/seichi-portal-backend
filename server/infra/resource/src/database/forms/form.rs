@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use domain::form::models::WebhookUrl;
 use domain::{
     form::models::{Form, FormId},
     user::models::User,
@@ -185,14 +186,17 @@ impl FormDatabase for ConnectionPool {
             form.id().into_inner().to_owned().to_string().into(),
         ];
 
+        let webhook_url = form
+            .settings()
+            .webhook_url(updated_by)
+            .ok()
+            .map(ToOwned::to_owned)
+            .and_then(WebhookUrl::into_inner)
+            .map(NonEmptyString::into_inner);
+
         let update_form_webhooks_params = [
-            form.settings()
-                .webhook_url()
-                .to_owned()
-                .into_inner()
-                .map(NonEmptyString::into_inner)
-                .into(),
             form.id().into_inner().to_string().to_owned().into(),
+            webhook_url.into(),
         ];
 
         self.read_write_transaction(|txn| {
@@ -212,9 +216,10 @@ impl FormDatabase for ConnectionPool {
                 .await?;
 
                 execute_and_values(
-                    r#"UPDATE form_webhooks SET
-                        url = ?
-                        WHERE form_id = ?"#,
+                    r#"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    url = VALUES(url)
+                    "#,
                     update_form_webhooks_params,
                     txn,
                 )

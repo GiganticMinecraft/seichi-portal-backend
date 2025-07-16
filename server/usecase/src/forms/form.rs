@@ -1,3 +1,4 @@
+use domain::form::question::models::Question;
 use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
@@ -56,7 +57,7 @@ impl<
         actor: &User,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<(Form, Vec<FormLabel>)>, Error> {
+    ) -> Result<Vec<(Form, Vec<Question>, Vec<FormLabel>)>, Error> {
         let forms = self
             .form_repository
             .list(offset, limit)
@@ -71,12 +72,24 @@ impl<
         }))
         .await?;
 
+        let questions = futures::future::try_join_all(
+            forms
+                .iter()
+                .map(|form| self.question_repository.get_questions(*form.id())),
+        )
+        .await?;
+
         let forms_with_labels = forms
             .into_iter()
             .zip(form_labels)
-            .map(|(form, labels)| {
+            .zip(questions)
+            .map(|((form, labels), questions)| {
                 Ok::<_, Error>((
                     form,
+                    questions
+                        .into_iter()
+                        .map(|question| question.try_into_read(actor))
+                        .collect::<Result<Vec<_>, _>>()?,
                     labels
                         .into_iter()
                         .map(|guard| guard.try_into_read(actor))

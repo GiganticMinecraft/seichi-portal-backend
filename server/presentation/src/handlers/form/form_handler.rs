@@ -15,9 +15,7 @@ use usecase::{dto::FormDto, forms::form::FormUseCase};
 use crate::handlers::error_handler::handle_error;
 use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
-    form_response_schemas::{
-        FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema, ResponsePeriodSchema,
-    },
+    form_response_schemas::{FormMetaSchema, FormSchema, FormSettingsSchema},
 };
 use axum::extract::rejection::PathRejection;
 use domain::form::models::FormDescription;
@@ -74,30 +72,13 @@ pub async fn form_list_handler(
 
     let response_schema = forms
         .into_iter()
-        .map(|(form, labels)| FormListSchema {
+        .map(|(form, questions, labels)| FormSchema {
             id: form.id().to_owned(),
-            title: form.title().to_owned().into_inner().into_inner(),
-            description: form.description().to_owned().into_inner(),
-            response_period: ResponsePeriodSchema {
-                start_at: form
-                    .settings()
-                    .answer_settings()
-                    .response_period()
-                    .start_at()
-                    .map(|start_at| start_at.to_owned()),
-                end_at: form
-                    .settings()
-                    .answer_settings()
-                    .response_period()
-                    .end_at()
-                    .map(|end_at| end_at.to_owned()),
-            },
-            answer_visibility: form
-                .settings()
-                .answer_settings()
-                .visibility()
-                .to_owned()
-                .into(),
+            title: form.title().to_owned(),
+            description: form.description().to_owned(),
+            settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+            questions,
             labels,
         })
         .collect_vec();
@@ -132,7 +113,7 @@ pub async fn get_form_handler(
         id: form.id().to_owned(),
         title: form.title().to_owned(),
         description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(form.settings()),
+        settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
         questions,
         labels,
@@ -181,20 +162,30 @@ pub async fn update_form_handler(
 
     let description = targets.description.map(FormDescription::new);
 
-    form_use_case
-        .update_form(
+    if let Some(future) = targets.settings.map(|settings| {
+        form_use_case.update_form(
             &user,
             form_id,
             targets.title,
             description,
-            targets.response_period,
-            targets.webhook,
-            targets.default_answer_title,
-            targets.visibility,
-            targets.answer_visibility,
+            settings
+                .answer_settings
+                .as_ref()
+                .and_then(|answer_settings| answer_settings.response_period.to_owned()),
+            settings.webhook_url.and_then(|url| url.0),
+            settings
+                .answer_settings
+                .as_ref()
+                .and_then(|answer_settings| answer_settings.default_answer_title.to_owned()),
+            settings.visibility,
+            settings
+                .answer_settings
+                .as_ref()
+                .and_then(|answer_settings| answer_settings.visibility.to_owned()),
         )
-        .await
-        .map_err(handle_error)?;
+    }) {
+        future.await.map_err(handle_error)?;
+    }
 
     Ok((StatusCode::OK, Json(())).into_response())
 }

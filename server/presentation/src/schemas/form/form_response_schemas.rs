@@ -1,14 +1,13 @@
 use chrono::{DateTime, Utc};
+use domain::form::answer::settings::models::AnswerSettings;
 use domain::form::{
     answer::settings::models::DefaultAnswerTitle,
-    models::{
-        FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility,
-        WebhookUrl,
-    },
+    models::{FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility},
     question::models::Question,
 };
 use itertools::Itertools;
 use serde::Serialize;
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 #[derive(Serialize, Debug)]
@@ -39,33 +38,44 @@ impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVi
 }
 
 #[derive(Serialize, Debug)]
-pub(crate) struct FormSettingsSchema {
-    pub response_period: ResponsePeriodSchema,
-    pub webhook_url: WebhookUrl,
+pub(crate) struct AnswerSettingsSchema {
     pub default_answer_title: DefaultAnswerTitle,
+    pub visibility: AnswerVisibility,
+    pub response_period: ResponsePeriodSchema,
+}
+
+impl AnswerSettingsSchema {
+    pub fn from_answer_settings_ref(answer_settings: &AnswerSettings) -> Self {
+        Self {
+            default_answer_title: answer_settings.default_answer_title().to_owned(),
+            visibility: answer_settings.visibility().to_owned().into(),
+            response_period: ResponsePeriodSchema {
+                start_at: answer_settings.response_period().start_at().to_owned(),
+                end_at: answer_settings.response_period().end_at().to_owned(),
+            },
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct FormSettingsSchema {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webhook_url: Option<Option<String>>,
     pub visibility: Visibility,
-    pub answer_visibility: AnswerVisibility,
+    pub answer_settings: AnswerSettingsSchema,
 }
 
 impl FormSettingsSchema {
-    pub fn from_settings_ref(settings: &FormSettings) -> Self {
+    pub fn from_settings_ref(actor: &domain::user::models::User, settings: &FormSettings) -> Self {
         FormSettingsSchema {
-            response_period: ResponsePeriodSchema {
-                start_at: settings
-                    .answer_settings()
-                    .response_period()
-                    .start_at()
-                    .to_owned(),
-                end_at: settings
-                    .answer_settings()
-                    .response_period()
-                    .end_at()
-                    .to_owned(),
-            },
-            webhook_url: settings.webhook_url().to_owned(),
-            default_answer_title: settings.answer_settings().default_answer_title().to_owned(),
+            webhook_url: settings
+                .webhook_url(actor)
+                .ok()
+                .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),
-            answer_visibility: settings.answer_settings().visibility().to_owned().into(),
+            answer_settings: AnswerSettingsSchema::from_answer_settings_ref(
+                settings.answer_settings(),
+            ),
         }
     }
 }
@@ -93,16 +103,6 @@ pub(crate) struct FormSchema {
     pub settings: FormSettingsSchema,
     pub metadata: FormMetaSchema,
     pub questions: Vec<Question>,
-    pub labels: Vec<FormLabel>,
-}
-
-#[derive(Serialize, Debug)]
-pub(crate) struct FormListSchema {
-    pub id: FormId,
-    pub title: String,
-    pub description: String,
-    pub response_period: ResponsePeriodSchema,
-    pub answer_visibility: AnswerVisibility,
     pub labels: Vec<FormLabel>,
 }
 

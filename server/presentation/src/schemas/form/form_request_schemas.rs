@@ -6,7 +6,7 @@ use domain::form::{
     },
     models::{FormLabelId, FormTitle, Visibility, WebhookUrl},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;
 
 #[derive(Deserialize, Debug)]
@@ -22,21 +22,56 @@ pub struct FormCreateSchema {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct AnswerSettingsSchema {
+    #[serde(default)]
+    pub default_answer_title: Option<DefaultAnswerTitle>,
+    #[serde(default)]
+    pub visibility: Option<AnswerVisibility>,
+    #[serde(default)]
+    pub response_period: Option<ResponsePeriod>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormSettingsSchema {
+    #[serde(default)]
+    pub webhook_url: Option<WebhookUrlSchema>,
+    #[serde(default)]
+    pub visibility: Option<Visibility>,
+    #[serde(default)]
+    pub answer_settings: Option<AnswerSettingsSchema>,
+}
+
+#[derive(Debug)]
+pub struct WebhookUrlSchema(pub(crate) Option<WebhookUrl>);
+
+impl<'de> Deserialize<'de> for WebhookUrlSchema {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let url: Option<String> = Option::deserialize(deserializer)?;
+        match url {
+            Some(url) => {
+                let non_empty_url =
+                    NonEmptyString::try_new(url).map_err(serde::de::Error::custom)?;
+                let webhook_url =
+                    WebhookUrl::try_new(Some(non_empty_url)).map_err(serde::de::Error::custom)?;
+
+                Ok(WebhookUrlSchema(Some(webhook_url)))
+            }
+            None => Ok(WebhookUrlSchema(None)),
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
 pub struct FormUpdateSchema {
     #[serde(default)]
     pub title: Option<FormTitle>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub response_period: Option<ResponsePeriod>,
-    #[serde(default)]
-    pub webhook: Option<WebhookUrl>,
-    #[serde(default)]
-    pub default_answer_title: Option<DefaultAnswerTitle>,
-    #[serde(default)]
-    pub visibility: Option<Visibility>,
-    #[serde(default)]
-    pub answer_visibility: Option<AnswerVisibility>,
+    pub settings: Option<FormSettingsSchema>,
 }
 
 #[derive(Deserialize, Debug)]

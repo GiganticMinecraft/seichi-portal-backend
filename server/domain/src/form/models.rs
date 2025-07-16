@@ -45,7 +45,7 @@ impl FormDescription {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct FormSettings {
     #[serde(default)]
     webhook_url: WebhookUrl,
@@ -65,6 +65,22 @@ impl FormSettings {
                 ResponsePeriod::try_new(None, None).unwrap(),
             ),
         }
+    }
+
+    pub fn webhook_url(&self, user: &User) -> Result<&WebhookUrl, DomainError> {
+        if user.role == Administrator {
+            Ok(&self.webhook_url)
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
+    pub fn visibility(&self) -> &Visibility {
+        &self.visibility
+    }
+
+    pub fn answer_settings(&self) -> &AnswerSettings {
+        &self.answer_settings
     }
 
     pub fn change_webhook_url(self, webhook_url: WebhookUrl) -> Self {

@@ -2846,20 +2846,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "outgoing"
-version = "0.1.0"
-dependencies = [
- "domain",
- "errors",
- "itertools 0.14.0",
- "reqwest 0.12.22",
- "serde",
- "serde_json",
- "serenity",
- "tracing",
-]
-
-[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
