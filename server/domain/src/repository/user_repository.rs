@@ -31,7 +31,7 @@ pub trait UserRepository: Send + Sync + 'static {
         &self,
         xbox_token: String,
         user: &User,
-        expires: i32,
+        expires: u32,
     ) -> Result<String, Error>;
     async fn fetch_user_by_session_id(&self, session_id: String) -> Result<Option<User>, Error>;
     async fn end_user_session(&self, session_id: String) -> Result<(), Error>;

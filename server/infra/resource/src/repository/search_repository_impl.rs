@@ -140,4 +140,12 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .await
             .map_err(Into::into)
     }
+
+    async fn initialize_search_engine(&self) -> Result<(), Error> {
+        self.client
+            .search()
+            .initialize_search_engine()
+            .await
+            .map_err(Into::into)
+    }
 }

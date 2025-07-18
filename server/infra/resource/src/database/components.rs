@@ -88,7 +88,7 @@ pub trait FormAnswerDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormAnswerLabelDatabase: Send + Sync {
-    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError>;
+    async fn create_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
     async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError>;
     async fn get_label_for_answers(
         &self,
@@ -151,7 +151,11 @@ pub trait FormCommentDatabase: Send + Sync {
     async fn get_comment(&self, comment_id: CommentId) -> Result<Option<CommentDto>, InfraError>;
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError>;
     async fn get_all_comments(&self) -> Result<Vec<CommentDto>, InfraError>;
-    async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError>;
+    async fn upsert_comment(
+        &self,
+        answer_id: AnswerId,
+        comment: &Comment,
+    ) -> Result<(), InfraError>;
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
@@ -195,7 +199,7 @@ pub trait UserDatabase: Send + Sync {
         &self,
         xbox_token: String,
         user: &User,
-        expires: i32,
+        expires: u32,
     ) -> Result<String, InfraError>;
     async fn fetch_user_by_session_id(
         &self,
@@ -226,6 +230,7 @@ pub trait SearchDatabase: Send + Sync {
         data: &[SearchableFieldsWithOperation],
     ) -> Result<(), InfraError>;
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError>;
+    async fn initialize_search_engine(&self) -> Result<(), InfraError>;
 }
 
 #[automock]

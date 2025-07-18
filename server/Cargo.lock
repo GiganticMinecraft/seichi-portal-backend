@@ -1442,6 +1442,8 @@ dependencies = [
 name = "errors"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "axum-extra",
  "lapin",
  "meilisearch-sdk",
  "redis",
@@ -2841,20 +2843,6 @@ dependencies = [
  "proc-macro2-diagnostics",
  "quote",
  "syn 2.0.104",
-]
-
-[[package]]
-name = "outgoing"
-version = "0.1.0"
-dependencies = [
- "domain",
- "errors",
- "itertools 0.14.0",
- "reqwest 0.12.22",
- "serde",
- "serde_json",
- "serenity",
- "tracing",
 ]
 
 [[package]]

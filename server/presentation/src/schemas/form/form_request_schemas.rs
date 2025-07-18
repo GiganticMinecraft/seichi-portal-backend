@@ -1,12 +1,12 @@
+use domain::form::question::models::{QuestionId, QuestionType};
 use domain::form::{
     answer::{
-        models::{AnswerId, AnswerLabelId, AnswerTitle, FormAnswerContent},
+        models::{AnswerLabelId, AnswerTitle},
         settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     },
-    models::{FormDescription, FormId, FormLabelId, FormTitle, Visibility, WebhookUrl},
-    question::models::Question,
+    models::{FormLabelId, FormTitle, Visibility, WebhookUrl},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;
 
 #[derive(Deserialize, Debug)]
@@ -18,7 +18,50 @@ pub struct OffsetAndLimit {
 #[derive(Deserialize, Debug)]
 pub struct FormCreateSchema {
     pub title: FormTitle,
-    pub description: FormDescription,
+    pub description: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AnswerSettingsSchema {
+    #[serde(default)]
+    pub default_answer_title: Option<DefaultAnswerTitle>,
+    #[serde(default)]
+    pub visibility: Option<AnswerVisibility>,
+    #[serde(default)]
+    pub response_period: Option<ResponsePeriod>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormSettingsSchema {
+    #[serde(default)]
+    pub webhook_url: Option<WebhookUrlSchema>,
+    #[serde(default)]
+    pub visibility: Option<Visibility>,
+    #[serde(default)]
+    pub answer_settings: Option<AnswerSettingsSchema>,
+}
+
+#[derive(Clone, Debug)]
+pub struct WebhookUrlSchema(pub(crate) Option<WebhookUrl>);
+
+impl<'de> Deserialize<'de> for WebhookUrlSchema {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let url: Option<String> = Option::deserialize(deserializer)?;
+        match url {
+            Some(url) => {
+                let non_empty_url =
+                    NonEmptyString::try_new(url).map_err(serde::de::Error::custom)?;
+                let webhook_url =
+                    WebhookUrl::try_new(Some(non_empty_url)).map_err(serde::de::Error::custom)?;
+
+                Ok(WebhookUrlSchema(Some(webhook_url)))
+            }
+            None => Ok(WebhookUrlSchema(None)),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -26,24 +69,20 @@ pub struct FormUpdateSchema {
     #[serde(default)]
     pub title: Option<FormTitle>,
     #[serde(default)]
-    pub description: Option<FormDescription>,
+    pub description: Option<String>,
     #[serde(default)]
-    pub response_period: Option<ResponsePeriod>,
-    #[serde(default)]
-    pub webhook: Option<WebhookUrl>,
-    #[serde(default)]
-    pub default_answer_title: Option<DefaultAnswerTitle>,
-    #[serde(default)]
-    pub visibility: Option<Visibility>,
-    #[serde(default)]
-    pub answer_visibility: Option<AnswerVisibility>,
+    pub settings: Option<FormSettingsSchema>,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct AnswersPostSchema {
-    pub form_id: FormId,
-    pub title: DefaultAnswerTitle,
-    pub answers: Vec<FormAnswerContent>,
+pub struct AnswerContentSchema {
+    pub question_id: QuestionId,
+    pub answer: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AnswerCreateSchema {
+    pub contents: Vec<AnswerContentSchema>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -53,25 +92,50 @@ pub struct AnswerUpdateSchema {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct FormQuestionUpdateSchema {
-    pub form_id: FormId,
-    pub questions: Vec<Question>,
+pub struct QuestionSchema {
+    pub id: Option<QuestionId>,
+    pub title: String,
+    pub question_type: QuestionType,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub choices: Vec<String>,
+    pub is_required: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormQuestionPutSchema {
+    #[serde(default)]
+    pub questions: Vec<QuestionSchema>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct CommentPostSchema {
-    pub answer_id: AnswerId,
-    pub content: String,
+    pub content: NonEmptyString,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct FormLabelSchema {
+pub struct CommentUpdateSchema {
+    pub content: Option<NonEmptyString>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FormLabelCreateSchema {
     pub name: NonEmptyString,
 }
 
 #[derive(Deserialize, Debug)]
+pub struct FormLabelUpdateSchema {
+    pub name: Option<NonEmptyString>,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct AnswerLabelSchema {
-    pub name: String,
+    pub name: NonEmptyString,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AnswerLabelUpdateSchema {
+    pub name: Option<NonEmptyString>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -91,5 +155,5 @@ pub struct PostedMessageSchema {
 
 #[derive(Deserialize, Debug)]
 pub struct MessageUpdateSchema {
-    pub body: String,
+    pub body: Option<String>,
 }

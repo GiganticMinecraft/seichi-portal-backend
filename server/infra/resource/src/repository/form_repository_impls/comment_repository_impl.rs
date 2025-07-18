@@ -1,4 +1,9 @@
+use crate::{
+    database::components::{DatabaseComponents, FormCommentDatabase},
+    repository::Repository,
+};
 use async_trait::async_trait;
+use domain::types::authorization_guard_with_context::Update;
 use domain::{
     form::{
         answer::models::AnswerId,
@@ -15,11 +20,6 @@ use domain::{
 };
 use errors::Error;
 use itertools::Itertools;
-
-use crate::{
-    database::components::{DatabaseComponents, FormCommentDatabase},
-    repository::Repository,
-};
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Client> {
@@ -77,7 +77,7 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
     }
 
     #[tracing::instrument(skip(self))]
-    async fn post_comment(
+    async fn create_comment(
         &self,
         answer_id: AnswerId,
         context: &CommentAuthorizationContext<Read>,
@@ -87,7 +87,33 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
         comment
             .try_create(
                 actor,
-                |comment| self.client.form_comment().post_comment(answer_id, comment),
+                |comment| {
+                    self.client
+                        .form_comment()
+                        .upsert_comment(answer_id, comment)
+                },
+                context,
+            )?
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_comment(
+        &self,
+        answer_id: AnswerId,
+        context: &CommentAuthorizationContext<Read>,
+        actor: &User,
+        comment: AuthorizationGuardWithContext<Comment, Update, CommentAuthorizationContext<Read>>,
+    ) -> Result<(), Error> {
+        comment
+            .try_update(
+                actor,
+                |comment| {
+                    self.client
+                        .form_comment()
+                        .upsert_comment(answer_id, comment)
+                },
                 context,
             )?
             .await

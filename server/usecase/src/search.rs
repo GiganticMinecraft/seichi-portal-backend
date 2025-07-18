@@ -349,7 +349,7 @@ impl<
                                     domain::search::models::SearchableFields::LabelForFormAnswers(
                                         domain::search::models::LabelForFormAnswers {
                                             id: label.id().to_owned(),
-                                            name: label.name().to_owned(),
+                                            name: label.name().to_owned().into_inner(),
                                         },
                                     ),
                                     Operation::Update,
@@ -395,5 +395,9 @@ impl<
         }
 
         Ok(())
+    }
+
+    pub async fn initialize_search_engine(&self) -> Result<(), Error> {
+        self.search_repository.initialize_search_engine().await
     }
 }

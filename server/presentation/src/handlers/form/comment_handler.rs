@@ -1,4 +1,4 @@
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{
     Extension, Json,
@@ -6,22 +6,54 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use domain::form::answer::models::AnswerId;
+use domain::form::models::FormId;
 use domain::{
     form::comment::models::{Comment, CommentContent, CommentId},
     repository::Repositories,
     user::models::User,
 };
+use errors::ErrorExtra;
+use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
+use crate::schemas::form::form_request_schemas::CommentUpdateSchema;
+use crate::schemas::form::form_response_schemas::AnswerComment;
 use crate::{
-    handlers::error_handler::{handle_error, handle_json_rejection},
-    schemas::form::form_request_schemas::CommentPostSchema,
+    handlers::error_handler::handle_error, schemas::form::form_request_schemas::CommentPostSchema,
 };
+
+pub async fn get_form_comment(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
+    let form_comment_use_case = CommentUseCase {
+        comment_repository: repository.form_comment_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
+    };
+
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
+
+    let comments = form_comment_use_case
+        .get_comments(&user, form_id, answer_id)
+        .await
+        .map_err(handle_error)?;
+
+    let response = comments
+        .into_iter()
+        .map(Into::<AnswerComment>::into)
+        .collect_vec();
+
+    Ok((StatusCode::OK, Json(response)).into_response())
+}
 
 pub async fn post_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<CommentPostSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
@@ -30,43 +62,69 @@ pub async fn post_form_comment(
         form_repository: repository.form_repository(),
     };
 
-    let Json(comment_schema) = json.map_err(handle_json_rejection)?;
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(comment_schema) = json.map_err_to_error().map_err(handle_error)?;
 
-    let post_comment_result = async {
-        let comment = Comment::new(
-            comment_schema.answer_id,
-            CommentContent::new(comment_schema.content.try_into()?),
-            user.to_owned(),
-        );
+    let comment = Comment::new(
+        answer_id,
+        CommentContent::new(comment_schema.content),
+        user.to_owned(),
+    );
 
-        form_comment_use_case
-            .post_comment(&user, comment, comment_schema.answer_id)
-            .await
-    }
-    .await;
+    form_comment_use_case
+        .post_comment(&user, form_id, answer_id, comment)
+        .await
+        .map_err(handle_error)?;
 
-    Ok(match post_comment_result {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    })
+    Ok(StatusCode::OK.into_response())
 }
 
-pub async fn delete_form_comment_handler(
+pub async fn update_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(comment_id): Path<CommentId>,
-) -> impl IntoResponse {
+    path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
+    json: Result<Json<CommentUpdateSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
     };
 
-    match form_comment_use_case
-        .delete_comment(&user, comment_id)
+    let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(comment_schema) = json.map_err_to_error().map_err(handle_error)?;
+
+    form_comment_use_case
+        .update_comment(
+            &user,
+            form_id,
+            answer_id,
+            comment_id,
+            comment_schema.content.map(CommentContent::new),
+        )
         .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
+}
+
+pub async fn delete_form_comment_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
+    let form_comment_use_case = CommentUseCase {
+        comment_repository: repository.form_comment_repository(),
+        answer_repository: repository.form_answer_repository(),
+        form_repository: repository.form_repository(),
+    };
+
+    let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;
+
+    form_comment_use_case
+        .delete_comment(&user, form_id, answer_id, comment_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
 }

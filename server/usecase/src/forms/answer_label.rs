@@ -4,6 +4,7 @@ use domain::{
     user::models::User,
 };
 use errors::{Error, usecase::UseCaseError::LabelNotFound};
+use types::non_empty_string::NonEmptyString;
 
 pub struct AnswerLabelUseCase<'a, AnswerLabelRepo: AnswerLabelRepository> {
     pub answer_label_repository: &'a AnswerLabelRepo,
@@ -13,13 +14,21 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
     pub async fn create_label_for_answers(
         &self,
         actor: &User,
-        label_name: String,
-    ) -> Result<(), Error> {
+        label_name: NonEmptyString,
+    ) -> Result<AnswerLabel, Error> {
         let answer_label = AnswerLabel::new(label_name);
+        let label_id = answer_label.id().to_owned();
 
         self.answer_label_repository
             .create_label_for_answers(actor, answer_label.into())
-            .await
+            .await?;
+
+        self.answer_label_repository
+            .get_label_for_answers(label_id)
+            .await?
+            .ok_or(Error::from(LabelNotFound))?
+            .try_into_read(actor)
+            .map_err(Into::into)
     }
 
     pub async fn get_labels_for_answers(&self, actor: &User) -> Result<Vec<AnswerLabel>, Error> {
@@ -51,11 +60,30 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
     pub async fn edit_label_for_answers(
         &self,
         actor: &User,
-        label: AnswerLabel,
-    ) -> Result<(), Error> {
+        label_id: AnswerLabelId,
+        name: Option<NonEmptyString>,
+    ) -> Result<AnswerLabel, Error> {
+        let current_label = self
+            .answer_label_repository
+            .get_label_for_answers(label_id)
+            .await?
+            .ok_or(Error::from(LabelNotFound))?;
+
+        if let Some(new_name) = name {
+            let updated_label = current_label
+                .into_update()
+                .map(|label| label.renamed(new_name));
+            self.answer_label_repository
+                .edit_label_for_answers(actor, updated_label)
+                .await?;
+        }
+
         self.answer_label_repository
-            .edit_label_for_answers(actor, label.into())
-            .await
+            .get_label_for_answers(label_id)
+            .await?
+            .ok_or(Error::from(LabelNotFound))?
+            .try_into_read(actor)
+            .map_err(Into::into)
     }
 
     pub async fn replace_answer_labels(

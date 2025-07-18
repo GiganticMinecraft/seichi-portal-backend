@@ -14,6 +14,7 @@ use domain::{
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -56,7 +57,7 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
 pub struct FormDto {
     pub id: String,
     pub title: String,
-    pub description: Option<String>,
+    pub description: String,
     pub metadata: (DateTime<Utc>, DateTime<Utc>),
     pub start_at: Option<DateTime<Utc>>,
     pub end_at: Option<DateTime<Utc>>,
@@ -86,7 +87,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
         Ok(domain::form::models::Form::from_raw_parts(
             FormId::from(Uuid::from_str(&id).map_err(Into::<InfraError>::into)?),
             FormTitle::new(title.try_into()?),
-            FormDescription::new(description.map(TryInto::try_into).transpose()?),
+            FormDescription::new(description),
             FormMeta::from_raw_parts(metadata.0, metadata.1),
             FormSettings::from_raw_parts(
                 ResponsePeriod::try_new(start_at, end_at)?,
@@ -237,7 +238,7 @@ impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
             Uuid::from_str(&id)
                 .map_err(Into::<InfraError>::into)?
                 .into(),
-            name,
+            NonEmptyString::try_new(name)?,
         ))
     }
 }

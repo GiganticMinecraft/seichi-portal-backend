@@ -15,8 +15,10 @@ use domain::search::models::SearchableFieldsWithOperation;
 use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
+use presentation::handlers::form::comment_handler::{get_form_comment, update_form_comment};
 use presentation::handlers::form::message_handler::RealInfrastructureRepositoryWithNotificationAPI;
-use presentation::handlers::search_handler::start_watch_out_of_sync;
+use presentation::handlers::notification_handler::get_my_notification_settings;
+use presentation::handlers::search_handler::{initialize_search_engine, start_watch_out_of_sync};
 use presentation::{
     auth::auth,
     handlers::{
@@ -42,9 +44,7 @@ use presentation::{
                 delete_message_handler, get_messages_handler, post_message_handler,
                 update_message_handler,
             },
-            question_handler::{
-                create_question_handler, get_questions_handler, put_question_handler,
-            },
+            question_handler::{get_questions_handler, put_question_handler},
         },
         health_check_handler::health_check,
         notification_handler::{get_notification_settings, update_notification_settings},
@@ -126,37 +126,40 @@ async fn main() -> anyhow::Result<()> {
                 .patch(update_form_handler),
         )
         .with_state(shared_repository.to_owned())
-        .route("/forms/{id}/answers", get(get_answer_by_form_id_handler))
-        .with_state(shared_repository.to_owned())
-        .route("/forms/{id}/questions", get(get_questions_handler))
-        .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers",
-            post(post_answer_handler).get(get_all_answers),
+            "/forms/{id}/answers",
+            get(get_answer_by_form_id_handler).post(post_answer_handler),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/labels/answers",
+            "/forms/{id}/questions",
+            get(get_questions_handler).put(put_question_handler),
+        )
+        .with_state(shared_repository.to_owned())
+        .route("/forms/answers", get(get_all_answers))
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/labels/answers",
             get(get_labels_for_answers).post(create_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/labels/forms",
-            get(get_labels_for_forms).post(create_label_for_forms),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/labels/answers/{label_id}",
+            "/labels/answers/{label_id}",
             delete(delete_label_for_answers).patch(edit_label_for_answers),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/labels/forms/{label_id}",
+            "/labels/forms",
+            get(get_labels_for_forms).post(create_label_for_forms),
+        )
+        .with_state(shared_repository.to_owned())
+        .route(
+            "/labels/forms/{label_id}",
             delete(delete_label_for_forms).patch(edit_label_for_forms),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/{answer_id}",
+            "/forms/{form_id}/answers/{answer_id}",
             get(get_answer_handler).patch(update_answer_handler),
         )
         .with_state(shared_repository.to_owned())
@@ -167,33 +170,31 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route("/forms/{form_id}/labels", put(replace_form_labels))
         .with_state(shared_repository.to_owned())
-        .route("/forms/answers/comment", post(post_form_comment))
-        .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/comments/{comment_id}",
-            delete(delete_form_comment_handler),
+            "/forms/{form_id}/answers/{answer_id}/comments",
+            get(get_form_comment).post(post_form_comment),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/questions",
-            post(create_question_handler).put(put_question_handler),
+            "/forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
+            patch(update_form_comment).delete(delete_form_comment_handler),
         )
         .with_state(shared_repository.to_owned())
         .route("/users/{uuid}", get(get_user_info).patch(patch_user_role))
         .with_state(shared_repository.to_owned())
         .route("/users/me", get(get_my_user_info))
         .with_state(shared_repository.to_owned())
-        .route("/users/list", get(user_list))
+        .route("/users", get(user_list))
         .with_state(shared_repository.to_owned())
         .route("/search", get(cross_search))
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/{answer_id}/messages",
+            "/forms/{form_id}/answers/{answer_id}/messages",
             get(get_messages_handler),
         )
         .with_state(shared_repository.to_owned())
         .route(
-            "/forms/answers/{answer_id}/messages",
+            "/forms/{form_id}/answers/{answer_id}/messages",
             post(post_message_handler),
         )
         .with_state(Arc::new(
@@ -203,7 +204,7 @@ async fn main() -> anyhow::Result<()> {
             ),
         ))
         .route(
-            "/forms/answers/{answer_id}/messages/{message_id}",
+            "/forms/{form_id}/answers/{answer_id}/messages/{message_id}",
             delete(delete_message_handler).patch(update_message_handler),
         )
         .with_state(shared_repository.to_owned())
@@ -214,7 +215,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .route(
             "/notifications/settings/me",
-            patch(update_notification_settings),
+            get(get_my_notification_settings).patch(update_notification_settings),
         )
         .with_state(shared_repository.to_owned())
         .route("/health", get(health_check))
@@ -251,6 +252,8 @@ async fn main() -> anyhow::Result<()> {
     let shared_manager = discord_connection.pool.shard_manager.clone();
     let messaging_conn = Arc::new(messaging_conn);
     let shutdown_notifier = Arc::new(Notify::new());
+
+    initialize_search_engine(shared_repository.to_owned()).await?;
 
     let (_discord, _axum, _syncer, _messaging, _auto_of_sync_watcher) = join!(
         discord_connection.pool.start(),

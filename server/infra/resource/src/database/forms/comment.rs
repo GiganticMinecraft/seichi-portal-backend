@@ -113,7 +113,11 @@ impl FormCommentDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn post_comment(&self, answer_id: AnswerId, comment: &Comment) -> Result<(), InfraError> {
+    async fn upsert_comment(
+        &self,
+        answer_id: AnswerId,
+        comment: &Comment,
+    ) -> Result<(), InfraError> {
         let params = [
             comment.comment_id().into_inner().to_string().into(),
             answer_id.into_inner().to_string().into(),
@@ -130,7 +134,9 @@ impl FormCommentDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     r"INSERT INTO form_answer_comments (id, answer_id, commented_by, content)
-                        VALUES (?, ?, ?, ?)",
+                        VALUES (?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                        content = VALUES(content)",
                     params,
                     txn,
                 )

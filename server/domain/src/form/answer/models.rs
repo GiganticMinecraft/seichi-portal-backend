@@ -96,19 +96,23 @@ pub type AnswerLabelId = types::Id<AnswerLabel>;
 #[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct AnswerLabel {
     id: AnswerLabelId,
-    name: String,
+    name: NonEmptyString,
 }
 
 impl AnswerLabel {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: NonEmptyString) -> Self {
         Self {
             id: AnswerLabelId::new(),
             name,
         }
     }
 
-    pub fn from_raw_parts(id: AnswerLabelId, name: String) -> Self {
+    pub fn from_raw_parts(id: AnswerLabelId, name: NonEmptyString) -> Self {
         Self { id, name }
+    }
+
+    pub fn renamed(self, name: NonEmptyString) -> Self {
+        Self { name, ..self }
     }
 }
 

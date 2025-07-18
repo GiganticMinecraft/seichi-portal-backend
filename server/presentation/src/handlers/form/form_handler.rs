@@ -12,16 +12,14 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{dto::FormDto, forms::form::FormUseCase};
 
-use crate::handlers::error_handler::handle_json_rejection;
-use crate::{
-    handlers::error_handler::handle_error,
-    schemas::form::{
-        form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
-        form_response_schemas::{
-            FormListSchema, FormMetaSchema, FormSchema, FormSettingsSchema, ResponsePeriodSchema,
-        },
-    },
+use crate::handlers::error_handler::handle_error;
+use crate::schemas::form::{
+    form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
+    form_response_schemas::{FormMetaSchema, FormSchema, FormSettingsSchema},
 };
+use axum::extract::rejection::PathRejection;
+use domain::form::models::FormDescription;
+use errors::ErrorExtra;
 
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
@@ -35,32 +33,39 @@ pub async fn create_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Json(form) = json.map_err(handle_json_rejection)?;
+    let Json(form) = json.map_err_to_error().map_err(handle_error)?;
 
-    Ok(
-        match form_use_case
-            .create_form(form.title, form.description, user)
-            .await
-        {
-            Ok(id) => (
-                StatusCode::CREATED,
-                [(
-                    header::LOCATION,
-                    HeaderValue::from_str(id.to_string().as_str()).unwrap(),
-                )],
-                Json(json!({ "id": id })),
-            )
-                .into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
+    let form_description = FormDescription::new(form.description);
+
+    let form = form_use_case
+        .create_form(form.title, form_description, &user)
+        .await
+        .map_err(handle_error)?;
+
+    Ok((
+        StatusCode::CREATED,
+        [(
+            header::LOCATION,
+            HeaderValue::from_str(form.id().to_owned().into_inner().to_string().as_str()).unwrap(),
+        )],
+        Json(json!(FormSchema {
+            id: form.id().to_owned(),
+            title: form.title().to_owned(),
+            description: form.description().to_owned(),
+            settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+            questions: vec![],
+            labels: vec![],
+        })),
     )
+        .into_response())
 }
 
 pub async fn form_list_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -68,56 +73,32 @@ pub async fn form_list_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case
+    let forms = form_use_case
         .form_list(&user, offset_and_limit.offset, offset_and_limit.limit)
         .await
-    {
-        Ok(forms) => {
-            let response_schema = forms
-                .into_iter()
-                .map(|(form, labels)| FormListSchema {
-                    id: form.id().to_owned(),
-                    title: form.title().to_owned().into_inner().into_inner(),
-                    description: form
-                        .description()
-                        .to_owned()
-                        .into_inner()
-                        .map(|desc| desc.to_string()),
-                    response_period: ResponsePeriodSchema {
-                        start_at: form
-                            .settings()
-                            .answer_settings()
-                            .response_period()
-                            .start_at()
-                            .map(|start_at| start_at.to_owned()),
-                        end_at: form
-                            .settings()
-                            .answer_settings()
-                            .response_period()
-                            .end_at()
-                            .map(|end_at| end_at.to_owned()),
-                    },
-                    answer_visibility: form
-                        .settings()
-                        .answer_settings()
-                        .visibility()
-                        .to_owned()
-                        .into(),
-                    labels,
-                })
-                .collect_vec();
+        .map_err(handle_error)?;
 
-            (StatusCode::OK, Json(response_schema)).into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+    let response_schema = forms
+        .into_iter()
+        .map(|(form, questions, labels)| FormSchema {
+            id: form.id().to_owned(),
+            title: form.title().to_owned(),
+            description: form.description().to_owned(),
+            settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+            questions,
+            labels,
+        })
+        .collect_vec();
+
+    Ok((StatusCode::OK, Json(response_schema)).into_response())
 }
 
 pub async fn get_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
-) -> impl IntoResponse {
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -125,33 +106,35 @@ pub async fn get_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case.get_form(&user, form_id).await {
-        Ok(FormDto {
-            form,
-            questions,
-            labels,
-        }) => {
-            let response = FormSchema {
-                id: form.id().to_owned(),
-                title: form.title().to_owned(),
-                description: form.description().to_owned(),
-                settings: FormSettingsSchema::from_settings_ref(form.settings()),
-                metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-                questions,
-                labels,
-            };
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-            (StatusCode::OK, Json(json!(response))).into_response()
-        }
-        Err(err) => handle_error(err).into_response(),
-    }
+    let FormDto {
+        form,
+        questions,
+        labels,
+    } = form_use_case
+        .get_form(&user, form_id)
+        .await
+        .map_err(handle_error)?;
+
+    let response = FormSchema {
+        id: form.id().to_owned(),
+        title: form.title().to_owned(),
+        description: form.description().to_owned(),
+        settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+        questions,
+        labels,
+    };
+
+    Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
 pub async fn delete_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
-) -> impl IntoResponse {
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -159,16 +142,20 @@ pub async fn delete_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    match form_use_case.delete_form(&user, form_id).await {
-        Ok(form_id) => (StatusCode::OK, Json(json!({ "id": form_id }))).into_response(),
-        Err(err) => handle_error(err).into_response(),
-    }
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+
+    form_use_case
+        .delete_form(&user, form_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 pub async fn update_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-    Path(form_id): Path<FormId>,
+    path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_use_case = FormUseCase {
@@ -178,25 +165,59 @@ pub async fn update_form_handler(
         form_label_repository: repository.form_label_repository(),
     };
 
-    let Json(targets) = json.map_err(handle_json_rejection)?;
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(targets) = json.map_err_to_error().map_err(handle_error)?;
 
-    Ok(
-        match form_use_case
-            .update_form(
-                &user,
-                form_id,
-                targets.title,
-                targets.description,
-                targets.response_period,
-                targets.webhook,
-                targets.default_answer_title,
-                targets.visibility,
-                targets.answer_visibility,
+    let title = targets.title;
+    let description = targets.description.map(FormDescription::new);
+    let (response_period, webhook_url, default_answer_title, visibility, answer_visibility) =
+        if let Some(settings) = &targets.settings {
+            (
+                settings
+                    .answer_settings
+                    .as_ref()
+                    .and_then(|answer_settings| answer_settings.response_period.to_owned()),
+                settings.webhook_url.to_owned().and_then(|url| url.0),
+                settings
+                    .answer_settings
+                    .as_ref()
+                    .and_then(|answer_settings| answer_settings.default_answer_title.to_owned()),
+                settings.visibility,
+                settings
+                    .answer_settings
+                    .as_ref()
+                    .and_then(|answer_settings| answer_settings.visibility.to_owned()),
             )
-            .await
-        {
-            Ok(form) => (StatusCode::OK, Json(form)).into_response(),
-            Err(err) => handle_error(err).into_response(),
-        },
+        } else {
+            (None, None, None, None, None)
+        };
+
+    let (updated_form, questions, labels) = form_use_case
+        .update_form(
+            &user,
+            form_id,
+            title,
+            description,
+            response_period,
+            webhook_url,
+            default_answer_title,
+            visibility,
+            answer_visibility,
+        )
+        .await
+        .map_err(handle_error)?;
+
+    Ok((
+        StatusCode::OK,
+        Json(FormSchema {
+            id: updated_form.id().to_owned(),
+            title: updated_form.title().to_owned(),
+            description: updated_form.description().to_owned(),
+            settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
+            metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
+            questions,
+            labels,
+        }),
     )
+        .into_response())
 }

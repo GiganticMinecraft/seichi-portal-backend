@@ -117,7 +117,7 @@ impl UserDatabase for ConnectionPool {
         &self,
         xbox_token: String,
         user: &User,
-        expires: i32,
+        expires: u32,
     ) -> Result<String, InfraError> {
         let now = Utc::now().timestamp_millis();
         let session_id = digest(format!("{xbox_token}{now}"));

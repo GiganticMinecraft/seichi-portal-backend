@@ -18,13 +18,16 @@ use crate::{
 #[async_trait]
 impl FormAnswerLabelDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn create_label_for_answers(&self, label_name: String) -> Result<(), InfraError> {
-        let params = [label_name.to_owned().into()];
+    async fn create_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError> {
+        let params = [
+            label.id().into_inner().to_string().into(),
+            label.name().to_owned().into_inner().into(),
+        ];
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 execute_and_values(
-                    "INSERT INTO label_for_form_answers (name) VALUES (?)",
+                    "INSERT INTO label_for_form_answers (id, name) VALUES (?, ?)",
                     params,
                     txn,
                 )
@@ -70,7 +73,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 let label_rs = query_all_and_values(
                     "SELECT id, name FROM label_for_form_answers WHERE id = ?",
-                    [label_id.into()],
+                    [label_id.to_string().into()],
                     txn,
                 )
                 .await?;
@@ -169,7 +172,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             Box::pin(async move {
                 execute_and_values(
                     "DELETE FROM label_for_form_answers WHERE id = ?",
-                    [label_id.to_string().into()],
+                    [label_id.into_inner().to_string().into()],
                     txn,
                 )
                 .await?;
@@ -184,7 +187,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError> {
         let params = [
-            label.name().to_owned().into(),
+            label.name().to_owned().into_inner().into(),
             label.id().to_string().into(),
         ];
 

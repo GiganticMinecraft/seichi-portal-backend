@@ -98,7 +98,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         &self,
         xbox_token: String,
         user: &User,
-        expires: i32,
+        expires: u32,
     ) -> Result<String, Error> {
         self.client
             .user()

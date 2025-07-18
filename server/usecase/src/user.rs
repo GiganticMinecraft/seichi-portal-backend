@@ -12,13 +12,13 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 }
 
 impl<R: UserRepository> UserUseCase<'_, R> {
-    pub async fn find_by(&self, actor: &User, uuid: Uuid) -> Result<Option<User>, Error> {
+    pub async fn find_by(&self, actor: &User, uuid: Uuid) -> Result<User, Error> {
         self.repository
             .find_by(uuid)
             .await?
             .map(|guard| guard.try_into_read(actor))
-            .transpose()
-            .map_err(Into::into)
+            .transpose()?
+            .ok_or(Error::from(UseCaseError::UserNotFound))
     }
 
     pub async fn upsert_user(&self, actor: &User, upsert_target: User) -> Result<(), Error> {
@@ -27,7 +27,12 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await
     }
 
-    pub async fn patch_user_role(&self, actor: &User, uuid: Uuid, role: Role) -> Result<(), Error> {
+    pub async fn patch_user_role(
+        &self,
+        actor: &User,
+        uuid: Uuid,
+        role: Role,
+    ) -> Result<User, Error> {
         let current_user_guard = self
             .repository
             .find_by(uuid)
@@ -42,7 +47,15 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
         self.repository
             .patch_user_role(actor, new_role_user.into())
-            .await
+            .await?;
+
+        let updated_user_guard = self
+            .repository
+            .find_by(uuid)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        updated_user_guard.try_into_read(actor).map_err(Into::into)
     }
 
     pub async fn fetch_all_users(&self, actor: &User) -> Result<Vec<User>, Error> {
@@ -64,7 +77,12 @@ impl<R: UserRepository> UserUseCase<'_, R> {
                 self.repository.upsert_user(&user, guard).await?;
                 // NOTE: リクエスト時点では token しかわからないので
                 //  token で検索したユーザーが操作者であるとする
-                self.find_by(&user, user.id).await
+                self.repository
+                    .find_by(user.id)
+                    .await?
+                    .map(|guard| guard.try_into_read(&user))
+                    .transpose()
+                    .map_err(Into::into)
             }
             None => Ok(None),
         }
@@ -74,7 +92,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         xbox_token: String,
         user: &User,
-        expires: i32,
+        expires: u32,
     ) -> Result<String, Error> {
         self.repository
             .start_user_session(xbox_token, user, expires)
@@ -85,12 +103,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         session_id: String,
     ) -> Result<Option<User>, Error> {
-        let user = self.repository.fetch_user_by_session_id(session_id).await?;
-
-        match user {
-            Some(user) => self.find_by(&user, user.id).await,
-            None => Ok(None),
-        }
+        self.repository.fetch_user_by_session_id(session_id).await
     }
 
     pub async fn end_user_session(&self, session_id: String) -> Result<(), Error> {

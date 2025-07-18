@@ -38,6 +38,10 @@ impl Comment {
         }
     }
 
+    pub fn with_updated_content(self, content: CommentContent) -> Self {
+        Self { content, ..self }
+    }
+
     pub fn from_raw_parts(
         answer_id: AnswerId,
         comment_id: CommentId,

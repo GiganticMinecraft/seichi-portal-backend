@@ -1,6 +1,6 @@
-use axum::extract::rejection::JsonRejection;
 use axum::response::Response;
 use axum::{Json, http::StatusCode, response::IntoResponse};
+use errors::presentation::PresentationError;
 use errors::{
     Error, domain::DomainError, infra::InfraError, usecase::UseCaseError,
     validation::ValidationError,
@@ -135,6 +135,14 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             Json(json!({
                 "errorCode": "USER_NOT_FOUND",
                 "reason": "User not found"
+            })),
+        )
+            .into_response(),
+        UseCaseError::DiscordNotLinked => (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "errorCode": "DISCORD_NOT_LINKED",
+                "reason": "Discord is not linked"
             })),
         )
             .into_response(),
@@ -314,7 +322,7 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
     }
 }
 
-pub fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
+fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
     match err {
         ValidationError::EmptyValue => (
             StatusCode::BAD_REQUEST,
@@ -335,22 +343,49 @@ pub fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
     }
 }
 
-pub fn handle_error(err: Error) -> impl IntoResponse {
+fn handle_presentation_error(err: PresentationError) -> impl IntoResponse {
+    match err {
+        PresentationError::JsonRejection { cause } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "errorCode": "UNPROCESSABLE_CONTENT",
+                "reason": cause
+            })),
+        )
+            .into_response(),
+        PresentationError::PathRejection { cause } => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "BAD_REQUEST",
+                "reason": cause
+            })),
+        )
+            .into_response(),
+        PresentationError::QueryRejection { cause } => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "errorCode": "BAD_REQUEST",
+                "reason": cause
+            })),
+        )
+            .into_response(),
+        PresentationError::TypedHeaderRejection { cause } => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "errorCode": "UNAUTHORIZED",
+                "reason": cause
+            })),
+        )
+            .into_response(),
+    }
+}
+
+pub fn handle_error(err: Error) -> Response {
     match err {
         Error::Domain { source } => handle_domain_error(source).into_response(),
         Error::UseCase { source } => handle_usecase_error(source).into_response(),
         Error::Infra { source } => handle_infra_error(source).into_response(),
         Error::Validation { source } => handle_validation_error(source).into_response(),
+        Error::Presentation { source } => handle_presentation_error(source).into_response(),
     }
-}
-
-pub fn handle_json_rejection(json_rejection: JsonRejection) -> Response {
-    (
-        StatusCode::UNPROCESSABLE_ENTITY,
-        Json(json!({
-            "errorCode": "UNPROCESSABLE_CONTENT",
-            "reason": json_rejection.body_text()
-        })),
-    )
-        .into_response()
 }

@@ -1,4 +1,5 @@
 use common::config::FRONTEND;
+use domain::form::models::FormId;
 use domain::notification::discord_dm_notificator::{
     DiscordDMNotificationType, DiscordDMSendContents,
 };
@@ -57,39 +58,32 @@ impl<
     pub async fn post_message<API: NotificationAPI>(
         &self,
         actor: &User,
+        form_id: FormId,
         message_body: String,
         answer_id: AnswerId,
         notification_api: &API,
     ) -> Result<(), Error> {
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
+
+        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
         let form_answer = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read_with_context_fn(actor, move |entry| {
-                let form_id = entry.form_id().to_owned();
-
-                async move {
-                    let guard = self
-                        .form_repository
-                        .get(form_id)
-                        .await?
-                        .ok_or(FormNotFound)?;
-
-                    let form = guard.try_read(actor)?;
-                    let form_settings = form.settings();
-
-                    Ok(AnswerEntryAuthorizationContext {
-                        form_visibility: form_settings.visibility().to_owned(),
-                        response_period: form_settings
-                            .answer_settings()
-                            .response_period()
-                            .to_owned(),
-                        answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                    })
-                }
-            })
-            .await?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let form_id = form_answer.form_id().to_owned();
         let answer_id = form_answer.id().to_owned();
@@ -174,37 +168,29 @@ impl<
     pub async fn get_messages(
         &self,
         actor: &User,
+        form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<Message>, Error> {
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
+        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
         let answers = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read_with_context_fn(actor, move |entry| {
-                let form_id = entry.form_id().to_owned();
-
-                async move {
-                    let guard = self
-                        .form_repository
-                        .get(form_id)
-                        .await?
-                        .ok_or(FormNotFound)?;
-
-                    let form = guard.try_read(actor)?;
-                    let form_settings = form.settings();
-
-                    Ok(AnswerEntryAuthorizationContext {
-                        form_visibility: form_settings.visibility().to_owned(),
-                        response_period: form_settings
-                            .answer_settings()
-                            .response_period()
-                            .to_owned(),
-                        answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                    })
-                }
-            })
-            .await?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answers,
@@ -222,9 +208,10 @@ impl<
     pub async fn update_message_body(
         &self,
         actor: &User,
+        form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,
-        body: String,
+        body: Option<String>,
     ) -> Result<(), Error> {
         let message = self
             .message_repository
@@ -232,35 +219,26 @@ impl<
             .await?
             .ok_or(MessageNotFound)?;
 
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
+
+        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read_with_context_fn(actor, move |entry| {
-                let form_id = entry.form_id().to_owned();
-
-                async move {
-                    let guard = self
-                        .form_repository
-                        .get(form_id)
-                        .await?
-                        .ok_or(FormNotFound)?;
-
-                    let form = guard.try_read(actor)?;
-                    let form_settings = form.settings();
-
-                    Ok(AnswerEntryAuthorizationContext {
-                        form_visibility: form_settings.visibility().to_owned(),
-                        response_period: form_settings
-                            .answer_settings()
-                            .response_period()
-                            .to_owned(),
-                        answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                    })
-                }
-            })
-            .await?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,
@@ -274,14 +252,19 @@ impl<
             return Err(Error::from(MessageNotFound));
         }
 
-        self.message_repository
-            .update_message_body(actor, &message_context, message.into_update(), body)
-            .await
+        if let Some(body) = body {
+            self.message_repository
+                .update_message_body(actor, &message_context, message.into_update(), body)
+                .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn delete_message(
         &self,
         actor: &User,
+        form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,
     ) -> Result<(), Error> {
@@ -291,35 +274,26 @@ impl<
             .await?
             .ok_or(MessageNotFound)?;
 
+        let form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+        let form = form_guard.try_read(actor)?;
+        let form_settings = form.settings();
+
+        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read_with_context_fn(actor, move |entry| {
-                let form_id = entry.form_id().to_owned();
-
-                async move {
-                    let guard = self
-                        .form_repository
-                        .get(form_id)
-                        .await?
-                        .ok_or(FormNotFound)?;
-
-                    let form = guard.try_read(actor)?;
-                    let form_settings = form.settings();
-
-                    Ok(AnswerEntryAuthorizationContext {
-                        form_visibility: form_settings.visibility().to_owned(),
-                        response_period: form_settings
-                            .answer_settings()
-                            .response_period()
-                            .to_owned(),
-                        answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                    })
-                }
-            })
-            .await?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,

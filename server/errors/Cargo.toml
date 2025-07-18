@@ -17,3 +17,5 @@ serde_json = { workspace = true }
 serenity = { workspace = true }
 lapin = { workspace = true }
 tokio = { workspace = true }
+axum = { workspace = true }
+axum-extra = { workspace = true }
