@@ -37,8 +37,8 @@ pub async fn create_form_handler(
 
     let form_description = FormDescription::new(form.description);
 
-    let id = form_use_case
-        .create_form(form.title, form_description, user)
+    let form = form_use_case
+        .create_form(form.title, form_description, &user)
         .await
         .map_err(handle_error)?;
 
@@ -46,9 +46,17 @@ pub async fn create_form_handler(
         StatusCode::CREATED,
         [(
             header::LOCATION,
-            HeaderValue::from_str(id.to_string().as_str()).unwrap(),
+            HeaderValue::from_str(form.id().to_owned().into_inner().to_string().as_str()).unwrap(),
         )],
-        Json(json!({ "id": id })),
+        Json(json!(FormSchema {
+            id: form.id().to_owned(),
+            title: form.title().to_owned(),
+            description: form.description().to_owned(),
+            settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+            questions: vec![],
+            labels: vec![],
+        })),
     )
         .into_response())
 }

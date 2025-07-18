@@ -41,14 +41,20 @@ impl<
         &self,
         title: FormTitle,
         description: FormDescription,
-        user: User,
-    ) -> Result<FormId, Error> {
+        user: &User,
+    ) -> Result<Form, Error> {
         let form = Form::new(title, description);
         let form_id = form.id().to_owned();
 
-        self.form_repository.create(&user, form.into()).await?;
+        self.form_repository.create(user, form.into()).await?;
 
-        Ok(form_id)
+        let created_form_guard = self
+            .form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
+
+        created_form_guard.try_into_read(user).map_err(Into::into)
     }
 
     /// `actor` が参照可能なフォームのリストを取得する
