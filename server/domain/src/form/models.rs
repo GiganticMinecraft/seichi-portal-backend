@@ -273,7 +273,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///
     /// let form = Form::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new("")
+    ///     FormDescription::new(String::from(""))
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -318,7 +318,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// let private_form = Form::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(""),
+    ///     FormDescription::new(String::from("")),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
     ///         ResponsePeriod::try_new(None, None).unwrap(),
@@ -332,7 +332,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///  let public_form = Form::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(""),
+    ///     FormDescription::new(String::from("")),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
     ///         ResponsePeriod::try_new(None, None).unwrap(),
@@ -381,7 +381,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///
     /// let form = Form::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new("")
+    ///     FormDescription::new(String::from(""))
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -420,7 +420,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///
     /// let form = Form::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new("")
+    ///     FormDescription::new(String::from(""))
     /// );
     ///
     /// assert!(form.can_delete(&administrator));
