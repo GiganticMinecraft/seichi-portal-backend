@@ -1,4 +1,5 @@
 use axum::extract::rejection::{JsonRejection, PathRejection};
+use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use axum::{
     Extension,
@@ -6,7 +7,6 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-
 use domain::{
     form::models::{FormId, FormLabelId, FormLabelName},
     repository::Repositories,
@@ -33,12 +33,28 @@ pub async fn create_label_for_forms(
 
     let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
-    form_label_use_case
+    let created_label = form_label_use_case
         .create_label_for_forms(&user, FormLabelName::new(label.name))
         .await
         .map_err(handle_error)?;
 
-    Ok(StatusCode::CREATED.into_response())
+    Ok((
+        StatusCode::CREATED,
+        [(
+            header::LOCATION,
+            HeaderValue::from_str(
+                created_label
+                    .id()
+                    .to_owned()
+                    .into_inner()
+                    .to_string()
+                    .as_str(),
+            )
+            .unwrap(),
+        )],
+        Json(created_label),
+    )
+        .into_response())
 }
 
 pub async fn get_labels_for_forms(

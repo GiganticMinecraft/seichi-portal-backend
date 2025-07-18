@@ -14,10 +14,20 @@ impl<R1: FormLabelRepository> FormLabelUseCase<'_, R1> {
         &self,
         actor: &User,
         label_name: FormLabelName,
-    ) -> Result<(), Error> {
+    ) -> Result<FormLabel, Error> {
+        let label = FormLabel::new(label_name);
+        let label_id = label.id().to_owned();
+
         self.form_label_repository
-            .create_label_for_forms(FormLabel::new(label_name).into(), actor)
-            .await
+            .create_label_for_forms(label.into(), actor)
+            .await?;
+
+        self.form_label_repository
+            .fetch_label(label_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::LabelNotFound))?
+            .try_into_read(actor)
+            .map_err(Into::into)
     }
 
     pub async fn get_labels_for_forms(&self, actor: &User) -> Result<Vec<FormLabel>, Error> {
