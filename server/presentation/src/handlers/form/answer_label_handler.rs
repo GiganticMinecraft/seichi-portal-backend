@@ -1,4 +1,5 @@
 use axum::extract::rejection::PathRejection;
+use axum::http::{HeaderValue, header};
 use axum::{
     Extension, Json,
     extract::{Path, State, rejection::JsonRejection},
@@ -31,12 +32,20 @@ pub async fn create_label_for_answers(
 
     let Json(label) = json.map_err_to_error().map_err(handle_error)?;
 
-    answer_label_use_case
+    let label = answer_label_use_case
         .create_label_for_answers(&user, label.name)
         .await
         .map_err(handle_error)?;
 
-    Ok(StatusCode::CREATED.into_response())
+    Ok((
+        StatusCode::CREATED,
+        [(
+            header::LOCATION,
+            HeaderValue::from_str(label.id().to_owned().into_inner().to_string().as_str()).unwrap(),
+        )],
+        Json(label),
+    )
+        .into_response())
 }
 
 pub async fn get_labels_for_answers(

@@ -15,12 +15,20 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
         &self,
         actor: &User,
         label_name: NonEmptyString,
-    ) -> Result<(), Error> {
+    ) -> Result<AnswerLabel, Error> {
         let answer_label = AnswerLabel::new(label_name);
+        let label_id = answer_label.id().to_owned();
 
         self.answer_label_repository
             .create_label_for_answers(actor, answer_label.into())
-            .await
+            .await?;
+
+        self.answer_label_repository
+            .get_label_for_answers(label_id)
+            .await?
+            .ok_or(Error::from(LabelNotFound))?
+            .try_into_read(actor)
+            .map_err(Into::into)
     }
 
     pub async fn get_labels_for_answers(&self, actor: &User) -> Result<Vec<AnswerLabel>, Error> {
