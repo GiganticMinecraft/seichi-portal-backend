@@ -141,7 +141,7 @@ pub async fn delete_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok((StatusCode::OK, Json(json!({ "id": () }))).into_response())
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 pub async fn update_form_handler(
