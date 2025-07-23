@@ -28,6 +28,23 @@ jobs:
   lint-and-test:
     needs: [ rustfmt ]
     name: Lint and test server
+    env:
+      MYSQL_DATABASE: "seichi_portal"
+      MYSQL_USER: "user"
+      MYSQL_PASSWORD: "password"
+      MYSQL_HOST: "localhost"
+      MYSQL_PORT: "3306"
+      HTTP_PORT: "9000"
+      FRONTEND_URL: "http://localhost:3000"
+      ENV_NAME: "local"
+      REDIS_HOST: "localhost"
+      REDIS_PORT: "6379"
+      MEILISEARCH_HOST: "http://localhost:7700"
+      RABBITMQ_USER: "user"
+      RABBITMQ_PASSWORD: "password"
+      RABBITMQ_HOST: "localhost"
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_ROUTING_KEY: "seichi_portal"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +92,7 @@ jobs:
         run: cargo test --all-features
         working-directory: ./server
 
-      - name: API test
+      - name: Docker compose up
         run: docker compose up -d
 
       - name: Run seichi-portal-backend
@@ -86,7 +103,7 @@ jobs:
         uses: schemathesis/action@v2
         with:
           # TODO: 実装している API のバージョンを取得できるようにして、自動で埋め込みたい
-          schema: https://giganticminecraft.github.io/seichi-portal-api-schema/v0.0.1/openapi.yaml
+          schema: "https://giganticminecraft.github.io/seichi-portal-api-schema/v0.0.1/openapi.yaml"
 
       - name: Clean up
         if: always()
