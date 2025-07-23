@@ -99,11 +99,14 @@ jobs:
         run: ./entrypoint &
         working-directory: ./server/target/debug
 
+      # TODO: 実装している API のバージョンを取得できるようにして、自動で埋め込みたい
+      - name: Save openapi schema
+        run: curl https://giganticminecraft.github.io/seichi-portal-api-schema/v0.0.1/openapi.yaml -O
+
       - name: Run API test
         uses: schemathesis/action@v2
         with:
-          # TODO: 実装している API のバージョンを取得できるようにして、自動で埋め込みたい
-          schema: "https://giganticminecraft.github.io/seichi-portal-api-schema/v0.0.1/openapi.yaml"
+          schema: "./openapi.yaml"
 
       - name: Clean up
         if: always()
