@@ -107,6 +107,7 @@ jobs:
         uses: schemathesis/action@v2
         with:
           schema: "./openapi.yaml"
+          base-url: "http://localhost:9000"
 
       - name: Clean up
         if: always()
