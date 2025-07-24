@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct Discord {
-    pub bot_token: String,
+    pub bot_token: Option<String>,
 }
 
 pub static DISCORD_BOT: LazyLock<Discord> =

@@ -1,9 +1,8 @@
+use crate::outgoing::config::{DISCORD_BOT, Discord};
 use serenity::{Client, all::GatewayIntents, client::ClientBuilder};
 
-use crate::outgoing::config::{DISCORD_BOT, Discord};
-
 pub struct ConnectionPool {
-    pub pool: Client,
+    pub pool: Option<Client>,
 }
 
 impl ConnectionPool {
@@ -12,10 +11,15 @@ impl ConnectionPool {
 
         let intents = GatewayIntents::DIRECT_MESSAGES;
 
-        let client = ClientBuilder::new(bot_token, intents)
-            .await
-            .expect("Discord client creation failed.");
-
-        Self { pool: client }
+        match bot_token.to_owned() {
+            Some(token) => Self {
+                pool: Some(
+                    ClientBuilder::new(token, intents)
+                        .await
+                        .expect("Discord client creation failed."),
+                ),
+            },
+            None => Self { pool: None },
+        }
     }
 }

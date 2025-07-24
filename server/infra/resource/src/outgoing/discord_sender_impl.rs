@@ -25,17 +25,19 @@ impl DiscordSender for ConnectionPool {
                 .expect("Failed to parse DiscordUserId into u64"),
         );
 
-        let http = &self.pool.http;
+        if let Some(pool) = &self.pool {
+            let http = &pool.http;
 
-        let dm_channel = user_id
-            .create_dm_channel(http)
-            .await
-            .map_err(Into::<InfraError>::into)?;
+            let dm_channel = user_id
+                .create_dm_channel(http)
+                .await
+                .map_err(Into::<InfraError>::into)?;
 
-        dm_channel
-            .say(&http, message)
-            .await
-            .map_err(Into::<InfraError>::into)?;
+            dm_channel
+                .say(&http, message)
+                .await
+                .map_err(Into::<InfraError>::into)?;
+        }
 
         Ok(())
     }
@@ -45,8 +47,8 @@ impl DiscordSender for ConnectionPool {
         webhook_url: WebhookUrl,
         message: ExecuteWebhook,
     ) -> Result<(), Error> {
-        if let Some(webhook_url) = webhook_url.into_inner() {
-            let http = &self.pool.http;
+        if let (Some(webhook_url), Some(pool)) = (webhook_url.into_inner(), &self.pool) {
+            let http = &pool.http;
 
             let webhook = serenity::model::webhook::Webhook::from_url(
                 http,
