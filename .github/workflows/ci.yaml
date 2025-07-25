@@ -93,7 +93,7 @@ jobs:
         working-directory: ./server
 
       - name: Docker compose up
-        run: docker compose up -d
+        run: docker compose up -d --wait
 
       - name: Wait for database to be ready
         run: |
