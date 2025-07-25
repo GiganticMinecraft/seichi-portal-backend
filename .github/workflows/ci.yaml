@@ -102,7 +102,7 @@ jobs:
           echo "Database is ready!"
 
       - name: Run seichi-portal-backend
-        run: ./target/debug/entrypoint > app.log 2>&1 &
+        run: ./entrypoint > app.log 2>&1 &
         working-directory: ./server/target/debug
 
       # TODO: 実装している API のバージョンを取得できるようにして、自動で埋め込みたい
@@ -119,7 +119,7 @@ jobs:
         if: always()
         run: |
           echo "---- Displaying application logs ----"
-          cat server/app.log
+          cat ./server/target/debug/app.log
           echo "------------------------------------"
 
       - name: Clean up
