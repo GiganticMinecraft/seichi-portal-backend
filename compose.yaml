@@ -3,6 +3,12 @@ services:
     image: mariadb:lts
     container_name: mariadb
     command: --log-bin --binlog-format=ROW --binlog_row_image=FULL
+    healthcheck:
+      test: [ "CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "user", "-ppassword" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     environment:
       - MYSQL_INITDB_SKIP_TZINFO=1
       - MARIADB_DATABASE=seichi_portal
