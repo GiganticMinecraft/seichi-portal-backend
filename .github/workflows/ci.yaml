@@ -102,7 +102,7 @@ jobs:
           echo "Database is ready!"
 
       - name: Run seichi-portal-backend
-        run: ./entrypoint &
+        run: ./target/debug/entrypoint > app.log 2>&1 &
         working-directory: ./server/target/debug
 
       # TODO: 実装している API のバージョンを取得できるようにして、自動で埋め込みたい
@@ -114,6 +114,13 @@ jobs:
         with:
           schema: "./openapi.yaml"
           base-url: "http://localhost:9000"
+
+      - name: Display backend logs
+        if: always()
+        run: |
+          echo "---- Displaying application logs ----"
+          cat server/app.log
+          echo "------------------------------------"
 
       - name: Clean up
         if: always()
