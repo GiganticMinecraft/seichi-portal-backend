@@ -92,8 +92,29 @@ jobs:
         run: cargo test --all-features
         working-directory: ./server
 
+      - name: Set up Docker image cache
+        id: cache-docker
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-images.tar
+          key: ${{ runner.os }}-docker-images-${{ hashFiles('compose.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-images-
+
+      - name: Load cached Docker images
+        if: steps.cache-docker.outputs.cache-hit == 'true'
+        run: |
+          echo "Loading Docker images from cache..."
+          docker load -i /tmp/docker-images.tar
+
       - name: Docker compose up
         run: docker compose up -d --wait
+
+      - name: Save Docker images to cache
+        if: always()
+        run: |
+          echo "Saving Docker images to cache..."
+          docker save -o /tmp/docker-images.tar $(docker compose config --images)
 
       - name: Wait for database to be ready
         run: |
