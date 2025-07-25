@@ -12,6 +12,7 @@ use axum::{
 };
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
+use futures::future::OptionFuture;
 use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
@@ -249,14 +250,23 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    let shared_manager = discord_connection.pool.shard_manager.clone();
+    let shared_manager = discord_connection
+        .pool
+        .as_ref()
+        .map(|pool| pool.shard_manager.clone());
     let messaging_conn = Arc::new(messaging_conn);
     let shutdown_notifier = Arc::new(Notify::new());
 
     initialize_search_engine(shared_repository.to_owned()).await?;
 
+    let discord_bot: OptionFuture<_> = discord_connection
+        .pool
+        .as_mut()
+        .map(|pool| pool.start())
+        .into();
+
     let (_discord, _axum, _syncer, _messaging, _auto_of_sync_watcher) = join!(
-        discord_connection.pool.start(),
+        discord_bot,
         axum::serve(listener, router)
             .with_graceful_shutdown(graceful_handler(
                 shared_manager,
@@ -285,7 +295,7 @@ async fn not_found_handler() -> impl IntoResponse {
 }
 
 async fn graceful_handler(
-    serenity_shared_manager: Arc<ShardManager>,
+    serenity_shared_manager: Option<Arc<ShardManager>>,
     messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
     search_engine_syncer_shutdown_notifier: Arc<Notify>,
 ) {
@@ -309,7 +319,9 @@ async fn graceful_handler(
     tokio::select! {
         _ = ctrl_c => {
             info!("Gracefully shutdown...");
-            serenity_shared_manager.shutdown_all().await;
+            if let Some(manager) = serenity_shared_manager {
+                manager.shutdown_all().await;
+            }
             messaging_connection.shutdown().await;
             search_engine_syncer_shutdown_notifier.notify_waiters();
         },
