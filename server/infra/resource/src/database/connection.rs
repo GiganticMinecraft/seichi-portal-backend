@@ -65,7 +65,7 @@ impl ConnectionPool {
         E: std::error::Error + Send,
     {
         self.rdb_pool
-            .transaction_with_config(callback, None, Some(AccessMode::ReadOnly))
+            .transaction_with_config(callback, None, None)
             .await
     }
 
