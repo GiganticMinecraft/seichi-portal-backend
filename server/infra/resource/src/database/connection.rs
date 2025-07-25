@@ -7,8 +7,8 @@ use redis::Client;
 use regex::Regex;
 use sea_orm::{
     AccessMode, ConnectionTrait, Database, DatabaseBackend, DatabaseConnection,
-    DatabaseTransaction, DbErr, ExecResult, QueryResult, Statement, TransactionError,
-    TransactionTrait, Value,
+    DatabaseTransaction, DbErr, ExecResult, IsolationLevel, QueryResult, Statement,
+    TransactionError, TransactionTrait, Value,
 };
 
 use crate::database::{
@@ -65,7 +65,11 @@ impl ConnectionPool {
         E: std::error::Error + Send,
     {
         self.rdb_pool
-            .transaction_with_config(callback, None, None)
+            .transaction_with_config(
+                callback,
+                Some(IsolationLevel::ReadCommitted),
+                Some(AccessMode::ReadOnly),
+            )
             .await
     }
 
