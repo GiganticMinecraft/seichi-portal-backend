@@ -28,6 +28,23 @@ jobs:
   lint-and-test:
     needs: [ rustfmt ]
     name: Lint and test server
+    env:
+      MYSQL_DATABASE: "seichi_portal"
+      MYSQL_USER: "user"
+      MYSQL_PASSWORD: "password"
+      MYSQL_HOST: "localhost"
+      MYSQL_PORT: "3306"
+      HTTP_PORT: "9000"
+      FRONTEND_URL: "http://localhost:3000"
+      ENV_NAME: "local"
+      REDIS_HOST: "localhost"
+      REDIS_PORT: "6379"
+      MEILISEARCH_HOST: "http://localhost:7700"
+      RABBITMQ_USER: "user"
+      RABBITMQ_PASSWORD: "password"
+      RABBITMQ_HOST: "localhost"
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_ROUTING_KEY: "seichi_portal"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -74,3 +91,58 @@ jobs:
       - name: Cargo test
         run: cargo test --all-features
         working-directory: ./server
+
+      - name: Set up Docker image cache
+        id: cache-docker
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-images.tar
+          key: ${{ runner.os }}-docker-images-${{ hashFiles('compose.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-images-
+
+      - name: Load cached Docker images
+        if: steps.cache-docker.outputs.cache-hit == 'true'
+        run: |
+          echo "Loading Docker images from cache..."
+          docker load -i /tmp/docker-images.tar
+
+      - name: Docker compose up
+        run: docker compose up -d --wait
+
+      - name: Save Docker images to cache
+        if: always()
+        run: |
+          echo "Saving Docker images to cache..."
+          docker save -o /tmp/docker-images.tar $(docker compose config --images)
+
+      - name: Wait for database to be ready
+        run: |
+          echo "Waiting for database to be ready..."
+          timeout 60s bash -c 'until nc -z $MYSQL_HOST $MYSQL_PORT; do sleep 1; done'
+          echo "Database is ready!"
+
+      - name: Run seichi-portal-backend
+        run: ./entrypoint > app.log 2>&1 &
+        working-directory: ./server/target/debug
+
+      # TODO: 実装している API のバージョンを取得できるようにして、自動で埋め込みたい
+      - name: Save openapi schema
+        run: curl https://giganticminecraft.github.io/seichi-portal-api-schema/v0.0.1/openapi.yaml -O
+
+      - name: Run API test
+        uses: schemathesis/action@v2
+        with:
+          schema: "./openapi.yaml"
+          base-url: "http://localhost:9000"
+
+      - name: Display backend logs
+        if: always()
+        run: |
+          echo "---- Displaying application logs ----"
+          cat ./server/target/debug/app.log
+          echo "------------------------------------"
+
+      - name: Clean up
+        if: always()
+        run: docker compose down
