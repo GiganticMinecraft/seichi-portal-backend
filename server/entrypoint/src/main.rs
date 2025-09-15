@@ -82,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
 
     let _guard = if ENV.name != "local" {
         let _guard = sentry::init((
-            "https://d1ea6a96248343c8a5dc9375d25363f0@sentry.onp.admin.seichi.click/7",
+            "http://481e89e767984164a62dfcb92c869db6@bugsink.seichi-minecraft/1",
             sentry::ClientOptions {
                 release: sentry::release_name!(),
                 traces_sample_rate: 1.0,
