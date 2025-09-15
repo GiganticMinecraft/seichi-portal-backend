@@ -312,6 +312,7 @@ async fn graceful_handler(
             serenity_shared_manager.shutdown_all().await;
             messaging_connection.shutdown().await;
             search_engine_syncer_shutdown_notifier.notify_waiters();
+            panic!("bug tracking test")
         },
         _ = terminate => {},
     }
