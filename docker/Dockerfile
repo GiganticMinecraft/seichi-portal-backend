@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.18
+# syntax=docker/dockerfile:1.19
 FROM ubuntu:22.04 as init
 
 COPY --link / /work/
