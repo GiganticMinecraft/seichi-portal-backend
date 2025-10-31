@@ -20,7 +20,7 @@ publish = false
 [workspace.dependencies]
 tokio = { version = "1.44.2", features = ["full"] }
 axum = "0.8.3"
-axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum-extra = { version = "0.12.0", features = ["typed-header"] }
 serde = { version = "1.0.219", features = ["derive"] }
 anyhow = "1.0.98"
 async-trait = "0.1.88"
