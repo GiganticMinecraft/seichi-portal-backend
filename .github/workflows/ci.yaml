@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: echo "RUST_VERSION=$(sed -n 's/channel = "\(.*\)\"/\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
           path: |
