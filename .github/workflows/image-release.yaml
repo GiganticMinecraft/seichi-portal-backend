@@ -35,7 +35,7 @@ jobs:
           command: build
           args: --manifest-path server/Cargo.toml --target ${{ matrix.cross-target }} --release
       - name: Upload artifact to collect in next job
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.cross-target }}
           path: server/target/${{ matrix.cross-target }}/release/entrypoint
@@ -49,11 +49,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: x86_64-unknown-linux-gnu
           path: docker/artifacts/x86_64-unknown-linux-gnu
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: aarch64-unknown-linux-gnu
           path: docker/artifacts/aarch64-unknown-linux-gnu
