@@ -17,7 +17,7 @@ tokio = { workspace = true }
 tower = "0.5.2"
 tower-http = { version = "0.6.2", features = ["cors"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3.19", features = ["std", "registry", "env-filter"] }
+tracing-subscriber = { version = "0.3.20", features = ["std", "registry", "env-filter"] }
 serde_json = { workspace = true }
 futures = { workspace = true }
 serenity = { workspace = true }
