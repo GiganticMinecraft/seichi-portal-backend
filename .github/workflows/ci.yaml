@@ -6,6 +6,9 @@ env:
   image_name: ghcr.io/giganticminecraft/seichi-poral-backend
   RUST_BACKTRACE: full
 
+permissions:
+  pull-requests: write
+
 jobs:
   rustfmt:
     name: rustfmt check
