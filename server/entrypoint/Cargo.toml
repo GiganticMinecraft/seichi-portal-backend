@@ -8,16 +8,16 @@ default-run = "entrypoint"
 anyhow = { workspace = true }
 axum = { workspace = true }
 common = { path = "../common" }
-hyper = { version = "1.6.0", features = ["full"] }
+hyper = { version = "=1.6.0", features = ["full"] }
 presentation = { path = "../presentation" }
 resource = { path = "../infra/resource" }
 # default featureは推移的にnative-tls featureを有効しているため、native-tls (LinuxではOpenSSL) を連れてくる。これをオプトアウトするためにrustlsを使う。
-sentry = { version = "0.46.0", default-features = false, features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "tracing", "debug-images", "rustls", "tower", "tower-http"] }
+sentry = { version = "=0.46.0", default-features = false, features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "tracing", "debug-images", "rustls", "tower", "tower-http"] }
 tokio = { workspace = true }
-tower = "0.5.2"
-tower-http = { version = "0.6.2", features = ["cors"] }
+tower = "=0.5.2"
+tower-http = { version = "=0.6.2", features = ["cors"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3.19", features = ["std", "registry", "env-filter"] }
+tracing-subscriber = { version = "=0.3.19", features = ["std", "registry", "env-filter"] }
 serde_json = { workspace = true }
 futures = { workspace = true }
 serenity = { workspace = true }
@@ -28,6 +28,6 @@ usecase = { path = "../usecase" }
 development = ["cargo-husky"]
 
 [dev-dependencies.cargo-husky]
-version = "1"
+version = "=1.5.0"
 default-features = false # Disable features which are enabled by default
 features = ["user-hooks"]
