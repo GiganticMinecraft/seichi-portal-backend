@@ -44,5 +44,5 @@ regex = "1.11.1"
 redis = { version = "1.0.0", features = ["tokio-comp", "json"] }
 meilisearch-sdk = "0.32.0"
 serenity = "0.12.4"
-lapin = "3.0.0"
+lapin = "4.0.0"
 
