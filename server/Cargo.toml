@@ -18,31 +18,31 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-tokio = { version = "1.44.2", features = ["full"] }
-axum = "0.8.3"
-axum-extra = { version = "0.12.0", features = ["typed-header"] }
-serde = { version = "1.0.219", features = ["derive"] }
-anyhow = "1.0.98"
-async-trait = "0.1.88"
-sea-orm = { version = "1.1.10", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
-tracing = "0.1.41"
-mockall = "0.14.0"
-envy = "0.4.2"
-test-case = "3.3.1"
-strum = "0.27.1"
-strum_macros = "0.27.1"
-proptest = "1.6.0"
-proptest-derive = "0.8.0"
-serde_json = "1.0.140"
-itertools = "0.14.0"
-chrono = { version = "0.4.40" }
-futures = "0.3.31"
-uuid = { version = "1.16.0", features = ["v4", "v7"] }
-deriving_via = "2.1.0"
-reqwest = { version = "0.13.0", default-features = false, features = ["rustls", "json"] }
-regex = "1.11.1"
-redis = { version = "1.0.0", features = ["tokio-comp", "json"] }
-meilisearch-sdk = "0.32.0"
-serenity = "0.12.4"
-lapin = "3.0.0"
+tokio = { version = "=1.44.2", features = ["full"] }
+axum = "=0.8.3"
+axum-extra = { version = "=0.12.0", features = ["typed-header"] }
+serde = { version = "=1.0.219", features = ["derive"] }
+anyhow = "=1.0.98"
+async-trait = "=0.1.88"
+sea-orm = { version = "=1.1.10", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
+tracing = "=0.1.41"
+mockall = "=0.14.0"
+envy = "=0.4.2"
+test-case = "=3.3.1"
+strum = "=0.27.1"
+strum_macros = "=0.27.1"
+proptest = "=1.6.0"
+proptest-derive = "=0.8.0"
+serde_json = "=1.0.140"
+itertools = "=0.14.0"
+chrono = { version = "=0.4.40" }
+futures = "=0.3.31"
+uuid = { version = "=1.16.0", features = ["v4", "v7"] }
+deriving_via = "=2.1.0"
+reqwest = { version = "=0.13.0", default-features = false, features = ["rustls", "json"] }
+regex = "=1.11.1"
+redis = { version = "=1.0.0", features = ["tokio-comp", "json"] }
+meilisearch-sdk = "=0.32.0"
+serenity = "=0.12.4"
+lapin = "=3.0.0"
 
