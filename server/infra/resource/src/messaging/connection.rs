@@ -55,7 +55,7 @@ impl MessagingConnectionPool {
 
         channel
             .queue_declare(
-                routing_key,
+                routing_key.as_str().into(),
                 QueueDeclareOptions {
                     durable: true,
                     ..Default::default()
@@ -66,8 +66,8 @@ impl MessagingConnectionPool {
 
         let mut consumer = channel
             .basic_consume(
-                routing_key,
-                "",
+                routing_key.as_str().into(),
+                "".into(),
                 BasicConsumeOptions::default(),
                 FieldTable::default(),
             )
