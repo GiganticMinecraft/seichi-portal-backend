@@ -21,6 +21,17 @@ use crate::{
     schemas::form::form_request_schemas::{AnswerLabelUpdateSchema, ReplaceAnswerLabelSchema},
 };
 
+#[utoipa::path(
+    post,
+    path = "/labels/answers",
+    summary = "回答用ラベルを作成する",
+    request_body = AnswerLabelSchema,
+    responses(
+        (status = 201),
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn create_label_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -48,6 +59,16 @@ pub async fn create_label_for_answers(
         .into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/labels/answers",
+    summary = "回答用ラベルの一覧を取得する",
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn get_labels_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -63,6 +84,19 @@ pub async fn get_labels_for_answers(
     Ok((StatusCode::OK, Json(labels)).into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/labels/answers/{label_id}",
+    summary = "回答用ラベルを削除する",
+    params(
+        ("label_id" = String, Path, description = "Label ID"),
+    ),
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn delete_label_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -82,6 +116,20 @@ pub async fn delete_label_for_answers(
     Ok(StatusCode::OK.into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/labels/answers/{label_id}",
+    summary = "回答用ラベルを更新する",
+    params(
+        ("label_id" = String, Path, description = "Label ID"),
+    ),
+    request_body = AnswerLabelUpdateSchema,
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn edit_label_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -103,6 +151,19 @@ pub async fn edit_label_for_answers(
     Ok((StatusCode::OK, Json(updated_label)).into_response())
 }
 
+#[utoipa::path(
+    put,
+    path = "/forms/answers/{answer_id}/labels",
+    params(
+        ("answer_id" = String, Path, description = "Answer ID"),
+    ),
+    request_body = ReplaceAnswerLabelSchema,
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn replace_answer_labels(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

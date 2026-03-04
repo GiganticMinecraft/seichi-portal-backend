@@ -18,6 +18,19 @@ use crate::{
     schemas::form::form_request_schemas::FormQuestionPutSchema,
 };
 
+#[utoipa::path(
+    get,
+    path = "/forms/{id}/questions",
+    summary = "質問の一覧取得",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 200, body = Vec<super::super::super::schemas::form::form_response_schemas::QuestionResponseSchema>),
+    ),
+    security(("bearer" = [])),
+    tag = "Questions"
+)]
 pub async fn get_questions_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -36,6 +49,20 @@ pub async fn get_questions_handler(
     Ok((StatusCode::OK, Json(questions)).into_response())
 }
 
+#[utoipa::path(
+    put,
+    path = "/forms/{id}/questions",
+    summary = "質問の上書き",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    request_body = FormQuestionPutSchema,
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Questions"
+)]
 pub async fn put_question_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

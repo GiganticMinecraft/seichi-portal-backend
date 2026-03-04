@@ -10,13 +10,13 @@ use serde::Serialize;
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct ResponsePeriodSchema {
     pub start_at: Option<DateTime<Utc>>,
     pub end_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) enum AnswerVisibility {
     #[serde(rename = "PUBLIC")]
     Public,
@@ -37,8 +37,9 @@ impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVi
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct AnswerSettingsSchema {
+    #[schema(value_type = Option<String>)]
     pub default_answer_title: DefaultAnswerTitle,
     pub visibility: AnswerVisibility,
     pub response_period: ResponsePeriodSchema,
@@ -57,10 +58,11 @@ impl AnswerSettingsSchema {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct FormSettingsSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub webhook_url: Option<Option<String>>,
+    #[schema(value_type = String)]
     pub visibility: Visibility,
     pub answer_settings: AnswerSettingsSchema,
 }
@@ -80,7 +82,7 @@ impl FormSettingsSchema {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct FormMetaSchema {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -95,18 +97,40 @@ impl FormMetaSchema {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct FormSchema {
+    #[schema(value_type = String, format = "uuid")]
     pub id: FormId,
+    #[schema(value_type = String)]
     pub title: FormTitle,
+    #[schema(value_type = String)]
     pub description: FormDescription,
     pub settings: FormSettingsSchema,
     pub metadata: FormMetaSchema,
+    #[schema(value_type = Vec<QuestionResponseSchema>)]
     pub questions: Vec<Question>,
+    #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(utoipa::ToSchema)]
+pub struct QuestionResponseSchema {
+    pub id: Option<i32>,
+    pub form_id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub question_type: String,
+    pub choices: Vec<String>,
+    pub is_required: bool,
+}
+
+#[derive(utoipa::ToSchema)]
+pub struct FormLabelResponseSchema {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) enum Role {
     #[serde(rename = "STANDARD_USER")]
     StandardUser,
@@ -123,7 +147,7 @@ impl From<domain::user::models::Role> for Role {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct User {
     uuid: String,
     name: String,
@@ -140,7 +164,7 @@ impl From<domain::user::models::User> for User {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct AnswerContent {
     question_id: i32,
     answer: String,
@@ -155,7 +179,7 @@ impl AnswerContent {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct AnswerComment {
     content: String,
     timestamp: DateTime<Utc>,
@@ -172,7 +196,7 @@ impl From<domain::form::comment::models::Comment> for AnswerComment {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct AnswerLabels {
     id: Uuid,
     name: String,
@@ -187,7 +211,7 @@ impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub(crate) struct FormAnswer {
     id: Uuid,
     user: User,
@@ -226,7 +250,7 @@ impl FormAnswer {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct MessageContentSchema {
     pub id: Uuid,
     pub body: String,
@@ -234,7 +258,7 @@ pub struct MessageContentSchema {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct SenderSchema {
     pub uuid: String,
     pub name: String,

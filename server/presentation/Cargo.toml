@@ -20,3 +20,5 @@ chrono = { workspace = true }
 itertools = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
+utoipa = { workspace = true }
+utoipa-axum = { workspace = true }

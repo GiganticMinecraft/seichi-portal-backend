@@ -16,3 +16,4 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 common = { path = "../common", optional = true }
 errors = { path = "../errors" }
+utoipa = { workspace = true }

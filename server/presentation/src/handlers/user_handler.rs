@@ -25,6 +25,16 @@ use axum_extra::typed_header::TypedHeaderRejection;
 use errors::presentation::PresentationError;
 use errors::{Error, ErrorExtra};
 
+#[utoipa::path(
+    get,
+    path = "/users/me",
+    summary = "自分のユーザー情報の取得",
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn get_my_user_info(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -55,6 +65,19 @@ pub async fn get_my_user_info(
     ).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/users/{uuid}",
+    summary = "ユーザーの取得",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn get_user_info(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -88,6 +111,20 @@ pub async fn get_user_info(
     ).into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/users/{uuid}",
+    summary = "ユーザーの更新",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    request_body = UserUpdateSchema,
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn patch_user_role(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -111,6 +148,16 @@ pub async fn patch_user_role(
     Ok((StatusCode::OK, Json(user)).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/users",
+    summary = "ユーザーの一覧取得",
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn user_list(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -126,6 +173,17 @@ pub async fn user_list(
     Ok((StatusCode::OK, Json(json!(users))).into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/session",
+    summary = "セッションを作成する",
+    request_body = super::super::schemas::session::SessionCreateSchema,
+    responses(
+        (status = 201),
+        (status = 401),
+    ),
+    tag = "Session"
+)]
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
     header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
@@ -170,6 +228,15 @@ pub async fn start_session(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/session",
+    summary = "セッションを削除する",
+    responses(
+        (status = 204),
+    ),
+    tag = "Session"
+)]
 pub async fn end_session(
     State(repository): State<RealInfrastructureRepository>,
     typed_header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
@@ -201,6 +268,17 @@ pub async fn end_session(
         .into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/link-discord",
+    summary = "Discord アカウントとリンクする",
+    request_body = DiscordOAuthToken,
+    responses(
+        (status = 204),
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn link_discord(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -223,6 +301,16 @@ pub async fn link_discord(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/link-discord",
+    summary = "Discord アカウントとのリンクを解除する",
+    responses(
+        (status = 204),
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn unlink_discord(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

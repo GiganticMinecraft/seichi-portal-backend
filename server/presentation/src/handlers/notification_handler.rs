@@ -19,6 +19,19 @@ use serde_json::json;
 use usecase::notification::NotificationUseCase;
 use uuid::Uuid;
 
+#[utoipa::path(
+    get,
+    path = "/notifications/settings/{uuid}",
+    summary = "通知の設定を取得する",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 200, body = NotificationSettingsResponse),
+    ),
+    security(("bearer" = [])),
+    tag = "Notifications"
+)]
 pub async fn get_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -43,6 +56,16 @@ pub async fn get_notification_settings(
     Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/notifications/settings/me",
+    summary = "自身の通知設定の取得",
+    responses(
+        (status = 200, body = NotificationSettingsResponse),
+    ),
+    security(("bearer" = [])),
+    tag = "Notifications"
+)]
 pub async fn get_my_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -66,6 +89,17 @@ pub async fn get_my_notification_settings(
     Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/notifications/settings/me",
+    summary = "通知設定の更新",
+    request_body = NotificationSettingsUpdateSchema,
+    responses(
+        (status = 200),
+    ),
+    security(("bearer" = [])),
+    tag = "Notifications"
+)]
 pub async fn update_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

@@ -6,7 +6,46 @@ use common::test_utils::arbitrary_uuid_v7;
 use deriving_via::DerivingVia;
 #[cfg(feature = "arbitrary")]
 use proptest_derive::Arbitrary;
+use utoipa::PartialSchema;
 use uuid::Uuid;
+
+impl<T: 'static> utoipa::ToSchema for IntegerId<T> {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("IntegerId")
+    }
+}
+
+impl<T: 'static> PartialSchema for IntegerId<T> {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::Integer,
+            ))
+            .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
+                utoipa::openapi::KnownFormat::Int32,
+            )))
+            .into()
+    }
+}
+
+impl<T: 'static> utoipa::ToSchema for Id<T> {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("Id")
+    }
+}
+
+impl<T: 'static> PartialSchema for Id<T> {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
+                utoipa::openapi::KnownFormat::Uuid,
+            )))
+            .into()
+    }
+}
 
 #[derive(DerivingVia, Debug, PartialOrd, PartialEq)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]

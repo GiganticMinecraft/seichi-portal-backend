@@ -22,6 +22,20 @@ use crate::{
     schemas::search_schemas::{CrossSearchResult, SearchQuery},
 };
 
+#[utoipa::path(
+    get,
+    path = "/search",
+    summary = "横断検索を行う",
+    params(
+        ("query" = Option<String>, Query, description = "Search query"),
+    ),
+    responses(
+        (status = 200, body = CrossSearchResult),
+        (status = 400, body = super::super::schemas::error_response::ErrorResponse),
+    ),
+    security(("bearer" = [])),
+    tag = "Search"
+)]
 pub async fn cross_search(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

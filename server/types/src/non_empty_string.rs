@@ -5,6 +5,23 @@ use errors::validation::{ValidationError, ValidationError::EmptyValue};
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 
+impl utoipa::ToSchema for NonEmptyString {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("NonEmptyString")
+    }
+}
+
+impl utoipa::PartialSchema for NonEmptyString {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .min_length(Some(1))
+            .into()
+    }
+}
+
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct NonEmptyString(String);

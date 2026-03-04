@@ -21,6 +21,18 @@ use axum::extract::rejection::PathRejection;
 use domain::form::models::FormDescription;
 use errors::ErrorExtra;
 
+#[utoipa::path(
+    post,
+    path = "/forms",
+    summary = "フォームの作成",
+    request_body = FormCreateSchema,
+    responses(
+        (status = 201, body = FormSchema),
+        (status = 401, body = super::super::super::schemas::error_response::ErrorResponse),
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -61,6 +73,20 @@ pub async fn create_form_handler(
         .into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/forms",
+    summary = "フォームの一覧取得",
+    params(
+        ("offset" = Option<u32>, Query, description = "Offset for pagination"),
+        ("limit" = Option<u32>, Query, description = "Limit for pagination"),
+    ),
+    responses(
+        (status = 200, body = Vec<FormSchema>),
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn form_list_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -94,6 +120,20 @@ pub async fn form_list_handler(
     Ok((StatusCode::OK, Json(response_schema)).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/forms/{id}",
+    summary = "フォームの取得",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 200, body = FormSchema),
+        (status = 404, body = super::super::super::schemas::error_response::ErrorResponse),
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn get_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -130,6 +170,20 @@ pub async fn get_form_handler(
     Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/forms/{id}",
+    summary = "フォームの削除",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 204),
+        (status = 404, body = super::super::super::schemas::error_response::ErrorResponse),
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn delete_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -152,6 +206,21 @@ pub async fn delete_form_handler(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/forms/{id}",
+    summary = "フォームの更新",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    request_body = FormUpdateSchema,
+    responses(
+        (status = 200, body = FormSchema),
+        (status = 404, body = super::super::super::schemas::error_response::ErrorResponse),
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn update_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
