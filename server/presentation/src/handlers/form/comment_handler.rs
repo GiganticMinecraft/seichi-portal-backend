@@ -18,6 +18,7 @@ use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::CommentUpdateSchema;
 use crate::schemas::form::form_response_schemas::AnswerComment;
 use crate::{
@@ -33,7 +34,13 @@ use crate::{
         ("answer_id" = String, Path, description = "Answer ID"),
     ),
     responses(
-        (status = 200, body = Vec<AnswerComment>),
+        (status = 200, description = "The request has succeeded.", body = Vec<AnswerComment>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Comments"
@@ -74,7 +81,13 @@ pub async fn get_form_comment(
     ),
     request_body = CommentPostSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Comments"
@@ -119,7 +132,13 @@ pub async fn post_form_comment(
     ),
     request_body = CommentUpdateSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Comments"
@@ -163,7 +182,13 @@ pub async fn update_form_comment(
         ("comment_id" = String, Path, description = "Comment ID"),
     ),
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Comments"

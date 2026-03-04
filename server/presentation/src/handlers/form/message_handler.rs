@@ -15,6 +15,7 @@ use serde_json::json;
 use std::sync::Arc;
 use usecase::forms::message::MessageUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -52,7 +53,13 @@ impl<API: NotificationAPI + Send + Sync> RealInfrastructureRepositoryWithNotific
     ),
     request_body = PostedMessageSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Messages"
@@ -99,7 +106,13 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
     ),
     request_body = MessageUpdateSchema,
     responses(
-        (status = 204),
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Messages"
@@ -138,7 +151,13 @@ pub async fn update_message_handler(
         ("answer_id" = String, Path, description = "Answer ID"),
     ),
     responses(
-        (status = 200, body = Vec<MessageContentSchema>),
+        (status = 200, description = "The request has succeeded.", body = Vec<MessageContentSchema>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Messages"
@@ -190,7 +209,12 @@ pub async fn get_messages_handler(
         ("message_id" = String, Path, description = "Message ID"),
     ),
     responses(
-        (status = 204),
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Messages"

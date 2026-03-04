@@ -13,6 +13,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::question::QuestionUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::FormQuestionPutSchema,
@@ -26,7 +27,12 @@ use crate::{
         ("id" = String, Path, description = "Form ID"),
     ),
     responses(
-        (status = 200, body = Vec<super::super::super::schemas::form::form_response_schemas::QuestionResponseSchema>),
+        (status = 200, description = "The request has succeeded.", body = Vec<super::super::super::schemas::form::form_response_schemas::QuestionResponseSchema>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Questions"
@@ -58,7 +64,13 @@ pub async fn get_questions_handler(
     ),
     request_body = FormQuestionPutSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Questions"

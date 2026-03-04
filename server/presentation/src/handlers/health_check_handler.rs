@@ -4,7 +4,7 @@ use axum::{http::StatusCode, response::IntoResponse};
     get,
     path = "/health",
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
     ),
     tag = "Health"
 )]

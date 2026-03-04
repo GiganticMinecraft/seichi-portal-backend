@@ -15,6 +15,7 @@ use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::answer_label::AnswerLabelUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::AnswerLabelSchema;
 use crate::{
     handlers::error_handler::handle_error,
@@ -27,7 +28,12 @@ use crate::{
     summary = "回答用ラベルを作成する",
     request_body = AnswerLabelSchema,
     responses(
-        (status = 201),
+        (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -64,7 +70,11 @@ pub async fn create_label_for_answers(
     path = "/labels/answers",
     summary = "回答用ラベルの一覧を取得する",
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -92,7 +102,12 @@ pub async fn get_labels_for_answers(
         ("label_id" = String, Path, description = "Label ID"),
     ),
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -125,7 +140,13 @@ pub async fn delete_label_for_answers(
     ),
     request_body = AnswerLabelUpdateSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -159,7 +180,12 @@ pub async fn edit_label_for_answers(
     ),
     request_body = ReplaceAnswerLabelSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"

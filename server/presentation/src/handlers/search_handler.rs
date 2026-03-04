@@ -17,6 +17,7 @@ use serde_json::json;
 use tokio::sync::{Notify, mpsc::Receiver};
 use usecase::search::SearchUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::search_schemas::{CrossSearchResult, SearchQuery},
@@ -30,8 +31,11 @@ use crate::{
         ("query" = Option<String>, Query, description = "Search query"),
     ),
     responses(
-        (status = 200, body = CrossSearchResult),
-        (status = 400, body = super::super::schemas::error_response::ErrorResponse),
+        (status = 200, description = "The request has succeeded.", body = CrossSearchResult),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Search"

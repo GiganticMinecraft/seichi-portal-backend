@@ -13,6 +13,7 @@ use serde_json::json;
 use usecase::{dto::FormDto, forms::form::FormUseCase};
 
 use crate::handlers::error_handler::handle_error;
+use crate::schemas::error_responses::*;
 use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
     form_response_schemas::{FormMetaSchema, FormSchema, FormSettingsSchema},
@@ -27,8 +28,12 @@ use errors::ErrorExtra;
     summary = "フォームの作成",
     request_body = FormCreateSchema,
     responses(
-        (status = 201, body = FormSchema),
-        (status = 401, body = super::super::super::schemas::error_response::ErrorResponse),
+        (status = 201, description = "The request has succeeded and a new resource has been created as a result.", body = FormSchema),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Forms"
@@ -82,7 +87,11 @@ pub async fn create_form_handler(
         ("limit" = Option<u32>, Query, description = "Limit for pagination"),
     ),
     responses(
-        (status = 200, body = Vec<FormSchema>),
+        (status = 200, description = "The request has succeeded.", body = Vec<FormSchema>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Forms"
@@ -128,8 +137,12 @@ pub async fn form_list_handler(
         ("id" = String, Path, description = "Form ID"),
     ),
     responses(
-        (status = 200, body = FormSchema),
-        (status = 404, body = super::super::super::schemas::error_response::ErrorResponse),
+        (status = 200, description = "The request has succeeded.", body = FormSchema),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Forms"
@@ -178,8 +191,12 @@ pub async fn get_form_handler(
         ("id" = String, Path, description = "Form ID"),
     ),
     responses(
-        (status = 204),
-        (status = 404, body = super::super::super::schemas::error_response::ErrorResponse),
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Forms"
@@ -215,8 +232,13 @@ pub async fn delete_form_handler(
     ),
     request_body = FormUpdateSchema,
     responses(
-        (status = 200, body = FormSchema),
-        (status = 404, body = super::super::super::schemas::error_response::ErrorResponse),
+        (status = 200, description = "The request has succeeded.", body = FormSchema),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Forms"

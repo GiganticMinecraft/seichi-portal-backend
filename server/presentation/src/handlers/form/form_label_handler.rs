@@ -16,6 +16,7 @@ use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::form_label::FormLabelUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::FormLabelCreateSchema;
 use crate::{
     handlers::error_handler::handle_error,
@@ -28,7 +29,12 @@ use crate::{
     summary = "フォーム用ラベルを作成する",
     request_body = FormLabelCreateSchema,
     responses(
-        (status = 201),
+        (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -73,7 +79,11 @@ pub async fn create_label_for_forms(
     path = "/labels/forms",
     summary = "フォーム用ラベルの一覧を取得する",
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -101,7 +111,12 @@ pub async fn get_labels_for_forms(
         ("label_id" = String, Path, description = "Label ID"),
     ),
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -134,7 +149,13 @@ pub async fn delete_label_for_forms(
     ),
     request_body = FormLabelUpdateSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"
@@ -168,7 +189,12 @@ pub async fn edit_label_for_forms(
     ),
     request_body = ReplaceFormLabelSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Labels"

@@ -18,6 +18,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::answer::AnswerUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -31,7 +32,11 @@ use crate::{
     path = "/forms/answers",
     summary = "すべての回答をフォームを横断して取得",
     responses(
-        (status = 200, body = Vec<FormAnswer>),
+        (status = 200, description = "The request has succeeded.", body = Vec<FormAnswer>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Answers"
@@ -76,7 +81,13 @@ pub async fn get_all_answers(
         ("answer_id" = String, Path, description = "Answer ID"),
     ),
     responses(
-        (status = 200, body = FormAnswer),
+        (status = 200, description = "The request has succeeded.", body = FormAnswer),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Answers"
@@ -120,7 +131,13 @@ pub async fn get_answer_handler(
         ("id" = String, Path, description = "Form ID"),
     ),
     responses(
-        (status = 200, body = Vec<FormAnswer>),
+        (status = 200, description = "The request has succeeded.", body = Vec<FormAnswer>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Answers"
@@ -168,7 +185,13 @@ pub async fn get_answer_by_form_id_handler(
     ),
     request_body = AnswerCreateSchema,
     responses(
-        (status = 200),
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Answers"
@@ -218,7 +241,13 @@ pub async fn post_answer_handler(
     ),
     request_body = AnswerUpdateSchema,
     responses(
-        (status = 200, body = FormAnswer),
+        (status = 200, description = "The request has succeeded.", body = FormAnswer),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
     ),
     security(("bearer" = [])),
     tag = "Answers"
