@@ -977,15 +977,6 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
 name = "convert_case"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
-name = "convert_case"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baaaa0ecca5b51987b9423ccdc971514dd8b0bb7b4060b983d3664dad3f1f89f"
@@ -1265,29 +1256,29 @@ dependencies = [
 
 [[package]]
 name = "deriving-via-impl"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b9a6426900e9c1f0561ef1c80c63fc6fc1ad642bb3f39d433e5491ef494f1d8"
+checksum = "15039215161d424bbde22218524bd8c974d6514c925eb59d4a410edab3a1b11d"
 dependencies = [
- "convert_case 0.7.1",
+ "convert_case",
  "quote",
  "syn 2.0.114",
 ]
 
 [[package]]
 name = "deriving_via"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "210d75e13f849c2b63b64782127e18d26c788d50b5583c091cbe338e9ae584e6"
+checksum = "0780dfead67c553fb8867f2a85b934cd13919e2988e787f653fcddeac894005b"
 dependencies = [
  "deriving_via_macros",
 ]
 
 [[package]]
 name = "deriving_via_macros"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "246315ebd01520975bcee56e2ac37fd3740c28a93b58627a58a5ca833203a65d"
+checksum = "4d5483e05546a137b5759015a738eb75d3ca50cfc2be3997cc38255d3f244175"
 dependencies = [
  "deriving-via-impl",
  "itertools",
@@ -2649,7 +2640,7 @@ version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0795d177129fed792fc789cf07d4647bb9e3939409fbe01764805c060afcd0e"
 dependencies = [
- "convert_case 0.8.0",
+ "convert_case",
  "proc-macro2",
  "quote",
  "structmeta",
