@@ -1,7 +1,7 @@
 use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
 
 use axum::{
-    Extension, Json, Router,
+    Json, Router,
     http::{
         Method, StatusCode,
         header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
@@ -119,19 +119,15 @@ async fn main() -> anyhow::Result<()> {
     let messaging_conn =
         resource::messaging::connection::MessagingConnectionPool::new(sender).await;
 
-    let conn_for_health = Arc::new(conn.clone());
-    let shared_repository = Repository::new(conn).into_shared();
-
     let shared_manager = discord_connection.pool.shard_manager.clone();
     let messaging_conn = Arc::new(messaging_conn);
 
-    let health_check_state = Arc::new(
-        presentation::handlers::health_check_handler::HealthCheckState {
-            db_conn: conn_for_health,
-            rabbitmq_conn: messaging_conn.clone(),
-            shard_manager: shared_manager.clone(),
-        },
-    );
+    let health_check_repo = Arc::new(resource::health_check::HealthCheckRepositoryImpl {
+        db_conn: Arc::new(conn.clone()),
+        rabbitmq_conn: messaging_conn.clone(),
+        shard_manager: shared_manager.clone(),
+    });
+    let shared_repository = Repository::new(conn).into_shared(health_check_repo);
 
     let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;
     let notificator_impl = DiscordDMNotificatorImpl::new();
@@ -241,7 +237,6 @@ async fn main() -> anyhow::Result<()> {
         .merge(router)
         .merge(message_post_router)
         .fallback(not_found_handler)
-        .layer(Extension(health_check_state))
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(
             shared_repository.to_owned(),

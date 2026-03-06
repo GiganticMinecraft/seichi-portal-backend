@@ -3142,7 +3142,6 @@ dependencies = [
  "resource",
  "serde",
  "serde_json",
- "serenity",
  "tokio",
  "tracing",
  "types",
