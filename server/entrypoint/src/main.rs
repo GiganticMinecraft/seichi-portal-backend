@@ -47,6 +47,7 @@ use utoipa_swagger_ui::SwaggerUi;
         presentation::handlers::form::message_handler::post_message_handler,
     ),
     info(title = "Seichi Portal API", version = "1.0.0"),
+    components(schemas(presentation::schemas::error_response::ErrorResponse)),
     modifiers(&SecurityAddon),
     tags(
         (name = "Forms"),
