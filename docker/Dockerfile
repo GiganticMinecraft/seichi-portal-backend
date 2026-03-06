@@ -18,11 +18,6 @@ LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seich
 
 COPY --from=init /seichi-portal-backend /seichi-portal-backend
 
-ARG USERNAME=ubuntu
-ARG GROUPNAME=ubuntu
-ARG UID=1000
-ARG GID=1000
-RUN groupadd -g $GID $GROUPNAME && \
-    useradd -m -s /bin/bash -u $UID -g $GID $USERNAME
+USER ubuntu
 
 ENTRYPOINT ["/seichi-portal-backend"]
