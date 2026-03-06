@@ -14,7 +14,7 @@ resource = { path = "../infra/resource" }
 # default featureは推移的にnative-tls featureを有効しているため、native-tls (LinuxではOpenSSL) を連れてくる。これをオプトアウトするためにrustlsを使う。
 sentry = { version = "0.46.2", default-features = false, features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "tracing", "debug-images", "rustls", "tower", "tower-http"] }
 tokio = { workspace = true }
-tower = "0.5.2"
+tower = "0.5.3"
 tower-http = { version = "0.6.8", features = ["cors"] }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.22", features = ["std", "registry", "env-filter"] }
