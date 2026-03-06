@@ -3,7 +3,7 @@ use axum::{
     Json, RequestExt,
     body::Body,
     extract::State,
-    http::{Request, StatusCode},
+    http::{Request, StatusCode, header},
     middleware::Next,
     response::Response,
 };
@@ -43,7 +43,20 @@ pub async fn auth(
     let auth = request
         .extract_parts::<TypedHeader<Authorization<Bearer>>>()
         .await
-        .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "UNAUTHORIZED", "reason": "Authorization header is missing."}))).into_response())?;
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                [(header::CONTENT_TYPE, "application/problem+json")],
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Unauthorized",
+                    "status": 401,
+                    "detail": "Authorization header is missing.",
+                    "errorCode": "UNAUTHORIZED"
+                })),
+            )
+                .into_response()
+        })?;
 
     let session_id = auth.token();
 
@@ -57,10 +70,35 @@ pub async fn auth(
         match user_use_case
             .fetch_user_by_session_id(session_id.to_string())
             .await
-            .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "UNAUTHORIZED", "reason": "Failed to retrieve user by session id."}))).into_response())?
-        {
+            .map_err(|_| {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    [(header::CONTENT_TYPE, "application/problem+json")],
+                    Json(json!({
+                        "type": "about:blank",
+                        "title": "Unauthorized",
+                        "status": 401,
+                        "detail": "Failed to retrieve user by session id.",
+                        "errorCode": "UNAUTHORIZED"
+                    })),
+                )
+                    .into_response()
+            })? {
             Some(user) => user,
-            None => return Err((StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "UNAUTHORIZED", "reason": "Invalid session id."}))).into_response()),
+            None => {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    [(header::CONTENT_TYPE, "application/problem+json")],
+                    Json(json!({
+                        "type": "about:blank",
+                        "title": "Unauthorized",
+                        "status": 401,
+                        "detail": "Invalid session id.",
+                        "errorCode": "UNAUTHORIZED"
+                    })),
+                )
+                    .into_response());
+            }
         }
     };
 
@@ -73,7 +111,18 @@ pub async fn auth(
         }
         Err(err) => {
             tracing::error!("{}", err);
-            Err((StatusCode::UNAUTHORIZED, Json(json!({"errorCode": "Internal server error", "reason": "Authentication middleware error."}))).into_response())
+            Err((
+                StatusCode::UNAUTHORIZED,
+                [(header::CONTENT_TYPE, "application/problem+json")],
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Unauthorized",
+                    "status": 401,
+                    "detail": "Authentication middleware error.",
+                    "errorCode": "UNAUTHORIZED"
+                })),
+            )
+                .into_response())
         }
     }
 }

@@ -1,5 +1,9 @@
 use axum::response::Response;
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    http::{StatusCode, header},
+    response::IntoResponse,
+};
 use errors::presentation::PresentationError;
 use errors::{
     Error, domain::DomainError, infra::InfraError, usecase::UseCaseError,
@@ -7,145 +11,127 @@ use errors::{
 };
 use serde_json::json;
 
+fn problem_response(status: StatusCode, title: &str, detail: &str, error_code: &str) -> Response {
+    (
+        status,
+        [(header::CONTENT_TYPE, "application/problem+json")],
+        Json(json!({
+            "type": "about:blank",
+            "title": title,
+            "status": status.as_u16(),
+            "detail": detail,
+            "errorCode": error_code,
+        })),
+    )
+        .into_response()
+}
+
 fn handle_domain_error(err: DomainError) -> impl IntoResponse {
     match err {
-        DomainError::Forbidden => (
+        DomainError::Forbidden => problem_response(
             StatusCode::FORBIDDEN,
-            Json(json!({
-                "errorCode": "FORBIDDEN",
-                "reason": "You do not have permission to access this resource."
-            })),
-        )
-            .into_response(),
-        DomainError::NotFound => (
+            "Forbidden",
+            "You do not have permission to access this resource.",
+            "FORBIDDEN",
+        ),
+        DomainError::NotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "NOT_FOUND",
-                "reason": "Resource not found."
-            })),
-        )
-            .into_response(),
-        DomainError::EmptyMessageBody => (
+            "Not Found",
+            "Resource not found.",
+            "NOT_FOUND",
+        ),
+        DomainError::EmptyMessageBody => problem_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "EMPTY_MESSAGE_BODY",
-                "reason": "Message body is empty."
-            })),
-        )
-            .into_response(),
+            "Bad Request",
+            "Message body is empty.",
+            "EMPTY_MESSAGE_BODY",
+        ),
         DomainError::Conversion { source } => {
             tracing::error!("Conversion Error: {}", source);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Conversion Error",
-                })),
+                "Internal Server Error",
+                "Conversion Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
-        DomainError::InvalidResponsePeriod => (
+        DomainError::InvalidResponsePeriod => problem_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "INVALID_RESPONSE_PERIOD",
-                "reason": "Invalid response period."
-            })),
-        )
-            .into_response(),
-        DomainError::InvalidWebhookUrl => (
+            "Bad Request",
+            "Invalid response period.",
+            "INVALID_RESPONSE_PERIOD",
+        ),
+        DomainError::InvalidWebhookUrl => problem_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "INVALID_WEBHOOK_URL",
-                "reason": "Invalid webhook url. (Seichi-Portal only supports Discord webhook)"
-            })),
-        )
-            .into_response(),
+            "Bad Request",
+            "Invalid webhook url. (Seichi-Portal only supports Discord webhook)",
+            "INVALID_WEBHOOK_URL",
+        ),
     }
 }
 
 fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
     match err {
-        UseCaseError::AnswerNotFound => (
+        UseCaseError::AnswerNotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "ANSWER_NOT_FOUND",
-                "reason": "Answer not found"
-            })),
-        )
-            .into_response(),
-        UseCaseError::OutOfPeriod => (
+            "Not Found",
+            "Answer not found.",
+            "ANSWER_NOT_FOUND",
+        ),
+        UseCaseError::OutOfPeriod => problem_response(
             StatusCode::FORBIDDEN,
-            Json(json!({
-                "errorCode": "OUT_OF_PERIOD",
-                "reason": "Posted forms is out of period."
-            })),
-        )
-            .into_response(),
-        UseCaseError::MessageNotFound => (
+            "Forbidden",
+            "Posted forms is out of period.",
+            "OUT_OF_PERIOD",
+        ),
+        UseCaseError::MessageNotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "MESSAGE_NOT_FOUND",
-                "reason": "Message not found"
-            })),
-        )
-            .into_response(),
-        UseCaseError::FormNotFound => (
+            "Not Found",
+            "Message not found.",
+            "MESSAGE_NOT_FOUND",
+        ),
+        UseCaseError::FormNotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "FORM_NOT_FOUND",
-                "reason": "FORM NOT FOUND"
-            })),
-        )
-            .into_response(),
-        UseCaseError::NotificationNotFound => (
+            "Not Found",
+            "Form not found.",
+            "FORM_NOT_FOUND",
+        ),
+        UseCaseError::NotificationNotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "NOTIFICATION_NOT_FOUND",
-                "reason": "Notification not found"
-            })),
-        )
-            .into_response(),
-        UseCaseError::LabelNotFound => (
+            "Not Found",
+            "Notification not found.",
+            "NOTIFICATION_NOT_FOUND",
+        ),
+        UseCaseError::LabelNotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "LABEL_NOT_FOUND",
-                "reason": "Label not found"
-            })),
-        )
-            .into_response(),
-        UseCaseError::CommentNotFound => (
+            "Not Found",
+            "Label not found.",
+            "LABEL_NOT_FOUND",
+        ),
+        UseCaseError::CommentNotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "COMMENT_NOT_FOUND",
-                "reason": "Comment not found"
-            })),
-        )
-            .into_response(),
-        UseCaseError::DiscordLinkFailed => (
+            "Not Found",
+            "Comment not found.",
+            "COMMENT_NOT_FOUND",
+        ),
+        UseCaseError::DiscordLinkFailed => problem_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "errorCode": "DISCORD_LINK_FAILED",
-                "reason": "Failed to link discord"
-            })),
-        )
-            .into_response(),
-        UseCaseError::UserNotFound => (
+            "Internal Server Error",
+            "Failed to link discord.",
+            "DISCORD_LINK_FAILED",
+        ),
+        UseCaseError::UserNotFound => problem_response(
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "errorCode": "USER_NOT_FOUND",
-                "reason": "User not found"
-            })),
-        )
-            .into_response(),
-        UseCaseError::DiscordNotLinked => (
+            "Not Found",
+            "User not found.",
+            "USER_NOT_FOUND",
+        ),
+        UseCaseError::DiscordNotLinked => problem_response(
             StatusCode::FORBIDDEN,
-            Json(json!({
-                "errorCode": "DISCORD_NOT_LINKED",
-                "reason": "Discord is not linked"
-            })),
-        )
-            .into_response(),
+            "Forbidden",
+            "Discord is not linked.",
+            "DISCORD_NOT_LINKED",
+        ),
     }
 }
 
@@ -153,230 +139,176 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
     match err {
         InfraError::Database { source } => {
             tracing::error!("Database Error: {}", source);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Database Error",
-                })),
+                "Internal Server Error",
+                "Database Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::DatabaseTransaction { cause } => {
             tracing::error!("Transaction Error: {}", cause);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Transaction Error",
-                })),
+                "Internal Server Error",
+                "Transaction Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::UuidParse { source } => {
             tracing::error!("Uuid Parse Error: {}", source);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Uuid Parse Error",
-                })),
+                "Internal Server Error",
+                "Uuid Parse Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::FormNotFound { id } => {
             tracing::error!("Form Not Found: id = {}", id);
-
-            (
+            problem_response(
                 StatusCode::NOT_FOUND,
-                Json(json!({
-                    "errorCode": "FORM_NOT_FOUND",
-                    "reason": "Form not found"
-                })),
+                "Not Found",
+                "Form not found.",
+                "FORM_NOT_FOUND",
             )
-                .into_response()
         }
         InfraError::AnswerNotFount { id } => {
             tracing::error!("Answer Not Found: id = {}", id);
-
-            (
+            problem_response(
                 StatusCode::NOT_FOUND,
-                Json(json!({
-                    "errorCode": "ANSWER_NOT_FOUND",
-                    "reason": "Answer not found"
-                })),
+                "Not Found",
+                "Answer not found.",
+                "ANSWER_NOT_FOUND",
             )
-                .into_response()
         }
         InfraError::Outgoing { cause } => {
             tracing::error!("Outgoing Error: {}", cause);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Outgoing Error",
-                })),
+                "Internal Server Error",
+                "Outgoing Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::EnumParse { source } => {
             tracing::error!("Enum Parse Error: source = {}", source);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Enum Parse Error",
-                })),
+                "Internal Server Error",
+                "Enum Parse Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::Redis { source } => {
             tracing::error!("Redis Error: {}", source);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Database Error",
-                })),
+                "Internal Server Error",
+                "Database Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::Reqwest { cause } => {
             tracing::error!("Reqwest Error: {}", cause);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "HTTP request Error",
-                })),
+                "Internal Server Error",
+                "HTTP request Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::MeiliSearch { cause } => {
             tracing::error!("MeiliSearch Error: {}", cause);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Search database Error",
-                })),
+                "Internal Server Error",
+                "Search database Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::SerdeJson { cause } => {
             tracing::error!("SerdeJson Error: {}", cause);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "JSON parse Error",
-                })),
+                "Internal Server Error",
+                "JSON parse Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::SerenityError { cause } => {
             tracing::error!("Serenity Error: {}", cause);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Discord API Error",
-                })),
+                "Internal Server Error",
+                "Discord API Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::AMQP { source } => {
             tracing::error!("AMQP Error: {}", source);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "AMQP Error",
-                })),
+                "Internal Server Error",
+                "AMQP Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
         InfraError::Send { cause } => {
             tracing::error!("Send Error: {}", cause);
-
-            (
+            problem_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "errorCode": "INTERNAL_SERVER_ERROR",
-                    "reason": "Send Error",
-                })),
+                "Internal Server Error",
+                "Send Error",
+                "INTERNAL_SERVER_ERROR",
             )
-                .into_response()
         }
     }
 }
 
 fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
     match err {
-        ValidationError::EmptyValue => (
+        ValidationError::EmptyValue => problem_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "EMPTY_VALUE",
-                "reason": "Empty value error."
-            })),
-        )
-            .into_response(),
-        ValidationError::NegativeValue => (
+            "Bad Request",
+            "Empty value error.",
+            "EMPTY_VALUE",
+        ),
+        ValidationError::NegativeValue => problem_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "NEGATIVE_VALUE",
-                "reason": "Negative value error."
-            })),
-        )
-            .into_response(),
+            "Bad Request",
+            "Negative value error.",
+            "NEGATIVE_VALUE",
+        ),
     }
 }
 
 fn handle_presentation_error(err: PresentationError) -> impl IntoResponse {
     match err {
-        PresentationError::JsonRejection { cause } => (
+        PresentationError::JsonRejection { cause } => problem_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({
-                "errorCode": "UNPROCESSABLE_CONTENT",
-                "reason": cause
-            })),
-        )
-            .into_response(),
-        PresentationError::PathRejection { cause } => (
+            "Unprocessable Content",
+            &cause,
+            "UNPROCESSABLE_CONTENT",
+        ),
+        PresentationError::PathRejection { cause } => problem_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "BAD_REQUEST",
-                "reason": cause
-            })),
-        )
-            .into_response(),
-        PresentationError::QueryRejection { cause } => (
+            "Bad Request",
+            &cause,
+            "BAD_REQUEST",
+        ),
+        PresentationError::QueryRejection { cause } => problem_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "BAD_REQUEST",
-                "reason": cause
-            })),
-        )
-            .into_response(),
-        PresentationError::TypedHeaderRejection { cause } => (
+            "Bad Request",
+            &cause,
+            "BAD_REQUEST",
+        ),
+        PresentationError::TypedHeaderRejection { cause } => problem_response(
             StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "errorCode": "UNAUTHORIZED",
-                "reason": cause
-            })),
-        )
-            .into_response(),
+            "Unauthorized",
+            &cause,
+            "UNAUTHORIZED",
+        ),
     }
 }
 
