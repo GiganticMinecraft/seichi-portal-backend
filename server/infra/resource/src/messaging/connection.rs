@@ -44,6 +44,10 @@ impl MessagingConnectionPool {
         }
     }
 
+    pub fn is_rabbitmq_connected(&self) -> bool {
+        self.rabbitmq_client.status().connected()
+    }
+
     async fn create_channel(&self) -> Result<Channel, InfraError> {
         Ok(self.rabbitmq_client.create_channel().await?)
     }

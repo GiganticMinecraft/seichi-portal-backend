@@ -22,3 +22,4 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
+serenity = { workspace = true }
