@@ -13,11 +13,11 @@ impl HealthCheckResult {
     }
 }
 
-pub struct HealthCheckUseCase<'a> {
-    pub repository: &'a (dyn HealthCheckRepository + Send + Sync),
+pub struct HealthCheckUseCase<'a, R: HealthCheckRepository + ?Sized> {
+    pub repository: &'a R,
 }
 
-impl HealthCheckUseCase<'_> {
+impl<R: HealthCheckRepository + ?Sized> HealthCheckUseCase<'_, R> {
     pub async fn check(&self) -> HealthCheckResult {
         let (db, meilisearch, rabbitmq, discord) = tokio::join!(
             self.repository.ping_db(),

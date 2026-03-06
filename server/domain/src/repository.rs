@@ -15,6 +15,7 @@ pub trait Repositories: Send + Sync {
     type ConcreteUserRepository: user_repository::UserRepository;
     type ConcreteSearchRepository: search_repository::SearchRepository;
     type ConcreteNotificationRepository: notification_repository::NotificationRepository;
+    type ConcreteHealthCheckRepository: health_check_repository::HealthCheckRepository;
     fn form_repository(&self) -> &Self::ConcreteFormRepository;
     fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository;
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository;
@@ -25,7 +26,5 @@ pub trait Repositories: Send + Sync {
     fn user_repository(&self) -> &Self::ConcreteUserRepository;
     fn search_repository(&self) -> &Self::ConcreteSearchRepository;
     fn notification_repository(&self) -> &Self::ConcreteNotificationRepository;
-    fn health_check_repository(
-        &self,
-    ) -> &(dyn health_check_repository::HealthCheckRepository + Send + Sync);
+    fn health_check_repository(&self) -> &Self::ConcreteHealthCheckRepository;
 }
