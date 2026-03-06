@@ -17,6 +17,7 @@ use serde_json::json;
 use usecase::user::UserUseCase;
 use uuid::Uuid;
 
+use crate::schemas::error_responses::*;
 use crate::schemas::user::UserUpdateSchema;
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 use axum::extract::rejection::{JsonRejection, PathRejection};
@@ -25,6 +26,20 @@ use axum_extra::typed_header::TypedHeaderRejection;
 use errors::presentation::PresentationError;
 use errors::{Error, ErrorExtra};
 
+#[utoipa::path(
+    get,
+    path = "/users/me",
+    summary = "自分のユーザー情報の取得",
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn get_my_user_info(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -55,6 +70,24 @@ pub async fn get_my_user_info(
     ).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/users/{uuid}",
+    summary = "ユーザーの取得",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn get_user_info(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -88,6 +121,25 @@ pub async fn get_user_info(
     ).into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/users/{uuid}",
+    summary = "ユーザーの更新",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    request_body = UserUpdateSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn patch_user_role(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -111,6 +163,20 @@ pub async fn patch_user_role(
     Ok((StatusCode::OK, Json(user)).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/users",
+    summary = "ユーザーの一覧取得",
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn user_list(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -126,6 +192,21 @@ pub async fn user_list(
     Ok((StatusCode::OK, Json(json!(users))).into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/session",
+    summary = "セッションを作成する",
+    request_body = super::super::schemas::session::SessionCreateSchema,
+    responses(
+        (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
+        BadRequest,
+        Unauthorized,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    tag = "Session"
+)]
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
     header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
@@ -170,6 +251,20 @@ pub async fn start_session(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/session",
+    summary = "セッションを削除する",
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    tag = "Session"
+)]
 pub async fn end_session(
     State(repository): State<RealInfrastructureRepository>,
     typed_header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
@@ -201,6 +296,23 @@ pub async fn end_session(
         .into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/link-discord",
+    summary = "Discord アカウントとリンクする",
+    request_body = DiscordOAuthToken,
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn link_discord(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -223,6 +335,22 @@ pub async fn link_discord(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/link-discord",
+    summary = "Discord アカウントとのリンクを解除する",
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
 pub async fn unlink_discord(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

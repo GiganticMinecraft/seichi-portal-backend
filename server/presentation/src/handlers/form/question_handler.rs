@@ -13,11 +13,30 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::question::QuestionUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::FormQuestionPutSchema,
 };
 
+#[utoipa::path(
+    get,
+    path = "/forms/{id}/questions",
+    summary = "質問の一覧取得",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = Vec<super::super::super::schemas::form::form_response_schemas::QuestionResponseSchema>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Questions"
+)]
 pub async fn get_questions_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -36,6 +55,26 @@ pub async fn get_questions_handler(
     Ok((StatusCode::OK, Json(questions)).into_response())
 }
 
+#[utoipa::path(
+    put,
+    path = "/forms/{id}/questions",
+    summary = "質問の上書き",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    request_body = FormQuestionPutSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Questions"
+)]
 pub async fn put_question_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

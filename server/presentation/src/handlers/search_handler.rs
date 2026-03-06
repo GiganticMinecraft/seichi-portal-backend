@@ -17,11 +17,29 @@ use serde_json::json;
 use tokio::sync::{Notify, mpsc::Receiver};
 use usecase::search::SearchUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::search_schemas::{CrossSearchResult, SearchQuery},
 };
 
+#[utoipa::path(
+    get,
+    path = "/search",
+    summary = "横断検索を行う",
+    params(
+        ("query" = Option<String>, Query, description = "Search query"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = CrossSearchResult),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Search"
+)]
 pub async fn cross_search(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

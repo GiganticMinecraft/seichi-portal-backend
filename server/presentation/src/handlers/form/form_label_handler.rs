@@ -16,12 +16,29 @@ use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::form_label::FormLabelUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::FormLabelCreateSchema;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::{FormLabelUpdateSchema, ReplaceFormLabelSchema},
 };
 
+#[utoipa::path(
+    post,
+    path = "/labels/forms",
+    summary = "フォーム用ラベルを作成する",
+    request_body = FormLabelCreateSchema,
+    responses(
+        (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn create_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -57,6 +74,20 @@ pub async fn create_label_for_forms(
         .into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/labels/forms",
+    summary = "フォーム用ラベルの一覧を取得する",
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn get_labels_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -72,6 +103,24 @@ pub async fn get_labels_for_forms(
     Ok((StatusCode::OK, Json(labels)).into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/labels/forms/{label_id}",
+    summary = "フォーム用ラベルを削除する",
+    params(
+        ("label_id" = String, Path, description = "Label ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn delete_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -91,6 +140,26 @@ pub async fn delete_label_for_forms(
     Ok(StatusCode::OK.into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/labels/forms/{label_id}",
+    summary = "フォーム用ラベルを更新する",
+    params(
+        ("label_id" = String, Path, description = "Label ID"),
+    ),
+    request_body = FormLabelUpdateSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn edit_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -112,6 +181,24 @@ pub async fn edit_label_for_forms(
     Ok(StatusCode::OK.into_response())
 }
 
+#[utoipa::path(
+    put,
+    path = "/forms/{form_id}/labels",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+    ),
+    request_body = ReplaceFormLabelSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Labels"
+)]
 pub async fn replace_form_labels(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

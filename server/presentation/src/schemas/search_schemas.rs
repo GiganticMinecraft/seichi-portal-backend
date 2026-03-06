@@ -13,15 +13,17 @@ use types::non_empty_string::NonEmptyString;
 use usecase::dto::CrossSearchDto;
 use uuid::Uuid;
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, utoipa::ToSchema)]
 pub struct SearchQuery {
     #[serde(default)]
     pub query: Option<NonEmptyString>,
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, utoipa::ToSchema)]
 pub struct CommentSchema {
+    #[schema(value_type = String, format = "uuid")]
     pub answer_id: AnswerId,
+    #[schema(value_type = String, format = "uuid")]
     pub id: CommentId,
     pub content: String,
     pub commented_by: Uuid,
@@ -38,12 +40,17 @@ impl From<Comment> for CommentSchema {
     }
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, utoipa::ToSchema)]
 pub struct CrossSearchResult {
+    #[schema(value_type = Vec<serde_json::Value>)]
     pub forms: Vec<Form>,
+    #[schema(value_type = Vec<serde_json::Value>)]
     pub users: Vec<User>,
+    #[schema(value_type = Vec<serde_json::Value>)]
     pub answers: Vec<AnswerEntry>,
+    #[schema(value_type = Vec<serde_json::Value>)]
     pub label_for_forms: Vec<FormLabel>,
+    #[schema(value_type = Vec<serde_json::Value>)]
     pub label_for_answers: Vec<AnswerLabel>,
     pub comments: Vec<CommentSchema>,
 }

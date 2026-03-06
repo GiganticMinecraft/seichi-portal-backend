@@ -18,6 +18,7 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::forms::answer::AnswerUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -26,6 +27,20 @@ use crate::{
     },
 };
 
+#[utoipa::path(
+    get,
+    path = "/forms/answers",
+    summary = "すべての回答をフォームを横断して取得",
+    responses(
+        (status = 200, description = "The request has succeeded.", body = Vec<FormAnswer>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Answers"
+)]
 pub async fn get_all_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -57,6 +72,26 @@ pub async fn get_all_answers(
     Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/forms/{form_id}/answers/{answer_id}",
+    summary = "回答の取得",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = FormAnswer),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Answers"
+)]
 pub async fn get_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -88,6 +123,25 @@ pub async fn get_answer_handler(
         .into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/forms/{id}/answers",
+    summary = "回答の一覧取得",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = Vec<FormAnswer>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Answers"
+)]
 pub async fn get_answer_by_form_id_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -122,6 +176,26 @@ pub async fn get_answer_by_form_id_handler(
     Ok((StatusCode::OK, Json(response)).into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/forms/{id}/answers",
+    summary = "回答の作成",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    request_body = AnswerCreateSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Answers"
+)]
 pub async fn post_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -157,6 +231,27 @@ pub async fn post_answer_handler(
     Ok(StatusCode::OK.into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/forms/{form_id}/answers/{answer_id}",
+    summary = "回答の更新",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+    ),
+    request_body = AnswerUpdateSchema,
+    responses(
+        (status = 200, description = "The request has succeeded.", body = FormAnswer),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Answers"
+)]
 pub async fn update_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

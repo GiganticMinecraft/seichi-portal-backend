@@ -8,52 +8,19 @@ use axum::{
     },
     middleware,
     response::IntoResponse,
-    routing::{delete, get, patch, post, put},
+    routing::post,
 };
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
 use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
-use presentation::handlers::form::comment_handler::{get_form_comment, update_form_comment};
-use presentation::handlers::form::message_handler::RealInfrastructureRepositoryWithNotificationAPI;
-use presentation::handlers::notification_handler::get_my_notification_settings;
-use presentation::handlers::search_handler::{initialize_search_engine, start_watch_out_of_sync};
-use presentation::{
-    auth::auth,
-    handlers::{
-        form::{
-            answer_handler::{
-                get_all_answers, get_answer_by_form_id_handler, get_answer_handler,
-                post_answer_handler, update_answer_handler,
-            },
-            answer_label_handler::{
-                create_label_for_answers, delete_label_for_answers, edit_label_for_answers,
-                get_labels_for_answers, replace_answer_labels,
-            },
-            comment_handler::{delete_form_comment_handler, post_form_comment},
-            form_handler::{
-                create_form_handler, delete_form_handler, form_list_handler, get_form_handler,
-                update_form_handler,
-            },
-            form_label_handler::{
-                create_label_for_forms, delete_label_for_forms, edit_label_for_forms,
-                get_labels_for_forms, replace_form_labels,
-            },
-            message_handler::{
-                delete_message_handler, get_messages_handler, post_message_handler,
-                update_message_handler,
-            },
-            question_handler::{get_questions_handler, put_question_handler},
-        },
-        health_check_handler::health_check,
-        notification_handler::{get_notification_settings, update_notification_settings},
-        search_handler::{cross_search, start_sync},
-        user_handler::{
-            end_session, get_my_user_info, get_user_info, link_discord, patch_user_role,
-            start_session, unlink_discord, user_list,
-        },
-    },
+use presentation::auth::auth;
+use presentation::handlers::form::message_handler::{
+    RealInfrastructureRepositoryWithNotificationAPI, post_message_handler,
+};
+use presentation::handlers::search_handler::{
+    initialize_search_engine, start_sync, start_watch_out_of_sync,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -68,6 +35,48 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use usecase::notification::discord_dm_notificator_impl::DiscordDMNotificatorImpl;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::{Modify, OpenApi};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
+use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        presentation::handlers::form::message_handler::post_message_handler,
+    ),
+    info(title = "Seichi Portal API", version = "1.0.0"),
+    components(schemas(presentation::schemas::error_response::ErrorResponse)),
+    modifiers(&SecurityAddon),
+    tags(
+        (name = "Forms"),
+        (name = "Answers"),
+        (name = "Questions"),
+        (name = "Comments"),
+        (name = "Labels"),
+        (name = "Messages"),
+        (name = "Users"),
+        (name = "Search"),
+        (name = "Notifications"),
+        (name = "Session"),
+        (name = "Health"),
+    )
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearer",
+                SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).build()),
+            );
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -116,83 +125,94 @@ async fn main() -> anyhow::Result<()> {
     let notificator_impl = DiscordDMNotificatorImpl::new();
     let notification_api = NotificationAPIImpl::new(discord_sender, notificator_impl);
 
-    let router = Router::new()
-        .route("/forms", post(create_form_handler).get(form_list_handler))
+    use presentation::handlers::form::{
+        answer_handler, answer_label_handler, comment_handler, form_handler, form_label_handler,
+        message_handler, question_handler,
+    };
+    use presentation::handlers::{
+        health_check_handler, notification_handler, search_handler, user_handler,
+    };
+
+    let (router, openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .routes(routes!(
+            form_handler::create_form_handler,
+            form_handler::form_list_handler
+        ))
+        .routes(routes!(
+            form_handler::get_form_handler,
+            form_handler::delete_form_handler,
+            form_handler::update_form_handler
+        ))
+        .routes(routes!(
+            answer_handler::get_answer_by_form_id_handler,
+            answer_handler::post_answer_handler
+        ))
+        .routes(routes!(
+            question_handler::get_questions_handler,
+            question_handler::put_question_handler
+        ))
+        .routes(routes!(answer_handler::get_all_answers))
+        .routes(routes!(
+            answer_label_handler::get_labels_for_answers,
+            answer_label_handler::create_label_for_answers
+        ))
+        .routes(routes!(
+            answer_label_handler::delete_label_for_answers,
+            answer_label_handler::edit_label_for_answers
+        ))
+        .routes(routes!(
+            form_label_handler::get_labels_for_forms,
+            form_label_handler::create_label_for_forms
+        ))
+        .routes(routes!(
+            form_label_handler::delete_label_for_forms,
+            form_label_handler::edit_label_for_forms
+        ))
+        .routes(routes!(
+            answer_handler::get_answer_handler,
+            answer_handler::update_answer_handler
+        ))
+        .routes(routes!(answer_label_handler::replace_answer_labels))
+        .routes(routes!(form_label_handler::replace_form_labels))
+        .routes(routes!(
+            comment_handler::get_form_comment,
+            comment_handler::post_form_comment
+        ))
+        .routes(routes!(
+            comment_handler::update_form_comment,
+            comment_handler::delete_form_comment_handler
+        ))
+        .routes(routes!(
+            user_handler::get_user_info,
+            user_handler::patch_user_role
+        ))
+        .routes(routes!(user_handler::get_my_user_info))
+        .routes(routes!(user_handler::user_list))
+        .routes(routes!(search_handler::cross_search))
+        .routes(routes!(message_handler::get_messages_handler))
+        .routes(routes!(
+            message_handler::update_message_handler,
+            message_handler::delete_message_handler
+        ))
+        .routes(routes!(notification_handler::get_notification_settings))
+        .routes(routes!(
+            notification_handler::get_my_notification_settings,
+            notification_handler::update_notification_settings
+        ))
+        .routes(routes!(health_check_handler::health_check))
+        .routes(routes!(
+            user_handler::start_session,
+            user_handler::end_session
+        ))
+        .routes(routes!(
+            user_handler::link_discord,
+            user_handler::unlink_discord
+        ))
         .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/{id}",
-            get(get_form_handler)
-                .delete(delete_form_handler)
-                .patch(update_form_handler),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/{id}/answers",
-            get(get_answer_by_form_id_handler).post(post_answer_handler),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/{id}/questions",
-            get(get_questions_handler).put(put_question_handler),
-        )
-        .with_state(shared_repository.to_owned())
-        .route("/forms/answers", get(get_all_answers))
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/labels/answers",
-            get(get_labels_for_answers).post(create_label_for_answers),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/labels/answers/{label_id}",
-            delete(delete_label_for_answers).patch(edit_label_for_answers),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/labels/forms",
-            get(get_labels_for_forms).post(create_label_for_forms),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/labels/forms/{label_id}",
-            delete(delete_label_for_forms).patch(edit_label_for_forms),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/{form_id}/answers/{answer_id}",
-            get(get_answer_handler).patch(update_answer_handler),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/answers/{answer_id}/labels",
-            put(replace_answer_labels),
-        )
-        .with_state(shared_repository.to_owned())
-        .route("/forms/{form_id}/labels", put(replace_form_labels))
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/{form_id}/answers/{answer_id}/comments",
-            get(get_form_comment).post(post_form_comment),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
-            patch(update_form_comment).delete(delete_form_comment_handler),
-        )
-        .with_state(shared_repository.to_owned())
-        .route("/users/{uuid}", get(get_user_info).patch(patch_user_role))
-        .with_state(shared_repository.to_owned())
-        .route("/users/me", get(get_my_user_info))
-        .with_state(shared_repository.to_owned())
-        .route("/users", get(user_list))
-        .with_state(shared_repository.to_owned())
-        .route("/search", get(cross_search))
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/forms/{form_id}/answers/{answer_id}/messages",
-            get(get_messages_handler),
-        )
-        .with_state(shared_repository.to_owned())
+        .split_for_parts();
+
+    // post_message_handler uses a different State type, so register it separately
+    let message_post_router = Router::new()
         .route(
             "/forms/{form_id}/answers/{answer_id}/messages",
             post(post_message_handler),
@@ -202,27 +222,12 @@ async fn main() -> anyhow::Result<()> {
                 shared_repository.to_owned(),
                 notification_api,
             ),
-        ))
-        .route(
-            "/forms/{form_id}/answers/{answer_id}/messages/{message_id}",
-            delete(delete_message_handler).patch(update_message_handler),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/notifications/settings/{uuid}",
-            get(get_notification_settings),
-        )
-        .with_state(shared_repository.to_owned())
-        .route(
-            "/notifications/settings/me",
-            get(get_my_notification_settings).patch(update_notification_settings),
-        )
-        .with_state(shared_repository.to_owned())
-        .route("/health", get(health_check))
-        .route("/session", post(start_session).delete(end_session))
-        .with_state(shared_repository.to_owned())
-        .route("/link-discord", post(link_discord).delete(unlink_discord))
-        .with_state(shared_repository.to_owned())
+        ));
+
+    let app = Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
+        .merge(router)
+        .merge(message_post_router)
         .fallback(not_found_handler)
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(
@@ -257,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (_discord, _axum, _syncer, _messaging, _auto_of_sync_watcher) = join!(
         discord_connection.pool.start(),
-        axum::serve(listener, router)
+        axum::serve(listener, app)
             .with_graceful_shutdown(graceful_handler(
                 shared_manager,
                 messaging_conn.clone(),

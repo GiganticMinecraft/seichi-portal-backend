@@ -18,12 +18,33 @@ use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::CommentUpdateSchema;
 use crate::schemas::form::form_response_schemas::AnswerComment;
 use crate::{
     handlers::error_handler::handle_error, schemas::form::form_request_schemas::CommentPostSchema,
 };
 
+#[utoipa::path(
+    get,
+    path = "/forms/{form_id}/answers/{answer_id}/comments",
+    summary = "コメントの取得",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = Vec<AnswerComment>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Comments"
+)]
 pub async fn get_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -50,6 +71,27 @@ pub async fn get_form_comment(
     Ok((StatusCode::OK, Json(response)).into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/forms/{form_id}/answers/{answer_id}/comments",
+    summary = "コメントの作成",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+    ),
+    request_body = CommentPostSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Comments"
+)]
 pub async fn post_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -79,6 +121,28 @@ pub async fn post_form_comment(
     Ok(StatusCode::OK.into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
+    summary = "コメントの編集",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+        ("comment_id" = String, Path, description = "Comment ID"),
+    ),
+    request_body = CommentUpdateSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Comments"
+)]
 pub async fn update_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -108,6 +172,27 @@ pub async fn update_form_comment(
     Ok(StatusCode::OK.into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
+    summary = "コメントの削除",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+        ("comment_id" = String, Path, description = "Comment ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Comments"
+)]
 pub async fn delete_form_comment_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

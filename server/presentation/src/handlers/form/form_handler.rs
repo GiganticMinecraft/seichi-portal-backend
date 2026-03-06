@@ -13,6 +13,7 @@ use serde_json::json;
 use usecase::{dto::FormDto, forms::form::FormUseCase};
 
 use crate::handlers::error_handler::handle_error;
+use crate::schemas::error_responses::*;
 use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
     form_response_schemas::{FormMetaSchema, FormSchema, FormSettingsSchema},
@@ -21,6 +22,22 @@ use axum::extract::rejection::PathRejection;
 use domain::form::models::FormDescription;
 use errors::ErrorExtra;
 
+#[utoipa::path(
+    post,
+    path = "/forms",
+    summary = "フォームの作成",
+    request_body = FormCreateSchema,
+    responses(
+        (status = 201, description = "The request has succeeded and a new resource has been created as a result.", body = FormSchema),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn create_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -61,6 +78,24 @@ pub async fn create_form_handler(
         .into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/forms",
+    summary = "フォームの一覧取得",
+    params(
+        ("offset" = Option<u32>, Query, description = "Offset for pagination"),
+        ("limit" = Option<u32>, Query, description = "Limit for pagination"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = Vec<FormSchema>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn form_list_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -94,6 +129,24 @@ pub async fn form_list_handler(
     Ok((StatusCode::OK, Json(response_schema)).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/forms/{id}",
+    summary = "フォームの取得",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = FormSchema),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn get_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -130,6 +183,24 @@ pub async fn get_form_handler(
     Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/forms/{id}",
+    summary = "フォームの削除",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn delete_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -152,6 +223,26 @@ pub async fn delete_form_handler(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/forms/{id}",
+    summary = "フォームの更新",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    request_body = FormUpdateSchema,
+    responses(
+        (status = 200, description = "The request has succeeded.", body = FormSchema),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Forms"
+)]
 pub async fn update_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,

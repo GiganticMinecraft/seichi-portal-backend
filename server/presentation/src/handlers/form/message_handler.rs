@@ -15,6 +15,7 @@ use serde_json::json;
 use std::sync::Arc;
 use usecase::forms::message::MessageUseCase;
 
+use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
@@ -42,6 +43,27 @@ impl<API: NotificationAPI + Send + Sync> RealInfrastructureRepositoryWithNotific
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/forms/{form_id}/answers/{answer_id}/messages",
+    summary = "メッセージの作成",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+    ),
+    request_body = PostedMessageSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Messages"
+)]
 pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
     Extension(user): Extension<User>,
     State(state): State<Arc<RealInfrastructureRepositoryWithNotificationAPI<API>>>,
@@ -73,6 +95,28 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
     Ok(StatusCode::OK.into_response())
 }
 
+#[utoipa::path(
+    patch,
+    path = "/forms/{form_id}/answers/{answer_id}/messages/{message_id}",
+    summary = "メッセージの編集",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+        ("message_id" = String, Path, description = "Message ID"),
+    ),
+    request_body = MessageUpdateSchema,
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Messages"
+)]
 pub async fn update_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -98,6 +142,26 @@ pub async fn update_message_handler(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/forms/{form_id}/answers/{answer_id}/messages",
+    summary = "メッセージの取得",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+    ),
+    responses(
+        (status = 200, description = "The request has succeeded.", body = Vec<MessageContentSchema>),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Messages"
+)]
 pub async fn get_messages_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
@@ -135,6 +199,26 @@ pub async fn get_messages_handler(
     Ok((StatusCode::OK, Json(json!(response))).into_response())
 }
 
+#[utoipa::path(
+    delete,
+    path = "/forms/{form_id}/answers/{answer_id}/messages/{message_id}",
+    summary = "メッセージの削除",
+    params(
+        ("form_id" = String, Path, description = "Form ID"),
+        ("answer_id" = String, Path, description = "Answer ID"),
+        ("message_id" = String, Path, description = "Message ID"),
+    ),
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Messages"
+)]
 pub async fn delete_message_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
