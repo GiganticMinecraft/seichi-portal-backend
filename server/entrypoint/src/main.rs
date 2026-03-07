@@ -119,7 +119,15 @@ async fn main() -> anyhow::Result<()> {
     let messaging_conn =
         resource::messaging::connection::MessagingConnectionPool::new(sender).await;
 
-    let shared_repository = Repository::new(conn).into_shared();
+    let shared_manager = discord_connection.pool.shard_manager.clone();
+    let messaging_conn = Arc::new(messaging_conn);
+
+    let health_check_repo = Arc::new(resource::health_check::HealthCheckRepositoryImpl::new(
+        Arc::new(conn.clone()),
+        messaging_conn.clone(),
+        shared_manager.clone(),
+    ));
+    let shared_repository = Repository::new(conn).into_shared(health_check_repo);
 
     let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;
     let notificator_impl = DiscordDMNotificatorImpl::new();
@@ -254,8 +262,6 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    let shared_manager = discord_connection.pool.shard_manager.clone();
-    let messaging_conn = Arc::new(messaging_conn);
     let shutdown_notifier = Arc::new(Notify::new());
 
     initialize_search_engine(shared_repository.to_owned()).await?;

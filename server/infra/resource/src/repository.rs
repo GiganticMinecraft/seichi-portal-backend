@@ -7,12 +7,33 @@ use std::sync::Arc;
 
 use domain::repository::Repositories;
 
-use crate::database::{components::DatabaseComponents, connection::ConnectionPool};
+use domain::repository::health_check_repository::HealthCheckRepository;
 
-pub type RealInfrastructureRepository = SharedRepository<ConnectionPool>;
+use crate::{
+    database::{components::DatabaseComponents, connection::ConnectionPool},
+    health_check::HealthCheckRepositoryImpl,
+};
 
-#[derive(Clone)]
-pub struct SharedRepository<Client: DatabaseComponents + 'static>(Arc<Repository<Client>>);
+pub type RealInfrastructureRepository = SharedRepository<ConnectionPool, HealthCheckRepositoryImpl>;
+
+pub struct SharedRepository<
+    Client: DatabaseComponents + 'static,
+    H: HealthCheckRepository + Send + Sync + 'static,
+> {
+    db: Arc<Repository<Client>>,
+    health_check: Arc<H>,
+}
+
+impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Sync + 'static> Clone
+    for SharedRepository<Client, H>
+{
+    fn clone(&self) -> Self {
+        Self {
+            db: Arc::clone(&self.db),
+            health_check: Arc::clone(&self.health_check),
+        }
+    }
+}
 
 pub struct Repository<Client: DatabaseComponents + 'static> {
     pub(crate) client: Client,
@@ -23,12 +44,20 @@ impl<Client: DatabaseComponents + 'static> Repository<Client> {
         Self { client }
     }
 
-    pub fn into_shared(self) -> SharedRepository<Client> {
-        SharedRepository(Arc::new(self))
+    pub fn into_shared<H: HealthCheckRepository + Send + Sync + 'static>(
+        self,
+        health_check: Arc<H>,
+    ) -> SharedRepository<Client, H> {
+        SharedRepository {
+            db: Arc::new(self),
+            health_check,
+        }
     }
 }
 
-impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Client> {
+impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Sync + 'static>
+    Repositories for SharedRepository<Client, H>
+{
     type ConcreteAnswerLabelRepository = Repository<Client>;
     type ConcreteFormAnswerRepository = Repository<Client>;
     type ConcreteFormCommentRepository = Repository<Client>;
@@ -39,44 +68,49 @@ impl<Client: DatabaseComponents + 'static> Repositories for SharedRepository<Cli
     type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
     type ConcreteUserRepository = Repository<Client>;
+    type ConcreteHealthCheckRepository = H;
 
     fn form_repository(&self) -> &Self::ConcreteFormRepository {
-        &self.0
+        &self.db
     }
 
     fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository {
-        &self.0
+        &self.db
     }
 
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository {
-        &self.0
+        &self.db
     }
 
     fn form_question_repository(&self) -> &Self::ConcreteFormQuestionRepository {
-        &self.0
+        &self.db
     }
 
     fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository {
-        &self.0
+        &self.db
     }
 
     fn form_comment_repository(&self) -> &Self::ConcreteFormCommentRepository {
-        &self.0
+        &self.db
     }
 
     fn form_label_repository(&self) -> &Self::ConcreteFormLabelRepository {
-        &self.0
+        &self.db
     }
 
     fn notification_repository(&self) -> &Self::ConcreteNotificationRepository {
-        &self.0
+        &self.db
     }
 
     fn user_repository(&self) -> &Self::ConcreteUserRepository {
-        &self.0
+        &self.db
     }
 
     fn search_repository(&self) -> &Self::ConcreteSearchRepository {
-        &self.0
+        &self.db
+    }
+
+    fn health_check_repository(&self) -> &Self::ConcreteHealthCheckRepository {
+        &self.health_check
     }
 }

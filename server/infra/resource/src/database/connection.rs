@@ -46,6 +46,18 @@ impl ConnectionPool {
         }
     }
 
+    pub async fn ping_db(&self) -> bool {
+        self.rdb_pool.ping().await.is_ok()
+    }
+
+    pub async fn ping_meilisearch(&self) -> bool {
+        self.meilisearch_client
+            .health()
+            .await
+            .map(|h| h.status == "available")
+            .unwrap_or(false)
+    }
+
     pub async fn migrate(&self) -> anyhow::Result<()> {
         migration::Migrator::up(&self.rdb_pool, None).await?;
 
