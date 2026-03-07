@@ -20,7 +20,7 @@ services:
       - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
     restart: always
   valkey:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     container_name: valkey
     ports:
       - "6379:6379"
@@ -28,7 +28,7 @@ services:
       - seichi_portal
     restart: always
   valkey-seed:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     container_name: valkey-seed
     depends_on:
       - valkey
