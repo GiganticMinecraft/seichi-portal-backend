@@ -122,11 +122,11 @@ async fn main() -> anyhow::Result<()> {
     let shared_manager = discord_connection.pool.shard_manager.clone();
     let messaging_conn = Arc::new(messaging_conn);
 
-    let health_check_repo = Arc::new(resource::health_check::HealthCheckRepositoryImpl {
-        db_conn: Arc::new(conn.clone()),
-        rabbitmq_conn: messaging_conn.clone(),
-        shard_manager: shared_manager.clone(),
-    });
+    let health_check_repo = Arc::new(resource::health_check::HealthCheckRepositoryImpl::new(
+        Arc::new(conn.clone()),
+        messaging_conn.clone(),
+        shared_manager.clone(),
+    ));
     let shared_repository = Repository::new(conn).into_shared(health_check_repo);
 
     let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;

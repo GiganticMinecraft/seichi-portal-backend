@@ -7,9 +7,23 @@ use serenity::gateway::ConnectionStage;
 use crate::{database::connection::ConnectionPool, messaging::connection::MessagingConnectionPool};
 
 pub struct HealthCheckRepositoryImpl {
-    pub db_conn: Arc<ConnectionPool>,
-    pub rabbitmq_conn: Arc<MessagingConnectionPool>,
-    pub shard_manager: Arc<serenity::all::ShardManager>,
+    pub(crate) db_conn: Arc<ConnectionPool>,
+    pub(crate) rabbitmq_conn: Arc<MessagingConnectionPool>,
+    pub(crate) shard_manager: Arc<serenity::all::ShardManager>,
+}
+
+impl HealthCheckRepositoryImpl {
+    pub fn new(
+        db_conn: Arc<ConnectionPool>,
+        rabbitmq_conn: Arc<MessagingConnectionPool>,
+        shard_manager: Arc<serenity::all::ShardManager>,
+    ) -> Self {
+        Self {
+            db_conn,
+            rabbitmq_conn,
+            shard_manager,
+        }
+    }
 }
 
 #[async_trait]
