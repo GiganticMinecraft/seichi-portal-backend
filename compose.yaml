@@ -27,6 +27,17 @@ services:
     networks:
       - seichi_portal
     restart: always
+  redis-seed:
+    image: redis/redis-stack:7.4.0-v3
+    container_name: redis-seed
+    depends_on:
+      - redis
+    volumes:
+      - ./docker/redis/seed.sh:/seed.sh
+    entrypoint: ["sh", "/seed.sh"]
+    networks:
+      - seichi_portal
+    restart: "no"
   meilisearch:
     # NOTE: meilisearch の公式 Docker イメージをそのまま使用すると、全文検索時に日本語の漢字と中国語の漢字が衝突するために検索できない場合があるため、
     # 中国語のトークン化が無効化された日本語用の Docker イメージを使用する

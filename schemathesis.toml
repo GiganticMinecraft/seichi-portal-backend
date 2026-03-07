@@ -1,4 +1,4 @@
-headers = { Authorization = "Bearer debug_user" }
+headers = { Authorization = "Bearer debug_session" }
 continue-on-failure = true
 
 [[operations]]
