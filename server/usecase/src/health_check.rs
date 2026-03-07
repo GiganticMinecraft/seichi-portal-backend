@@ -1,15 +1,12 @@
-use domain::repository::health_check_repository::HealthCheckRepository;
+use domain::repository::health_check_repository::{ComponentHealth, HealthCheckRepository};
 
 pub struct HealthCheckResult {
-    pub db: bool,
-    pub meilisearch: bool,
-    pub rabbitmq: bool,
-    pub discord: bool,
+    pub components: Vec<ComponentHealth>,
 }
 
 impl HealthCheckResult {
     pub fn all_ok(&self) -> bool {
-        self.db && self.meilisearch && self.rabbitmq && self.discord
+        self.components.iter().all(|c| c.healthy)
     }
 }
 
@@ -19,18 +16,7 @@ pub struct HealthCheckUseCase<'a, R: HealthCheckRepository + ?Sized> {
 
 impl<R: HealthCheckRepository + ?Sized> HealthCheckUseCase<'_, R> {
     pub async fn check(&self) -> HealthCheckResult {
-        let (db, meilisearch, rabbitmq, discord) = tokio::join!(
-            self.repository.ping_db(),
-            self.repository.ping_meilisearch(),
-            self.repository.is_rabbitmq_connected(),
-            self.repository.is_discord_connected(),
-        );
-
-        HealthCheckResult {
-            db,
-            meilisearch,
-            rabbitmq,
-            discord,
-        }
+        let components = self.repository.check_components().await;
+        HealthCheckResult { components }
     }
 }

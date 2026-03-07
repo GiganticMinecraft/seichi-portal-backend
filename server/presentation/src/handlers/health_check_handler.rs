@@ -27,13 +27,18 @@ pub async fn health_check(
         StatusCode::SERVICE_UNAVAILABLE
     };
 
-    let body = Json(serde_json::json!({
-        "status": if all_ok { "ok" } else { "error" },
-        "db": if result.db { "ok" } else { "error" },
-        "meilisearch": if result.meilisearch { "ok" } else { "error" },
-        "rabbitmq": if result.rabbitmq { "ok" } else { "error" },
-        "discord": if result.discord { "ok" } else { "error" },
-    }));
+    let component_map: serde_json::Map<_, _> = std::iter::once((
+        "status".to_string(),
+        serde_json::json!(if all_ok { "ok" } else { "error" }),
+    ))
+    .chain(result.components.iter().map(|c| {
+        (
+            c.name.clone(),
+            serde_json::json!(if c.healthy { "ok" } else { "error" }),
+        )
+    }))
+    .collect();
+    let body = Json(serde_json::Value::Object(component_map));
 
     (status_code, body).into_response()
 }

@@ -28,22 +28,40 @@ impl HealthCheckRepositoryImpl {
 
 #[async_trait]
 impl HealthCheckRepository for HealthCheckRepositoryImpl {
-    async fn ping_db(&self) -> bool {
-        self.db_conn.ping_db().await
-    }
+    async fn check_components(
+        &self,
+    ) -> Vec<domain::repository::health_check_repository::ComponentHealth> {
+        use domain::repository::health_check_repository::ComponentHealth;
 
-    async fn ping_meilisearch(&self) -> bool {
-        self.db_conn.ping_meilisearch().await
-    }
+        let (db, meilisearch, rabbitmq, discord) = tokio::join!(
+            self.db_conn.ping_db(),
+            self.db_conn.ping_meilisearch(),
+            async { self.rabbitmq_conn.is_rabbitmq_connected() },
+            async {
+                let runners = self.shard_manager.runners.lock().await;
+                runners
+                    .values()
+                    .any(|r| r.stage == ConnectionStage::Connected)
+            },
+        );
 
-    async fn is_rabbitmq_connected(&self) -> bool {
-        self.rabbitmq_conn.is_rabbitmq_connected()
-    }
-
-    async fn is_discord_connected(&self) -> bool {
-        let runners = self.shard_manager.runners.lock().await;
-        runners
-            .values()
-            .any(|r| r.stage == ConnectionStage::Connected)
+        vec![
+            ComponentHealth {
+                name: "db".to_string(),
+                healthy: db,
+            },
+            ComponentHealth {
+                name: "meilisearch".to_string(),
+                healthy: meilisearch,
+            },
+            ComponentHealth {
+                name: "rabbitmq".to_string(),
+                healthy: rabbitmq,
+            },
+            ComponentHealth {
+                name: "discord".to_string(),
+                healthy: discord,
+            },
+        ]
     }
 }
