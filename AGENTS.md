@@ -20,7 +20,7 @@ cd server/ && makers pretty
 
 ## ローカル開発時の認証
 
-`docker compose up` で Redis にデバッグ用セッションデータが自動投入される。API リクエスト時は以下のセッション ID を `Authorization` ヘッダーに指定する:
+`docker compose up` で Valkey にデバッグ用セッションデータが自動投入される。API リクエスト時は以下のセッション ID を `Authorization` ヘッダーに指定する:
 
 - `Bearer debug_session` — ADMINISTRATOR ロール
 - `Bearer debug_session_standard` — STANDARD_USER ロール
