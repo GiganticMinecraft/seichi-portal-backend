@@ -19,21 +19,21 @@ services:
       - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
       - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
     restart: always
-  redis:
-    image: redis/redis-stack:7.4.0-v3
-    container_name: redis
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: valkey
     ports:
       - "6379:6379"
     networks:
       - seichi_portal
     restart: always
-  redis-seed:
-    image: redis/redis-stack:7.4.0-v3
-    container_name: redis-seed
+  valkey-seed:
+    image: valkey/valkey:8-alpine
+    container_name: valkey-seed
     depends_on:
-      - redis
+      - valkey
     volumes:
-      - ./docker/redis/seed.sh:/seed.sh
+      - ./docker/valkey/seed.sh:/seed.sh
     entrypoint: ["sh", "/seed.sh"]
     networks:
       - seichi_portal

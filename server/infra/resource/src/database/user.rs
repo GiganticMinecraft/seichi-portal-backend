@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use domain::user::models::{DiscordUser, Role, User};
 use errors::infra::InfraError;
-use redis::{Commands, JsonCommands};
+use redis::Commands;
 use sha256::digest;
 use uuid::Uuid;
 
@@ -124,9 +124,9 @@ impl UserDatabase for ConnectionPool {
 
         let mut redis_connection = redis_connection().await;
 
-        redis_connection.json_set::<&str, &str, _, ()>(&session_id, "$", user)?;
+        let user_json = serde_json::to_string(user)?;
+        redis_connection.set_ex::<&str, String, ()>(&session_id, user_json, expires as u64)?;
 
-        redis_connection.expire::<&str, ()>(&session_id, expires as i64)?;
         Ok(session_id)
     }
 
@@ -136,12 +136,8 @@ impl UserDatabase for ConnectionPool {
     ) -> Result<Option<User>, InfraError> {
         let mut redis_connection = redis_connection().await;
 
-        let user = serde_json::from_str::<Vec<User>>(
-            &redis_connection.json_get::<&String, &str, String>(&session_id, "$")?,
-        )
-        .map(|users| users.into_iter().nth(0))
-        .ok()
-        .flatten();
+        let result: Option<String> = redis_connection.get(&session_id)?;
+        let user = result.and_then(|s| serde_json::from_str::<User>(&s).ok());
 
         Ok(user)
     }
