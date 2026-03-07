@@ -11,13 +11,13 @@ use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct ResponsePeriodSchema {
+pub struct ResponsePeriodSchema {
     pub start_at: Option<DateTime<Utc>>,
     pub end_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) enum AnswerVisibility {
+pub enum AnswerVisibility {
     #[serde(rename = "PUBLIC")]
     Public,
     #[serde(rename = "PRIVATE")]
@@ -38,7 +38,7 @@ impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVi
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct AnswerSettingsSchema {
+pub struct AnswerSettingsSchema {
     #[schema(value_type = Option<String>)]
     pub default_answer_title: DefaultAnswerTitle,
     pub visibility: AnswerVisibility,
@@ -59,7 +59,7 @@ impl AnswerSettingsSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct FormSettingsSchema {
+pub struct FormSettingsSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub webhook_url: Option<Option<String>>,
     #[schema(value_type = String)]
@@ -83,7 +83,7 @@ impl FormSettingsSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct FormMetaSchema {
+pub struct FormMetaSchema {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -98,7 +98,7 @@ impl FormMetaSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct FormSchema {
+pub struct FormSchema {
     #[schema(value_type = String, format = "uuid")]
     pub id: FormId,
     #[schema(value_type = String)]
