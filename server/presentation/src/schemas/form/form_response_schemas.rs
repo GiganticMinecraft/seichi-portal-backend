@@ -180,7 +180,7 @@ impl AnswerContent {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct AnswerComment {
+pub struct AnswerComment {
     content: String,
     timestamp: DateTime<Utc>,
     commented_by: User,
@@ -197,7 +197,7 @@ impl From<domain::form::comment::models::Comment> for AnswerComment {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct AnswerLabels {
+pub struct AnswerLabels {
     id: Uuid,
     name: String,
 }
@@ -212,7 +212,7 @@ impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct FormAnswer {
+pub struct FormAnswer {
     id: Uuid,
     user: User,
     form_id: Uuid,

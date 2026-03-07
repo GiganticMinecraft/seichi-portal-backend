@@ -23,6 +23,20 @@ use crate::{
         form_response_schemas::{MessageContentSchema, SenderSchema},
     },
 };
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetMessagesResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<MessageContentSchema>),
+}
+
+impl IntoResponse for GetMessagesResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use domain::form::models::FormId;
@@ -151,7 +165,7 @@ pub async fn update_message_handler(
         ("answer_id" = String, Path, description = "Answer ID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = Vec<MessageContentSchema>),
+        GetMessagesResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -166,7 +180,7 @@ pub async fn get_messages_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetMessagesResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
@@ -182,21 +196,21 @@ pub async fn get_messages_handler(
         .await
         .map_err(handle_error)?;
 
-    let response = messages
-        .into_iter()
-        .map(|message| MessageContentSchema {
-            id: message.id().into_inner(),
-            body: message.body().to_owned(),
-            sender: SenderSchema {
-                uuid: message.sender().id.to_string(),
-                name: message.sender().name.to_owned(),
-                role: message.sender().role.to_string(),
-            },
-            timestamp: message.timestamp().to_owned(),
-        })
-        .collect_vec();
-
-    Ok((StatusCode::OK, Json(json!(response))).into_response())
+    Ok(GetMessagesResponse::Ok(
+        messages
+            .into_iter()
+            .map(|message| MessageContentSchema {
+                id: message.id().into_inner(),
+                body: message.body().to_owned(),
+                sender: SenderSchema {
+                    uuid: message.sender().id.to_string(),
+                    name: message.sender().name.to_owned(),
+                    role: message.sender().role.to_string(),
+                },
+                timestamp: message.timestamp().to_owned(),
+            })
+            .collect_vec(),
+    ))
 }
 
 #[utoipa::path(
