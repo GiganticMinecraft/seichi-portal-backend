@@ -47,19 +47,19 @@ impl HealthCheckRepository for HealthCheckRepositoryImpl {
 
         vec![
             ComponentHealth {
-                name: "db".to_string(),
+                name: "MariaDB".to_string(),
                 healthy: db,
             },
             ComponentHealth {
-                name: "meilisearch".to_string(),
+                name: "Meilisearch".to_string(),
                 healthy: meilisearch,
             },
             ComponentHealth {
-                name: "rabbitmq".to_string(),
+                name: "RabbitMQ".to_string(),
                 healthy: rabbitmq,
             },
             ComponentHealth {
-                name: "discord".to_string(),
+                name: "DiscordBot".to_string(),
                 healthy: discord,
             },
         ]
