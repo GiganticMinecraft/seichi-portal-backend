@@ -1,6 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use domain::repository::Repositories;
 use resource::repository::RealInfrastructureRepository;
+use serde_json::{Map, json};
 use usecase::health_check::HealthCheckUseCase;
 
 #[utoipa::path(
@@ -27,18 +28,19 @@ pub async fn health_check(
         StatusCode::SERVICE_UNAVAILABLE
     };
 
-    let component_map: serde_json::Map<_, _> = std::iter::once((
+    let component_map: Map<_, _> = std::iter::once((
         "status".to_string(),
-        serde_json::json!(if all_ok { "ok" } else { "error" }),
+        json!(if all_ok { "ok" } else { "error" }),
     ))
     .chain(result.components.iter().map(|c| {
         (
             c.name.clone(),
-            serde_json::json!(if c.healthy { "ok" } else { "error" }),
+            json!(if c.healthy { "ok" } else { "error" }),
         )
     }))
     .collect();
-    let body = Json(serde_json::Value::Object(component_map));
+
+    let body = Json(json!(component_map));
 
     (status_code, body).into_response()
 }

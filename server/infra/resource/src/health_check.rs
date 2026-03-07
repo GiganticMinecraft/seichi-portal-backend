@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use domain::repository::health_check_repository::HealthCheckRepository;
+use domain::repository::health_check_repository::{ComponentHealth, HealthCheckRepository};
 use serenity::gateway::ConnectionStage;
 
 use crate::{database::connection::ConnectionPool, messaging::connection::MessagingConnectionPool};
@@ -28,11 +28,7 @@ impl HealthCheckRepositoryImpl {
 
 #[async_trait]
 impl HealthCheckRepository for HealthCheckRepositoryImpl {
-    async fn check_components(
-        &self,
-    ) -> Vec<domain::repository::health_check_repository::ComponentHealth> {
-        use domain::repository::health_check_repository::ComponentHealth;
-
+    async fn check_components(&self) -> Vec<ComponentHealth> {
         let (db, meilisearch, rabbitmq, discord) = tokio::join!(
             self.db_conn.ping_db(),
             self.db_conn.ping_meilisearch(),
