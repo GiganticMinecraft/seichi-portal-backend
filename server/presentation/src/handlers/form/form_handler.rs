@@ -22,13 +22,81 @@ use axum::extract::rejection::PathRejection;
 use domain::form::models::FormDescription;
 use errors::ErrorExtra;
 
+#[derive(utoipa::IntoResponses)]
+pub enum CreateFormResponse {
+    #[response(
+        status = 201,
+        description = "The request has succeeded and a new resource has been created as a result."
+    )]
+    Created(FormSchema),
+}
+
+impl IntoResponse for CreateFormResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Created(body) => (
+                StatusCode::CREATED,
+                [(
+                    header::LOCATION,
+                    HeaderValue::from_str(body.id.to_owned().into_inner().to_string().as_str())
+                        .unwrap(),
+                )],
+                Json(json!(body)),
+            )
+                .into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum FormListResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<FormSchema>),
+}
+
+impl IntoResponse for FormListResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetFormResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(FormSchema),
+}
+
+impl IntoResponse for GetFormResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum UpdateFormResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(FormSchema),
+}
+
+impl IntoResponse for UpdateFormResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/forms",
     summary = "フォームの作成",
     request_body = FormCreateSchema,
     responses(
-        (status = 201, description = "The request has succeeded and a new resource has been created as a result.", body = FormSchema),
+        CreateFormResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -42,7 +110,7 @@ pub async fn create_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormCreateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<CreateFormResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -59,23 +127,15 @@ pub async fn create_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok((
-        StatusCode::CREATED,
-        [(
-            header::LOCATION,
-            HeaderValue::from_str(form.id().to_owned().into_inner().to_string().as_str()).unwrap(),
-        )],
-        Json(json!(FormSchema {
-            id: form.id().to_owned(),
-            title: form.title().to_owned(),
-            description: form.description().to_owned(),
-            settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
-            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-            questions: vec![],
-            labels: vec![],
-        })),
-    )
-        .into_response())
+    Ok(CreateFormResponse::Created(FormSchema {
+        id: form.id().to_owned(),
+        title: form.title().to_owned(),
+        description: form.description().to_owned(),
+        settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+        questions: vec![],
+        labels: vec![],
+    }))
 }
 
 #[utoipa::path(
@@ -87,7 +147,7 @@ pub async fn create_form_handler(
         ("limit" = Option<u32>, Query, description = "Limit for pagination"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = Vec<FormSchema>),
+        FormListResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -100,7 +160,7 @@ pub async fn form_list_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<FormListResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -126,7 +186,7 @@ pub async fn form_list_handler(
         })
         .collect_vec();
 
-    Ok((StatusCode::OK, Json(response_schema)).into_response())
+    Ok(FormListResponse::Ok(response_schema))
 }
 
 #[utoipa::path(
@@ -137,7 +197,7 @@ pub async fn form_list_handler(
         ("id" = String, Path, description = "Form ID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = FormSchema),
+        GetFormResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -151,7 +211,7 @@ pub async fn get_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetFormResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -170,7 +230,7 @@ pub async fn get_form_handler(
         .await
         .map_err(handle_error)?;
 
-    let response = FormSchema {
+    Ok(GetFormResponse::Ok(FormSchema {
         id: form.id().to_owned(),
         title: form.title().to_owned(),
         description: form.description().to_owned(),
@@ -178,9 +238,7 @@ pub async fn get_form_handler(
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
         questions,
         labels,
-    };
-
-    Ok((StatusCode::OK, Json(json!(response))).into_response())
+    }))
 }
 
 #[utoipa::path(
@@ -232,7 +290,7 @@ pub async fn delete_form_handler(
     ),
     request_body = FormUpdateSchema,
     responses(
-        (status = 200, description = "The request has succeeded.", body = FormSchema),
+        UpdateFormResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -248,7 +306,7 @@ pub async fn update_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<UpdateFormResponse, Response> {
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
@@ -298,17 +356,13 @@ pub async fn update_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok((
-        StatusCode::OK,
-        Json(FormSchema {
-            id: updated_form.id().to_owned(),
-            title: updated_form.title().to_owned(),
-            description: updated_form.description().to_owned(),
-            settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
-            metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
-            questions,
-            labels,
-        }),
-    )
-        .into_response())
+    Ok(UpdateFormResponse::Ok(FormSchema {
+        id: updated_form.id().to_owned(),
+        title: updated_form.title().to_owned(),
+        description: updated_form.description().to_owned(),
+        settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
+        metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
+        questions,
+        labels,
+    }))
 }

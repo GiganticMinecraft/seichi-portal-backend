@@ -23,6 +23,20 @@ use crate::{
     schemas::search_schemas::{CrossSearchResult, SearchQuery},
 };
 
+#[derive(utoipa::IntoResponses)]
+pub enum CrossSearchResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(CrossSearchResult),
+}
+
+impl IntoResponse for CrossSearchResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/search",
@@ -31,7 +45,7 @@ use crate::{
         ("query" = Option<String>, Query, description = "Search query"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = CrossSearchResult),
+        CrossSearchResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -44,7 +58,7 @@ pub async fn cross_search(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<SearchQuery>, QueryRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<CrossSearchResponse, Response> {
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         answer_repository: repository.form_answer_repository(),
@@ -58,7 +72,7 @@ pub async fn cross_search(
     let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
 
     match search_query {
-        SearchQuery { query: None } => Ok((
+        SearchQuery { query: None } => Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "errorCode": "BAD_REQUEST",
@@ -71,7 +85,7 @@ pub async fn cross_search(
                 .cross_search(&user, query.into_inner())
                 .await
                 .map_err(handle_error)?;
-            Ok((StatusCode::OK, Json(json!(CrossSearchResult::from(result)))).into_response())
+            Ok(CrossSearchResponse::Ok(CrossSearchResult::from(result)))
         }
     }
 }

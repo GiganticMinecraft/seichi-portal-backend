@@ -27,12 +27,68 @@ use crate::{
     },
 };
 
+#[derive(utoipa::IntoResponses)]
+pub enum GetAllAnswersResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<FormAnswer>),
+}
+
+impl IntoResponse for GetAllAnswersResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetAnswerResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(FormAnswer),
+}
+
+impl IntoResponse for GetAnswerResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetAnswersByFormResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<FormAnswer>),
+}
+
+impl IntoResponse for GetAnswersByFormResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum UpdateAnswerResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(FormAnswer),
+}
+
+impl IntoResponse for UpdateAnswerResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/forms/answers",
     summary = "すべての回答をフォームを横断して取得",
     responses(
-        (status = 200, description = "The request has succeeded.", body = Vec<FormAnswer>),
+        GetAllAnswersResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -44,7 +100,7 @@ use crate::{
 pub async fn get_all_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetAllAnswersResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -58,18 +114,18 @@ pub async fn get_all_answers(
         .await
         .map_err(handle_error)?;
 
-    let response = answers
-        .into_iter()
-        .map(|answer_dto| {
-            FormAnswer::new(
-                answer_dto.form_answer,
-                answer_dto.comments,
-                answer_dto.labels,
-            )
-        })
-        .collect_vec();
-
-    Ok((StatusCode::OK, Json(json!(response))).into_response())
+    Ok(GetAllAnswersResponse::Ok(
+        answers
+            .into_iter()
+            .map(|answer_dto| {
+                FormAnswer::new(
+                    answer_dto.form_answer,
+                    answer_dto.comments,
+                    answer_dto.labels,
+                )
+            })
+            .collect_vec(),
+    ))
 }
 
 #[utoipa::path(
@@ -81,7 +137,7 @@ pub async fn get_all_answers(
         ("answer_id" = String, Path, description = "Answer ID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = FormAnswer),
+        GetAnswerResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -96,7 +152,7 @@ pub async fn get_answer_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetAnswerResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -112,15 +168,11 @@ pub async fn get_answer_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok((
-        StatusCode::OK,
-        Json(json!(FormAnswer::new(
-            answer_dto.form_answer,
-            answer_dto.comments,
-            answer_dto.labels
-        ))),
-    )
-        .into_response())
+    Ok(GetAnswerResponse::Ok(FormAnswer::new(
+        answer_dto.form_answer,
+        answer_dto.comments,
+        answer_dto.labels,
+    )))
 }
 
 #[utoipa::path(
@@ -131,7 +183,7 @@ pub async fn get_answer_handler(
         ("id" = String, Path, description = "Form ID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = Vec<FormAnswer>),
+        GetAnswersByFormResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -146,7 +198,7 @@ pub async fn get_answer_by_form_id_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetAnswersByFormResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -162,18 +214,18 @@ pub async fn get_answer_by_form_id_handler(
         .await
         .map_err(handle_error)?;
 
-    let response = answers
-        .into_iter()
-        .map(|answer_dto| {
-            FormAnswer::new(
-                answer_dto.form_answer,
-                answer_dto.comments,
-                answer_dto.labels,
-            )
-        })
-        .collect_vec();
-
-    Ok((StatusCode::OK, Json(response)).into_response())
+    Ok(GetAnswersByFormResponse::Ok(
+        answers
+            .into_iter()
+            .map(|answer_dto| {
+                FormAnswer::new(
+                    answer_dto.form_answer,
+                    answer_dto.comments,
+                    answer_dto.labels,
+                )
+            })
+            .collect_vec(),
+    ))
 }
 
 #[utoipa::path(
@@ -241,7 +293,7 @@ pub async fn post_answer_handler(
     ),
     request_body = AnswerUpdateSchema,
     responses(
-        (status = 200, description = "The request has succeeded.", body = FormAnswer),
+        UpdateAnswerResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -257,7 +309,7 @@ pub async fn update_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<AnswerUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<UpdateAnswerResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         answer_repository: repository.form_answer_repository(),
         form_repository: repository.form_repository(),
@@ -274,13 +326,9 @@ pub async fn update_answer_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok((
-        StatusCode::OK,
-        Json(FormAnswer::new(
-            answer_dto.form_answer,
-            answer_dto.comments,
-            answer_dto.labels,
-        )),
-    )
-        .into_response())
+    Ok(UpdateAnswerResponse::Ok(FormAnswer::new(
+        answer_dto.form_answer,
+        answer_dto.comments,
+        answer_dto.labels,
+    )))
 }

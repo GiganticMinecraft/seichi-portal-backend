@@ -14,7 +14,6 @@ use domain::{
     user::models::User,
 };
 use errors::ErrorExtra;
-use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use usecase::forms::comment::CommentUseCase;
 
@@ -25,6 +24,20 @@ use crate::{
     handlers::error_handler::handle_error, schemas::form::form_request_schemas::CommentPostSchema,
 };
 
+#[derive(utoipa::IntoResponses)]
+pub enum GetFormCommentResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<AnswerComment>),
+}
+
+impl IntoResponse for GetFormCommentResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/forms/{form_id}/answers/{answer_id}/comments",
@@ -34,7 +47,7 @@ use crate::{
         ("answer_id" = String, Path, description = "Answer ID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = Vec<AnswerComment>),
+        GetFormCommentResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -49,7 +62,7 @@ pub async fn get_form_comment(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetFormCommentResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
         answer_repository: repository.form_answer_repository(),
@@ -63,12 +76,12 @@ pub async fn get_form_comment(
         .await
         .map_err(handle_error)?;
 
-    let response = comments
-        .into_iter()
-        .map(Into::<AnswerComment>::into)
-        .collect_vec();
-
-    Ok((StatusCode::OK, Json(response)).into_response())
+    Ok(GetFormCommentResponse::Ok(
+        comments
+            .into_iter()
+            .map(Into::<AnswerComment>::into)
+            .collect(),
+    ))
 }
 
 #[utoipa::path(

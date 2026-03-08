@@ -16,9 +16,22 @@ use axum::{
 use domain::{repository::Repositories, user::models::User};
 use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
-use serde_json::json;
 use usecase::notification::NotificationUseCase;
 use uuid::Uuid;
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetNotificationSettingsResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(NotificationSettingsResponse),
+}
+
+impl IntoResponse for GetNotificationSettingsResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
 
 #[utoipa::path(
     get,
@@ -28,7 +41,7 @@ use uuid::Uuid;
         ("uuid" = String, Path, description = "User UUID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = NotificationSettingsResponse),
+        GetNotificationSettingsResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -43,7 +56,7 @@ pub async fn get_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetNotificationSettingsResponse, Response> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
@@ -56,11 +69,11 @@ pub async fn get_notification_settings(
         .await
         .map_err(handle_error)?;
 
-    let response = NotificationSettingsResponse {
-        is_send_message_notification: *settings.is_send_message_notification(),
-    };
-
-    Ok((StatusCode::OK, Json(json!(response))).into_response())
+    Ok(GetNotificationSettingsResponse::Ok(
+        NotificationSettingsResponse {
+            is_send_message_notification: *settings.is_send_message_notification(),
+        },
+    ))
 }
 
 #[utoipa::path(
@@ -68,7 +81,7 @@ pub async fn get_notification_settings(
     path = "/notifications/settings/me",
     summary = "自身の通知設定の取得",
     responses(
-        (status = 200, description = "The request has succeeded.", body = NotificationSettingsResponse),
+        GetNotificationSettingsResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -82,7 +95,7 @@ pub async fn get_notification_settings(
 pub async fn get_my_notification_settings(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetNotificationSettingsResponse, Response> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
@@ -95,11 +108,11 @@ pub async fn get_my_notification_settings(
         .await
         .map_err(handle_error)?;
 
-    let response = NotificationSettingsResponse {
-        is_send_message_notification: *settings.is_send_message_notification(),
-    };
-
-    Ok((StatusCode::OK, Json(json!(response))).into_response())
+    Ok(GetNotificationSettingsResponse::Ok(
+        NotificationSettingsResponse {
+            is_send_message_notification: *settings.is_send_message_notification(),
+        },
+    ))
 }
 
 #[utoipa::path(
