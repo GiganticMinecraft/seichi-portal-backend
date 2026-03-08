@@ -174,7 +174,7 @@ pub struct PutQuestionsResponseSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) enum Role {
+pub enum Role {
     #[serde(rename = "STANDARD_USER")]
     StandardUser,
     #[serde(rename = "ADMINISTRATOR")]
@@ -191,7 +191,7 @@ impl From<domain::user::models::Role> for Role {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct User {
+pub struct User {
     uuid: String,
     name: String,
     role: Role,
@@ -208,7 +208,7 @@ impl From<domain::user::models::User> for User {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub(crate) struct AnswerContent {
+pub struct AnswerContent {
     question_id: i32,
     answer: String,
 }
