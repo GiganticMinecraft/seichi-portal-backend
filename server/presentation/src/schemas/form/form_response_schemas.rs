@@ -113,7 +113,7 @@ pub struct FormSchema {
     pub labels: Vec<FormLabel>,
 }
 
-#[derive(utoipa::ToSchema)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct QuestionResponseSchema {
     pub id: Option<i32>,
     pub form_id: String,
@@ -124,10 +124,53 @@ pub struct QuestionResponseSchema {
     pub is_required: bool,
 }
 
-#[derive(utoipa::ToSchema)]
+impl From<domain::form::question::models::Question> for QuestionResponseSchema {
+    fn from(val: domain::form::question::models::Question) -> Self {
+        QuestionResponseSchema {
+            id: val.id.map(|id| id.into_inner()),
+            form_id: val.form_id.into_inner().to_string(),
+            title: val.title,
+            description: val.description,
+            question_type: val.question_type.to_string(),
+            choices: val.choices,
+            is_required: val.is_required,
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct FormLabelResponseSchema {
     pub id: String,
     pub name: String,
+}
+
+impl From<domain::form::models::FormLabel> for FormLabelResponseSchema {
+    fn from(val: domain::form::models::FormLabel) -> Self {
+        FormLabelResponseSchema {
+            id: val.id().to_owned().into_inner().to_string(),
+            name: val.name().to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerLabelResponseSchema {
+    pub id: String,
+    pub name: String,
+}
+
+impl From<domain::form::answer::models::AnswerLabel> for AnswerLabelResponseSchema {
+    fn from(val: domain::form::answer::models::AnswerLabel) -> Self {
+        AnswerLabelResponseSchema {
+            id: val.id().to_owned().into_inner().to_string(),
+            name: val.name().to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct PutQuestionsResponseSchema {
+    pub questions: Vec<QuestionResponseSchema>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
