@@ -10,14 +10,44 @@ use domain::{form::models::FormId, repository::Repositories, user::models::User}
 use errors::ErrorExtra;
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
-use serde_json::json;
 use usecase::forms::question::QuestionUseCase;
 
 use crate::schemas::error_responses::*;
+use crate::schemas::form::form_response_schemas::{
+    PutQuestionsResponseSchema, QuestionResponseSchema,
+};
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::FormQuestionPutSchema,
 };
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetQuestionsResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<QuestionResponseSchema>),
+}
+
+impl IntoResponse for GetQuestionsResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum PutQuestionsResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(PutQuestionsResponseSchema),
+}
+
+impl IntoResponse for PutQuestionsResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
 
 #[utoipa::path(
     get,
@@ -27,7 +57,7 @@ use crate::{
         ("id" = String, Path, description = "Form ID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded.", body = Vec<super::super::super::schemas::form::form_response_schemas::QuestionResponseSchema>),
+        GetQuestionsResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -41,7 +71,7 @@ pub async fn get_questions_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetQuestionsResponse, Response> {
     let question_use_case = QuestionUseCase {
         question_repository: repository.form_question_repository(),
     };
@@ -52,7 +82,9 @@ pub async fn get_questions_handler(
         .get_questions(&user, form_id)
         .await
         .map_err(handle_error)?;
-    Ok((StatusCode::OK, Json(questions)).into_response())
+    Ok(GetQuestionsResponse::Ok(
+        questions.into_iter().map(Into::into).collect(),
+    ))
 }
 
 #[utoipa::path(
@@ -64,7 +96,7 @@ pub async fn get_questions_handler(
     ),
     request_body = FormQuestionPutSchema,
     responses(
-        (status = 200, description = "The request has succeeded."),
+        PutQuestionsResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -80,7 +112,7 @@ pub async fn put_question_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormQuestionPutSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<PutQuestionsResponse, Response> {
     let question_use_case = QuestionUseCase {
         question_repository: repository.form_question_repository(),
     };
@@ -109,5 +141,7 @@ pub async fn put_question_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok((StatusCode::OK, Json(json!({"questions": questions }))).into_response())
+    Ok(PutQuestionsResponse::Ok(PutQuestionsResponseSchema {
+        questions: questions.into_iter().map(Into::into).collect(),
+    }))
 }

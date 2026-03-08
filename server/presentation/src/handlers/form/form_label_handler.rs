@@ -18,10 +18,50 @@ use usecase::forms::form_label::FormLabelUseCase;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::FormLabelCreateSchema;
+use crate::schemas::form::form_response_schemas::FormLabelResponseSchema;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::{FormLabelUpdateSchema, ReplaceFormLabelSchema},
 };
+
+#[derive(utoipa::IntoResponses)]
+pub enum CreateFormLabelResponse {
+    #[response(
+        status = 201,
+        description = "The request has succeeded and a new resource has been created as a result."
+    )]
+    Created(FormLabelResponseSchema),
+}
+
+impl IntoResponse for CreateFormLabelResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Created(body) => (
+                StatusCode::CREATED,
+                [(
+                    header::LOCATION,
+                    HeaderValue::from_str(body.id.as_str()).unwrap(),
+                )],
+                Json(body),
+            )
+                .into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetFormLabelsResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<FormLabelResponseSchema>),
+}
+
+impl IntoResponse for GetFormLabelsResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
 
 #[utoipa::path(
     post,
@@ -29,7 +69,7 @@ use crate::{
     summary = "フォーム用ラベルを作成する",
     request_body = FormLabelCreateSchema,
     responses(
-        (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
+        CreateFormLabelResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -43,7 +83,7 @@ pub async fn create_label_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormLabelCreateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<CreateFormLabelResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
@@ -55,23 +95,7 @@ pub async fn create_label_for_forms(
         .await
         .map_err(handle_error)?;
 
-    Ok((
-        StatusCode::CREATED,
-        [(
-            header::LOCATION,
-            HeaderValue::from_str(
-                created_label
-                    .id()
-                    .to_owned()
-                    .into_inner()
-                    .to_string()
-                    .as_str(),
-            )
-            .unwrap(),
-        )],
-        Json(created_label),
-    )
-        .into_response())
+    Ok(CreateFormLabelResponse::Created(created_label.into()))
 }
 
 #[utoipa::path(
@@ -79,7 +103,7 @@ pub async fn create_label_for_forms(
     path = "/labels/forms",
     summary = "フォーム用ラベルの一覧を取得する",
     responses(
-        (status = 200, description = "The request has succeeded."),
+        GetFormLabelsResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -91,7 +115,7 @@ pub async fn create_label_for_forms(
 pub async fn get_labels_for_forms(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetFormLabelsResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
@@ -100,7 +124,9 @@ pub async fn get_labels_for_forms(
         .get_labels_for_forms(&user)
         .await
         .map_err(handle_error)?;
-    Ok((StatusCode::OK, Json(labels)).into_response())
+    Ok(GetFormLabelsResponse::Ok(
+        labels.into_iter().map(Into::into).collect(),
+    ))
 }
 
 #[utoipa::path(

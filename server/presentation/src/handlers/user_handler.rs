@@ -18,7 +18,7 @@ use usecase::user::UserUseCase;
 use uuid::Uuid;
 
 use crate::schemas::error_responses::*;
-use crate::schemas::user::UserUpdateSchema;
+use crate::schemas::user::{UserInfoResponse, UserSchema, UserUpdateSchema};
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
@@ -26,12 +26,54 @@ use axum_extra::typed_header::TypedHeaderRejection;
 use errors::presentation::PresentationError;
 use errors::{Error, ErrorExtra};
 
+#[derive(utoipa::IntoResponses)]
+pub enum GetUserInfoResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(UserInfoResponse),
+}
+
+impl IntoResponse for GetUserInfoResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum PatchUserRoleResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(UserSchema),
+}
+
+impl IntoResponse for PatchUserRoleResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum UserListResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<UserSchema>),
+}
+
+impl IntoResponse for UserListResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/users/me",
     summary = "自分のユーザー情報の取得",
     responses(
-        (status = 200, description = "The request has succeeded."),
+        GetUserInfoResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -43,7 +85,7 @@ use errors::{Error, ErrorExtra};
 pub async fn get_my_user_info(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetUserInfoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -58,16 +100,13 @@ pub async fn get_my_user_info(
             user.name().to_owned().into_inner(),
         )
     });
-    Ok((
-        StatusCode::OK,
-        Json(json!({
-            "id": user_dto.user.id.to_string(),
-            "name": user_dto.user.name,
-            "role": user_dto.user.role.to_string(),
-            "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
-            "discord_username": discord_user_id_with_name.map(|(_, username)| username),
-        })),
-    ).into_response())
+    Ok(GetUserInfoResponse::Ok(UserInfoResponse {
+        id: user_dto.user.id.to_string(),
+        name: user_dto.user.name,
+        role: user_dto.user.role.to_string(),
+        discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
+        discord_username: discord_user_id_with_name.map(|(_, name)| name),
+    }))
 }
 
 #[utoipa::path(
@@ -78,7 +117,7 @@ pub async fn get_my_user_info(
         ("uuid" = String, Path, description = "User UUID"),
     ),
     responses(
-        (status = 200, description = "The request has succeeded."),
+        GetUserInfoResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -92,7 +131,7 @@ pub async fn get_user_info(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetUserInfoResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -109,16 +148,13 @@ pub async fn get_user_info(
             user.name().to_owned().into_inner(),
         )
     });
-    Ok((
-        StatusCode::OK,
-        Json(json!({
-            "id": user_dto.user.id.to_string(),
-            "name": user_dto.user.name,
-            "role": user_dto.user.role.to_string(),
-            "discord_user_id": discord_user_id_with_name.to_owned().map(|(discord_user, _)| discord_user),
-            "discord_username": discord_user_id_with_name.map(|(_, username)| username),
-        })),
-    ).into_response())
+    Ok(GetUserInfoResponse::Ok(UserInfoResponse {
+        id: user_dto.user.id.to_string(),
+        name: user_dto.user.name,
+        role: user_dto.user.role.to_string(),
+        discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
+        discord_username: discord_user_id_with_name.map(|(_, name)| name),
+    }))
 }
 
 #[utoipa::path(
@@ -130,7 +166,7 @@ pub async fn get_user_info(
     ),
     request_body = UserUpdateSchema,
     responses(
-        (status = 200, description = "The request has succeeded."),
+        PatchUserRoleResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -145,7 +181,7 @@ pub async fn patch_user_role(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
     json: Result<Json<UserUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<PatchUserRoleResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -160,7 +196,7 @@ pub async fn patch_user_role(
     }
     .map_err(handle_error)?;
 
-    Ok((StatusCode::OK, Json(user)).into_response())
+    Ok(PatchUserRoleResponse::Ok(user.into()))
 }
 
 #[utoipa::path(
@@ -168,7 +204,7 @@ pub async fn patch_user_role(
     path = "/users",
     summary = "ユーザーの一覧取得",
     responses(
-        (status = 200, description = "The request has succeeded."),
+        UserListResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -180,7 +216,7 @@ pub async fn patch_user_role(
 pub async fn user_list(
     Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<UserListResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -189,7 +225,9 @@ pub async fn user_list(
         .fetch_all_users(&actor)
         .await
         .map_err(handle_error)?;
-    Ok((StatusCode::OK, Json(json!(users))).into_response())
+    Ok(UserListResponse::Ok(
+        users.into_iter().map(Into::into).collect(),
+    ))
 }
 
 #[utoipa::path(

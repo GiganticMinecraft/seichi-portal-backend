@@ -17,10 +17,64 @@ use usecase::forms::answer_label::AnswerLabelUseCase;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::AnswerLabelSchema;
+use crate::schemas::form::form_response_schemas::AnswerLabelResponseSchema;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::form_request_schemas::{AnswerLabelUpdateSchema, ReplaceAnswerLabelSchema},
 };
+
+#[derive(utoipa::IntoResponses)]
+pub enum CreateAnswerLabelResponse {
+    #[response(
+        status = 201,
+        description = "The request has succeeded and a new resource has been created as a result."
+    )]
+    Created(AnswerLabelResponseSchema),
+}
+
+impl IntoResponse for CreateAnswerLabelResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Created(body) => (
+                StatusCode::CREATED,
+                [(
+                    header::LOCATION,
+                    HeaderValue::from_str(body.id.as_str()).unwrap(),
+                )],
+                Json(body),
+            )
+                .into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetAnswerLabelsResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<AnswerLabelResponseSchema>),
+}
+
+impl IntoResponse for GetAnswerLabelsResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum EditAnswerLabelResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(AnswerLabelResponseSchema),
+}
+
+impl IntoResponse for EditAnswerLabelResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
 
 #[utoipa::path(
     post,
@@ -28,7 +82,7 @@ use crate::{
     summary = "回答用ラベルを作成する",
     request_body = AnswerLabelSchema,
     responses(
-        (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
+        CreateAnswerLabelResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -42,7 +96,7 @@ pub async fn create_label_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<AnswerLabelSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<CreateAnswerLabelResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
@@ -54,15 +108,7 @@ pub async fn create_label_for_answers(
         .await
         .map_err(handle_error)?;
 
-    Ok((
-        StatusCode::CREATED,
-        [(
-            header::LOCATION,
-            HeaderValue::from_str(label.id().to_owned().into_inner().to_string().as_str()).unwrap(),
-        )],
-        Json(label),
-    )
-        .into_response())
+    Ok(CreateAnswerLabelResponse::Created(label.into()))
 }
 
 #[utoipa::path(
@@ -70,7 +116,7 @@ pub async fn create_label_for_answers(
     path = "/labels/answers",
     summary = "回答用ラベルの一覧を取得する",
     responses(
-        (status = 200, description = "The request has succeeded."),
+        GetAnswerLabelsResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -82,7 +128,7 @@ pub async fn create_label_for_answers(
 pub async fn get_labels_for_answers(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<GetAnswerLabelsResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
@@ -91,7 +137,9 @@ pub async fn get_labels_for_answers(
         .get_labels_for_answers(&user)
         .await
         .map_err(handle_error)?;
-    Ok((StatusCode::OK, Json(labels)).into_response())
+    Ok(GetAnswerLabelsResponse::Ok(
+        labels.into_iter().map(Into::into).collect(),
+    ))
 }
 
 #[utoipa::path(
@@ -140,7 +188,7 @@ pub async fn delete_label_for_answers(
     ),
     request_body = AnswerLabelUpdateSchema,
     responses(
-        (status = 200, description = "The request has succeeded."),
+        EditAnswerLabelResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -156,7 +204,7 @@ pub async fn edit_label_for_answers(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<AnswerLabelId>, PathRejection>,
     json: Result<Json<AnswerLabelUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<EditAnswerLabelResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
         answer_label_repository: repository.answer_label_repository(),
     };
@@ -169,7 +217,7 @@ pub async fn edit_label_for_answers(
         .await
         .map_err(handle_error)?;
 
-    Ok((StatusCode::OK, Json(updated_label)).into_response())
+    Ok(EditAnswerLabelResponse::Ok(updated_label.into()))
 }
 
 #[utoipa::path(
