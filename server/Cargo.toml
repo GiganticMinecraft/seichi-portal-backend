@@ -37,7 +37,7 @@ serde_json = "1.0.149"
 itertools = "0.14.0"
 chrono = { version = "0.4.44" }
 futures = "0.3.32"
-uuid = { version = "1.23.0", features = ["v4", "v7"] }
+uuid = { version = "1.23.1", features = ["v4", "v7"] }
 deriving_via = "2.2.0"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json"] }
 regex = "1.12.3"
