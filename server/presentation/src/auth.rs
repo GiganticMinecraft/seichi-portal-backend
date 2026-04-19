@@ -107,27 +107,8 @@ pub async fn auth(
                 .into_response()
         })?;
 
-    match user_use_case.upsert_user(&user, user.to_owned()).await {
-        Ok(_) => {
-            request.extensions_mut().insert(user);
+    request.extensions_mut().insert(user);
 
-            let response = next.run(request).await;
-            Ok(response)
-        }
-        Err(err) => {
-            tracing::error!("{}", err);
-            Err((
-                StatusCode::UNAUTHORIZED,
-                [(header::CONTENT_TYPE, "application/problem+json")],
-                Json(json!({
-                    "type": "about:blank",
-                    "title": "Unauthorized",
-                    "status": 401,
-                    "detail": "Authentication middleware error.",
-                    "errorCode": "UNAUTHORIZED"
-                })),
-            )
-                .into_response())
-        }
-    }
+    let response = next.run(request).await;
+    Ok(response)
 }
