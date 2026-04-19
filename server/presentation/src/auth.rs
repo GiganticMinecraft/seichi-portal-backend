@@ -55,7 +55,7 @@ pub async fn auth(
 
     let session_id = auth.token();
 
-    let user = match user_use_case
+    let session_user = match user_use_case
         .fetch_user_by_session_id(session_id.to_string())
         .await
         .map_err(|_| {
@@ -88,6 +88,24 @@ pub async fn auth(
                 .into_response());
         }
     };
+
+    let user = user_use_case
+        .find_by(&session_user, session_user.id)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                [(header::CONTENT_TYPE, "application/problem+json")],
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Unauthorized",
+                    "status": 401,
+                    "detail": "Failed to retrieve user from database.",
+                    "errorCode": "UNAUTHORIZED"
+                })),
+            )
+                .into_response()
+        })?;
 
     match user_use_case.upsert_user(&user, user.to_owned()).await {
         Ok(_) => {
