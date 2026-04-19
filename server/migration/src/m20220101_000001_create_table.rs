@@ -109,7 +109,7 @@ impl MigrationTrait for Migration {
                 r"CREATE TABLE IF NOT EXISTS form_webhooks(
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id CHAR(36) NOT NULL,
-                    url TEXT NOT NULL,
+                    url TEXT,
                     FOREIGN KEY fk_form_webhooks_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
