@@ -44,7 +44,7 @@ regex = "1.12.3"
 redis = { version = "1.2.0", features = ["tokio-comp"] }
 meilisearch-sdk = "0.33.0"
 serenity = "0.12.5"
-lapin = "4.5.0"
+lapin = "4.6.0"
 utoipa = { version = "5.4.0", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
