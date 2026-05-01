@@ -21,7 +21,7 @@ use crate::{
             ConnectionPool, batch_insert, execute_and_values, query_all, query_all_and_values,
             query_one_and_values,
         },
-        count_as_u32,
+        count::count_as_u32,
     },
     dto::{FormAnswerContentDto, FormAnswerDto},
 };

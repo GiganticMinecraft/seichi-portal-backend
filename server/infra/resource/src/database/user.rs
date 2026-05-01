@@ -12,7 +12,7 @@ use crate::{
     database::{
         components::UserDatabase,
         connection::{ConnectionPool, redis_connection},
-        count_as_u32,
+        count::count_as_u32,
     },
     dto::DiscordUserDto,
 };

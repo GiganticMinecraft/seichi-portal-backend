@@ -12,7 +12,7 @@ use crate::{
     database::{
         components::FormDatabase,
         connection::{ConnectionPool, execute_and_values, query_all_and_values},
-        count_as_u32,
+        count::count_as_u32,
     },
     dto::FormDto,
 };
