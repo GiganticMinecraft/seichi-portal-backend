@@ -5,7 +5,7 @@ use domain::{
     user::models::User,
 };
 use errors::infra::InfraError;
-use futures::future::try_join;
+use futures::future::try_join3;
 use types::non_empty_string::NonEmptyString;
 
 use crate::database::connection::query_one;
@@ -54,9 +54,16 @@ impl FormDatabase for ConnectionPool {
                     txn,
                 );
 
-                try_join(
+                let insert_form_webhooks_table = execute_and_values(
+                    r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)",
+                    [form_id.to_owned().into_inner().to_string().into()],
+                    txn,
+                );
+
+                try_join3(
                     insert_default_answer_title_table,
                     insert_response_period_table,
+                    insert_form_webhooks_table,
                 )
                 .await?;
 
@@ -76,7 +83,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let form_query = query_all_and_values(
-                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, answer_visibility, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, answer_visibility, created_at, updated_at, form_webhooks.url AS webhook_url, start_at, end_at, default_answer_titles.title AS default_answer_title
                             FROM form_meta_data
                             LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
@@ -101,8 +108,8 @@ impl FormDatabase for ConnectionPool {
                             ),
                             start_at: query_rs.try_get("", "start_at")?,
                             end_at: query_rs.try_get("", "end_at")?,
-                            webhook_url: query_rs.try_get("", "url")?,
-                            default_answer_title: query_rs.try_get("", "default_answer_titles.title")?,
+                            webhook_url: query_rs.try_get("", "webhook_url")?,
+                            default_answer_title: query_rs.try_get("", "default_answer_title")?,
                             visibility: query_rs.try_get("", "visibility")?,
                             answer_visibility: query_rs.try_get("", "answer_visibility")?,
                         })
@@ -117,7 +124,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let form_query = query_all_and_values(
-                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, answer_visibility, created_at, updated_at, url, start_at, end_at, default_answer_titles.title
+                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, answer_visibility, created_at, updated_at, form_webhooks.url AS webhook_url, start_at, end_at, default_answer_titles.title AS default_answer_title
                             FROM form_meta_data
                             LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
                             LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
@@ -143,8 +150,8 @@ impl FormDatabase for ConnectionPool {
                     ),
                     start_at: form.try_get("", "start_at")?,
                     end_at: form.try_get("", "end_at")?,
-                    webhook_url: form.try_get("", "url")?,
-                    default_answer_title: form.try_get("", "title")?,
+                    webhook_url: form.try_get("", "webhook_url")?,
+                    default_answer_title: form.try_get("", "default_answer_title")?,
                     visibility: form.try_get("", "visibility")?,
                     answer_visibility: form.try_get("", "answer_visibility")?,
                 }))
