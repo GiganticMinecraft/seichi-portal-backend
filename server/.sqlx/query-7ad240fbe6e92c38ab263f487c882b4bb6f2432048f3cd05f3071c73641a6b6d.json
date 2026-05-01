@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO discord_linked_users (user_id, discord_id, discord_username)\n                    VALUES (?, ?, ?)\n                    ON DUPLICATE KEY UPDATE\n                    discord_id = VALUES(discord_id),\n                    discord_username = VALUES(discord_username)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "7ad240fbe6e92c38ab263f487c882b4bb6f2432048f3cd05f3071c73641a6b6d"
+}

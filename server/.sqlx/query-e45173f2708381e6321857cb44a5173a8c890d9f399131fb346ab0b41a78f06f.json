@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO discord_notification_settings (discord_id, is_send_message_notification)\n                    VALUES ((SELECT discord_id FROM discord_linked_users WHERE user_id = ?), ?)\n                    ON DUPLICATE KEY UPDATE\n                    is_send_message_notification = VALUES(is_send_message_notification)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e45173f2708381e6321857cb44a5173a8c890d9f399131fb346ab0b41a78f06f"
+}
