@@ -337,9 +337,11 @@ where
             bind_values(
                 &sql.replace(
                     insert_part,
-                    &vec![insert_part; params_vec.len() / insert_part.matches('?').count()]
-                        .iter()
-                        .join(", "),
+                    &std::iter::repeat_n(
+                        insert_part,
+                        params_vec.len() / insert_part.matches('?').count(),
+                    )
+                    .join(", "),
                 ),
                 params_vec,
             )?
@@ -366,7 +368,11 @@ where
             bind_values(
                 &sql.replace(
                     "(?)",
-                    format!("({})", &vec!["?"; params_vec.len()].iter().join(", ")).as_str(),
+                    format!(
+                        "({})",
+                        std::iter::repeat_n("?", params_vec.len()).join(", ")
+                    )
+                    .as_str(),
                 ),
                 params_vec,
             )?
