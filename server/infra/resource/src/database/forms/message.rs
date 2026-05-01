@@ -46,7 +46,6 @@ impl FormMessageDatabase for ConnectionPool {
                 Ok::<_, InfraError>(())
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -68,7 +67,6 @@ impl FormMessageDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -161,7 +159,6 @@ impl FormMessageDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -179,6 +176,5 @@ impl FormMessageDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

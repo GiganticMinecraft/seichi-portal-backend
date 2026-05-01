@@ -66,7 +66,6 @@ impl FormDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -111,7 +110,6 @@ impl FormDatabase for ConnectionPool {
                     }).collect::<Result<Vec<_>, _>>()
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -152,7 +150,6 @@ impl FormDatabase for ConnectionPool {
                 }))
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -170,7 +167,6 @@ impl FormDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -231,7 +227,6 @@ impl FormDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -249,6 +244,5 @@ impl FormDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

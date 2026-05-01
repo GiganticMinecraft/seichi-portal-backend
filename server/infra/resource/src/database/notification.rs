@@ -45,7 +45,6 @@ impl NotificationDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -63,7 +62,8 @@ impl NotificationDatabase for ConnectionPool {
                     WHERE user_id = ?",
                     [recipient_id.to_string().into()],
                     txn,
-                ).await?;
+                )
+                .await?;
 
                 rs.map(|rs| {
                     Ok::<_, InfraError>(NotificationSettingsDto {
@@ -72,10 +72,13 @@ impl NotificationDatabase for ConnectionPool {
                             id: recipient_id.to_string(),
                             role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
                         },
-                        is_send_message_notification: rs.try_get("", "is_send_message_notification")?,
+                        is_send_message_notification: rs
+                            .try_get("", "is_send_message_notification")?,
                     })
-                }).transpose()
+                })
+                .transpose()
             })
-        }).await.map_err(Into::into)
+        })
+        .await
     }
 }

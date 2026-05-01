@@ -78,7 +78,6 @@ impl FormAnswerDatabase for ConnectionPool {
                 Ok::<_, InfraError>(())
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -128,7 +127,6 @@ impl FormAnswerDatabase for ConnectionPool {
             })
         })
             .await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -206,7 +204,6 @@ impl FormAnswerDatabase for ConnectionPool {
 
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -277,7 +274,6 @@ impl FormAnswerDatabase for ConnectionPool {
             })
         })
             .await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -364,7 +360,6 @@ impl FormAnswerDatabase for ConnectionPool {
 
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -390,7 +385,6 @@ impl FormAnswerDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -408,6 +402,5 @@ impl FormAnswerDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

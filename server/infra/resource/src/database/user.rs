@@ -70,7 +70,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError> {
@@ -87,7 +86,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn fetch_all_users(&self) -> Result<Vec<User>, InfraError> {
@@ -110,7 +108,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn start_user_session(
@@ -181,7 +178,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError> {
@@ -200,7 +196,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn fetch_discord_user(&self, user: &User) -> Result<Option<DiscordUserDto>, InfraError> {
@@ -244,6 +239,5 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

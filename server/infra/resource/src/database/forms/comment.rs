@@ -49,7 +49,6 @@ impl FormCommentDatabase for ConnectionPool {
             })
         })
             .await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -80,7 +79,6 @@ impl FormCommentDatabase for ConnectionPool {
             })
         })
             .await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -109,7 +107,6 @@ impl FormCommentDatabase for ConnectionPool {
             })
         })
             .await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -146,7 +143,6 @@ impl FormCommentDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -164,7 +160,6 @@ impl FormCommentDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -183,6 +178,5 @@ impl FormCommentDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

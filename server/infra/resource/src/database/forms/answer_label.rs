@@ -37,7 +37,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -59,7 +58,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -91,7 +89,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -130,7 +127,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -163,7 +159,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
             .await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -181,7 +176,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -204,7 +198,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -244,7 +237,6 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -263,6 +255,5 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

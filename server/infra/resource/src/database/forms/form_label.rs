@@ -37,7 +37,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -58,7 +57,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -97,7 +95,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -115,7 +112,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -140,7 +136,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -162,7 +157,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -192,7 +186,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -231,7 +224,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -249,6 +241,5 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

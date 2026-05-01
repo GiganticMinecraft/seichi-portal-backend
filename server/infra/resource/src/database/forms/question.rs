@@ -78,7 +78,6 @@ impl FormQuestionDatabase for ConnectionPool {
                 Ok::<_, InfraError>(())
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -87,89 +86,105 @@ impl FormQuestionDatabase for ConnectionPool {
         form_id: FormId,
         questions: Vec<Question>,
     ) -> Result<(), InfraError> {
-        self.read_write_transaction(|txn| Box::pin(async move {
-            let current_form_question_ids = query_all_and_values(
-                r"SELECT question_id FROM form_questions WHERE form_id = ?",
-                [form_id.into_inner().to_string().into()],
-                txn,
-            ).await?
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                let current_form_question_ids = query_all_and_values(
+                    r"SELECT question_id FROM form_questions WHERE form_id = ?",
+                    [form_id.into_inner().to_string().into()],
+                    txn,
+                )
+                .await?
                 .into_iter()
                 .map(|rs| rs.try_get::<i32>("", "question_id"))
                 .collect::<Result<Vec<_>, DbErr>>()?;
 
-            let delete_target_question_ids = current_form_question_ids
-                .into_iter()
-                .filter(|question_id| {
-                    !questions.iter().any(|question| question.id.map(|id| id.into_inner()) == Some(*question_id))
-                }).collect_vec();
+                let delete_target_question_ids = current_form_question_ids
+                    .into_iter()
+                    .filter(|question_id| {
+                        !questions
+                            .iter()
+                            .any(|question| question.id.map(|id| id.into_inner()) == Some(*question_id))
+                    })
+                    .collect_vec();
 
-            multiple_delete(
-                r"DELETE FROM form_questions WHERE question_id IN (?)",
-                delete_target_question_ids.into_iter().map(|id| id.into()),
-                txn,
-            ).await?;
+                multiple_delete(
+                    r"DELETE FROM form_questions WHERE question_id IN (?)",
+                    delete_target_question_ids.into_iter().map(|id| id.into()),
+                    txn,
+                )
+                .await?;
 
-            batch_insert(
-                r"INSERT INTO form_questions (question_id, form_id, title, description, question_type, is_required)
+                batch_insert(
+                    r"INSERT INTO form_questions (question_id, form_id, title, description, question_type, is_required)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                 title = VALUES(title),
                 description = VALUES(description),
                 question_type = VALUES(question_type),
                 is_required = VALUES(is_required)",
-                questions.iter().flat_map(|question| vec![
-                    question.id.map(|id| id.into_inner()).into(),
-                    form_id.into_inner().to_string().into(),
-                    question.title.clone().into(),
-                    question.description.clone().into(),
-                    question.question_type.to_string().into(),
-                    question.is_required.to_owned().into()]),
-                txn,
-            ).await?;
+                    questions.iter().flat_map(|question| {
+                        vec![
+                            question.id.map(|id| id.into_inner()).into(),
+                            form_id.into_inner().to_string().into(),
+                            question.title.clone().into(),
+                            question.description.clone().into(),
+                            question.question_type.to_string().into(),
+                            question.is_required.to_owned().into(),
+                        ]
+                    }),
+                    txn,
+                )
+                .await?;
 
-            let last_insert_id = query_one(
-                "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
-                txn,
-            )
+                let last_insert_id = query_one(
+                    "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
+                    txn,
+                )
                 .await?
                 .unwrap()
                 .try_get("", "question_id")?;
 
-            let choices_active_values = questions
-                .iter()
-                .rev()
-                .zip((1..=last_insert_id).rev())
-                .filter(|(q, _)| {
-                    !q.choices.is_empty() && q.question_type != domain::form::question::models::QuestionType::TEXT
-                })
-                .flat_map(|(question, question_id)| {
-                    question
-                        .choices
+                let choices_active_values = questions
+                    .iter()
+                    .rev()
+                    .zip((1..=last_insert_id).rev())
+                    .filter(|(q, _)| {
+                        !q.choices.is_empty()
+                            && q.question_type != domain::form::question::models::QuestionType::TEXT
+                    })
+                    .flat_map(|(question, question_id)| {
+                        question
+                            .choices
+                            .iter()
+                            .cloned()
+                            .flat_map(|choice| vec![question_id.to_string(), choice])
+                            .collect_vec()
+                    })
+                    .collect_vec();
+
+                // TODO: 現在の API の仕様上、form_choices で割り当てられているidをバックエンドから送信することはないため、
+                //  ON DUPLICATE KEY UPDATE を使用せずに完全に選択肢を上書きしているが、API の仕様を変更して choice_id を公開し、
+                //  それを使って選択肢の更新を行うべきか検討する
+                multiple_delete(
+                    "DELETE FROM form_choices WHERE question_id IN (?)",
+                    questions
                         .iter()
-                        .cloned()
-                        .flat_map(|choice| vec![question_id.to_string(), choice])
-                        .collect_vec()
-                })
-                .collect_vec();
-
-            // TODO: 現在の API の仕様上、form_choices で割り当てられているidをバックエンドから送信することはないため、
-            //  ON DUPLICATE KEY UPDATE を使用せずに完全に選択肢を上書きしているが、API の仕様を変更して choice_id を公開し、
-            //  それを使って選択肢の更新を行うべきか検討する
-            multiple_delete(
-                "DELETE FROM form_choices WHERE question_id IN (?)",
-                questions.iter().map(|question| question.id.map(|id| id.into_inner()).into()),
-                txn,
-            ).await?;
-
-            batch_insert(
-                r"INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
-                choices_active_values.into_iter().map(|value| value.into()),
-                txn,
-            )
+                        .map(|question| question.id.map(|id| id.into_inner()).into()),
+                    txn,
+                )
                 .await?;
 
-            Ok::<_, InfraError>(())
-        })).await.map_err(Into::into)
+                batch_insert(
+                    r"INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
+                    choices_active_values.into_iter().map(|value| value.into()),
+                    txn,
+                )
+                .await?;
+
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
     }
 
     #[tracing::instrument]
@@ -223,6 +238,5 @@ impl FormQuestionDatabase for ConnectionPool {
                     .collect::<Result<Vec<QuestionDto>, _>>()
             })
         }).await
-            .map_err(Into::into)
     }
 }
