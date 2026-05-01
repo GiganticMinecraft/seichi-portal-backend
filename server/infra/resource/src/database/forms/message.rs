@@ -11,6 +11,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
@@ -46,7 +47,6 @@ impl FormMessageDatabase for ConnectionPool {
                 Ok::<_, InfraError>(())
             })
         }).await
-            .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -68,7 +68,6 @@ impl FormMessageDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -94,16 +93,16 @@ impl FormMessageDatabase for ConnectionPool {
                         rs.into_iter()
                             .map(|rs| {
                                 let user = Ok::<_, InfraError>(UserDto {
-                                    name: rs.try_get("", "name")?,
-                                    id: rs.try_get("", "sender")?,
-                                    role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                                    name: rs.try_get("name")?,
+                                    id: rs.try_get("sender")?,
+                                    role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
                                 });
 
                                 Ok::<_, InfraError>((
                                     user?,
-                                    Uuid::from_str(&rs.try_get::<String>("", "message_id")?)?,
-                                    rs.try_get::<String>("", "body")?,
-                                    rs.try_get::<DateTime<Utc>>("", "timestamp")?,
+                                    Uuid::from_str(&rs.try_get::<String, _>("message_id")?)?,
+                                    rs.try_get::<String, _>("body")?,
+                                    rs.try_get::<DateTime<Utc>, _>("timestamp")?,
                                 ))
                             })
                             .collect_vec(),
@@ -144,24 +143,23 @@ impl FormMessageDatabase for ConnectionPool {
 
                 rs.map(|rs| {
                     let user = Ok::<_, InfraError>(UserDto {
-                        name: rs.try_get("", "name")?,
-                        id: rs.try_get("", "sender")?,
-                        role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                        name: rs.try_get("name")?,
+                        id: rs.try_get("sender")?,
+                        role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
                     })?;
 
                     Ok::<_, InfraError>(MessageDto {
                         id: message_id.to_owned().to_string(),
-                        related_answer: rs.try_get("", "related_answer_id")?,
+                        related_answer: rs.try_get("related_answer_id")?,
                         sender: user,
-                        body: rs.try_get("", "body")?,
-                        timestamp: rs.try_get("", "timestamp")?,
+                        body: rs.try_get("body")?,
+                        timestamp: rs.try_get("timestamp")?,
                     })
                 })
                 .transpose()
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -179,6 +177,5 @@ impl FormMessageDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

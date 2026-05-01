@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
 use errors::infra::InfraError;
 use itertools::Itertools;
+use sqlx::Row;
 
 use crate::database::connection::query_one;
 use crate::{
@@ -37,7 +38,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -50,15 +50,14 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .collect::<Result<Vec<FormLabelDto>, _>>()
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -89,15 +88,14 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .collect::<Result<Vec<FormLabelDto>, _>>()
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -115,7 +113,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -132,15 +129,14 @@ impl FormLabelDatabase for ConnectionPool {
                 label_rs
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .transpose()
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -162,7 +158,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -184,15 +179,14 @@ impl FormLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormLabelDto {
-                            id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .collect::<Result<Vec<FormLabelDto>, _>>()
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -231,7 +225,6 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     #[tracing::instrument]
@@ -241,7 +234,7 @@ impl FormLabelDatabase for ConnectionPool {
                 let query = query_one("SELECT COUNT(*) FROM label_for_forms", txn).await?;
 
                 let size = query
-                    .map(|rs| rs.try_get::<i32>("", "COUNT(*)"))
+                    .map(|rs| rs.try_get::<i32, _>("COUNT(*)"))
                     .transpose()?
                     .unwrap_or(0);
 
@@ -249,6 +242,5 @@ impl FormLabelDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

@@ -5,10 +5,11 @@ use itertools::Itertools;
 use migration::MigratorTrait;
 use redis::Client;
 use regex::Regex;
-use sea_orm::{
-    AccessMode, ConnectionTrait, Database, DatabaseBackend, DatabaseConnection,
-    DatabaseTransaction, DbErr, ExecResult, QueryResult, Statement, TransactionError,
-    TransactionTrait, Value,
+use sea_orm::{Database, Value};
+use sqlx::{
+    MySql,
+    mysql::{MySqlArguments, MySqlPool, MySqlPoolOptions, MySqlQueryResult, MySqlRow},
+    query::Query,
 };
 
 use crate::database::{
@@ -16,14 +17,18 @@ use crate::database::{
     config::{MEILISEARCH, MYSQL, MeiliSearch, MySQL, REDIS, Redis},
 };
 
+pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
+pub type DbErr = sqlx::Error;
+pub type ExecResult = MySqlQueryResult;
+
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
-    pub(crate) rdb_pool: DatabaseConnection,
+    pub(crate) rdb_pool: MySqlPool,
     pub(crate) meilisearch_client: meilisearch_sdk::client::Client,
 }
 
 impl ConnectionPool {
-    pub async fn new() -> Self {
+    fn database_url() -> String {
         let MySQL {
             user,
             password,
@@ -33,12 +38,16 @@ impl ConnectionPool {
             ..
         } = &*MYSQL;
 
-        let database_url = format!("mysql://{user}:{password}@{host}:{port}/{database}");
+        format!("mysql://{user}:{password}@{host}:{port}/{database}")
+    }
 
+    pub async fn new() -> Self {
+        let database_url = Self::database_url();
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
 
         Self {
-            rdb_pool: Database::connect(&database_url)
+            rdb_pool: MySqlPoolOptions::new()
+                .connect(&database_url)
                 .await
                 .unwrap_or_else(|_| panic!("Cannot establish connect to {database_url}.")),
             meilisearch_client: meilisearch_sdk::client::Client::new(host, api_key.to_owned())
@@ -47,7 +56,10 @@ impl ConnectionPool {
     }
 
     pub async fn ping_db(&self) -> bool {
-        self.rdb_pool.ping().await.is_ok()
+        sqlx::query("SELECT 1")
+            .execute(&self.rdb_pool)
+            .await
+            .is_ok()
     }
 
     pub async fn ping_meilisearch(&self) -> bool {
@@ -59,43 +71,71 @@ impl ConnectionPool {
     }
 
     pub async fn migrate(&self) -> anyhow::Result<()> {
-        migration::Migrator::up(&self.rdb_pool, None).await?;
-
+        let migration_conn = Database::connect(Self::database_url()).await?;
+        migration::Migrator::up(&migration_conn, None).await?;
         Ok(())
     }
 
-    pub async fn read_only_transaction<F, T, E>(
-        &self,
-        callback: F,
-    ) -> Result<T, TransactionError<E>>
+    pub async fn read_only_transaction<F, T, E>(&self, callback: F) -> Result<T, InfraError>
     where
         F: for<'c> FnOnce(
-                &'c DatabaseTransaction,
+                &'c mut DatabaseTransaction,
             ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'c>>
             + Send,
         T: Send,
-        E: std::error::Error + Send,
+        E: Into<InfraError> + Send,
     {
-        self.rdb_pool
-            .transaction_with_config(callback, None, Some(AccessMode::ReadOnly))
+        let mut transaction = self
+            .rdb_pool
+            .begin_with("START TRANSACTION READ ONLY")
             .await
+            .map_err(|error| InfraError::DatabaseTransaction {
+                cause: error.to_string(),
+            })?;
+
+        let result = callback(&mut transaction).await;
+        match result {
+            Ok(value) => {
+                transaction.commit().await?;
+                Ok(value)
+            }
+            Err(error) => {
+                let infra_error = error.into();
+                let _ = transaction.rollback().await;
+                Err(infra_error)
+            }
+        }
     }
 
-    pub async fn read_write_transaction<F, T, E>(
-        &self,
-        callback: F,
-    ) -> Result<T, TransactionError<E>>
+    pub async fn read_write_transaction<F, T, E>(&self, callback: F) -> Result<T, InfraError>
     where
         F: for<'c> FnOnce(
-                &'c DatabaseTransaction,
+                &'c mut DatabaseTransaction,
             ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'c>>
             + Send,
         T: Send,
-        E: std::error::Error + Send,
+        E: Into<InfraError> + Send,
     {
-        self.rdb_pool
-            .transaction_with_config(callback, None, Some(AccessMode::ReadWrite))
+        let mut transaction = self
+            .rdb_pool
+            .begin_with("START TRANSACTION READ WRITE")
             .await
+            .map_err(|error| InfraError::DatabaseTransaction {
+                cause: error.to_string(),
+            })?;
+
+        let result = callback(&mut transaction).await;
+        match result {
+            Ok(value) => {
+                transaction.commit().await?;
+                Ok(value)
+            }
+            Err(error) => {
+                let infra_error = error.into();
+                let _ = transaction.rollback().await;
+                Err(infra_error)
+            }
+        }
     }
 }
 
@@ -115,7 +155,10 @@ impl DatabaseComponents for ConnectionPool {
     type TransactionAcrossComponents = DatabaseTransaction;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents> {
-        Ok(self.rdb_pool.begin().await?)
+        Ok(self
+            .rdb_pool
+            .begin_with("START TRANSACTION READ WRITE")
+            .await?)
     }
 
     fn form(&self) -> &Self::ConcreteFormDatabase {
@@ -163,85 +206,114 @@ impl DatabaseComponents for ConnectionPool {
     }
 }
 
+fn bind_value<'q>(
+    query: Query<'q, MySql, MySqlArguments>,
+    value: Value,
+) -> Result<Query<'q, MySql, MySqlArguments>, sqlx::Error> {
+    match value {
+        Value::Bool(value) => Ok(query.bind(value)),
+        Value::TinyInt(value) => Ok(query.bind(value)),
+        Value::SmallInt(value) => Ok(query.bind(value)),
+        Value::Int(value) => Ok(query.bind(value)),
+        Value::BigInt(value) => Ok(query.bind(value)),
+        Value::TinyUnsigned(value) => Ok(query.bind(value)),
+        Value::SmallUnsigned(value) => Ok(query.bind(value)),
+        Value::Unsigned(value) => Ok(query.bind(value)),
+        Value::BigUnsigned(value) => Ok(query.bind(value)),
+        Value::Float(value) => Ok(query.bind(value)),
+        Value::Double(value) => Ok(query.bind(value)),
+        Value::String(value) => Ok(query.bind(value.map(|value| *value))),
+        Value::Char(value) => Ok(query.bind(value.map(|value| value.to_string()))),
+        Value::Bytes(value) => Ok(query.bind(value.map(|value| *value))),
+        Value::ChronoDate(value) => Ok(query.bind(value.map(|value| *value))),
+        Value::ChronoTime(value) => Ok(query.bind(value.map(|value| *value))),
+        Value::ChronoDateTime(value) => Ok(query.bind(value.map(|value| *value))),
+        Value::ChronoDateTimeUtc(value) => Ok(query.bind(value.map(|value| *value))),
+        Value::ChronoDateTimeLocal(value) => {
+            Ok(query.bind(value.map(|value| value.fixed_offset().naive_local())))
+        }
+        Value::ChronoDateTimeWithTimeZone(value) => {
+            Ok(query.bind(value.map(|value| value.with_timezone(&chrono::Utc))))
+        }
+        Value::Uuid(value) => Ok(query.bind(value.map(|value| *value))),
+        other => Err(sqlx::Error::Protocol(format!(
+            "unsupported bind value for sqlx migration: {other:?}"
+        ))),
+    }
+}
+
+fn bind_values<'q, I>(
+    sql: &'q str,
+    values: I,
+) -> Result<Query<'q, MySql, MySqlArguments>, sqlx::Error>
+where
+    I: IntoIterator<Item = Value>,
+{
+    values.into_iter().try_fold(sqlx::query(sql), bind_value)
+}
+
 pub async fn query_all(
     sql: &str,
-    transaction: &DatabaseTransaction,
-) -> Result<Vec<QueryResult>, DbErr> {
-    transaction
-        .query_all(Statement::from_string(DatabaseBackend::MySql, sql))
-        .await
+    transaction: &mut DatabaseTransaction,
+) -> Result<Vec<MySqlRow>, DbErr> {
+    sqlx::query(sql).fetch_all(&mut **transaction).await
 }
 
 pub async fn query_all_and_values<I>(
     sql: &str,
     values: I,
-    transaction: &DatabaseTransaction,
-) -> Result<Vec<QueryResult>, DbErr>
+    transaction: &mut DatabaseTransaction,
+) -> Result<Vec<MySqlRow>, DbErr>
 where
     I: IntoIterator<Item = Value>,
 {
-    transaction
-        .query_all(Statement::from_sql_and_values(
-            DatabaseBackend::MySql,
-            sql,
-            values,
-        ))
+    bind_values(sql, values)?
+        .fetch_all(&mut **transaction)
         .await
 }
 
 pub async fn query_one(
     sql: &str,
-    transaction: &DatabaseTransaction,
-) -> Result<Option<QueryResult>, DbErr> {
-    transaction
-        .query_one(Statement::from_string(DatabaseBackend::MySql, sql))
-        .await
+    transaction: &mut DatabaseTransaction,
+) -> Result<Option<MySqlRow>, DbErr> {
+    sqlx::query(sql).fetch_optional(&mut **transaction).await
 }
 
 pub async fn query_one_and_values<I>(
     sql: &str,
     values: I,
-    transaction: &DatabaseTransaction,
-) -> Result<Option<QueryResult>, DbErr>
+    transaction: &mut DatabaseTransaction,
+) -> Result<Option<MySqlRow>, DbErr>
 where
     I: IntoIterator<Item = Value>,
 {
-    transaction
-        .query_one(Statement::from_sql_and_values(
-            DatabaseBackend::MySql,
-            sql,
-            values,
-        ))
+    bind_values(sql, values)?
+        .fetch_optional(&mut **transaction)
         .await
 }
 
-pub async fn execute(sql: &str, transaction: &DatabaseTransaction) -> Result<ExecResult, DbErr> {
-    transaction
-        .execute(Statement::from_string(DatabaseBackend::MySql, sql))
-        .await
+pub async fn execute(
+    sql: &str,
+    transaction: &mut DatabaseTransaction,
+) -> Result<ExecResult, DbErr> {
+    sqlx::query(sql).execute(&mut **transaction).await
 }
 
 pub async fn execute_and_values<I>(
     sql: &str,
     values: I,
-    transaction: &DatabaseTransaction,
+    transaction: &mut DatabaseTransaction,
 ) -> Result<ExecResult, DbErr>
 where
     I: IntoIterator<Item = Value>,
 {
-    transaction
-        .execute(Statement::from_sql_and_values(
-            DatabaseBackend::MySql,
-            sql,
-            values,
-        ))
-        .await
+    bind_values(sql, values)?.execute(&mut **transaction).await
 }
 
 pub async fn batch_insert<I>(
     sql: &str,
     params: I,
-    transaction: &DatabaseTransaction,
+    transaction: &mut DatabaseTransaction,
 ) -> Result<Option<ExecResult>, DbErr>
 where
     I: IntoIterator<Item = Value>,
@@ -262,18 +334,19 @@ where
         let insert_part = insert_part_opt.unwrap().as_str();
 
         Ok(Some(
-            transaction
-                .execute(Statement::from_sql_and_values(
-                    DatabaseBackend::MySql,
-                    sql.replace(
+            bind_values(
+                &sql.replace(
+                    insert_part,
+                    &std::iter::repeat_n(
                         insert_part,
-                        &vec![insert_part; params_vec.len() / insert_part.matches('?').count()]
-                            .iter()
-                            .join(", "),
-                    ),
-                    params_vec,
-                ))
-                .await?,
+                        params_vec.len() / insert_part.matches('?').count(),
+                    )
+                    .join(", "),
+                ),
+                params_vec,
+            )?
+            .execute(&mut **transaction)
+            .await?,
         ))
     }
 }
@@ -281,7 +354,7 @@ where
 pub async fn multiple_delete<I>(
     sql: &str,
     params: I,
-    transaction: &DatabaseTransaction,
+    transaction: &mut DatabaseTransaction,
 ) -> Result<Option<ExecResult>, DbErr>
 where
     I: IntoIterator<Item = Value>,
@@ -292,16 +365,19 @@ where
         Ok(None)
     } else {
         Ok(Some(
-            transaction
-                .execute(Statement::from_sql_and_values(
-                    DatabaseBackend::MySql,
-                    sql.replace(
-                        "(?)",
-                        format!("({})", &vec!["?"; params_vec.len()].iter().join(", ")).as_str(),
-                    ),
-                    params_vec,
-                ))
-                .await?,
+            bind_values(
+                &sql.replace(
+                    "(?)",
+                    format!(
+                        "({})",
+                        std::iter::repeat_n("?", params_vec.len()).join(", ")
+                    )
+                    .as_str(),
+                ),
+                params_vec,
+            )?
+            .execute(&mut **transaction)
+            .await?,
         ))
     }
 }
@@ -315,3 +391,5 @@ pub async fn redis_connection() -> Client {
 
     client_result.unwrap_or_else(|_| panic!("Cannot connect to Valkey."))
 }
+
+use errors::infra::InfraError;

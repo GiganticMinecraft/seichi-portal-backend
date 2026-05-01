@@ -6,6 +6,7 @@ use domain::user::models::{DiscordUser, Role, User};
 use errors::infra::InfraError;
 use redis::Commands;
 use sha256::digest;
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::database::connection::query_one;
@@ -35,9 +36,9 @@ impl UserDatabase for ConnectionPool {
                     let user = query
                         .map(|rs| {
                             Ok::<User, InfraError>(User {
-                                name: rs.try_get("", "name")?,
+                                name: rs.try_get("name")?,
                                 id: uuid,
-                                role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                                role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
                             })
                         })
                         .transpose()?;
@@ -70,7 +71,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError> {
@@ -87,7 +87,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn fetch_all_users(&self) -> Result<Vec<User>, InfraError> {
@@ -99,9 +98,9 @@ impl UserDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<User, InfraError>(User {
-                            name: rs.try_get("", "name")?,
-                            id: Uuid::parse_str(&rs.try_get::<String>("", "id")?)?,
-                            role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                            name: rs.try_get("name")?,
+                            id: Uuid::parse_str(&rs.try_get::<String, _>("id")?)?,
+                            role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
                         })
                     })
                     .collect::<Result<Vec<User>, InfraError>>()?;
@@ -110,7 +109,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn start_user_session(
@@ -181,7 +179,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError> {
@@ -200,7 +197,6 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 
     async fn fetch_discord_user(&self, user: &User) -> Result<Option<DiscordUserDto>, InfraError> {
@@ -220,8 +216,8 @@ impl UserDatabase for ConnectionPool {
                     query
                         .map(|rs| {
                             Ok::<_, InfraError>(DiscordUserDto {
-                                user_id: rs.try_get::<String>("", "discord_id")?,
-                                username: rs.try_get::<String>("", "discord_username")?,
+                                user_id: rs.try_get::<String, _>("discord_id")?,
+                                username: rs.try_get::<String, _>("discord_username")?,
                             })
                         })
                         .transpose()
@@ -236,7 +232,7 @@ impl UserDatabase for ConnectionPool {
                 let query = query_one("SELECT COUNT(*) as count FROM users", txn).await?;
 
                 let size = query
-                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .map(|rs| rs.try_get::<i32, _>("count"))
                     .transpose()?
                     .unwrap_or(0);
 
@@ -244,6 +240,5 @@ impl UserDatabase for ConnectionPool {
             })
         })
         .await
-        .map_err(Into::into)
     }
 }

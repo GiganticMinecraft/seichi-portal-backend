@@ -2,12 +2,12 @@ use serde_json::Error;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum InfraError {
     #[error("Database Error: {}", .source)]
     Database {
         #[from]
-        source: sea_orm::error::DbErr,
+        source: sqlx::Error,
     },
     #[error("Transaction Error: {}", .cause)]
     DatabaseTransaction { cause: String },
@@ -49,13 +49,51 @@ pub enum InfraError {
     Send { cause: String },
 }
 
-impl<E> From<sea_orm::TransactionError<E>> for InfraError
-where
-    E: std::error::Error,
-{
-    fn from(value: sea_orm::TransactionError<E>) -> Self {
-        InfraError::DatabaseTransaction {
-            cause: value.to_string(),
+impl PartialEq for InfraError {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Self::Database { source: left } => {
+                matches!(other, Self::Database { source: right } if left.to_string() == right.to_string())
+            }
+            Self::DatabaseTransaction { cause: left } => {
+                matches!(other, Self::DatabaseTransaction { cause: right } if left == right)
+            }
+            Self::UuidParse { source: left } => {
+                matches!(other, Self::UuidParse { source: right } if left == right)
+            }
+            Self::FormNotFound { id: left } => {
+                matches!(other, Self::FormNotFound { id: right } if left == right)
+            }
+            Self::AnswerNotFount { id: left } => {
+                matches!(other, Self::AnswerNotFount { id: right } if left == right)
+            }
+            Self::Outgoing { cause: left } => {
+                matches!(other, Self::Outgoing { cause: right } if left == right)
+            }
+            Self::EnumParse { source: left } => {
+                matches!(other, Self::EnumParse { source: right } if left == right)
+            }
+            Self::Redis { source: left } => {
+                matches!(other, Self::Redis { source: right } if left.to_string() == right.to_string())
+            }
+            Self::Reqwest { cause: left } => {
+                matches!(other, Self::Reqwest { cause: right } if left == right)
+            }
+            Self::MeiliSearch { cause: left } => {
+                matches!(other, Self::MeiliSearch { cause: right } if left == right)
+            }
+            Self::SerdeJson { cause: left } => {
+                matches!(other, Self::SerdeJson { cause: right } if left == right)
+            }
+            Self::SerenityError { cause: left } => {
+                matches!(other, Self::SerenityError { cause: right } if left == right)
+            }
+            Self::AMQP { source: left } => {
+                matches!(other, Self::AMQP { source: right } if left.to_string() == right.to_string())
+            }
+            Self::Send { cause: left } => {
+                matches!(other, Self::Send { cause: right } if left == right)
+            }
         }
     }
 }
