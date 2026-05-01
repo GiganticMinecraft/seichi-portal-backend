@@ -2,13 +2,12 @@ use async_trait::async_trait;
 use domain::form::{models::FormId, question::models::Question};
 use errors::infra::InfraError;
 use itertools::Itertools;
-use sea_orm::DbErr;
 
 use crate::{
     database::{
         components::FormQuestionDatabase,
         connection::{
-            ConnectionPool, batch_insert, multiple_delete, query_all_and_values, query_one,
+            ConnectionPool, DbErr, batch_insert, multiple_delete, query_all_and_values, query_one,
         },
     },
     dto::QuestionDto,

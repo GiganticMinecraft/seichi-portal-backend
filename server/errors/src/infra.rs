@@ -2,12 +2,12 @@ use serde_json::Error;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum InfraError {
     #[error("Database Error: {}", .source)]
     Database {
         #[from]
-        source: sea_orm::error::DbErr,
+        source: sqlx::Error,
     },
     #[error("Transaction Error: {}", .cause)]
     DatabaseTransaction { cause: String },
@@ -49,13 +49,39 @@ pub enum InfraError {
     Send { cause: String },
 }
 
-impl<E> From<sea_orm::TransactionError<E>> for InfraError
-where
-    E: std::error::Error,
-{
-    fn from(value: sea_orm::TransactionError<E>) -> Self {
-        InfraError::DatabaseTransaction {
-            cause: value.to_string(),
+impl PartialEq for InfraError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Database { source: left }, Self::Database { source: right }) => {
+                left.to_string() == right.to_string()
+            }
+            (
+                Self::DatabaseTransaction { cause: left },
+                Self::DatabaseTransaction { cause: right },
+            ) => left == right,
+            (Self::UuidParse { source: left }, Self::UuidParse { source: right }) => left == right,
+            (Self::FormNotFound { id: left }, Self::FormNotFound { id: right }) => left == right,
+            (Self::AnswerNotFount { id: left }, Self::AnswerNotFount { id: right }) => {
+                left == right
+            }
+            (Self::Outgoing { cause: left }, Self::Outgoing { cause: right }) => left == right,
+            (Self::EnumParse { source: left }, Self::EnumParse { source: right }) => left == right,
+            (Self::Redis { source: left }, Self::Redis { source: right }) => {
+                left.to_string() == right.to_string()
+            }
+            (Self::Reqwest { cause: left }, Self::Reqwest { cause: right }) => left == right,
+            (Self::MeiliSearch { cause: left }, Self::MeiliSearch { cause: right }) => {
+                left == right
+            }
+            (Self::SerdeJson { cause: left }, Self::SerdeJson { cause: right }) => left == right,
+            (Self::SerenityError { cause: left }, Self::SerenityError { cause: right }) => {
+                left == right
+            }
+            (Self::AMQP { source: left }, Self::AMQP { source: right }) => {
+                left.to_string() == right.to_string()
+            }
+            (Self::Send { cause: left }, Self::Send { cause: right }) => left == right,
+            _ => false,
         }
     }
 }

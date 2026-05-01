@@ -5,7 +5,6 @@ use domain::{
     user::models::User,
 };
 use errors::infra::InfraError;
-use futures::future::try_join3;
 use types::non_empty_string::NonEmptyString;
 
 use crate::database::connection::query_one;
@@ -42,28 +41,24 @@ impl FormDatabase for ConnectionPool {
                 )
                 .await?;
 
-                let insert_default_answer_title_table = execute_and_values(
+                execute_and_values(
                     r"INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
                     [form_id.to_owned().into_inner().to_string().into()],
                     txn,
-                );
+                )
+                .await?;
 
-                let insert_response_period_table = execute_and_values(
+                execute_and_values(
                     r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)",
                     [form_id.to_owned().into_inner().to_string().into()],
                     txn,
-                );
+                )
+                .await?;
 
-                let insert_form_webhooks_table = execute_and_values(
+                execute_and_values(
                     r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)",
                     [form_id.to_owned().into_inner().to_string().into()],
                     txn,
-                );
-
-                try_join3(
-                    insert_default_answer_title_table,
-                    insert_response_period_table,
-                    insert_form_webhooks_table,
                 )
                 .await?;
 

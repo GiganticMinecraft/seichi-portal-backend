@@ -1,3 +1,5 @@
+#![allow(clippy::useless_conversion)]
+
 pub mod components;
 pub mod config;
 pub mod connection;
