@@ -4,7 +4,6 @@ use errors::infra::InfraError;
 use itertools::Itertools;
 use sqlx::Row;
 
-use crate::database::connection::query_one;
 use crate::{
     database::{
         components::FormLabelDatabase,
@@ -231,14 +230,12 @@ impl FormLabelDatabase for ConnectionPool {
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let query = query_one("SELECT COUNT(*) FROM label_for_forms", txn).await?;
-
-                let size = query
-                    .map(|rs| rs.try_get::<i32, _>("COUNT(*)"))
-                    .transpose()?
+                let size = sqlx::query_scalar!("SELECT COUNT(*) AS count FROM label_for_forms")
+                    .fetch_optional(&mut **txn)
+                    .await?
                     .unwrap_or(0);
 
-                Ok::<_, InfraError>(size as u32)
+                Ok::<_, InfraError>(u32::try_from(size).unwrap_or(0))
             })
         })
         .await

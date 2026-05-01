@@ -6,16 +6,12 @@ use domain::user::models::{DiscordUser, Role, User};
 use errors::infra::InfraError;
 use redis::Commands;
 use sha256::digest;
-use sqlx::Row;
 use uuid::Uuid;
 
-use crate::database::connection::query_one;
 use crate::{
     database::{
         components::UserDatabase,
-        connection::{
-            ConnectionPool, execute_and_values, query_all, query_one_and_values, redis_connection,
-        },
+        connection::{ConnectionPool, redis_connection},
     },
     dto::DiscordUserDto,
 };
@@ -26,19 +22,19 @@ impl UserDatabase for ConnectionPool {
         Ok(self
             .read_only_transaction(|txn| {
                 Box::pin(async move {
-                    let query = query_one_and_values(
+                    let query = sqlx::query!(
                         "SELECT name, role FROM users WHERE id = ?",
-                        [uuid.to_string().into()],
-                        txn,
+                        uuid.to_string()
                     )
+                    .fetch_optional(&mut **txn)
                     .await?;
 
                     let user = query
-                        .map(|rs| {
+                        .map(|row| {
                             Ok::<User, InfraError>(User {
-                                name: rs.try_get("name")?,
+                                name: row.name,
                                 id: uuid,
-                                role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
+                                role: Role::from_str(&row.role)?,
                             })
                         })
                         .transpose()?;
@@ -50,21 +46,21 @@ impl UserDatabase for ConnectionPool {
     }
 
     async fn upsert_user(&self, user: &User) -> Result<(), InfraError> {
-        let params = [
-            user.id.to_string().into(),
-            user.name.to_owned().into(),
-            user.role.to_string().into(),
-        ];
+        let user_id = user.id.to_string();
+        let user_name = user.name.to_owned();
+        let user_role = user.role.to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "INSERT INTO users (id, name, role) VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE
                         name = VALUES(name)",
-                    params,
-                    txn,
+                    user_id,
+                    user_name,
+                    user_role,
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<(), InfraError>(())
@@ -76,11 +72,12 @@ impl UserDatabase for ConnectionPool {
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "UPDATE users SET role = ? WHERE id = ?",
-                    [role.to_string().into(), uuid.to_string().into()],
-                    txn,
+                    role.to_string(),
+                    uuid.to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<(), InfraError>(())
@@ -92,15 +89,17 @@ impl UserDatabase for ConnectionPool {
     async fn fetch_all_users(&self) -> Result<Vec<User>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let query = query_all("SELECT id, name, role FROM users", txn).await?;
+                let query = sqlx::query!("SELECT id, name, role FROM users")
+                    .fetch_all(&mut **txn)
+                    .await?;
 
                 let users = query
                     .into_iter()
-                    .map(|rs| {
+                    .map(|row| {
                         Ok::<User, InfraError>(User {
-                            name: rs.try_get("name")?,
-                            id: Uuid::parse_str(&rs.try_get::<String, _>("id")?)?,
-                            role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
+                            name: row.name,
+                            id: Uuid::parse_str(&row.id)?,
+                            role: Role::from_str(&row.role)?,
                         })
                     })
                     .collect::<Result<Vec<User>, InfraError>>()?;
@@ -159,20 +158,18 @@ impl UserDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     r#"INSERT INTO discord_linked_users (user_id, discord_id, discord_username)
                     VALUES (?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                     discord_id = VALUES(discord_id),
                     discord_username = VALUES(discord_username)
                     "#,
-                    [
-                        user_id.into(),
-                        discord_user_id.into(),
-                        discord_username.into(),
-                    ],
-                    txn,
+                    user_id,
+                    discord_user_id,
+                    discord_username,
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<(), InfraError>(())
@@ -186,11 +183,11 @@ impl UserDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "DELETE FROM discord_linked_users WHERE user_id = ?",
-                    [user_id.into()],
-                    txn,
+                    user_id,
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<(), InfraError>(())
@@ -205,19 +202,19 @@ impl UserDatabase for ConnectionPool {
         Ok(self
             .read_only_transaction(|txn| {
                 Box::pin(async move {
-                    let query = query_one_and_values(
+                    let query = sqlx::query!(
                         "SELECT discord_id, discord_username FROM discord_linked_users WHERE \
                          user_id = ?",
-                        [user_id.into()],
-                        txn,
+                        user_id,
                     )
+                    .fetch_optional(&mut **txn)
                     .await?;
 
                     query
-                        .map(|rs| {
+                        .map(|row| {
                             Ok::<_, InfraError>(DiscordUserDto {
-                                user_id: rs.try_get::<String, _>("discord_id")?,
-                                username: rs.try_get::<String, _>("discord_username")?,
+                                user_id: row.discord_id,
+                                username: row.discord_username,
                             })
                         })
                         .transpose()
@@ -229,14 +226,12 @@ impl UserDatabase for ConnectionPool {
     async fn fetch_size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let query = query_one("SELECT COUNT(*) as count FROM users", txn).await?;
-
-                let size = query
-                    .map(|rs| rs.try_get::<i32, _>("count"))
-                    .transpose()?
+                let size = sqlx::query_scalar!("SELECT COUNT(*) AS count FROM users")
+                    .fetch_optional(&mut **txn)
+                    .await?
                     .unwrap_or(0);
 
-                Ok::<_, InfraError>(size as u32)
+                Ok::<_, InfraError>(u32::try_from(size).unwrap_or(0))
             })
         })
         .await

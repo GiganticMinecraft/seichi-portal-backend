@@ -5,3 +5,4 @@ target
 proptest-regressions/
 .hypothesis
 .vscode/
+server/.sqlx/*.json
