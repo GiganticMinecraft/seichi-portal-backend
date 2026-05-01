@@ -77,3 +77,51 @@ jobs:
       - name: Cargo test
         run: cargo test --all-features
         working-directory: ./server
+
+  sqlx-prepare-check:
+    needs: [ rustfmt ]
+    name: sqlx prepare check
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mariadb:lts
+        env:
+          MYSQL_INITDB_SKIP_TZINFO: 1
+          MARIADB_DATABASE: seichi_portal
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_USER: user
+          MARIADB_PASSWORD: password
+          MYSQL_TCP_PORT: 3306
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      DATABASE_URL: mysql://user:password@127.0.0.1:3306/seichi_portal
+    steps:
+      - uses: actions/checkout@v6
+      - run: echo "RUST_VERSION=$(sed -n 's/channel = \"\\(.*\\)\"/\\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
+      - uses: actions/cache@v5
+        with:
+          key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cache/sccache/
+            target/
+          restore-keys: |
+            rust-${{ env.RUST_VERSION }}-build-
+            rust-${{ env.RUST_VERSION }}-
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install sqlx CLI
+        run: cargo install sqlx-cli --locked --no-default-features --features rustls,mysql
+        working-directory: ./server
+      - name: Check sqlx offline metadata
+        run: cargo sqlx prepare --check --workspace
+        working-directory: ./server

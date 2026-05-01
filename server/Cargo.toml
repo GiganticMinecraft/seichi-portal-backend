@@ -25,6 +25,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 anyhow = "1.0.102"
 async-trait = "0.1.89"
 sea-orm = { version = "1.1.20", features = ["sqlx-mysql", "runtime-actix-rustls", "macros"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "mysql", "macros"] }
 tracing = "0.1.44"
 mockall = "0.14.0"
 envy = "0.4.2"
@@ -48,4 +49,3 @@ lapin = "4.6.0"
 utoipa = { version = "5.4.0", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
-
