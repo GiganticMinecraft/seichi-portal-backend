@@ -233,10 +233,10 @@ impl FormDatabase for ConnectionPool {
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let size = sqlx::query_scalar!("SELECT COUNT(*) AS count FROM form_meta_data")
-                    .fetch_optional(&mut **txn)
-                    .await?
-                    .unwrap_or(0);
+                let size =
+                    sqlx::query_scalar!("SELECT COUNT(*) AS `count!: i64` FROM form_meta_data")
+                        .fetch_one(&mut **txn)
+                        .await?;
 
                 Ok::<_, InfraError>(u32::try_from(size).unwrap_or(0))
             })
