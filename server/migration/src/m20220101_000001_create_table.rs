@@ -98,6 +98,7 @@ impl MigrationTrait for Migration {
                     form_id CHAR(36) NOT NULL,
                     start_at DATETIME,
                     end_at DATETIME,
+                    UNIQUE KEY uk_response_period_form_id(form_id),
                     FOREIGN KEY fk_response_period_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
@@ -110,6 +111,7 @@ impl MigrationTrait for Migration {
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id CHAR(36) NOT NULL,
                     url TEXT,
+                    UNIQUE KEY uk_form_webhooks_form_id(form_id),
                     FOREIGN KEY fk_form_webhooks_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
@@ -151,6 +153,7 @@ impl MigrationTrait for Migration {
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     form_id CHAR(36) NOT NULL,
                     title TEXT,
+                    UNIQUE KEY uk_default_answer_titles_form_id(form_id),
                     FOREIGN KEY fk_default_answer_titles_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
                 )",
             ))
