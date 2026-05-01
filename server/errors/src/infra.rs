@@ -51,37 +51,49 @@ pub enum InfraError {
 
 impl PartialEq for InfraError {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Database { source: left }, Self::Database { source: right }) => {
-                left.to_string() == right.to_string()
+        match self {
+            Self::Database { source: left } => {
+                matches!(other, Self::Database { source: right } if left.to_string() == right.to_string())
             }
-            (
-                Self::DatabaseTransaction { cause: left },
-                Self::DatabaseTransaction { cause: right },
-            ) => left == right,
-            (Self::UuidParse { source: left }, Self::UuidParse { source: right }) => left == right,
-            (Self::FormNotFound { id: left }, Self::FormNotFound { id: right }) => left == right,
-            (Self::AnswerNotFount { id: left }, Self::AnswerNotFount { id: right }) => {
-                left == right
+            Self::DatabaseTransaction { cause: left } => {
+                matches!(other, Self::DatabaseTransaction { cause: right } if left == right)
             }
-            (Self::Outgoing { cause: left }, Self::Outgoing { cause: right }) => left == right,
-            (Self::EnumParse { source: left }, Self::EnumParse { source: right }) => left == right,
-            (Self::Redis { source: left }, Self::Redis { source: right }) => {
-                left.to_string() == right.to_string()
+            Self::UuidParse { source: left } => {
+                matches!(other, Self::UuidParse { source: right } if left == right)
             }
-            (Self::Reqwest { cause: left }, Self::Reqwest { cause: right }) => left == right,
-            (Self::MeiliSearch { cause: left }, Self::MeiliSearch { cause: right }) => {
-                left == right
+            Self::FormNotFound { id: left } => {
+                matches!(other, Self::FormNotFound { id: right } if left == right)
             }
-            (Self::SerdeJson { cause: left }, Self::SerdeJson { cause: right }) => left == right,
-            (Self::SerenityError { cause: left }, Self::SerenityError { cause: right }) => {
-                left == right
+            Self::AnswerNotFount { id: left } => {
+                matches!(other, Self::AnswerNotFount { id: right } if left == right)
             }
-            (Self::AMQP { source: left }, Self::AMQP { source: right }) => {
-                left.to_string() == right.to_string()
+            Self::Outgoing { cause: left } => {
+                matches!(other, Self::Outgoing { cause: right } if left == right)
             }
-            (Self::Send { cause: left }, Self::Send { cause: right }) => left == right,
-            _ => false,
+            Self::EnumParse { source: left } => {
+                matches!(other, Self::EnumParse { source: right } if left == right)
+            }
+            Self::Redis { source: left } => {
+                matches!(other, Self::Redis { source: right } if left.to_string() == right.to_string())
+            }
+            Self::Reqwest { cause: left } => {
+                matches!(other, Self::Reqwest { cause: right } if left == right)
+            }
+            Self::MeiliSearch { cause: left } => {
+                matches!(other, Self::MeiliSearch { cause: right } if left == right)
+            }
+            Self::SerdeJson { cause: left } => {
+                matches!(other, Self::SerdeJson { cause: right } if left == right)
+            }
+            Self::SerenityError { cause: left } => {
+                matches!(other, Self::SerenityError { cause: right } if left == right)
+            }
+            Self::AMQP { source: left } => {
+                matches!(other, Self::AMQP { source: right } if left.to_string() == right.to_string())
+            }
+            Self::Send { cause: left } => {
+                matches!(other, Self::Send { cause: right } if left == right)
+            }
         }
     }
 }
