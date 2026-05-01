@@ -16,6 +16,7 @@ use crate::{
     database::{
         components::FormCommentDatabase,
         connection::{ConnectionPool, execute_and_values, query_all_and_values},
+        count_as_u32,
     },
     dto::{CommentDto, UserDto},
 };
@@ -173,7 +174,7 @@ impl FormCommentDatabase for ConnectionPool {
                 .fetch_one(&mut **txn)
                 .await?;
 
-                Ok::<_, InfraError>(u32::try_from(size).unwrap_or(0))
+                count_as_u32(size, "form_answer_comments")
             })
         })
         .await

@@ -12,6 +12,7 @@ use crate::{
     database::{
         components::UserDatabase,
         connection::{ConnectionPool, redis_connection},
+        count_as_u32,
     },
     dto::DiscordUserDto,
 };
@@ -230,7 +231,7 @@ impl UserDatabase for ConnectionPool {
                     .fetch_one(&mut **txn)
                     .await?;
 
-                Ok::<_, InfraError>(u32::try_from(size).unwrap_or(0))
+                count_as_u32(size, "users")
             })
         })
         .await

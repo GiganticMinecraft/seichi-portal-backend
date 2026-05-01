@@ -22,6 +22,8 @@ pub enum InfraError {
     AnswerNotFount { id: i32 },
     #[error("Outgoing Error: {}", .cause)]
     Outgoing { cause: String },
+    #[error("Unexpected Error: {}", .cause)]
+    Unexpected { cause: String },
     #[error("Enum Parse Error: source = {}", .source)]
     EnumParse {
         #[from]
@@ -69,6 +71,9 @@ impl PartialEq for InfraError {
             }
             Self::Outgoing { cause: left } => {
                 matches!(other, Self::Outgoing { cause: right } if left == right)
+            }
+            Self::Unexpected { cause: left } => {
+                matches!(other, Self::Unexpected { cause: right } if left == right)
             }
             Self::EnumParse { source: left } => {
                 matches!(other, Self::EnumParse { source: right } if left == right)
