@@ -7,7 +7,7 @@ use redis::Client;
 use regex::Regex;
 use sea_orm::{Database, Value};
 use sqlx::{
-    MySql, Row,
+    MySql,
     mysql::{MySqlArguments, MySqlPool, MySqlPoolOptions, MySqlQueryResult, MySqlRow},
     query::Query,
 };
@@ -20,18 +20,6 @@ use crate::database::{
 pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
 pub type DbErr = sqlx::Error;
 pub type ExecResult = MySqlQueryResult;
-
-#[derive(Debug)]
-pub struct QueryResult(MySqlRow);
-
-impl QueryResult {
-    pub fn try_get<T>(&self, _prefix: &str, column: &str) -> Result<T, sqlx::Error>
-    where
-        T: sqlx::Type<MySql> + for<'r> sqlx::Decode<'r, MySql>,
-    {
-        self.0.try_get(column)
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
@@ -267,49 +255,41 @@ where
 pub async fn query_all(
     sql: &str,
     transaction: &mut DatabaseTransaction,
-) -> Result<Vec<QueryResult>, DbErr> {
-    sqlx::query(sql)
-        .fetch_all(&mut **transaction)
-        .await
-        .map(|rows| rows.into_iter().map(QueryResult).collect())
+) -> Result<Vec<MySqlRow>, DbErr> {
+    sqlx::query(sql).fetch_all(&mut **transaction).await
 }
 
 pub async fn query_all_and_values<I>(
     sql: &str,
     values: I,
     transaction: &mut DatabaseTransaction,
-) -> Result<Vec<QueryResult>, DbErr>
+) -> Result<Vec<MySqlRow>, DbErr>
 where
     I: IntoIterator<Item = Value>,
 {
     bind_values(sql, values)?
         .fetch_all(&mut **transaction)
         .await
-        .map(|rows| rows.into_iter().map(QueryResult).collect())
 }
 
 pub async fn query_one(
     sql: &str,
     transaction: &mut DatabaseTransaction,
-) -> Result<Option<QueryResult>, DbErr> {
-    sqlx::query(sql)
-        .fetch_optional(&mut **transaction)
-        .await
-        .map(|row| row.map(QueryResult))
+) -> Result<Option<MySqlRow>, DbErr> {
+    sqlx::query(sql).fetch_optional(&mut **transaction).await
 }
 
 pub async fn query_one_and_values<I>(
     sql: &str,
     values: I,
     transaction: &mut DatabaseTransaction,
-) -> Result<Option<QueryResult>, DbErr>
+) -> Result<Option<MySqlRow>, DbErr>
 where
     I: IntoIterator<Item = Value>,
 {
     bind_values(sql, values)?
         .fetch_optional(&mut **transaction)
         .await
-        .map(|row| row.map(QueryResult))
 }
 
 pub async fn execute(

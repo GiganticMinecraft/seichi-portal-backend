@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use domain::form::{models::FormId, question::models::Question};
 use errors::infra::InfraError;
 use itertools::Itertools;
+use sqlx::Row;
 
 use crate::{
     database::{
@@ -49,7 +50,7 @@ impl FormQuestionDatabase for ConnectionPool {
                 )
                     .await?
                     .unwrap()
-                    .try_get("", "question_id")?;
+                    .try_get("question_id")?;
 
                 let choices_active_values = questions
                     .iter()
@@ -95,7 +96,7 @@ impl FormQuestionDatabase for ConnectionPool {
                 )
                 .await?
                 .into_iter()
-                .map(|rs| rs.try_get::<i32>("", "question_id"))
+                .map(|rs| rs.try_get::<i32, _>("question_id"))
                 .collect::<Result<Vec<_>, DbErr>>()?;
 
                 let delete_target_question_ids = current_form_question_ids
@@ -142,7 +143,7 @@ impl FormQuestionDatabase for ConnectionPool {
                 )
                 .await?
                 .unwrap()
-                .try_get("", "question_id")?;
+                .try_get("question_id")?;
 
                 let choices_active_values = questions
                     .iter()
@@ -209,16 +210,16 @@ impl FormQuestionDatabase for ConnectionPool {
                 questions_rs
                     .into_iter()
                     .map(|question_rs| {
-                        let question_id: i32 = question_rs.try_get("", "question_id")?;
+                        let question_id: i32 = question_rs.try_get("question_id")?;
 
                         let choices = choices_rs
                             .iter()
                             .filter_map(|choice_rs| {
                                 if choice_rs
-                                    .try_get::<i32>("", "question_id")
+                                    .try_get::<i32, _>("question_id")
                                     .is_ok_and(|id| id == question_id)
                                 {
-                                    choice_rs.try_get::<String>("", "choice").ok()
+                                    choice_rs.try_get::<String, _>("choice").ok()
                                 } else {
                                     None
                                 }
@@ -227,12 +228,12 @@ impl FormQuestionDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(QuestionDto {
                             id: Some(question_id),
-                            form_id: question_rs.try_get("", "form_id")?,
-                            title: question_rs.try_get("", "title")?,
-                            description: question_rs.try_get("", "description")?,
-                            question_type: question_rs.try_get("", "question_type")?,
+                            form_id: question_rs.try_get("form_id")?,
+                            title: question_rs.try_get("title")?,
+                            description: question_rs.try_get("description")?,
+                            question_type: question_rs.try_get("question_type")?,
                             choices,
-                            is_required: question_rs.try_get("", "is_required")?,
+                            is_required: question_rs.try_get("is_required")?,
                         })
                     })
                     .collect::<Result<Vec<QuestionDto>, _>>()

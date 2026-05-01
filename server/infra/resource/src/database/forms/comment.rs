@@ -9,6 +9,7 @@ use domain::{
     user::models::Role,
 };
 use errors::infra::InfraError;
+use sqlx::Row;
 
 use crate::database::connection::{query_all, query_one};
 use crate::{
@@ -35,14 +36,14 @@ impl FormCommentDatabase for ConnectionPool {
 
                 comment.into_iter().next().map(|rs| {
                     Ok::<_, InfraError>(CommentDto {
-                        answer_id: rs.try_get("", "answer_id")?,
-                        comment_id: rs.try_get("", "id")?,
-                        content: rs.try_get("", "content")?,
-                        timestamp: rs.try_get("", "timestamp")?,
+                        answer_id: rs.try_get("answer_id")?,
+                        comment_id: rs.try_get("id")?,
+                        content: rs.try_get("content")?,
+                        timestamp: rs.try_get("timestamp")?,
                         commented_by: UserDto {
-                            name: rs.try_get("", "name")?,
-                            id: rs.try_get("", "commented_by")?,
-                            role: Role::from_str(rs.try_get::<String>("", "role")?.as_str())?,
+                            name: rs.try_get("name")?,
+                            id: rs.try_get("commented_by")?,
+                            role: Role::from_str(rs.try_get::<String, _>("role")?.as_str())?,
                         },
                     })
                 }).transpose()
@@ -65,14 +66,14 @@ impl FormCommentDatabase for ConnectionPool {
 
                 comments.into_iter().map(|rs| {
                     Ok::<_, InfraError>(CommentDto {
-                        answer_id: rs.try_get("", "answer_id")?,
-                        comment_id: rs.try_get("", "id")?,
-                        content: rs.try_get("", "content")?,
-                        timestamp: rs.try_get("", "timestamp")?,
+                        answer_id: rs.try_get("answer_id")?,
+                        comment_id: rs.try_get("id")?,
+                        content: rs.try_get("content")?,
+                        timestamp: rs.try_get("timestamp")?,
                         commented_by: UserDto {
-                            name: rs.try_get("", "name")?,
-                            id: rs.try_get("", "commented_by")?,
-                            role: Role::from_str(rs.try_get::<String>("", "role")?.as_str())?,
+                            name: rs.try_get("name")?,
+                            id: rs.try_get("commented_by")?,
+                            role: Role::from_str(rs.try_get::<String, _>("role")?.as_str())?,
                         },
                     })
                 }).collect::<Result<Vec<_>, _>>()
@@ -93,14 +94,14 @@ impl FormCommentDatabase for ConnectionPool {
 
                 comments.into_iter().map(|rs| {
                     Ok::<_, InfraError>(CommentDto {
-                        answer_id: rs.try_get("", "answer_id")?,
-                        comment_id: rs.try_get("", "id")?,
-                        content: rs.try_get("", "content")?,
-                        timestamp: rs.try_get("", "timestamp")?,
+                        answer_id: rs.try_get("answer_id")?,
+                        comment_id: rs.try_get("id")?,
+                        content: rs.try_get("content")?,
+                        timestamp: rs.try_get("timestamp")?,
                         commented_by: UserDto {
-                            name: rs.try_get("", "name")?,
-                            id: rs.try_get("", "commented_by")?,
-                            role: Role::from_str(rs.try_get::<String>("", "role")?.as_str())?,
+                            name: rs.try_get("name")?,
+                            id: rs.try_get("commented_by")?,
+                            role: Role::from_str(rs.try_get::<String, _>("role")?.as_str())?,
                         },
                     })
                 }).collect::<Result<Vec<_>, _>>()
@@ -170,7 +171,7 @@ impl FormCommentDatabase for ConnectionPool {
                     query_one("SELECT COUNT(*) AS count FROM form_answer_comments", txn).await?;
 
                 let size = query
-                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .map(|rs| rs.try_get::<i32, _>("count"))
                     .transpose()?
                     .unwrap_or(0);
 

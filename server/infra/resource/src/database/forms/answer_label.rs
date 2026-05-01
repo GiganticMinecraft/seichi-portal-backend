@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use domain::form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId};
 use errors::infra::InfraError;
 use itertools::Itertools;
+use sqlx::Row;
 
 use crate::database::connection::query_one;
 use crate::{
@@ -50,8 +51,8 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(AnswerLabelDto {
-                            id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -80,8 +81,8 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(AnswerLabelDto {
-                            id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .next()
@@ -119,8 +120,8 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(AnswerLabelDto {
-                            id: rs.try_get("", "id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .collect::<Result<Vec<AnswerLabelDto>, _>>()
@@ -151,8 +152,8 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(AnswerLabelDto {
-                            id: rs.try_get("", "label_id")?,
-                            name: rs.try_get("", "name")?,
+                            id: rs.try_get("label_id")?,
+                            name: rs.try_get("name")?,
                         })
                     })
                     .collect::<Result<Vec<AnswerLabelDto>, _>>()
@@ -247,7 +248,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                     query_one("SELECT COUNT(*) AS count FROM label_for_form_answers", txn).await?;
 
                 let size = query
-                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .map(|rs| rs.try_get::<i32, _>("count"))
                     .transpose()?
                     .unwrap_or(0);
 

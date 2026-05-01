@@ -3,6 +3,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use domain::{notification::models::NotificationPreference, user::models::Role};
 use errors::infra::InfraError;
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
@@ -68,12 +69,12 @@ impl NotificationDatabase for ConnectionPool {
                 rs.map(|rs| {
                     Ok::<_, InfraError>(NotificationSettingsDto {
                         recipient: UserDto {
-                            name: rs.try_get("", "name")?,
+                            name: rs.try_get("name")?,
                             id: recipient_id.to_string(),
-                            role: Role::from_str(&rs.try_get::<String>("", "role")?)?,
+                            role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
                         },
                         is_send_message_notification: rs
-                            .try_get("", "is_send_message_notification")?,
+                            .try_get("is_send_message_notification")?,
                     })
                 })
                 .transpose()

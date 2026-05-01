@@ -5,6 +5,7 @@ use domain::{
     user::models::User,
 };
 use errors::infra::InfraError;
+use sqlx::Row;
 use types::non_empty_string::NonEmptyString;
 
 use crate::database::connection::query_one;
@@ -93,19 +94,19 @@ impl FormDatabase for ConnectionPool {
                     .into_iter()
                     .map(|query_rs| {
                         Ok::<_, InfraError>(FormDto {
-                            id: query_rs.try_get("", "form_id")?,
-                            title: query_rs.try_get("", "form_title")?,
-                            description: query_rs.try_get("", "description")?,
+                            id: query_rs.try_get("form_id")?,
+                            title: query_rs.try_get("form_title")?,
+                            description: query_rs.try_get("description")?,
                             metadata: (
-                                query_rs.try_get("", "created_at")?,
-                                query_rs.try_get("", "updated_at")?,
+                                query_rs.try_get("created_at")?,
+                                query_rs.try_get("updated_at")?,
                             ),
-                            start_at: query_rs.try_get("", "start_at")?,
-                            end_at: query_rs.try_get("", "end_at")?,
-                            webhook_url: query_rs.try_get("", "webhook_url")?,
-                            default_answer_title: query_rs.try_get("", "default_answer_title")?,
-                            visibility: query_rs.try_get("", "visibility")?,
-                            answer_visibility: query_rs.try_get("", "answer_visibility")?,
+                            start_at: query_rs.try_get("start_at")?,
+                            end_at: query_rs.try_get("end_at")?,
+                            webhook_url: query_rs.try_get("webhook_url")?,
+                            default_answer_title: query_rs.try_get("default_answer_title")?,
+                            visibility: query_rs.try_get("visibility")?,
+                            answer_visibility: query_rs.try_get("answer_visibility")?,
                         })
                     }).collect::<Result<Vec<_>, _>>()
             })
@@ -135,18 +136,18 @@ impl FormDatabase for ConnectionPool {
 
                 Ok::<_, InfraError>(Some(FormDto {
                     id: form_id.into_inner().to_string(),
-                    title: form.try_get("", "form_title")?,
-                    description: form.try_get("", "description")?,
+                    title: form.try_get("form_title")?,
+                    description: form.try_get("description")?,
                     metadata: (
-                        form.try_get("", "created_at")?,
-                        form.try_get("", "updated_at")?,
+                        form.try_get("created_at")?,
+                        form.try_get("updated_at")?,
                     ),
-                    start_at: form.try_get("", "start_at")?,
-                    end_at: form.try_get("", "end_at")?,
-                    webhook_url: form.try_get("", "webhook_url")?,
-                    default_answer_title: form.try_get("", "default_answer_title")?,
-                    visibility: form.try_get("", "visibility")?,
-                    answer_visibility: form.try_get("", "answer_visibility")?,
+                    start_at: form.try_get("start_at")?,
+                    end_at: form.try_get("end_at")?,
+                    webhook_url: form.try_get("webhook_url")?,
+                    default_answer_title: form.try_get("default_answer_title")?,
+                    visibility: form.try_get("visibility")?,
+                    answer_visibility: form.try_get("answer_visibility")?,
                 }))
             })
         }).await
@@ -236,7 +237,7 @@ impl FormDatabase for ConnectionPool {
                 let query = query_one("SELECT COUNT(*) AS count FROM form_meta_data", txn).await?;
 
                 let size = query
-                    .map(|rs| rs.try_get::<i32>("", "count"))
+                    .map(|rs| rs.try_get::<i32, _>("count"))
                     .transpose()?
                     .unwrap_or(0);
 
