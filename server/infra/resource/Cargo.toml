@@ -15,6 +15,7 @@ itertools = { workspace = true }
 migration = { path = "../../migration" }
 mockall = { workspace = true }
 sea-orm = { workspace = true }
+sqlx = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 regex = { workspace = true }
