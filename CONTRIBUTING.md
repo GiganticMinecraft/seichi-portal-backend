@@ -20,10 +20,16 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 sudo apt install pkg-config libssl-dev build-essential musl-tools
 ```
 
-- `cargo-make`と `sea-orm-cli` を `cargo` でインストールします
+- `cargo-make` と `sea-orm-cli` を `cargo` でインストールします
 
 ```shell
 cargo install cargo-make sea-orm-cli
+```
+
+- `sqlx` のオフラインクエリ検証に使う `sqlx-cli` をインストールします
+
+```shell
+cargo install sqlx-cli --no-default-features --features rustls,mysql
 ```
 
 - ツールチェインのインストール
@@ -36,14 +42,30 @@ rustup target add x86_64-unknown-linux-musl
 
 ### ローカルで起動する
 
-データベース周りの接続情報は [.env.example](./server/.env.example) にまとまっており、 DB を起動するためには `.env`
-ファイルが必要なため、ファイルをコピーします。
+データベース周りの接続情報は [ルートの .env.example](./.env.example) にまとまっています。ローカル起動前に `.env`
+ファイルを作成してください。
 必要に応じて値を書きかえてください。
+
+```shell
+cp .env.example .env
+```
+
+現時点ではアプリ本体は `MYSQL_*` を参照し続けます。一方で `DATABASE_URL` は `sqlx` のオフラインクエリ検証用です。
+移行完了までは両方を `.env` に保持してください。
 
 データーベースとサーバーを起動するにはリポジトリのディレクトリトップで `up` タスクを実行します。
 
 ```shell
 seichi-portal-backend> makers up
+```
+
+`sqlx` の typed query を追加または変更した場合は、DB 起動後に `server/` で `.sqlx/` メタデータを更新してください。
+この PR 時点では `.sqlx/` が空でも構いませんが、将来の typed query 導入に備えて運用を固定しています。
+
+```shell
+docker compose up -d
+cd server
+DATABASE_URL=mysql://user:password@localhost:3306/seichi_portal cargo sqlx prepare --workspace
 ```
 
 ## アーキテクチャ
