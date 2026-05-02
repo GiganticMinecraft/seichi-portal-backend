@@ -46,7 +46,7 @@ services:
   # The backend still runs embedded migrations on startup, but development
   # compose runs them here first so db-seed can rely on the schema existing.
   migrate:
-    image: rust:1.92.0
+    image: rust:1.95.0
     container_name: migrate
     depends_on:
       db:
