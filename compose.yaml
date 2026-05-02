@@ -18,6 +18,11 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
       - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "-P", "3306", "-u", "root", "-proot", "--silent"]
+      interval: 5s
+      timeout: 30s
+      retries: 10
     restart: always
   valkey:
     image: valkey/valkey:9-alpine
@@ -35,6 +40,44 @@ services:
     volumes:
       - ./docker/valkey/seed.sh:/seed.sh
     entrypoint: ["sh", "/seed.sh"]
+    networks:
+      - seichi_portal
+    restart: "no"
+  # The backend still runs embedded migrations on startup, but development
+  # compose runs them here first so db-seed can rely on the schema existing.
+  migrate:
+    image: rust:1.92.0
+    container_name: migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - MYSQL_DATABASE=seichi_portal
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+    working_dir: /work/server
+    volumes:
+      - .:/work
+      - cargo_registry:/usr/local/cargo/registry
+      - cargo_git:/usr/local/cargo/git
+      - cargo_target:/work/server/target
+      - ./docker/migrate.sh:/migrate.sh
+    entrypoint: ["sh", "/migrate.sh"]
+    networks:
+      - seichi_portal
+    restart: "no"
+  db-seed:
+    image: mariadb:lts
+    container_name: db-seed
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./docker/seed-debug-users.sh:/seed-debug-users.sh
+      - ./docker/seed-debug-users.sql:/seed-debug-users.sql
+    entrypoint: ["sh", "/seed-debug-users.sh"]
     networks:
       - seichi_portal
     restart: "no"
@@ -89,3 +132,6 @@ networks:
 volumes:
   mysql_data:
   meili_data:
+  cargo_registry:
+  cargo_git:
+  cargo_target:
