@@ -5,10 +5,7 @@ use itertools::Itertools;
 use sqlx::{Row, query};
 
 use crate::{
-    database::{
-        components::FormQuestionDatabase,
-        connection::{ConnectionPool, DbErr, query_all_and_values},
-    },
+    database::{components::FormQuestionDatabase, connection::ConnectionPool},
     dto::QuestionDto,
 };
 
@@ -30,7 +27,6 @@ impl FormQuestionDatabase for ConnectionPool {
                         "INSERT INTO form_questions (form_id, title, description, question_type, is_required) VALUES {}",
                         std::iter::repeat_n("(?, ?, ?, ?, ?)", questions.len()).join(", ")
                     );
-
                     questions
                         .iter()
                         .fold(query(&sql), |query, question| {
@@ -73,7 +69,6 @@ impl FormQuestionDatabase for ConnectionPool {
                             "INSERT INTO form_choices (question_id, choice) VALUES {}",
                             std::iter::repeat_n("(?, ?)", choices_active_values.len()).join(", ")
                         );
-
                         choices_active_values
                             .into_iter()
                             .flat_map(|(question_id, choice)| [question_id, choice])
@@ -98,15 +93,15 @@ impl FormQuestionDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                let current_form_question_ids = query_all_and_values(
-                    r"SELECT question_id FROM form_questions WHERE form_id = ?",
-                    [form_id.clone().into()],
-                    txn,
+                let current_form_question_ids = sqlx::query(
+                    "SELECT question_id FROM form_questions WHERE form_id = ?",
                 )
+                .bind(form_id.clone())
+                .fetch_all(&mut **txn)
                 .await?
                 .into_iter()
-                .map(|rs| rs.try_get::<i32, _>("question_id"))
-                .collect::<Result<Vec<_>, DbErr>>()?;
+                .map(|row| row.try_get::<i32, _>("question_id"))
+                .collect::<Result<Vec<_>, _>>()?;
 
                 let delete_target_question_ids = current_form_question_ids
                     .into_iter()
@@ -122,7 +117,6 @@ impl FormQuestionDatabase for ConnectionPool {
                         "DELETE FROM form_questions WHERE question_id IN ({})",
                         std::iter::repeat_n("?", delete_target_question_ids.len()).join(", ")
                     );
-
                     delete_target_question_ids
                         .iter()
                         .fold(query(&sql), |query, question_id| query.bind(question_id))
@@ -133,15 +127,14 @@ impl FormQuestionDatabase for ConnectionPool {
                 if !questions.is_empty() {
                     let sql = format!(
                         r"INSERT INTO form_questions (question_id, form_id, title, description, question_type, is_required)
-                VALUES {}
-                ON DUPLICATE KEY UPDATE
-                title = VALUES(title),
-                description = VALUES(description),
-                question_type = VALUES(question_type),
-                is_required = VALUES(is_required)",
+                        VALUES {}
+                        ON DUPLICATE KEY UPDATE
+                        title = VALUES(title),
+                        description = VALUES(description),
+                        question_type = VALUES(question_type),
+                        is_required = VALUES(is_required)",
                         std::iter::repeat_n("(?, ?, ?, ?, ?, ?)", questions.len()).join(", ")
                     );
-
                     questions
                         .iter()
                         .fold(query(&sql), |query, question| {
@@ -193,7 +186,6 @@ impl FormQuestionDatabase for ConnectionPool {
                             "DELETE FROM form_choices WHERE question_id IN ({})",
                             std::iter::repeat_n("?", current_question_ids.len()).join(", ")
                         );
-
                         current_question_ids
                             .iter()
                             .fold(query(&sql), |query, question_id| query.bind(question_id))
@@ -206,7 +198,6 @@ impl FormQuestionDatabase for ConnectionPool {
                             "INSERT INTO form_choices (question_id, choice) VALUES {}",
                             std::iter::repeat_n("(?, ?)", choices_active_values.len()).join(", ")
                         );
-
                         choices_active_values
                             .into_iter()
                             .flat_map(|(question_id, choice)| [question_id, choice])
@@ -226,38 +217,37 @@ impl FormQuestionDatabase for ConnectionPool {
     async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let questions_rs = query_all_and_values(
-                    r"SELECT question_id, form_id, title, description, question_type, is_required FROM form_questions WHERE form_id = ?",
-                    [form_id.into_inner().to_string().into()],
-                    txn,
-                ).await?;
-
-                let choices_rs = query_all_and_values(
-                    r"SELECT form_choices.question_id, choice FROM form_choices
-                                INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
-                                WHERE form_id = ?",
-                    [form_id.into_inner().to_string().into()],
-                    txn,
+                let form_id = form_id.into_inner().to_string();
+                let questions_rs = sqlx::query(
+                    r"SELECT question_id AS `question_id!: i32`, form_id, title, description, question_type, is_required
+                    FROM form_questions WHERE form_id = ?",
                 )
-                    .await?;
+                .bind(form_id.clone())
+                .fetch_all(&mut **txn)
+                .await?;
+
+                let choices_rs = sqlx::query(
+                    r"SELECT form_choices.question_id, choice FROM form_choices
+                    INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
+                    WHERE form_id = ?",
+                )
+                .bind(form_id)
+                .fetch_all(&mut **txn)
+                .await?;
 
                 questions_rs
                     .into_iter()
                     .map(|question_rs| {
-                        let question_id: i32 = question_rs.try_get("question_id")?;
+                        let question_id = question_rs.try_get::<i32, _>("question_id")?;
 
                         let choices = choices_rs
                             .iter()
-                            .filter_map(|choice_rs| {
-                                if choice_rs
+                            .filter(|choice_rs| {
+                                choice_rs
                                     .try_get::<i32, _>("question_id")
                                     .is_ok_and(|id| id == question_id)
-                                {
-                                    choice_rs.try_get::<String, _>("choice").ok()
-                                } else {
-                                    None
-                                }
                             })
+                            .filter_map(|choice_rs| choice_rs.try_get::<String, _>("choice").ok())
                             .collect_vec();
 
                         Ok::<_, InfraError>(QuestionDto {
@@ -265,9 +255,13 @@ impl FormQuestionDatabase for ConnectionPool {
                             form_id: question_rs.try_get("form_id")?,
                             title: question_rs.try_get("title")?,
                             description: question_rs.try_get("description")?,
-                            question_type: question_rs.try_get("question_type")?,
+                            question_type: question_rs
+                                .try_get::<Option<String>, _>("question_type")?
+                                .unwrap_or_default(),
                             choices,
-                            is_required: question_rs.try_get("is_required")?,
+                            is_required: question_rs
+                                .try_get::<Option<bool>, _>("is_required")?
+                                .unwrap_or(false),
                         })
                     })
                     .collect::<Result<Vec<QuestionDto>, _>>()

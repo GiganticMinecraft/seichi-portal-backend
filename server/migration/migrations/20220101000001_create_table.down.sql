@@ -1,0 +1,18 @@
+DROP TABLE IF EXISTS
+    messages,
+    label_settings_for_forms,
+    label_for_forms,
+    label_settings_for_form_answers,
+    label_for_form_answers,
+    form_answer_comments,
+    default_answer_titles,
+    real_answers,
+    answers,
+    form_webhooks,
+    response_period,
+    form_choices,
+    form_questions,
+    form_meta_data,
+    discord_notification_settings,
+    discord_linked_users,
+    users;

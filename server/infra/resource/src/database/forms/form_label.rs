@@ -5,11 +5,7 @@ use itertools::Itertools;
 use sqlx::{Row, query};
 
 use crate::{
-    database::{
-        components::FormLabelDatabase,
-        connection::{ConnectionPool, query_all, query_all_and_values, query_one_and_values},
-        count::count_as_u32,
-    },
+    database::{components::FormLabelDatabase, connection::ConnectionPool, count::count_as_u32},
     dto::FormLabelDto,
 };
 
@@ -40,7 +36,9 @@ impl FormLabelDatabase for ConnectionPool {
     async fn fetch_labels(&self) -> Result<Vec<FormLabelDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = query_all("SELECT id, name FROM label_for_forms", txn).await?;
+                let labels_rs = sqlx::query("SELECT id, name FROM label_for_forms")
+                    .fetch_all(&mut **txn)
+                    .await?;
 
                 labels_rs
                     .into_iter()
@@ -72,11 +70,10 @@ impl FormLabelDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let placeholders = std::iter::repeat_n("?", label_ids.len())
-                    .collect_vec()
-                    .join(", ");
-                let sql =
-                    format!("SELECT id, name FROM label_for_forms WHERE id IN ({placeholders})");
+                let sql = format!(
+                    "SELECT id, name FROM label_for_forms WHERE id IN ({})",
+                    std::iter::repeat_n("?", label_ids.len()).join(", ")
+                );
                 let labels_rs = label_ids
                     .iter()
                     .fold(query(&sql), |query, label_id| query.bind(label_id))
@@ -118,12 +115,10 @@ impl FormLabelDatabase for ConnectionPool {
     async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let label_rs = query_one_and_values(
-                    "SELECT id, name FROM label_for_forms WHERE id = ?",
-                    [id.into_inner().to_string().into()],
-                    txn,
-                )
-                .await?;
+                let label_rs = sqlx::query("SELECT id, name FROM label_for_forms WHERE id = ?")
+                    .bind(id.into_inner().to_string())
+                    .fetch_optional(&mut **txn)
+                    .await?;
 
                 label_rs
                     .map(|rs| {
@@ -167,12 +162,12 @@ impl FormLabelDatabase for ConnectionPool {
     ) -> Result<Vec<FormLabelDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = query_all_and_values(
+                let labels_rs = sqlx::query(
                     "SELECT id, name FROM label_for_forms WHERE id IN (SELECT label_id FROM \
                      label_settings_for_forms WHERE form_id = ?)",
-                    [form_id.into_inner().to_string().into()],
-                    txn,
                 )
+                .bind(form_id.into_inner().to_string())
+                .fetch_all(&mut **txn)
                 .await?;
 
                 labels_rs
@@ -215,7 +210,6 @@ impl FormLabelDatabase for ConnectionPool {
                         "INSERT INTO label_settings_for_forms (form_id, label_id) VALUES {}",
                         std::iter::repeat_n("(?, ?)", label_ids.len()).join(", ")
                     );
-
                     label_ids
                         .into_iter()
                         .flat_map(|label_id| [form_id.clone(), label_id])

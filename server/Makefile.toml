@@ -7,8 +7,8 @@ __CARGO_FIX_YOLO = 1
 REPOSITORY_ROOT = { script = ["git rev-parse --show-superproject-working-tree --show-toplevel"] }
 
 [tasks.generate-migrate-file]
-command = "sea-orm-cli"
-args = ["migrate", "generate", "${@}"]
+command = "cargo"
+args = ["sqlx", "migrate", "add", "${@}"]
 
 [tasks.fix]
 command = "cargo"

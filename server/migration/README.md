@@ -1,41 +1,20 @@
-# Running Migrator CLI
+# Running SQLx migrations
 
 - Generate a new migration file
     ```sh
-    cargo run -- migrate generate MIGRATION_NAME
+    cargo sqlx migrate add MIGRATION_NAME
     ```
 - Apply all pending migrations
     ```sh
-    cargo run
+    cargo sqlx migrate run --source ./migration/migrations
     ```
+- Rollback the last applied migration
     ```sh
-    cargo run -- up
-    ```
-- Apply first 10 pending migrations
-    ```sh
-    cargo run -- up -n 10
-    ```
-- Rollback last applied migrations
-    ```sh
-    cargo run -- down
-    ```
-- Rollback last 10 applied migrations
-    ```sh
-    cargo run -- down -n 10
-    ```
-- Drop all tables from the database, then reapply all migrations
-    ```sh
-    cargo run -- fresh
-    ```
-- Rollback all applied migrations, then reapply all migrations
-    ```sh
-    cargo run -- refresh
-    ```
-- Rollback all applied migrations
-    ```sh
-    cargo run -- reset
+    cargo sqlx migrate revert --source ./migration/migrations
     ```
 - Check the status of all migrations
     ```sh
-    cargo run -- status
+    cargo sqlx migrate info --source ./migration/migrations
     ```
+
+`server/migration` crate also exposes the embedded migrator used by the application at startup.
