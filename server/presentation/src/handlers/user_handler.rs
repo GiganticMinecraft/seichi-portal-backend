@@ -243,6 +243,7 @@ pub async fn user_list(
         UnprocessableEntity,
         InternalServerError,
     ),
+    security(("bearer" = [])),
     tag = "Session"
 )]
 pub async fn start_session(
@@ -301,6 +302,7 @@ pub async fn start_session(
         UnprocessableEntity,
         InternalServerError,
     ),
+    security(("bearer" = [])),
     tag = "Session"
 )]
 pub async fn end_session(
