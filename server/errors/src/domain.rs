@@ -17,4 +17,6 @@ pub enum DomainError {
     InvalidResponsePeriod,
     #[error("Invalid webhook url.")]
     InvalidWebhookUrl,
+    #[error("Invalid entity: {message}")]
+    InvalidEntity { message: String },
 }

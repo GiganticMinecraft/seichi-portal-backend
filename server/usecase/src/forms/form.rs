@@ -6,14 +6,15 @@ use domain::{
     },
     repository::{
         form::{
-            form_label_repository::FormLabelRepository, form_repository::FormRepository,
-            question_repository::QuestionRepository,
+            answer_repository::AnswerRepository, form_label_repository::FormLabelRepository,
+            form_repository::FormRepository, question_repository::QuestionRepository,
         },
         notification_repository::NotificationRepository,
     },
     user::models::User,
 };
-use errors::{Error, usecase::UseCaseError::FormNotFound};
+use errors::{Error, domain::DomainError, usecase::UseCaseError::FormNotFound};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::dto::FormDto;
 
@@ -23,11 +24,13 @@ pub struct FormUseCase<
     NotificationRepo: NotificationRepository,
     QuestionRepo: QuestionRepository,
     FormLabelRepo: FormLabelRepository,
+    AnswerRepo: AnswerRepository,
 > {
     pub form_repository: &'a FormRepo,
     pub notification_repository: &'a NotificationRepo,
     pub question_repository: &'a QuestionRepo,
     pub form_label_repository: &'a FormLabelRepo,
+    pub answer_repository: &'a AnswerRepo,
 }
 
 impl<
@@ -35,7 +38,8 @@ impl<
     R2: NotificationRepository,
     R3: QuestionRepository,
     R4: FormLabelRepository,
-> FormUseCase<'_, R1, R2, R3, R4>
+    R5: AnswerRepository,
+> FormUseCase<'_, R1, R2, R3, R4, R5>
 {
     pub async fn create_form(
         &self,
@@ -159,12 +163,60 @@ impl<
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
+        questions: Option<Vec<Question>>,
     ) -> Result<(Form, Vec<Question>, Vec<FormLabel>), Error> {
         let current_form = self
             .form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
+        let current_questions = self
+            .question_repository
+            .get_questions(form_id)
+            .await?
+            .into_iter()
+            .map(|question| question.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if let Some(questions) = &questions {
+            Question::validate_set(questions)?;
+
+            let existing_question_ids = current_questions
+                .iter()
+                .filter_map(|question| question.id.map(|id| id.into_inner()))
+                .collect::<BTreeSet<_>>();
+            if let Some(invalid_question) = questions
+                .iter()
+                .find(|question| question.form_id != form_id)
+            {
+                return Err(DomainError::InvalidEntity {
+                    message: format!(
+                        "question.form_id must match the target form: {}",
+                        invalid_question.template_key
+                    ),
+                }
+                .into());
+            }
+            if let Some(invalid_id) = questions
+                .iter()
+                .filter_map(|question| question.id.map(|id| id.into_inner()))
+                .find(|id| !existing_question_ids.contains(id))
+            {
+                return Err(DomainError::InvalidEntity {
+                    message: format!("question id {} does not belong to the form", invalid_id),
+                }
+                .into());
+            }
+
+            let has_answers = !self
+                .answer_repository
+                .get_answers_by_form_id(form_id)
+                .await?
+                .is_empty();
+            if has_answers {
+                validate_answered_form_question_update(&current_questions, questions)?;
+            }
+        }
 
         let updated_form = current_form.into_update().map(|form| {
             let current_answer_settings = form.settings().answer_settings().to_owned();
@@ -210,6 +262,15 @@ impl<
         self.form_repository
             .update_form(actor, updated_form)
             .await?;
+        if let Some(questions) = questions {
+            self.question_repository
+                .put_questions(
+                    actor,
+                    form_id,
+                    questions.into_iter().map(Into::into).collect(),
+                )
+                .await?;
+        }
 
         let updated_form_guard = self
             .form_repository
@@ -238,4 +299,143 @@ impl<
 
         Ok((updated_form, questions, labels))
     }
+}
+
+fn validate_answered_form_question_update(
+    current_questions: &[Question],
+    updated_questions: &[Question],
+) -> Result<(), Error> {
+    let current_by_id = current_questions
+        .iter()
+        .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+        .collect::<HashMap<_, _>>();
+    let updated_by_id = updated_questions
+        .iter()
+        .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+        .collect::<HashMap<_, _>>();
+
+    if let Some(error) = current_questions
+        .iter()
+        .filter_map(|current_question| {
+            current_question
+                .id
+                .map(|id| (id.into_inner(), current_question))
+        })
+        .find_map(|(current_id, current_question)| {
+            let updated_question =
+                updated_by_id
+                    .get(&current_id)
+                    .ok_or_else(|| DomainError::InvalidEntity {
+                        message: format!(
+                            "cannot delete question {} from a form that already has answers",
+                            current_question.template_key
+                        ),
+                    });
+
+            updated_question
+                .and_then(|updated_question| {
+                    (current_question.template_key == updated_question.template_key)
+                        .then_some(updated_question)
+                        .ok_or_else(|| DomainError::InvalidEntity {
+                            message: format!(
+                                "cannot change template_key for answered question {}",
+                                current_question.template_key
+                            ),
+                        })
+                })
+                .and_then(|updated_question| {
+                    (current_question.question_type == updated_question.question_type)
+                        .then_some((current_question, updated_question))
+                        .ok_or_else(|| DomainError::InvalidEntity {
+                            message: format!(
+                                "cannot change question_type for answered question {}",
+                                current_question.template_key
+                            ),
+                        })
+                })
+                .and_then(|(current_question, updated_question)| {
+                    let current_choice_ids = current_question
+                        .choices
+                        .iter()
+                        .flat_map(|choices| {
+                            choices
+                                .iter()
+                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
+                        })
+                        .collect::<BTreeSet<_>>();
+                    let updated_choice_ids = updated_question
+                        .choices
+                        .iter()
+                        .flat_map(|choices| {
+                            choices
+                                .iter()
+                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
+                        })
+                        .collect::<BTreeSet<_>>();
+
+                    current_choice_ids
+                        .into_iter()
+                        .find(|choice_id| !updated_choice_ids.contains(choice_id))
+                        .map(|choice_id| DomainError::InvalidEntity {
+                            message: format!(
+                                "cannot delete choice {} from answered question {}",
+                                choice_id, current_question.template_key
+                            ),
+                        })
+                        .map_or(Ok(()), Err)
+                })
+                .err()
+        })
+    {
+        return Err(error.into());
+    }
+
+    if let Some(error) = updated_questions
+        .iter()
+        .filter_map(|updated_question| {
+            updated_question
+                .id
+                .map(|id| (id.into_inner(), updated_question))
+        })
+        .find_map(|(updated_id, updated_question)| {
+            current_by_id
+                .get(&updated_id)
+                .ok_or_else(|| DomainError::InvalidEntity {
+                    message: format!("question id {} does not belong to the form", updated_id),
+                })
+                .and_then(|current_question| {
+                    let current_choice_ids = current_question
+                        .choices
+                        .iter()
+                        .flat_map(|choices| {
+                            choices
+                                .iter()
+                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
+                        })
+                        .collect::<BTreeSet<_>>();
+
+                    updated_question
+                        .choices
+                        .iter()
+                        .flat_map(|choices| {
+                            choices
+                                .iter()
+                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
+                        })
+                        .find(|choice_id| !current_choice_ids.contains(choice_id))
+                        .map(|choice_id| DomainError::InvalidEntity {
+                            message: format!(
+                                "cannot regenerate choice id {} for answered question {}",
+                                choice_id, updated_question.template_key
+                            ),
+                        })
+                        .map_or(Ok(()), Err)
+                })
+                .err()
+        })
+    {
+        return Err(error.into());
+    }
+
+    Ok(())
 }

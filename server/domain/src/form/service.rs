@@ -1,5 +1,6 @@
 use errors::{Error, domain::DomainError};
 use regex::Regex;
+use std::collections::HashMap;
 
 use crate::{
     form::{
@@ -8,6 +9,7 @@ use crate::{
             settings::models::DefaultAnswerTitle,
         },
         models::FormId,
+        question::models::Question,
     },
     repository::form::{
         answer_repository::AnswerRepository, form_repository::FormRepository,
@@ -32,27 +34,39 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
 {
     fn generate_embedded_answer_title(
         default_answer_title: DefaultAnswerTitle,
+        questions: &[Question],
         answers: &[FormAnswerContent],
         actor: &User,
     ) -> Result<AnswerTitle, Error> {
         match default_answer_title.into_inner() {
             Some(default_answer_title) => {
                 let default_answer_title = default_answer_title.to_string();
-                let regex = Regex::new(r"\$\d+").unwrap();
+                let regex = Regex::new(r"\{\{question\.([A-Za-z0-9_-]+)\}\}").unwrap();
+                let question_template_key_by_id = questions
+                    .iter()
+                    .filter_map(|question| {
+                        question
+                            .id
+                            .map(|id| (id.into_inner(), question.template_key.as_str()))
+                    })
+                    .collect::<HashMap<_, _>>();
+                let answers_by_template_key = answers
+                    .iter()
+                    .filter_map(|answer| {
+                        question_template_key_by_id
+                            .get(&answer.question_id.into_inner())
+                            .map(|template_key| (*template_key, answer.answer.as_str()))
+                    })
+                    .collect::<HashMap<_, _>>();
 
                 let answer_replaced_title: String = regex
-                    .find_iter(default_answer_title.to_owned().as_str())
-                    .fold(default_answer_title, |replaced_title, question_id| {
-                        let answer_opt = answers.iter().find(|answer| {
-                            answer.question_id.to_string() == question_id.as_str().replace('$', "")
-                        });
-                        replaced_title.replace(
-                            question_id.as_str(),
-                            &answer_opt
-                                .map(|answer| answer.answer.to_owned().to_string())
-                                .unwrap_or_default(),
-                        )
-                    });
+                    .replace_all(default_answer_title.as_str(), |caps: &regex::Captures| {
+                        answers_by_template_key
+                            .get(&caps[1])
+                            .copied()
+                            .unwrap_or_default()
+                    })
+                    .into_owned();
 
                 let username_replaced_title =
                     answer_replaced_title.replace("$username", actor.name.as_str());
@@ -81,8 +95,15 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
             .answer_settings()
             .default_answer_title()
             .to_owned();
+        let questions = self
+            .question_repo
+            .get_questions(form_id)
+            .await?
+            .into_iter()
+            .map(|question| question.try_into_read(actor))
+            .collect::<Result<Vec<_>, _>>()?;
 
-        Self::generate_embedded_answer_title(default_answer_title, answers, actor)
+        Self::generate_embedded_answer_title(default_answer_title, &questions, answers, actor)
     }
 }
 
@@ -107,12 +128,50 @@ mod tests {
         let third_question_id = QuestionId::from(2);
 
         let default_answer_title = DefaultAnswerTitle::new(Some(
-            NonEmptyString::try_new(format!(
-                "Answer to ${}, ${}, ${} by $username($username)",
-                first_question_id, second_question_id, third_question_id
-            ))
+            NonEmptyString::try_new(
+                "Answer to {{question.first}}, {{question.second}}, {{question.third}} by $username($username)"
+                    .to_string(),
+            )
             .unwrap(),
         ));
+        let questions = vec![
+            Question::from_raw_parts(
+                Some(first_question_id),
+                Default::default(),
+                "first".to_string(),
+                0,
+                "First".to_string(),
+                None,
+                crate::form::question::models::QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap(),
+            Question::from_raw_parts(
+                Some(second_question_id),
+                Default::default(),
+                "second".to_string(),
+                1,
+                "Second".to_string(),
+                None,
+                crate::form::question::models::QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap(),
+            Question::from_raw_parts(
+                Some(third_question_id),
+                Default::default(),
+                "third".to_string(),
+                2,
+                "Third".to_string(),
+                None,
+                crate::form::question::models::QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap(),
+        ];
         let answers = vec![
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
@@ -142,7 +201,10 @@ mod tests {
             MockQuestionRepository,
             MockAnswerRepository,
         >::generate_embedded_answer_title(
-            default_answer_title, answers.as_slice(), &actor
+            default_answer_title,
+            questions.as_slice(),
+            answers.as_slice(),
+            &actor,
         )
         .unwrap();
 

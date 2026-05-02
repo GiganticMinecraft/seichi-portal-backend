@@ -6,6 +6,7 @@ use domain::{
         },
         comment::service::CommentAuthorizationContext,
         models::FormId,
+        question::models::{Question, QuestionType},
         service::DefaultAnswerTitleDomainService,
     },
     repository::form::{
@@ -18,9 +19,11 @@ use domain::{
 };
 use errors::{
     Error,
+    domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
 use futures::{StreamExt, stream, try_join};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::dto::AnswerDto;
 
@@ -59,12 +62,18 @@ impl<
             answer_repo: self.answer_repository,
         };
 
-        let (form, title) = try_join!(
+        let (form, question_guards, title) = try_join!(
             self.form_repository.get(form_id),
+            self.question_repository.get_questions(form_id),
             form_service.to_answer_title(&user, form_id, answers.as_slice())
         )?;
 
         let form = form.ok_or(Error::from(FormNotFound))?;
+        let questions = question_guards
+            .into_iter()
+            .map(|question| question.try_into_read(&user))
+            .collect::<Result<Vec<_>, _>>()?;
+        validate_posted_answers(&questions, &answers)?;
 
         let form_settings = form.try_read(&user)?.settings();
 
@@ -363,5 +372,196 @@ impl<
             labels,
             comments,
         })
+    }
+}
+
+fn validate_posted_answers(
+    questions: &[Question],
+    answers: &[FormAnswerContent],
+) -> Result<(), Error> {
+    let questions_by_id = questions
+        .iter()
+        .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+        .collect::<HashMap<_, _>>();
+    let answered_question_ids = answers
+        .iter()
+        .map(|answer| answer.question_id.into_inner())
+        .collect::<BTreeSet<_>>();
+    if answered_question_ids.len() != answers.len() {
+        return Err(DomainError::InvalidEntity {
+            message: "duplicate answer for the same question".to_string(),
+        }
+        .into());
+    }
+
+    if let Some(error) = answers.iter().find_map(|answer| {
+        let question = questions_by_id
+            .get(&answer.question_id.into_inner())
+            .ok_or_else(|| DomainError::InvalidEntity {
+                message: format!(
+                    "question {} does not belong to the form",
+                    answer.question_id
+                ),
+            });
+
+        question
+            .and_then(|question| match question.question_type {
+                QuestionType::Text => Ok(()),
+                QuestionType::SingleChoice => question
+                    .choices
+                    .iter()
+                    .flat_map(|choices| choices.iter())
+                    .any(|choice| choice.label == answer.answer)
+                    .then_some(())
+                    .ok_or_else(|| DomainError::InvalidEntity {
+                        message: format!(
+                            "answer for question {} must match one of the available choices",
+                            question.template_key
+                        ),
+                    }),
+                QuestionType::MultipleChoice => {
+                    let values = parse_multiple_choice_answer(&answer.answer);
+                    (!values.is_empty()
+                        && values.iter().all(|value| {
+                            question
+                                .choices
+                                .iter()
+                                .flat_map(|choices| choices.iter())
+                                .any(|choice| choice.label == *value)
+                        }))
+                    .then_some(())
+                    .ok_or_else(|| DomainError::InvalidEntity {
+                        message: format!(
+                            "answer for question {} must reference only existing choices",
+                            question.template_key
+                        ),
+                    })
+                }
+            })
+            .err()
+    }) {
+        return Err(error.into());
+    }
+
+    if let Some(missing_question) = questions
+        .iter()
+        .filter(|question| question.is_required)
+        .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+        .find(|(question_id, _)| !answered_question_ids.contains(question_id))
+        .map(|(_, question)| question)
+    {
+        return Err(DomainError::InvalidEntity {
+            message: format!(
+                "required question {} is missing",
+                missing_question.template_key
+            ),
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
+fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
+    let trimmed = answer.trim();
+    if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        return trimmed[1..trimmed.len() - 1]
+            .split(',')
+            .map(|value| value.trim().trim_matches('"').to_string())
+            .filter(|value| !value.is_empty())
+            .collect();
+    }
+
+    trimmed
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::form::{
+        answer::models::FormAnswerContentId,
+        models::FormId,
+        question::models::{Choice, QuestionId},
+    };
+    use types::non_empty_vec::NonEmptyVec;
+    use uuid::Uuid;
+
+    fn text_question() -> Question {
+        Question::new(
+            Some(QuestionId::from(1)),
+            FormId::from(Uuid::nil()),
+            "name".to_string(),
+            0,
+            "Name".to_string(),
+            None,
+            QuestionType::Text,
+            None,
+            true,
+        )
+        .unwrap()
+    }
+
+    fn single_choice_question() -> Question {
+        Question::new(
+            Some(QuestionId::from(2)),
+            FormId::from(Uuid::nil()),
+            "role".to_string(),
+            1,
+            "Role".to_string(),
+            None,
+            QuestionType::SingleChoice,
+            Some(
+                NonEmptyVec::try_new(vec![
+                    Choice::new(Some(1.into()), 0, "Admin".to_string()).unwrap(),
+                    Choice::new(Some(2.into()), 1, "User".to_string()).unwrap(),
+                ])
+                .unwrap(),
+            ),
+            true,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn validate_posted_answers_rejects_duplicate_question_ids() {
+        let questions = vec![text_question()];
+        let answers = vec![
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Alice".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Bob".to_string(),
+            },
+        ];
+
+        assert!(validate_posted_answers(&questions, &answers).is_err());
+    }
+
+    #[test]
+    fn validate_posted_answers_rejects_invalid_single_choice() {
+        let questions = vec![text_question(), single_choice_question()];
+        let answers = vec![
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Alice".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(2),
+                answer: "Guest".to_string(),
+            },
+        ];
+
+        assert!(validate_posted_answers(&questions, &answers).is_err());
     }
 }

@@ -67,6 +67,12 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             "Invalid webhook url. (Seichi-Portal only supports Discord webhook)",
             "INVALID_WEBHOOK_URL",
         ),
+        DomainError::InvalidEntity { message } => problem_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Unprocessable Entity",
+            &message,
+            "INVALID_ENTITY",
+        ),
     }
 }
 
