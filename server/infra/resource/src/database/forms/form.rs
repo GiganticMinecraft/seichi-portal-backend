@@ -5,13 +5,12 @@ use domain::{
     user::models::User,
 };
 use errors::infra::InfraError;
-use sqlx::Row;
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
     database::{
         components::FormDatabase,
-        connection::{ConnectionPool, execute_and_values, query_all_and_values},
+        connection::{ConnectionPool, execute_and_values},
         count::count_as_u32,
     },
     dto::FormDto,
@@ -77,80 +76,48 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<Vec<FormDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let form_query = query_all_and_values(
-                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, answer_visibility, created_at, updated_at, form_webhooks.url AS webhook_url, start_at, end_at, default_answer_titles.title AS default_answer_title
-                            FROM form_meta_data
-                            LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
-                            LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
-                            LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
-                            ORDER BY form_meta_data.id
-                            LIMIT ? OFFSET ?",
-                    [limit.unwrap_or(u32::MAX).into(), offset.unwrap_or(0).into()],
-                    txn,
+                let form_rows = sqlx::query_as!(
+                    FormDto,
+                    r"SELECT form_meta_data.id AS id, form_meta_data.title AS title, description, visibility, answer_visibility, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`, updated_at AS `updated_at!: chrono::DateTime<chrono::Utc>`, form_webhooks.url AS webhook_url, start_at AS `start_at: chrono::DateTime<chrono::Utc>`, end_at AS `end_at: chrono::DateTime<chrono::Utc>`, default_answer_titles.title AS default_answer_title
+                    FROM form_meta_data
+                    LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
+                    LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
+                    LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
+                    ORDER BY form_meta_data.id
+                    LIMIT ? OFFSET ?",
+                    limit.unwrap_or(u32::MAX),
+                    offset.unwrap_or(0),
                 )
-                    .await?;
+                .fetch_all(&mut **txn)
+                .await?;
 
-                form_query
-                    .into_iter()
-                    .map(|query_rs| {
-                        Ok::<_, InfraError>(FormDto {
-                            id: query_rs.try_get("form_id")?,
-                            title: query_rs.try_get("form_title")?,
-                            description: query_rs.try_get("description")?,
-                            metadata: (
-                                query_rs.try_get("created_at")?,
-                                query_rs.try_get("updated_at")?,
-                            ),
-                            start_at: query_rs.try_get("start_at")?,
-                            end_at: query_rs.try_get("end_at")?,
-                            webhook_url: query_rs.try_get("webhook_url")?,
-                            default_answer_title: query_rs.try_get("default_answer_title")?,
-                            visibility: query_rs.try_get("visibility")?,
-                            answer_visibility: query_rs.try_get("answer_visibility")?,
-                        })
-                    }).collect::<Result<Vec<_>, _>>()
+                Ok::<_, InfraError>(form_rows)
             })
-        }).await
+        })
+        .await
     }
 
     #[tracing::instrument]
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let form_query = query_all_and_values(
-                    r"SELECT form_meta_data.id AS form_id, form_meta_data.title AS form_title, description, visibility, answer_visibility, created_at, updated_at, form_webhooks.url AS webhook_url, start_at, end_at, default_answer_titles.title AS default_answer_title
-                            FROM form_meta_data
-                            LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
-                            LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
-                            LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
-                            WHERE form_meta_data.id = ?",
-                    [form_id.into_inner().to_string().into()],
-                    txn,
+                let form = sqlx::query_as!(
+                    FormDto,
+                    r"SELECT form_meta_data.id AS id, form_meta_data.title AS title, description, visibility, answer_visibility, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`, updated_at AS `updated_at!: chrono::DateTime<chrono::Utc>`, form_webhooks.url AS webhook_url, start_at AS `start_at: chrono::DateTime<chrono::Utc>`, end_at AS `end_at: chrono::DateTime<chrono::Utc>`, default_answer_titles.title AS default_answer_title
+                    FROM form_meta_data
+                    LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
+                    LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
+                    LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
+                    WHERE form_meta_data.id = ?",
+                    form_id.into_inner().to_string(),
                 )
-                    .await?;
+                .fetch_optional(&mut **txn)
+                .await?;
 
-                let form = match form_query.first() {
-                    Some(form) => form,
-                    None => return Ok(None),
-                };
-
-                Ok::<_, InfraError>(Some(FormDto {
-                    id: form_id.into_inner().to_string(),
-                    title: form.try_get("form_title")?,
-                    description: form.try_get("description")?,
-                    metadata: (
-                        form.try_get("created_at")?,
-                        form.try_get("updated_at")?,
-                    ),
-                    start_at: form.try_get("start_at")?,
-                    end_at: form.try_get("end_at")?,
-                    webhook_url: form.try_get("webhook_url")?,
-                    default_answer_title: form.try_get("default_answer_title")?,
-                    visibility: form.try_get("visibility")?,
-                    answer_visibility: form.try_get("answer_visibility")?,
-                }))
+                Ok::<_, InfraError>(form)
             })
-        }).await
+        })
+        .await
     }
 
     #[tracing::instrument]

@@ -1,25 +1,17 @@
-use std::str::FromStr;
-
-use async_trait::async_trait;
-use domain::{
-    form::{
-        answer::models::AnswerId,
-        comment::models::{Comment, CommentId},
-    },
-    user::models::Role,
-};
-use errors::infra::InfraError;
-use sqlx::Row;
-
-use crate::database::connection::query_all;
 use crate::{
     database::{
         components::FormCommentDatabase,
-        connection::{ConnectionPool, execute_and_values, query_all_and_values},
+        connection::{ConnectionPool, execute_and_values},
         count::count_as_u32,
     },
-    dto::{CommentDto, UserDto},
+    dto::CommentDto,
 };
+use async_trait::async_trait;
+use domain::form::{
+    answer::models::AnswerId,
+    comment::models::{Comment, CommentId},
+};
+use errors::infra::InfraError;
 
 #[async_trait]
 impl FormCommentDatabase for ConnectionPool {
@@ -27,88 +19,61 @@ impl FormCommentDatabase for ConnectionPool {
     async fn get_comment(&self, comment_id: CommentId) -> Result<Option<CommentDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let comment = query_all_and_values(
-                    r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
+                let comment = sqlx::query_as!(
+                    CommentDto,
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
                     WHERE form_answer_comments.id = ?",
-                    [comment_id.into_inner().to_string().into()],
-                    txn,
-                ).await?;
+                    comment_id.into_inner().to_string(),
+                )
+                .fetch_optional(&mut **txn)
+                .await?;
 
-                comment.into_iter().next().map(|rs| {
-                    Ok::<_, InfraError>(CommentDto {
-                        answer_id: rs.try_get("answer_id")?,
-                        comment_id: rs.try_get("id")?,
-                        content: rs.try_get("content")?,
-                        timestamp: rs.try_get("timestamp")?,
-                        commented_by: UserDto {
-                            name: rs.try_get("name")?,
-                            id: rs.try_get("commented_by")?,
-                            role: Role::from_str(rs.try_get::<String, _>("role")?.as_str())?,
-                        },
-                    })
-                }).transpose()
+                Ok::<_, InfraError>(comment)
             })
         })
-            .await
+        .await
     }
 
     #[tracing::instrument]
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let comments = query_all_and_values(
-                    r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
+                let comments = sqlx::query_as!(
+                    CommentDto,
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
                     WHERE answer_id = ?",
-                    [answer_id.into_inner().to_string().into()],
-                    txn,
-                ).await?;
+                    answer_id.into_inner().to_string(),
+                )
+                .fetch_all(&mut **txn)
+                .await?;
 
-                comments.into_iter().map(|rs| {
-                    Ok::<_, InfraError>(CommentDto {
-                        answer_id: rs.try_get("answer_id")?,
-                        comment_id: rs.try_get("id")?,
-                        content: rs.try_get("content")?,
-                        timestamp: rs.try_get("timestamp")?,
-                        commented_by: UserDto {
-                            name: rs.try_get("name")?,
-                            id: rs.try_get("commented_by")?,
-                            role: Role::from_str(rs.try_get::<String, _>("role")?.as_str())?,
-                        },
-                    })
-                }).collect::<Result<Vec<_>, _>>()
+                Ok::<_, InfraError>(comments)
             })
         })
-            .await
+        .await
     }
 
     #[tracing::instrument]
     async fn get_all_comments(&self) -> Result<Vec<CommentDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let comments = query_all(
-                    r"SELECT form_answer_comments.id AS content_id, answer_id, commented_by, name, role, content, timestamp FROM form_answer_comments
-                    INNER JOIN users ON form_answer_comments.commented_by = users.id",
-                    txn,
-                ).await?;
+                let comments = sqlx::query_as!(
+                    CommentDto,
+                    r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM form_answer_comments
+                    INNER JOIN users ON form_answer_comments.commented_by = users.id"
+                )
+                .fetch_all(&mut **txn)
+                .await?;
 
-                comments.into_iter().map(|rs| {
-                    Ok::<_, InfraError>(CommentDto {
-                        answer_id: rs.try_get("answer_id")?,
-                        comment_id: rs.try_get("id")?,
-                        content: rs.try_get("content")?,
-                        timestamp: rs.try_get("timestamp")?,
-                        commented_by: UserDto {
-                            name: rs.try_get("name")?,
-                            id: rs.try_get("commented_by")?,
-                            role: Role::from_str(rs.try_get::<String, _>("role")?.as_str())?,
-                        },
-                    })
-                }).collect::<Result<Vec<_>, _>>()
+                Ok::<_, InfraError>(comments)
             })
         })
-            .await
+        .await
     }
 
     #[tracing::instrument]

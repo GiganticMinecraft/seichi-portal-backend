@@ -58,7 +58,8 @@ pub struct FormDto {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub metadata: (DateTime<Utc>, DateTime<Utc>),
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub start_at: Option<DateTime<Utc>>,
     pub end_at: Option<DateTime<Utc>>,
     pub webhook_url: Option<String>,
@@ -75,7 +76,8 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             id,
             title,
             description,
-            metadata,
+            created_at,
+            updated_at,
             start_at,
             end_at,
             webhook_url,
@@ -88,7 +90,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             FormId::from(Uuid::from_str(&id).map_err(Into::<InfraError>::into)?),
             FormTitle::new(title.try_into()?),
             FormDescription::new(description),
-            FormMeta::from_raw_parts(metadata.0, metadata.1),
+            FormMeta::from_raw_parts(created_at, updated_at),
             FormSettings::from_raw_parts(
                 ResponsePeriod::try_new(start_at, end_at)?,
                 WebhookUrl::try_new(webhook_url.map(TryInto::try_into).transpose()?)?,
@@ -148,7 +150,9 @@ pub struct CommentDto {
     pub comment_id: String,
     pub content: String,
     pub timestamp: DateTime<Utc>,
-    pub commented_by: UserDto,
+    pub commented_by_name: String,
+    pub commented_by_id: String,
+    pub commented_by_role: String,
 }
 
 impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
@@ -160,7 +164,9 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
             comment_id,
             content,
             timestamp,
-            commented_by,
+            commented_by_name,
+            commented_by_id,
+            commented_by_role,
         }: CommentDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::comment::models::Comment::from_raw_parts(
@@ -172,7 +178,12 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
                 .into(),
             CommentContent::new(content.try_into()?),
             timestamp,
-            commented_by.try_into()?,
+            UserDto {
+                name: commented_by_name,
+                id: commented_by_id,
+                role: Role::from_str(&commented_by_role).map_err(Into::<InfraError>::into)?,
+            }
+            .try_into()?,
         ))
     }
 }
@@ -264,7 +275,9 @@ impl TryFrom<FormLabelDto> for domain::form::models::FormLabel {
 pub struct MessageDto {
     pub id: String,
     pub related_answer: String,
-    pub sender: UserDto,
+    pub sender_name: String,
+    pub sender_id: String,
+    pub sender_role: String,
     pub body: String,
     pub timestamp: DateTime<Utc>,
 }
@@ -276,7 +289,9 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
         MessageDto {
             id,
             related_answer,
-            sender,
+            sender_name,
+            sender_id,
+            sender_role,
             body,
             timestamp,
         }: MessageDto,
@@ -289,7 +304,12 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
                 Uuid::from_str(&related_answer)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
-                sender.try_into()?,
+                UserDto {
+                    name: sender_name,
+                    id: sender_id,
+                    role: Role::from_str(&sender_role).map_err(Into::<InfraError>::into)?,
+                }
+                .try_into()?,
                 body,
                 timestamp,
             ))
