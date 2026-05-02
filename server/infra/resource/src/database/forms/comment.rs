@@ -1,9 +1,5 @@
 use crate::{
-    database::{
-        components::FormCommentDatabase,
-        connection::{ConnectionPool, execute_and_values},
-        count::count_as_u32,
-    },
+    database::{components::FormCommentDatabase, connection::ConnectionPool, count::count_as_u32},
     dto::CommentDto,
 };
 use async_trait::async_trait;
@@ -82,28 +78,24 @@ impl FormCommentDatabase for ConnectionPool {
         answer_id: AnswerId,
         comment: &Comment,
     ) -> Result<(), InfraError> {
-        let params = [
-            comment.comment_id().into_inner().to_string().into(),
-            answer_id.into_inner().to_string().into(),
-            comment.commented_by().id.to_string().into(),
-            comment
-                .content()
-                .to_owned()
-                .into_inner()
-                .into_inner()
-                .into(),
-        ];
+        let comment_id = comment.comment_id().into_inner().to_string();
+        let answer_id = answer_id.into_inner().to_string();
+        let commented_by = comment.commented_by().id.to_string();
+        let content = comment.content().to_owned().into_inner().into_inner();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     r"INSERT INTO form_answer_comments (id, answer_id, commented_by, content)
                         VALUES (?, ?, ?, ?)
                         ON DUPLICATE KEY UPDATE
                         content = VALUES(content)",
-                    params,
-                    txn,
+                    comment_id,
+                    answer_id,
+                    commented_by,
+                    content,
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())
@@ -116,11 +108,11 @@ impl FormCommentDatabase for ConnectionPool {
     async fn delete_comment(&self, comment_id: CommentId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "DELETE FROM form_answer_comments WHERE id = ?",
-                    [comment_id.into_inner().to_string().into()],
-                    txn,
+                    comment_id.into_inner().to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_answer_comments (id, answer_id, commented_by, content)\n                        VALUES (?, ?, ?, ?)\n                        ON DUPLICATE KEY UPDATE\n                        content = VALUES(content)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "1a11d223e4370e5fc504ca5180df3c2ac3df90addd95df32825c89785a8d8c03"
+}

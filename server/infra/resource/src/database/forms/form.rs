@@ -8,11 +8,7 @@ use errors::infra::InfraError;
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    database::{
-        components::FormDatabase,
-        connection::{ConnectionPool, execute_and_values},
-        count::count_as_u32,
-    },
+    database::{components::FormDatabase, connection::ConnectionPool, count::count_as_u32},
     dto::FormDto,
 };
 
@@ -27,39 +23,37 @@ impl FormDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     r#"INSERT INTO form_meta_data (id, title, description, created_by, updated_by)
                             VALUES (?, ?, ?, ?, ?)"#,
-                    [
-                        form_id.into_inner().to_string().into(),
-                        form_title.to_string().into(),
-                        description.to_owned().into(),
-                        user_id.to_string().into(),
-                        user_id.to_string().into(),
-                    ],
-                    txn,
+                    form_id.into_inner().to_string(),
+                    form_title.to_string(),
+                    description.to_owned(),
+                    user_id.to_string(),
+                    user_id.to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
-                execute_and_values(
+                sqlx::query!(
                     r"INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
-                    [form_id.to_owned().into_inner().to_string().into()],
-                    txn,
+                    form_id.to_owned().into_inner().to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
-                execute_and_values(
+                sqlx::query!(
                     r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)",
-                    [form_id.to_owned().into_inner().to_string().into()],
-                    txn,
+                    form_id.to_owned().into_inner().to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
-                execute_and_values(
+                sqlx::query!(
                     r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)",
-                    [form_id.to_owned().into_inner().to_string().into()],
-                    txn,
+                    form_id.to_owned().into_inner().to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())
@@ -124,11 +118,11 @@ impl FormDatabase for ConnectionPool {
     async fn delete(&self, form_id: FormId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "DELETE FROM form_meta_data WHERE id = ?",
-                    [form_id.into_inner().to_string().into()],
-                    txn,
+                    form_id.into_inner().to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())
@@ -139,18 +133,12 @@ impl FormDatabase for ConnectionPool {
 
     #[tracing::instrument]
     async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError> {
-        let form_meta_update_params = [
-            form.title().to_owned().into_inner().into_inner().into(),
-            form.description().to_owned().into_inner().into(),
-            form.settings().visibility().to_string().into(),
-            form.settings()
-                .answer_settings()
-                .visibility()
-                .to_string()
-                .into(),
-            updated_by.id.to_string().into(),
-            form.id().into_inner().to_owned().to_string().into(),
-        ];
+        let title = form.title().to_owned().into_inner().into_inner();
+        let description = form.description().to_owned().into_inner();
+        let visibility = form.settings().visibility().to_string();
+        let answer_visibility = form.settings().answer_settings().visibility().to_string();
+        let updated_by_id = updated_by.id.to_string();
+        let form_id = form.id().into_inner().to_owned().to_string();
 
         let webhook_url = form
             .settings()
@@ -160,14 +148,9 @@ impl FormDatabase for ConnectionPool {
             .and_then(WebhookUrl::into_inner)
             .map(NonEmptyString::into_inner);
 
-        let update_form_webhooks_params = [
-            form.id().into_inner().to_string().to_owned().into(),
-            webhook_url.into(),
-        ];
-
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     r#"UPDATE form_meta_data SET
                     title = ?,
                     description = ?,
@@ -176,19 +159,25 @@ impl FormDatabase for ConnectionPool {
                     updated_by = ?
                     WHERE id = ?
                     "#,
-                    form_meta_update_params,
-                    txn,
+                    title,
+                    description,
+                    visibility,
+                    answer_visibility,
+                    updated_by_id,
+                    form_id.clone(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
-                execute_and_values(
+                sqlx::query!(
                     r#"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)
                     ON DUPLICATE KEY UPDATE
                     url = VALUES(url)
                     "#,
-                    update_form_webhooks_params,
-                    txn,
+                    form_id,
+                    webhook_url,
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())

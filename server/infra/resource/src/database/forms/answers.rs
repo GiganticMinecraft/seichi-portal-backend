@@ -18,8 +18,8 @@ use crate::{
     database::{
         components::FormAnswerDatabase,
         connection::{
-            ConnectionPool, DatabaseTransaction, execute_and_values, query_all,
-            query_all_and_values, query_one_and_values,
+            ConnectionPool, DatabaseTransaction, query_all, query_all_and_values,
+            query_one_and_values,
         },
         count::count_as_u32,
     },
@@ -75,17 +75,15 @@ impl FormAnswerDatabase for ConnectionPool {
 
         self.read_write_transaction(move |txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     r"INSERT INTO answers (id, form_id, user, title, timestamp) VALUES (?, ?, ?, ?, ?)",
-                    [
-                        answer_id.into(),
-                        form_id.into(),
-                        user_id.into(),
-                        title.into(),
-                        timestamp.into(),
-                    ],
-                    txn,
+                    answer_id,
+                    form_id,
+                    user_id,
+                    title,
+                    timestamp,
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 if !contents.is_empty() {
@@ -96,7 +94,9 @@ impl FormAnswerDatabase for ConnectionPool {
 
                     contents
                         .into_iter()
-                        .flat_map(|(answer_id, question_id, answer)| [answer_id, question_id, answer])
+                        .flat_map(|(answer_id, question_id, answer)| {
+                            [answer_id, question_id, answer]
+                        })
                         .fold(query(&sql), |query, value| query.bind(value))
                         .execute(&mut **txn)
                         .await?;
@@ -387,14 +387,17 @@ impl FormAnswerDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     r#"INSERT INTO answers (id, form_id, user, title)
                     VALUES (?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                     title = VALUES(title)"#,
-                    [answer_id.into(), form_id.into(), user.into(), title.into()],
-                    txn,
+                    answer_id,
+                    form_id,
+                    user,
+                    title,
                 )
+                .execute(&mut **txn)
                 .await?;
                 Ok::<_, InfraError>(())
             })

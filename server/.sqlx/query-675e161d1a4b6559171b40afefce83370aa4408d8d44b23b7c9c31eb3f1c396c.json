@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO label_for_forms (id, name) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "675e161d1a4b6559171b40afefce83370aa4408d8d44b23b7c9c31eb3f1c396c"
+}

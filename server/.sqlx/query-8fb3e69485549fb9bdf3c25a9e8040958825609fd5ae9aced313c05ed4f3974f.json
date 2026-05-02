@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT question_id AS `question_id!: i32` FROM form_questions ORDER BY question_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "question_id!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8fb3e69485549fb9bdf3c25a9e8040958825609fd5ae9aced313c05ed4f3974f"
+}

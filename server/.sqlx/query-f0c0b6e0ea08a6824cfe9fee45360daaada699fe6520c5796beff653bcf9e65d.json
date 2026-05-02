@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)\n                    ON DUPLICATE KEY UPDATE\n                    url = VALUES(url)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "f0c0b6e0ea08a6824cfe9fee45360daaada699fe6520c5796beff653bcf9e65d"
+}

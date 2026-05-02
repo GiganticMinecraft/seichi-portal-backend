@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "9be430b8f989ac720f0fa12772fca1c1fa6a935c621653d20abb5d93febe5da9"
+}

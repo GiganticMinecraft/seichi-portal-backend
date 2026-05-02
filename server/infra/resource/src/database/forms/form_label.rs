@@ -7,10 +7,7 @@ use sqlx::{Row, query};
 use crate::{
     database::{
         components::FormLabelDatabase,
-        connection::{
-            ConnectionPool, execute_and_values, query_all, query_all_and_values,
-            query_one_and_values,
-        },
+        connection::{ConnectionPool, query_all, query_all_and_values, query_one_and_values},
         count::count_as_u32,
     },
     dto::FormLabelDto,
@@ -20,18 +17,17 @@ use crate::{
 impl FormLabelDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn create_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError> {
-        let params = [
-            label.id().to_owned().into_inner().to_string().into(),
-            label.name().to_string().into(),
-        ];
+        let label_id = label.id().to_owned().into_inner().to_string();
+        let label_name = label.name().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "INSERT INTO label_for_forms (id, name) VALUES (?, ?)",
-                    params,
-                    txn,
+                    label_id,
+                    label_name,
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())
@@ -105,11 +101,11 @@ impl FormLabelDatabase for ConnectionPool {
     async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "DELETE FROM label_for_forms WHERE id = ?",
-                    [label_id.to_string().into()],
-                    txn,
+                    label_id.to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())
@@ -150,11 +146,12 @@ impl FormLabelDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "UPDATE label_for_forms SET name = ? WHERE id = ?",
-                    [name.to_string().into(), id.to_string().into()],
-                    txn,
+                    name.to_string(),
+                    id.to_string(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())
@@ -202,11 +199,11 @@ impl FormLabelDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "DELETE FROM label_settings_for_forms WHERE form_id = ?",
-                    [form_id.clone().into()],
-                    txn,
+                    form_id.clone(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 if !label_ids.is_empty() {

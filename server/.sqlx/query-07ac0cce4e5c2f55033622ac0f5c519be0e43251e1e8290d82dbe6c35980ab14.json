@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM label_settings_for_forms WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "07ac0cce4e5c2f55033622ac0f5c519be0e43251e1e8290d82dbe6c35980ab14"
+}

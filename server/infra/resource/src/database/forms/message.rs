@@ -6,10 +6,7 @@ use domain::form::{
 use errors::infra::InfraError;
 
 use crate::{
-    database::{
-        components::FormMessageDatabase,
-        connection::{ConnectionPool, execute_and_values},
-    },
+    database::{components::FormMessageDatabase, connection::ConnectionPool},
     dto::MessageDto,
 };
 
@@ -25,13 +22,16 @@ impl FormMessageDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(r"INSERT INTO messages (id, related_answer_id, sender, body, timestamp) VALUES (?, ?, ?, ?, ?)", [
-                    id.into(),
-                    related_answer_id.into(),
-                    sender.into(),
-                    body.into(),
-                    timestamp.into(),
-                ], txn).await?;
+                sqlx::query!(
+                    r"INSERT INTO messages (id, related_answer_id, sender, body, timestamp) VALUES (?, ?, ?, ?, ?)",
+                    id,
+                    related_answer_id,
+                    sender,
+                    body,
+                    timestamp,
+                )
+                .execute(&mut **txn)
+                .await?;
 
                 Ok::<_, InfraError>(())
             })
@@ -46,11 +46,12 @@ impl FormMessageDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
+                sqlx::query!(
                     "UPDATE messages SET body = ? WHERE id = ?",
-                    [body.into(), message_id.into_inner().into()],
-                    txn,
+                    body,
+                    message_id.into_inner(),
                 )
+                .execute(&mut **txn)
                 .await?;
 
                 Ok::<_, InfraError>(())
@@ -115,12 +116,9 @@ impl FormMessageDatabase for ConnectionPool {
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                execute_and_values(
-                    "DELETE FROM messages WHERE id = ?",
-                    [message_id.to_string().into()],
-                    txn,
-                )
-                .await?;
+                sqlx::query!("DELETE FROM messages WHERE id = ?", message_id.to_string(),)
+                    .execute(&mut **txn)
+                    .await?;
 
                 Ok::<_, InfraError>(())
             })
