@@ -16,37 +16,6 @@ use crate::{
     dto::FormDto,
 };
 
-struct FormReadRow {
-    id: String,
-    title: String,
-    description: String,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-    start_at: Option<chrono::DateTime<chrono::Utc>>,
-    end_at: Option<chrono::DateTime<chrono::Utc>>,
-    webhook_url: Option<String>,
-    default_answer_title: Option<String>,
-    visibility: String,
-    answer_visibility: String,
-}
-
-impl FormReadRow {
-    fn into_dto(self) -> FormDto {
-        FormDto {
-            id: self.id,
-            title: self.title,
-            description: self.description,
-            metadata: (self.created_at, self.updated_at),
-            start_at: self.start_at,
-            end_at: self.end_at,
-            webhook_url: self.webhook_url,
-            default_answer_title: self.default_answer_title,
-            visibility: self.visibility,
-            answer_visibility: self.answer_visibility,
-        }
-    }
-}
-
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
@@ -107,7 +76,8 @@ impl FormDatabase for ConnectionPool {
     ) -> Result<Vec<FormDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let form_rows = sqlx::query!(
+                let form_rows = sqlx::query_as!(
+                    FormDto,
                     r"SELECT form_meta_data.id AS id, form_meta_data.title AS title, description, visibility, answer_visibility, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`, updated_at AS `updated_at!: chrono::DateTime<chrono::Utc>`, form_webhooks.url AS webhook_url, start_at AS `start_at: chrono::DateTime<chrono::Utc>`, end_at AS `end_at: chrono::DateTime<chrono::Utc>`, default_answer_titles.title AS default_answer_title
                     FROM form_meta_data
                     LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
@@ -121,27 +91,7 @@ impl FormDatabase for ConnectionPool {
                 .fetch_all(&mut **txn)
                 .await?;
 
-                Ok::<_, InfraError>(
-                    form_rows
-                        .into_iter()
-                        .map(|row| {
-                            FormReadRow {
-                                id: row.id,
-                                title: row.title,
-                                description: row.description,
-                                created_at: row.created_at,
-                                updated_at: row.updated_at,
-                                start_at: row.start_at,
-                                end_at: row.end_at,
-                                webhook_url: row.webhook_url,
-                                default_answer_title: row.default_answer_title,
-                                visibility: row.visibility,
-                                answer_visibility: row.answer_visibility,
-                            }
-                            .into_dto()
-                        })
-                        .collect::<Vec<_>>(),
-                )
+                Ok::<_, InfraError>(form_rows)
             })
         })
         .await
@@ -151,7 +101,8 @@ impl FormDatabase for ConnectionPool {
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let form = sqlx::query!(
+                let form = sqlx::query_as!(
+                    FormDto,
                     r"SELECT form_meta_data.id AS id, form_meta_data.title AS title, description, visibility, answer_visibility, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`, updated_at AS `updated_at!: chrono::DateTime<chrono::Utc>`, form_webhooks.url AS webhook_url, start_at AS `start_at: chrono::DateTime<chrono::Utc>`, end_at AS `end_at: chrono::DateTime<chrono::Utc>`, default_answer_titles.title AS default_answer_title
                     FROM form_meta_data
                     LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
@@ -163,22 +114,7 @@ impl FormDatabase for ConnectionPool {
                 .fetch_optional(&mut **txn)
                 .await?;
 
-                Ok::<_, InfraError>(form.map(|row| {
-                    FormReadRow {
-                        id: row.id,
-                        title: row.title,
-                        description: row.description,
-                        created_at: row.created_at,
-                        updated_at: row.updated_at,
-                        start_at: row.start_at,
-                        end_at: row.end_at,
-                        webhook_url: row.webhook_url,
-                        default_answer_title: row.default_answer_title,
-                        visibility: row.visibility,
-                        answer_visibility: row.answer_visibility,
-                    }
-                    .into_dto()
-                }))
+                Ok::<_, InfraError>(form)
             })
         })
         .await

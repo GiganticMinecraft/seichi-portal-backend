@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT form_answer_comments.id AS comment_id, answer_id, commented_by, name, role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM form_answer_comments\n                    INNER JOIN users ON form_answer_comments.commented_by = users.id\n                    WHERE form_answer_comments.id = ?",
+  "query": "SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM form_answer_comments\n                    INNER JOIN users ON form_answer_comments.commented_by = users.id",
   "describe": {
     "columns": [
       {
@@ -23,7 +23,7 @@
       },
       {
         "ordinal": 2,
-        "name": "commented_by",
+        "name": "commented_by_id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
@@ -32,7 +32,7 @@
       },
       {
         "ordinal": 3,
-        "name": "name",
+        "name": "commented_by_name",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
@@ -41,7 +41,7 @@
       },
       {
         "ordinal": 4,
-        "name": "role",
+        "name": "commented_by_role",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
@@ -68,7 +68,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       false,
@@ -80,5 +80,5 @@
       false
     ]
   },
-  "hash": "ee73dc2e7aa483f98be913b7d74710917afd20158129773b58946ff176fd1711"
+  "hash": "a95316331a3d3398360a93e4510bec5a9e85b0b9053b9fd61a498231396fdc1d"
 }

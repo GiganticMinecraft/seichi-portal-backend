@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT messages.id AS message_id, related_answer_id, sender, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM messages\n                    INNER JOIN users ON users.id = messages.sender\n                    WHERE related_answer_id = ?",
+  "query": "SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM messages\n                    INNER JOIN users ON users.id = messages.sender\n                    WHERE related_answer_id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "message_id",
+        "name": "id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -14,7 +14,7 @@
       },
       {
         "ordinal": 1,
-        "name": "related_answer_id",
+        "name": "related_answer",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
@@ -23,7 +23,7 @@
       },
       {
         "ordinal": 2,
-        "name": "sender",
+        "name": "sender_id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
@@ -80,5 +80,5 @@
       false
     ]
   },
-  "hash": "ca4d70f5215d92eabbc3407b970a26e3a897c592f68c6444b3a61a500d0c4a12"
+  "hash": "b6be50a31914cd8d653ba36da386ce1d84e69f6f3f746eee06620d0e83345bea"
 }

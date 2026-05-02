@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT form_answer_comments.id AS comment_id, answer_id, commented_by, name, role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM form_answer_comments\n                    INNER JOIN users ON form_answer_comments.commented_by = users.id\n                    WHERE answer_id = ?",
+  "query": "SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM messages\n                    INNER JOIN users ON users.id = messages.sender\n                    WHERE messages.id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "comment_id",
+        "name": "id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -14,7 +14,7 @@
       },
       {
         "ordinal": 1,
-        "name": "answer_id",
+        "name": "related_answer",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
@@ -23,7 +23,7 @@
       },
       {
         "ordinal": 2,
-        "name": "commented_by",
+        "name": "sender_id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
@@ -32,7 +32,7 @@
       },
       {
         "ordinal": 3,
-        "name": "name",
+        "name": "sender_name",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
@@ -41,7 +41,7 @@
       },
       {
         "ordinal": 4,
-        "name": "role",
+        "name": "sender_role",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
@@ -50,7 +50,7 @@
       },
       {
         "ordinal": 5,
-        "name": "content",
+        "name": "body",
         "type_info": {
           "type": "Blob",
           "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
@@ -80,5 +80,5 @@
       false
     ]
   },
-  "hash": "4e5d88b0e5f4f17904aa0982d628516d179e1b4399f28867105ac4a0df3ac0e3"
+  "hash": "fefa920611a0cbd428204484ea1ad38bb919556d6e69f5e28d9b2d396cc2ef9c"
 }

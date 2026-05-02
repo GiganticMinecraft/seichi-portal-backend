@@ -1,12 +1,7 @@
-use std::str::FromStr;
-
 use async_trait::async_trait;
-use domain::{
-    form::{
-        answer::models::AnswerEntry,
-        message::models::{Message, MessageId},
-    },
-    user::models::Role,
+use domain::form::{
+    answer::models::AnswerEntry,
+    message::models::{Message, MessageId},
 };
 use errors::infra::InfraError;
 
@@ -15,34 +10,8 @@ use crate::{
         components::FormMessageDatabase,
         connection::{ConnectionPool, execute_and_values},
     },
-    dto::{MessageDto, UserDto},
+    dto::MessageDto,
 };
-
-struct MessageReadRow {
-    message_id: String,
-    related_answer_id: String,
-    sender_id: String,
-    sender_name: String,
-    sender_role: String,
-    body: String,
-    timestamp: chrono::DateTime<chrono::Utc>,
-}
-
-impl MessageReadRow {
-    fn into_dto(self) -> Result<MessageDto, InfraError> {
-        Ok(MessageDto {
-            id: self.message_id,
-            related_answer: self.related_answer_id,
-            sender: UserDto {
-                name: self.sender_name,
-                id: self.sender_id,
-                role: Role::from_str(&self.sender_role)?,
-            },
-            body: self.body,
-            timestamp: self.timestamp,
-        })
-    }
-}
 
 #[async_trait]
 impl FormMessageDatabase for ConnectionPool {
@@ -99,8 +68,9 @@ impl FormMessageDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let rows = sqlx::query!(
-                    r"SELECT messages.id AS message_id, related_answer_id, sender, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                let rows = sqlx::query_as!(
+                    MessageDto,
+                    r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
                     WHERE related_answer_id = ?",
@@ -109,20 +79,7 @@ impl FormMessageDatabase for ConnectionPool {
                 .fetch_all(&mut **txn)
                 .await?;
 
-                rows.into_iter()
-                    .map(|row| {
-                        MessageReadRow {
-                            message_id: row.message_id,
-                            related_answer_id: row.related_answer_id,
-                            sender_id: row.sender,
-                            sender_name: row.sender_name,
-                            sender_role: row.sender_role,
-                            body: row.body,
-                            timestamp: row.timestamp,
-                        }
-                        .into_dto()
-                    })
-                    .collect::<Result<Vec<_>, _>>()
+                Ok::<_, InfraError>(rows)
             })
         })
         .await
@@ -137,8 +94,9 @@ impl FormMessageDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let row = sqlx::query!(
-                    r"SELECT messages.id AS message_id, related_answer_id, sender, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                let row = sqlx::query_as!(
+                    MessageDto,
+                    r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
                     WHERE messages.id = ?",
@@ -147,19 +105,7 @@ impl FormMessageDatabase for ConnectionPool {
                 .fetch_optional(&mut **txn)
                 .await?;
 
-                row.map(|row| {
-                    MessageReadRow {
-                        message_id: row.message_id,
-                        related_answer_id: row.related_answer_id,
-                        sender_id: row.sender,
-                        sender_name: row.sender_name,
-                        sender_role: row.sender_role,
-                        body: row.body,
-                        timestamp: row.timestamp,
-                    }
-                    .into_dto()
-                })
-                .transpose()
+                Ok::<_, InfraError>(row)
             })
         })
         .await
