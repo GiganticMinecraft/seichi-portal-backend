@@ -464,10 +464,13 @@ fn validate_posted_answers(
 
 fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
     let trimmed = answer.trim();
-    if trimmed.starts_with('[') && trimmed.ends_with(']') {
-        return trimmed[1..trimmed.len() - 1]
-            .split(',')
-            .map(|value| value.trim().trim_matches('"').to_string())
+    if trimmed.starts_with('[')
+        && trimmed.ends_with(']')
+        && let Ok(values) = serde_json::from_str::<Vec<String>>(trimmed)
+    {
+        return values
+            .into_iter()
+            .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .collect();
     }
@@ -563,5 +566,21 @@ mod tests {
         ];
 
         assert!(validate_posted_answers(&questions, &answers).is_err());
+    }
+
+    #[test]
+    fn parse_multiple_choice_answer_accepts_json_with_commas_in_values() {
+        assert_eq!(
+            parse_multiple_choice_answer(r#"["Admin, Owner","User"]"#),
+            vec!["Admin, Owner".to_string(), "User".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_multiple_choice_answer_falls_back_to_legacy_csv_format() {
+        assert_eq!(
+            parse_multiple_choice_answer("Admin, User"),
+            vec!["Admin".to_string(), "User".to_string()]
+        );
     }
 }

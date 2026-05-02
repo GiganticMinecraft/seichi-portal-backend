@@ -1,6 +1,7 @@
 use errors::{Error, domain::DomainError};
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use crate::{
     form::{
@@ -41,7 +42,6 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
         match default_answer_title.into_inner() {
             Some(default_answer_title) => {
                 let default_answer_title = default_answer_title.to_string();
-                let regex = Regex::new(r"\{\{question\.([A-Za-z0-9_-]+)\}\}").unwrap();
                 let question_template_key_by_id = questions
                     .iter()
                     .filter_map(|question| {
@@ -59,7 +59,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
                     })
                     .collect::<HashMap<_, _>>();
 
-                let answer_replaced_title: String = regex
+                let answer_replaced_title: String = question_placeholder_regex()
                     .replace_all(default_answer_title.as_str(), |caps: &regex::Captures| {
                         answers_by_template_key
                             .get(&caps[1])
@@ -105,6 +105,11 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
 
         Self::generate_embedded_answer_title(default_answer_title, &questions, answers, actor)
     }
+}
+
+fn question_placeholder_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| Regex::new(r"\{\{question\.([A-Za-z0-9_-]+)\}\}").unwrap())
 }
 
 #[cfg(test)]

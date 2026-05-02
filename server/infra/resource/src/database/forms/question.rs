@@ -234,12 +234,11 @@ async fn insert_new_questions<'a>(
         .execute(&mut *txn)
         .await?;
 
-    let last_insert_id = result.last_insert_id() as i32;
-    let first_insert_id = last_insert_id - questions.len() as i32 + 1;
+    let first_insert_id = result.last_insert_id() as i32;
 
     Ok(questions
         .into_iter()
-        .zip(first_insert_id..=last_insert_id)
+        .zip(first_insert_id..)
         .map(|(question, question_id)| (question_id, question))
         .collect())
 }
@@ -380,6 +379,7 @@ async fn upsert_existing_choices(
     let sql = format!(
         r"INSERT INTO form_choices (id, question_id, position, label) VALUES {}
         ON DUPLICATE KEY UPDATE
+        question_id = VALUES(question_id),
         position = VALUES(position),
         label = VALUES(label)",
         std::iter::repeat_n("(?, ?, ?, ?)", choices.len()).join(", ")
