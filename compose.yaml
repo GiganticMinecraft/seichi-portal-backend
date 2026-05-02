@@ -18,6 +18,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
       - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
+      - ./docker/seed-debug-users.sql:/docker-entrypoint-initdb.d/seed-debug-users.sql
     restart: always
   valkey:
     image: valkey/valkey:9-alpine
