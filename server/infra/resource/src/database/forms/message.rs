@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use domain::{
     form::{
         answer::models::AnswerEntry,
@@ -10,19 +9,40 @@ use domain::{
     user::models::Role,
 };
 use errors::infra::InfraError;
-use itertools::Itertools;
-use sqlx::Row;
-use uuid::Uuid;
 
 use crate::{
     database::{
         components::FormMessageDatabase,
-        connection::{
-            ConnectionPool, execute_and_values, query_all_and_values, query_one_and_values,
-        },
+        connection::{ConnectionPool, execute_and_values},
     },
     dto::{MessageDto, UserDto},
 };
+
+struct MessageReadRow {
+    message_id: String,
+    related_answer_id: String,
+    sender_id: String,
+    sender_name: String,
+    sender_role: String,
+    body: String,
+    timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+impl MessageReadRow {
+    fn into_dto(self) -> Result<MessageDto, InfraError> {
+        Ok(MessageDto {
+            id: self.message_id,
+            related_answer: self.related_answer_id,
+            sender: UserDto {
+                name: self.sender_name,
+                id: self.sender_id,
+                role: Role::from_str(&self.sender_role)?,
+            },
+            body: self.body,
+            timestamp: self.timestamp,
+        })
+    }
+}
 
 #[async_trait]
 impl FormMessageDatabase for ConnectionPool {
@@ -77,50 +97,35 @@ impl FormMessageDatabase for ConnectionPool {
     ) -> Result<Vec<MessageDto>, InfraError> {
         let answer_id = answers.id().into_inner().to_owned();
 
-        Ok(self
-            .read_only_transaction(|txn| {
-                Box::pin(async move {
-                    let rs = query_all_and_values(
-                        r"SELECT messages.id AS message_id, sender, name, role, body, timestamp FROM messages
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rows = sqlx::query!(
+                    r"SELECT messages.id AS message_id, related_answer_id, sender, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM messages
                     INNER JOIN users ON users.id = messages.sender
                     WHERE related_answer_id = ?",
-                        [answer_id.into()],
-                        txn,
-                    )
-                        .await?;
+                    answer_id.to_string(),
+                )
+                .fetch_all(&mut **txn)
+                .await?;
 
-                    Ok::<_, InfraError>(
-                        rs.into_iter()
-                            .map(|rs| {
-                                let user = Ok::<_, InfraError>(UserDto {
-                                    name: rs.try_get("name")?,
-                                    id: rs.try_get("sender")?,
-                                    role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
-                                });
-
-                                Ok::<_, InfraError>((
-                                    user?,
-                                    Uuid::from_str(&rs.try_get::<String, _>("message_id")?)?,
-                                    rs.try_get::<String, _>("body")?,
-                                    rs.try_get::<DateTime<Utc>, _>("timestamp")?,
-                                ))
-                            })
-                            .collect_vec(),
-                    )
-                })
+                rows.into_iter()
+                    .map(|row| {
+                        MessageReadRow {
+                            message_id: row.message_id,
+                            related_answer_id: row.related_answer_id,
+                            sender_id: row.sender,
+                            sender_name: row.sender_name,
+                            sender_role: row.sender_role,
+                            body: row.body,
+                            timestamp: row.timestamp,
+                        }
+                        .into_dto()
+                    })
+                    .collect::<Result<Vec<_>, _>>()
             })
-            .await?
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .map(|(user, message_id, body, timestamp)| MessageDto {
-                id: message_id.to_string(),
-                related_answer: answer_id.to_string(),
-                sender: user,
-                body,
-                timestamp,
-            })
-            .collect_vec())
+        })
+        .await
     }
 
     #[tracing::instrument]
@@ -128,33 +133,31 @@ impl FormMessageDatabase for ConnectionPool {
         &self,
         message_id: &MessageId,
     ) -> Result<Option<MessageDto>, InfraError> {
-        let message_id = message_id.into_inner();
+        let message_id = message_id.into_inner().to_string();
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let rs = query_one_and_values(
-                    r"SELECT sender, message_senders.name, message_senders.role, body, timestamp, related_answer_id FROM messages
-                    INNER JOIN users AS message_senders ON message_senders.id = messages.sender
+                let row = sqlx::query!(
+                    r"SELECT messages.id AS message_id, related_answer_id, sender, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM messages
+                    INNER JOIN users ON users.id = messages.sender
                     WHERE messages.id = ?",
-                    [message_id.to_string().into()],
-                    txn,
+                    message_id,
                 )
+                .fetch_optional(&mut **txn)
                 .await?;
 
-                rs.map(|rs| {
-                    let user = Ok::<_, InfraError>(UserDto {
-                        name: rs.try_get("name")?,
-                        id: rs.try_get("sender")?,
-                        role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
-                    })?;
-
-                    Ok::<_, InfraError>(MessageDto {
-                        id: message_id.to_owned().to_string(),
-                        related_answer: rs.try_get("related_answer_id")?,
-                        sender: user,
-                        body: rs.try_get("body")?,
-                        timestamp: rs.try_get("timestamp")?,
-                    })
+                row.map(|row| {
+                    MessageReadRow {
+                        message_id: row.message_id,
+                        related_answer_id: row.related_answer_id,
+                        sender_id: row.sender,
+                        sender_name: row.sender_name,
+                        sender_role: row.sender_role,
+                        body: row.body,
+                        timestamp: row.timestamp,
+                    }
+                    .into_dto()
                 })
                 .transpose()
             })
