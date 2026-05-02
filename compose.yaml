@@ -18,7 +18,6 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
       - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
-      - ./docker/seed-debug-users.sql:/docker-entrypoint-initdb.d/seed-debug-users.sql
     restart: always
   valkey:
     image: valkey/valkey:9-alpine
@@ -36,6 +35,20 @@ services:
     volumes:
       - ./docker/valkey/seed.sh:/seed.sh
     entrypoint: ["sh", "/seed.sh"]
+    networks:
+      - seichi_portal
+    restart: "no"
+  # Debug users depend on tables created by SQLx migrations at app startup,
+  # so they cannot be seeded via /docker-entrypoint-initdb.d/.
+  db-seed:
+    image: mariadb:lts
+    container_name: db-seed
+    depends_on:
+      - db
+    volumes:
+      - ./docker/seed-debug-users.sh:/seed-debug-users.sh
+      - ./docker/seed-debug-users.sql:/seed-debug-users.sql
+    entrypoint: ["sh", "/seed-debug-users.sh"]
     networks:
       - seichi_portal
     restart: "no"
