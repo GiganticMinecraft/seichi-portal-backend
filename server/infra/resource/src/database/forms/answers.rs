@@ -18,7 +18,7 @@ use crate::{
     database::{
         components::FormAnswerDatabase,
         connection::{
-            ConnectionPool, DatabaseTransaction, batch_insert, execute_and_values, query_all,
+            ConnectionPool, DatabaseTransaction, execute_and_values, query_all,
             query_all_and_values, query_one_and_values,
         },
         count::count_as_u32,
@@ -64,17 +64,12 @@ impl FormAnswerDatabase for ConnectionPool {
             .contents()
             .as_slice()
             .iter()
-            .flat_map(|content| {
-                [
-                    answer_id.to_owned().into(),
-                    content
-                        .question_id
-                        .to_owned()
-                        .into_inner()
-                        .to_string()
-                        .into(),
-                    content.answer.to_owned().into(),
-                ]
+            .map(|content| {
+                (
+                    answer_id.clone(),
+                    content.question_id.to_owned().into_inner().to_string(),
+                    content.answer.to_owned(),
+                )
             })
             .collect::<Vec<_>>();
 
@@ -93,12 +88,19 @@ impl FormAnswerDatabase for ConnectionPool {
                 )
                 .await?;
 
-                batch_insert(
-                    r"INSERT INTO real_answers (answer_id, question_id, answer) VALUES (?, ?, ?)",
-                    contents,
-                    txn,
-                )
-                .await?;
+                if !contents.is_empty() {
+                    let sql = format!(
+                        "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
+                        std::iter::repeat_n("(?, ?, ?)", contents.len()).join(", ")
+                    );
+
+                    contents
+                        .into_iter()
+                        .flat_map(|(answer_id, question_id, answer)| [answer_id, question_id, answer])
+                        .fold(query(&sql), |query, value| query.bind(value))
+                        .execute(&mut **txn)
+                        .await?;
+                }
 
                 Ok::<_, InfraError>(())
             })

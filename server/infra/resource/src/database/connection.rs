@@ -1,10 +1,8 @@
 use std::{fmt::Debug, future::Future, pin::Pin};
 
 use async_trait::async_trait;
-use itertools::Itertools;
 use migration::MigratorTrait;
 use redis::Client;
-use regex::Regex;
 use sea_orm::{Database, Value};
 use sqlx::{
     MySql,
@@ -308,78 +306,6 @@ where
     I: IntoIterator<Item = Value>,
 {
     bind_values(sql, values)?.execute(&mut **transaction).await
-}
-
-pub async fn batch_insert<I>(
-    sql: &str,
-    params: I,
-    transaction: &mut DatabaseTransaction,
-) -> Result<Option<ExecResult>, DbErr>
-where
-    I: IntoIterator<Item = Value>,
-{
-    let regex = Regex::new(r"\((\?,\s*)+\?\)").unwrap();
-    let insert_part_opt = regex.find(sql);
-
-    assert!(
-        insert_part_opt.is_some(),
-        "SQL insert params must be exists."
-    );
-
-    let params_vec = params.into_iter().collect::<Vec<_>>();
-
-    if params_vec.is_empty() {
-        Ok(None)
-    } else {
-        let insert_part = insert_part_opt.unwrap().as_str();
-
-        Ok(Some(
-            bind_values(
-                &sql.replace(
-                    insert_part,
-                    &std::iter::repeat_n(
-                        insert_part,
-                        params_vec.len() / insert_part.matches('?').count(),
-                    )
-                    .join(", "),
-                ),
-                params_vec,
-            )?
-            .execute(&mut **transaction)
-            .await?,
-        ))
-    }
-}
-
-pub async fn multiple_delete<I>(
-    sql: &str,
-    params: I,
-    transaction: &mut DatabaseTransaction,
-) -> Result<Option<ExecResult>, DbErr>
-where
-    I: IntoIterator<Item = Value>,
-{
-    let params_vec = params.into_iter().collect::<Vec<_>>();
-
-    if params_vec.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(
-            bind_values(
-                &sql.replace(
-                    "(?)",
-                    format!(
-                        "({})",
-                        std::iter::repeat_n("?", params_vec.len()).join(", ")
-                    )
-                    .as_str(),
-                ),
-                params_vec,
-            )?
-            .execute(&mut **transaction)
-            .await?,
-        ))
-    }
 }
 
 pub async fn redis_connection() -> Client {
