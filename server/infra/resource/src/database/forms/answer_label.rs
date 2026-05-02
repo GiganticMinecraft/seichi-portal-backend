@@ -7,10 +7,7 @@ use sqlx::{Row, query};
 use crate::{
     database::{
         components::FormAnswerLabelDatabase,
-        connection::{
-            ConnectionPool, batch_insert, execute_and_values, multiple_delete, query_all,
-            query_all_and_values,
-        },
+        connection::{ConnectionPool, execute_and_values, query_all, query_all_and_values},
         count::count_as_u32,
     },
     dto::AnswerLabelDto,
@@ -211,32 +208,34 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         answer_id: AnswerId,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), InfraError> {
+        let answer_id = answer_id.into_inner().to_string();
+
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                multiple_delete(
+                execute_and_values(
                     "DELETE FROM label_settings_for_form_answers WHERE answer_id = ?",
-                    vec![answer_id.into_inner().to_string().into()],
+                    [answer_id.clone().into()],
                     txn,
                 )
                 .await?;
 
-                let params = label_ids
-                    .into_iter()
-                    .flat_map(|label_id| {
-                        [
-                            answer_id.into_inner().to_string().into(),
-                            label_id.into_inner().to_string().into(),
-                        ]
-                    })
-                    .collect_vec();
+                if !label_ids.is_empty() {
+                    let label_ids = label_ids
+                        .into_iter()
+                        .map(|label_id| label_id.into_inner().to_string())
+                        .collect_vec();
+                    let sql = format!(
+                        "INSERT INTO label_settings_for_form_answers (answer_id, label_id) VALUES {}",
+                        std::iter::repeat_n("(?, ?)", label_ids.len()).join(", ")
+                    );
 
-                batch_insert(
-                    "INSERT INTO label_settings_for_form_answers (answer_id, label_id) VALUES (?, \
-                     ?)",
-                    params,
-                    txn,
-                )
-                .await?;
+                    label_ids
+                        .into_iter()
+                        .flat_map(|label_id| [answer_id.clone(), label_id])
+                        .fold(query(&sql), |query, value| query.bind(value))
+                        .execute(&mut **txn)
+                        .await?;
+                }
 
                 Ok::<_, InfraError>(())
             })

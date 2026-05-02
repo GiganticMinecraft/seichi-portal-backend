@@ -2,14 +2,12 @@ use async_trait::async_trait;
 use domain::form::{models::FormId, question::models::Question};
 use errors::infra::InfraError;
 use itertools::Itertools;
-use sqlx::Row;
+use sqlx::{Row, query};
 
 use crate::{
     database::{
         components::FormQuestionDatabase,
-        connection::{
-            ConnectionPool, DbErr, batch_insert, multiple_delete, query_all_and_values, query_one,
-        },
+        connection::{ConnectionPool, DbErr, query_all_and_values, query_one},
     },
     dto::QuestionDto,
 };
@@ -22,59 +20,70 @@ impl FormQuestionDatabase for ConnectionPool {
         form_id: FormId,
         questions: Vec<Question>,
     ) -> Result<(), InfraError> {
-        let form_id = form_id.to_owned();
         let questions = questions.to_owned();
+        let form_id = form_id.into_inner().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                batch_insert(
-                    r"INSERT INTO form_questions (form_id, title, description, question_type, is_required) VALUES (?, ?, ?, ?, ?)",
-                    questions
-                        .clone()
-                        .into_iter()
-                        .flat_map(|question|
-                            vec![
-                                form_id.into_inner().to_string().into(),
-                                question.title.clone().into(),
-                                question.description.clone().into(),
-                                question.question_type.to_string().into(),
-                                (*question.is_required()).into()
-                            ]
-                        ).collect_vec(),
-                    txn,
-                ).await?;
+                if !questions.is_empty() {
+                    let sql = format!(
+                        "INSERT INTO form_questions (form_id, title, description, question_type, is_required) VALUES {}",
+                        std::iter::repeat_n("(?, ?, ?, ?, ?)", questions.len()).join(", ")
+                    );
 
-                let last_insert_id = query_one(
-                    "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
-                    txn,
-                )
+                    questions
+                        .iter()
+                        .fold(query(&sql), |query, question| {
+                            query
+                                .bind(form_id.clone())
+                                .bind(question.title.clone())
+                                .bind(question.description.clone())
+                                .bind(question.question_type.to_string())
+                                .bind(*question.is_required())
+                        })
+                        .execute(&mut **txn)
+                        .await?;
+
+                    let last_insert_id = query_one(
+                        "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
+                        txn,
+                    )
                     .await?
                     .unwrap()
                     .try_get("question_id")?;
 
-                let choices_active_values = questions
-                    .iter()
-                    .rev()
-                    .zip((1..=last_insert_id).rev())
-                    .filter(|(q, _)| {
-                        !q.choices.is_empty() && q.question_type != domain::form::question::models::QuestionType::TEXT
-                    })
-                    .flat_map(|(question, question_id)| {
-                        question
-                            .choices
-                            .iter()
-                            .cloned()
-                            .flat_map(|choice| vec![question_id.to_string(), choice])
-                            .collect_vec()
-                    })
-                    .collect_vec();
+                    let choices_active_values = questions
+                        .iter()
+                        .rev()
+                        .zip((1..=last_insert_id).rev())
+                        .filter(|(q, _)| {
+                            !q.choices.is_empty()
+                                && q.question_type
+                                    != domain::form::question::models::QuestionType::TEXT
+                        })
+                        .flat_map(|(question, question_id)| {
+                            question
+                                .choices
+                                .iter()
+                                .cloned()
+                                .map(move |choice| (question_id.to_string(), choice))
+                        })
+                        .collect_vec();
 
-                batch_insert(
-                    "INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
-                    choices_active_values.into_iter().map(|value| value.into()),
-                    txn,
-                )
-                    .await?;
+                    if !choices_active_values.is_empty() {
+                        let sql = format!(
+                            "INSERT INTO form_choices (question_id, choice) VALUES {}",
+                            std::iter::repeat_n("(?, ?)", choices_active_values.len()).join(", ")
+                        );
+
+                        choices_active_values
+                            .into_iter()
+                            .flat_map(|(question_id, choice)| [question_id, choice])
+                            .fold(query(&sql), |query, value| query.bind(value))
+                            .execute(&mut **txn)
+                            .await?;
+                    }
+                }
 
                 Ok::<_, InfraError>(())
             })
@@ -87,11 +96,13 @@ impl FormQuestionDatabase for ConnectionPool {
         form_id: FormId,
         questions: Vec<Question>,
     ) -> Result<(), InfraError> {
+        let form_id = form_id.into_inner().to_string();
+
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 let current_form_question_ids = query_all_and_values(
                     r"SELECT question_id FROM form_questions WHERE form_id = ?",
-                    [form_id.into_inner().to_string().into()],
+                    [form_id.clone().into()],
                     txn,
                 )
                 .await?
@@ -108,79 +119,106 @@ impl FormQuestionDatabase for ConnectionPool {
                     })
                     .collect_vec();
 
-                multiple_delete(
-                    r"DELETE FROM form_questions WHERE question_id IN (?)",
-                    delete_target_question_ids.into_iter().map(|id| id.into()),
-                    txn,
-                )
-                .await?;
+                if !delete_target_question_ids.is_empty() {
+                    let sql = format!(
+                        "DELETE FROM form_questions WHERE question_id IN ({})",
+                        std::iter::repeat_n("?", delete_target_question_ids.len()).join(", ")
+                    );
 
-                batch_insert(
-                    r"INSERT INTO form_questions (question_id, form_id, title, description, question_type, is_required)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    delete_target_question_ids
+                        .iter()
+                        .fold(query(&sql), |query, question_id| query.bind(question_id))
+                        .execute(&mut **txn)
+                        .await?;
+                }
+
+                if !questions.is_empty() {
+                    let sql = format!(
+                        r"INSERT INTO form_questions (question_id, form_id, title, description, question_type, is_required)
+                VALUES {}
                 ON DUPLICATE KEY UPDATE
                 title = VALUES(title),
                 description = VALUES(description),
                 question_type = VALUES(question_type),
                 is_required = VALUES(is_required)",
-                    questions.iter().flat_map(|question| {
-                        vec![
-                            question.id.map(|id| id.into_inner()).into(),
-                            form_id.into_inner().to_string().into(),
-                            question.title.clone().into(),
-                            question.description.clone().into(),
-                            question.question_type.to_string().into(),
-                            question.is_required.to_owned().into(),
-                        ]
-                    }),
-                    txn,
-                )
-                .await?;
+                        std::iter::repeat_n("(?, ?, ?, ?, ?, ?)", questions.len()).join(", ")
+                    );
 
-                let last_insert_id = query_one(
-                    "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
-                    txn,
-                )
-                .await?
-                .unwrap()
-                .try_get("question_id")?;
-
-                let choices_active_values = questions
-                    .iter()
-                    .rev()
-                    .zip((1..=last_insert_id).rev())
-                    .filter(|(q, _)| {
-                        !q.choices.is_empty()
-                            && q.question_type != domain::form::question::models::QuestionType::TEXT
-                    })
-                    .flat_map(|(question, question_id)| {
-                        question
-                            .choices
-                            .iter()
-                            .cloned()
-                            .flat_map(|choice| vec![question_id.to_string(), choice])
-                            .collect_vec()
-                    })
-                    .collect_vec();
-
-                // TODO: 現在の API の仕様上、form_choices で割り当てられているidをバックエンドから送信することはないため、
-                //  ON DUPLICATE KEY UPDATE を使用せずに完全に選択肢を上書きしているが、API の仕様を変更して choice_id を公開し、
-                //  それを使って選択肢の更新を行うべきか検討する
-                multiple_delete(
-                    "DELETE FROM form_choices WHERE question_id IN (?)",
                     questions
                         .iter()
-                        .map(|question| question.id.map(|id| id.into_inner()).into()),
-                    txn,
-                )
-                .await?;
+                        .fold(query(&sql), |query, question| {
+                            query
+                                .bind(question.id.map(|id| id.into_inner()))
+                                .bind(form_id.clone())
+                                .bind(question.title.clone())
+                                .bind(question.description.clone())
+                                .bind(question.question_type.to_string())
+                                .bind(*question.is_required())
+                        })
+                        .execute(&mut **txn)
+                        .await?;
 
-                batch_insert(
-                    r"INSERT INTO form_choices (question_id, choice) VALUES (?, ?)",
-                    choices_active_values.into_iter().map(|value| value.into()),
-                    txn,
-                )
-                .await?;
+                    let last_insert_id = query_one(
+                        "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
+                        txn,
+                    )
+                    .await?
+                    .unwrap()
+                    .try_get("question_id")?;
+
+                    let choices_active_values = questions
+                        .iter()
+                        .rev()
+                        .zip((1..=last_insert_id).rev())
+                        .filter(|(q, _)| {
+                            !q.choices.is_empty()
+                                && q.question_type
+                                    != domain::form::question::models::QuestionType::TEXT
+                        })
+                        .flat_map(|(question, question_id)| {
+                            question
+                                .choices
+                                .iter()
+                                .cloned()
+                                .map(move |choice| (question_id.to_string(), choice))
+                        })
+                        .collect_vec();
+
+                    let current_question_ids = questions
+                        .iter()
+                        .filter_map(|question| question.id.map(|id| id.into_inner()))
+                        .collect_vec();
+
+                    // TODO: 現在の API の仕様上、form_choices で割り当てられているidをバックエンドから送信することはないため、
+                    //  ON DUPLICATE KEY UPDATE を使用せずに完全に選択肢を上書きしているが、API の仕様を変更して choice_id を公開し、
+                    //  それを使って選択肢の更新を行うべきか検討する
+                    if !current_question_ids.is_empty() {
+                        let sql = format!(
+                            "DELETE FROM form_choices WHERE question_id IN ({})",
+                            std::iter::repeat_n("?", current_question_ids.len()).join(", ")
+                        );
+
+                        current_question_ids
+                            .iter()
+                            .fold(query(&sql), |query, question_id| query.bind(question_id))
+                            .execute(&mut **txn)
+                            .await?;
+                    }
+
+                    if !choices_active_values.is_empty() {
+                        let sql = format!(
+                            "INSERT INTO form_choices (question_id, choice) VALUES {}",
+                            std::iter::repeat_n("(?, ?)", choices_active_values.len()).join(", ")
+                        );
+
+                        choices_active_values
+                            .into_iter()
+                            .flat_map(|(question_id, choice)| [question_id, choice])
+                            .fold(query(&sql), |query, value| query.bind(value))
+                            .execute(&mut **txn)
+                            .await?;
+                    }
+                }
 
                 Ok::<_, InfraError>(())
             })
