@@ -17,10 +17,7 @@ use uuid::Uuid;
 use crate::{
     database::{
         components::FormAnswerDatabase,
-        connection::{
-            ConnectionPool, DatabaseTransaction, query_all, query_all_and_values,
-            query_one_and_values,
-        },
+        connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
     dto::{FormAnswerContentDto, FormAnswerDto},
@@ -29,7 +26,7 @@ use crate::{
 async fn fetch_real_answers_by_answer_ids<T>(
     txn: &mut DatabaseTransaction,
     answer_ids: &[T],
-) -> Result<Vec<sqlx::mysql::MySqlRow>, InfraError>
+) -> Result<Vec<(Uuid, FormAnswerContentDto)>, InfraError>
 where
     T: AsRef<str>,
 {
@@ -37,17 +34,58 @@ where
         return Ok(Vec::new());
     }
 
-    let placeholders = std::iter::repeat_n("?", answer_ids.len())
-        .collect_vec()
-        .join(", ");
     let sql = format!(
-        "SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({placeholders})"
+        "SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})",
+        std::iter::repeat_n("?", answer_ids.len()).join(", ")
     );
-    let query = answer_ids.iter().fold(query(&sql), |query, answer_id| {
-        query.bind(answer_id.as_ref())
-    });
 
-    Ok(query.fetch_all(&mut **txn).await?)
+    answer_ids
+        .iter()
+        .fold(query(&sql), |query, answer_id| {
+            query.bind(answer_id.as_ref())
+        })
+        .fetch_all(&mut **txn)
+        .await?
+        .into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>((
+                Uuid::from_str(&row.try_get::<String, _>("answer_id")?)?,
+                FormAnswerContentDto {
+                    id: row.try_get("id")?,
+                    question_id: row.try_get("question_id")?,
+                    answer: row.try_get("answer")?,
+                },
+            ))
+        })
+        .collect()
+}
+
+fn attach_contents(
+    form_answer_dtos: Vec<FormAnswerDto>,
+    answer_id_with_content_dto: Vec<(Uuid, FormAnswerContentDto)>,
+) -> Result<Vec<FormAnswerDto>, InfraError> {
+    let grouped_answer_contents = answer_id_with_content_dto
+        .into_iter()
+        .into_group_map_by(|(answer_id, _)| *answer_id);
+
+    form_answer_dtos
+        .into_iter()
+        .map(|dto| {
+            Ok::<_, InfraError>(FormAnswerDto {
+                contents: grouped_answer_contents
+                    .get(&Uuid::from_str(&dto.id)?)
+                    .cloned()
+                    .map(|contents| {
+                        contents
+                            .into_iter()
+                            .map(|(_, content_dto)| content_dto)
+                            .collect_vec()
+                    })
+                    .unwrap_or_default(),
+                ..dto
+            })
+        })
+        .collect()
 }
 
 #[async_trait]
@@ -91,7 +129,6 @@ impl FormAnswerDatabase for ConnectionPool {
                         "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
                         std::iter::repeat_n("(?, ?, ?)", contents.len()).join(", ")
                     );
-
                     contents
                         .into_iter()
                         .flat_map(|(answer_id, question_id, answer)| {
@@ -111,23 +148,24 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let answer_query_result_opt = query_one_and_values(
+                let answer_query_result_opt = sqlx::query(
                     r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE answers.id = ?",
-                    [answer_id.into_inner().to_string().into()],
-                    txn,
-                ).await?;
-
-                let contents = query_all_and_values(
-                    r"SELECT id, question_id, answer FROM real_answers WHERE answer_id = ?",
-                    [answer_id.into_inner().to_string().into()],
-                    txn,
                 )
-                    .await?;
+                .bind(answer_id.into_inner().to_string())
+                .fetch_optional(&mut **txn)
+                .await?;
+
+                let contents = sqlx::query(
+                    r"SELECT id, question_id, answer FROM real_answers WHERE answer_id = ?",
+                )
+                .bind(answer_id.into_inner().to_string())
+                .fetch_all(&mut **txn)
+                .await?;
 
                 let contents = contents
-                    .iter()
+                    .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerContentDto {
                             id: rs.try_get("id")?,
@@ -140,7 +178,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 answer_query_result_opt
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerDto {
-                            id: answer_id.into_inner().to_string(),
+                            id: rs.try_get("answer_id")?,
                             uuid: rs.try_get("user")?,
                             user_name: rs.try_get("name")?,
                             user_role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
@@ -163,17 +201,18 @@ impl FormAnswerDatabase for ConnectionPool {
     ) -> Result<Vec<FormAnswerDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let answers = query_all_and_values(
+                let answers = sqlx::query(
                     r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         WHERE form_id = ?
                         ORDER BY answers.timestamp",
-                    [form_id.into_inner().to_string().into()],
-                    txn,
-                ).await?;
+                )
+                .bind(form_id.into_inner().to_string())
+                .fetch_all(&mut **txn)
+                .await?;
 
                 let form_answer_dtos = answers
-                    .iter()
+                    .into_iter()
                     .map(|rs| {
                         let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
 
@@ -192,35 +231,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
 
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-
-
-                let answer_id_with_content_dto = contents
-                    .iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?, FormAnswerContentDto {
-                            id: rs.try_get("id")?,
-                            question_id: rs.try_get("question_id")?,
-                            answer: rs.try_get("answer")?,
-                        }))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let grouped_answer_contents = answer_id_with_content_dto
-                    .into_iter()
-                    .into_group_map_by(|(answer_id, _)| answer_id.to_owned());
-
-
-                form_answer_dtos
-                    .into_iter()
-                    .map(|dto| {
-                        Ok::<_, InfraError>(FormAnswerDto {
-                            contents: grouped_answer_contents.get(&Uuid::from_str(&dto.id)?).cloned()
-                                .map(|contents| contents.into_iter().map(|(_, content_dto)| content_dto).collect_vec())
-                                .unwrap_or_default(),
-                            ..dto
-                        })
-                    }).collect()
-
+                attach_contents(form_answer_dtos, contents)
             })
         }).await
     }
@@ -229,15 +240,16 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let answers = query_all(
+                let answers = sqlx::query(
                     r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
                         ORDER BY answers.timestamp",
-                    txn,
-                ).await?;
+                )
+                .fetch_all(&mut **txn)
+                .await?;
 
                 let form_answer_dtos = answers
-                    .iter()
+                    .into_iter()
                     .map(|rs| {
                         let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
 
@@ -254,42 +266,8 @@ impl FormAnswerDatabase for ConnectionPool {
                     }).collect::<Result<Vec<_>, _>>()?;
 
                 let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
-
-                let contents = if answer_ids.is_empty() {
-                    Vec::new()
-                } else {
-                    query_all_and_values(
-                        format!("SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
-                        answer_ids.into_iter().map(|id| id.to_string().into()),
-                        txn,
-                    ).await?
-                };
-
-                let answer_id_with_content_dto = contents
-                    .iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?, FormAnswerContentDto {
-                            id: rs.try_get("id")?,
-                            question_id: rs.try_get("question_id")?,
-                            answer: rs.try_get("answer")?,
-                        }))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let grouped_answer_contents = answer_id_with_content_dto
-                    .into_iter()
-                    .into_group_map_by(|(answer_id, _)| answer_id.to_owned());
-
-                form_answer_dtos
-                    .into_iter()
-                    .map(|dto| {
-                        Ok::<_, InfraError>(FormAnswerDto {
-                            contents: grouped_answer_contents.get(&Uuid::from_str(&dto.id)?).cloned()
-                                .map(|contents| contents.into_iter().map(|(_, content_dto)| content_dto).collect_vec())
-                                .unwrap_or_default(),
-                            ..dto
-                        })
-                    }).collect()
+                let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
+                attach_contents(form_answer_dtos, contents)
             })
         })
             .await
@@ -311,21 +289,21 @@ impl FormAnswerDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let placeholders = std::iter::repeat_n("?", ids.len())
-                    .collect_vec()
-                    .join(", ");
                 let sql = format!(
                     "SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
-                        WHERE answers.id IN ({placeholders})
-                        ORDER BY answers.timestamp"
+                        WHERE answers.id IN ({})
+                        ORDER BY answers.timestamp",
+                    std::iter::repeat_n("?", ids.len()).join(", ")
                 );
-                let answers = ids.iter().fold(query(&sql), |query, id| query.bind(id))
+                let answers = ids
+                    .iter()
+                    .fold(query(&sql), |query, id| query.bind(id))
                     .fetch_all(&mut **txn)
                     .await?;
 
                 let form_answer_dtos = answers
-                    .iter()
+                    .into_iter()
                     .map(|rs| {
                         let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
 
@@ -344,35 +322,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
 
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-
-
-                let answer_id_with_content_dto = contents
-                    .iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>((Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?, FormAnswerContentDto {
-                            id: rs.try_get("id")?,
-                            question_id: rs.try_get("question_id")?,
-                            answer: rs.try_get("answer")?,
-                        }))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let grouped_answer_contents = answer_id_with_content_dto
-                    .into_iter()
-                    .into_group_map_by(|(answer_id, _)| answer_id.to_owned());
-
-
-                form_answer_dtos
-                    .into_iter()
-                    .map(|dto| {
-                        Ok::<_, InfraError>(FormAnswerDto {
-                            contents: grouped_answer_contents.get(&Uuid::from_str(&dto.id)?).cloned()
-                                .map(|contents| contents.into_iter().map(|(_, content_dto)| content_dto).collect_vec())
-                                .unwrap_or_default(),
-                            ..dto
-                        })
-                    }).collect()
-
+                attach_contents(form_answer_dtos, contents)
             })
         }).await
     }

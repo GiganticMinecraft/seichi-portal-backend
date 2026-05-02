@@ -6,7 +6,6 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sea-orm = { workspace = true }
 sqlx = { workspace = true }
 strum = { workspace = true }
 thiserror = "2.0.18"
