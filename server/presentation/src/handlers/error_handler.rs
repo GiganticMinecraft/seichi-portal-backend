@@ -191,6 +191,15 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
                 "INTERNAL_SERVER_ERROR",
             )
         }
+        InfraError::Unexpected { cause } => {
+            tracing::error!("Unexpected Error: {}", cause);
+            problem_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+                "Unexpected Error",
+                "INTERNAL_SERVER_ERROR",
+            )
+        }
         InfraError::EnumParse { source } => {
             tracing::error!("Enum Parse Error: source = {}", source);
             problem_response(

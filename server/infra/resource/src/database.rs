@@ -1,6 +1,7 @@
 pub mod components;
 pub mod config;
 pub mod connection;
+pub mod count;
 pub mod forms;
 mod meilisearch_schemas;
 pub mod notification;

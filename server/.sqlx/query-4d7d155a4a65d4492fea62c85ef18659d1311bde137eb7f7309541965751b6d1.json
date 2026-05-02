@@ -1,0 +1,44 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT is_send_message_notification, name, role\n                    FROM discord_notification_settings\n                    INNER JOIN discord_linked_users ON discord_notification_settings.discord_id = discord_linked_users.discord_id\n                    INNER JOIN users ON discord_linked_users.user_id = users.id\n                    WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_send_message_notification",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 1
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 64
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "role",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "max_size": 52
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4d7d155a4a65d4492fea62c85ef18659d1311bde137eb7f7309541965751b6d1"
+}

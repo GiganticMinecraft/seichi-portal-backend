@@ -1,0 +1,34 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT discord_id, discord_username FROM discord_linked_users WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "discord_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | UNIQUE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 72
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "discord_username",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 128
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3a177a3b598a4954a861d2593afd0247b831bd623c4f4ae4a7c203461fc8ddcb"
+}

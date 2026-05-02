@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM discord_linked_users WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "113e2bdad35fc1c5897cd071ee3e62de297500f99e2b5e7a413393ab0673af36"
+}
