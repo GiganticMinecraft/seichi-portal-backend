@@ -7,7 +7,7 @@ use sqlx::{Row, query};
 use crate::{
     database::{
         components::FormQuestionDatabase,
-        connection::{ConnectionPool, DbErr, query_all_and_values, query_one},
+        connection::{ConnectionPool, DbErr, query_all_and_values},
     },
     dto::QuestionDto,
 };
@@ -44,13 +44,11 @@ impl FormQuestionDatabase for ConnectionPool {
                         .execute(&mut **txn)
                         .await?;
 
-                    let last_insert_id = query_one(
-                        "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
-                        txn,
+                    let last_insert_id = sqlx::query_scalar!(
+                        "SELECT question_id AS `question_id!: i32` FROM form_questions ORDER BY question_id DESC LIMIT 1"
                     )
-                    .await?
-                    .unwrap()
-                    .try_get("question_id")?;
+                    .fetch_one(&mut **txn)
+                    .await?;
 
                     let choices_active_values = questions
                         .iter()
@@ -158,13 +156,11 @@ impl FormQuestionDatabase for ConnectionPool {
                         .execute(&mut **txn)
                         .await?;
 
-                    let last_insert_id = query_one(
-                        "SELECT question_id FROM form_questions ORDER BY question_id DESC LIMIT 1",
-                        txn,
+                    let last_insert_id = sqlx::query_scalar!(
+                        "SELECT question_id AS `question_id!: i32` FROM form_questions ORDER BY question_id DESC LIMIT 1"
                     )
-                    .await?
-                    .unwrap()
-                    .try_get("question_id")?;
+                    .fetch_one(&mut **txn)
+                    .await?;
 
                     let choices_active_values = questions
                         .iter()

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c00259015f47ad69b5345d121094b20da708a776e5b7950ae098e4aba24fbfda"
+}

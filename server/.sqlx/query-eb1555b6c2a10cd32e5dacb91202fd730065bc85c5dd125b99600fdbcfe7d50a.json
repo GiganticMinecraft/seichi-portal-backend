@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM form_answer_comments WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "eb1555b6c2a10cd32e5dacb91202fd730065bc85c5dd125b99600fdbcfe7d50a"
+}
