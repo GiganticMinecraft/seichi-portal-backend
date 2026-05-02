@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
 use errors::infra::InfraError;
 use itertools::Itertools;
-use sqlx::Row;
+use sqlx::{Row, query};
 
 use crate::{
     database::{
@@ -71,18 +71,21 @@ impl FormLabelDatabase for ConnectionPool {
 
         let label_ids = ids
             .into_iter()
-            .map(|id| format!("'{}'", id.into_inner()))
-            .collect_vec()
-            .join(", ");
+            .map(|id| id.into_inner().to_string())
+            .collect_vec();
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = query_all(
-                    format!("SELECT id, name FROM label_for_forms WHERE id IN ({label_ids})")
-                        .as_str(),
-                    txn,
-                )
-                .await?;
+                let placeholders = std::iter::repeat_n("?", label_ids.len())
+                    .collect_vec()
+                    .join(", ");
+                let sql =
+                    format!("SELECT id, name FROM label_for_forms WHERE id IN ({placeholders})");
+                let labels_rs = label_ids
+                    .iter()
+                    .fold(query(&sql), |query, label_id| query.bind(label_id))
+                    .fetch_all(&mut **txn)
+                    .await?;
 
                 labels_rs
                     .into_iter()

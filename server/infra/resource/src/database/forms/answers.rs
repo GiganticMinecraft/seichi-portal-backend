@@ -10,7 +10,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
-use sqlx::Row;
+use sqlx::{Row, query};
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
@@ -18,13 +18,37 @@ use crate::{
     database::{
         components::FormAnswerDatabase,
         connection::{
-            ConnectionPool, batch_insert, execute_and_values, query_all, query_all_and_values,
-            query_one_and_values,
+            ConnectionPool, DatabaseTransaction, batch_insert, execute_and_values, query_all,
+            query_all_and_values, query_one_and_values,
         },
         count::count_as_u32,
     },
     dto::{FormAnswerContentDto, FormAnswerDto},
 };
+
+async fn fetch_real_answers_by_answer_ids<T>(
+    txn: &mut DatabaseTransaction,
+    answer_ids: &[T],
+) -> Result<Vec<sqlx::mysql::MySqlRow>, InfraError>
+where
+    T: AsRef<str>,
+{
+    if answer_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = std::iter::repeat_n("?", answer_ids.len())
+        .collect_vec()
+        .join(", ");
+    let sql = format!(
+        "SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({placeholders})"
+    );
+    let query = answer_ids.iter().fold(query(&sql), |query, answer_id| {
+        query.bind(answer_id.as_ref())
+    });
+
+    Ok(query.fetch_all(&mut **txn).await?)
+}
 
 #[async_trait]
 impl FormAnswerDatabase for ConnectionPool {
@@ -165,15 +189,7 @@ impl FormAnswerDatabase for ConnectionPool {
 
                 let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
 
-                let contents = if answer_ids.is_empty() {
-                    Vec::new()
-                } else {
-                    query_all_and_values(
-                        format!("SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
-                        answer_ids.into_iter().map(|id| id.to_string().into()),
-                        txn,
-                    ).await?
-                };
+                let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
 
 
                 let answer_id_with_content_dto = contents
@@ -288,19 +304,23 @@ impl FormAnswerDatabase for ConnectionPool {
 
         let ids = answer_ids
             .iter()
-            .map(|id| id.into_inner().to_string().into())
+            .map(|id| id.into_inner().to_string())
             .collect_vec();
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let answers = query_all_and_values(
-                    format!("SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
+                let placeholders = std::iter::repeat_n("?", ids.len())
+                    .collect_vec()
+                    .join(", ");
+                let sql = format!(
+                    "SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
                         INNER JOIN users ON answers.user = users.id
-                        WHERE answers.id IN ({})
-                        ORDER BY answers.timestamp", &vec!["?"; ids.len()].iter().join(", ")).as_str(),
-                    ids,
-                    txn,
-                ).await?;
+                        WHERE answers.id IN ({placeholders})
+                        ORDER BY answers.timestamp"
+                );
+                let answers = ids.iter().fold(query(&sql), |query, id| query.bind(id))
+                    .fetch_all(&mut **txn)
+                    .await?;
 
                 let form_answer_dtos = answers
                     .iter()
@@ -321,15 +341,7 @@ impl FormAnswerDatabase for ConnectionPool {
 
                 let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
 
-                let contents = if answer_ids.is_empty() {
-                    Vec::new()
-                } else {
-                    query_all_and_values(
-                        format!("SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})", vec!["?"; answer_ids.len()].join(",")).as_str(),
-                        answer_ids.into_iter().map(|id| id.to_string().into()),
-                        txn,
-                    ).await?
-                };
+                let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
 
 
                 let answer_id_with_content_dto = contents
