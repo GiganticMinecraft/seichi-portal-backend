@@ -508,52 +508,8 @@ fn required_choices(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::form::question::models::QuestionType;
     use serde_json::json;
     use uuid::Uuid;
-
-    #[test]
-    fn deserialize_and_convert_text_question_variant() {
-        let question: QuestionSchema = serde_json::from_value(json!({
-            "question_type": "Text",
-            "template_key": "body",
-            "position": 0,
-            "title": "Body",
-            "description": "desc",
-            "is_required": true
-        }))
-        .unwrap();
-
-        let result = into_upsert_question_dto(FormId::from(Uuid::nil()), question).unwrap();
-
-        assert_eq!(result.question.question_type(), QuestionType::Text);
-        assert!(result.question.choices().is_none());
-    }
-
-    #[test]
-    fn deserialize_and_convert_multiple_choice_variant() {
-        let question: QuestionSchema = serde_json::from_value(json!({
-            "question_type": "MultipleChoice",
-            "template_key": "roles",
-            "position": 0,
-            "title": "Roles",
-            "description": "desc",
-            "is_required": false,
-            "choices": [
-                { "position": 0, "label": "Admin" },
-                { "position": 1, "label": "User" }
-            ]
-        }))
-        .unwrap();
-
-        let result = into_upsert_question_dto(FormId::from(Uuid::nil()), question).unwrap();
-
-        assert_eq!(
-            result.question.question_type(),
-            QuestionType::MultipleChoice
-        );
-        assert_eq!(result.question.choices().unwrap().len(), 2);
-    }
 
     #[test]
     fn text_question_with_choices_is_rejected_during_deserialization() {

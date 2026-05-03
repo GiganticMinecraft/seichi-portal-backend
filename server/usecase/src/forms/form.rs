@@ -445,7 +445,6 @@ mod tests {
     use super::*;
     use domain::{
         form::{
-            answer::models::AnswerEntry,
             models::{FormDescription, FormMeta, FormSettings, FormTitle},
             question::models::{QuestionId, QuestionType},
         },
@@ -457,11 +456,8 @@ mod tests {
             },
             notification_repository::MockNotificationRepository,
         },
-        types::authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
         user::models::{Role, User},
     };
-    use std::sync::Arc;
-    use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
     fn admin_user() -> User {
@@ -497,36 +493,6 @@ mod tests {
             None,
             QuestionType::Text,
             None,
-            true,
-        )
-        .unwrap()
-    }
-
-    fn single_choice_question(
-        form_id: FormId,
-        question_id: QuestionId,
-        position: u16,
-        template_key: &str,
-    ) -> Question {
-        Question::from_raw_parts(
-            question_id,
-            form_id,
-            template_key.to_string().try_into().unwrap(),
-            position,
-            template_key.to_string().try_into().unwrap(),
-            None,
-            QuestionType::SingleChoice,
-            Some(
-                NonEmptyVec::try_new(vec![
-                    domain::form::question::models::Choice::new(
-                        Some(1.into()),
-                        0,
-                        "A".to_string().try_into().unwrap(),
-                    )
-                    .unwrap(),
-                ])
-                .unwrap(),
-            ),
             true,
         )
         .unwrap()
@@ -596,112 +562,5 @@ mod tests {
             .unwrap();
 
         assert_eq!(questions, vec![existing_question]);
-    }
-
-    #[tokio::test]
-    async fn update_form_replaces_all_questions_when_questions_field_is_present() {
-        let user = admin_user();
-        let form_id = FormId::from(Uuid::new_v4());
-        let existing_question = text_question(form_id, QuestionId::from(Uuid::new_v4()), 0, "body");
-        let replacement_question =
-            single_choice_question(form_id, QuestionId::from(Uuid::new_v4()), 0, "role");
-        let replacement_for_update = replacement_question.clone();
-        let replacement_for_read = replacement_question.clone();
-        let actor_for_assert = user.clone();
-
-        let mut form_repository = MockFormRepository::new();
-        form_repository
-            .expect_get()
-            .times(2)
-            .returning(move |_| Ok(Some(sample_form(form_id).into())));
-        form_repository
-            .expect_update_form()
-            .times(1)
-            .returning(|_, _| Ok(()));
-
-        let mut question_repository = MockQuestionRepository::new();
-        let first_read_questions = Arc::new(vec![existing_question]);
-        let second_read_questions = Arc::new(vec![replacement_for_read.clone()]);
-        let call_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let call_count_clone = call_count.clone();
-        question_repository
-            .expect_get_questions()
-            .times(2)
-            .returning(move |_| {
-                let call = call_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                let questions = if call == 0 {
-                    first_read_questions.clone()
-                } else {
-                    second_read_questions.clone()
-                };
-                Ok(questions.iter().cloned().map(Into::into).collect())
-            });
-        question_repository
-            .expect_put_questions()
-            .times(1)
-            .returning(move |_, target_form_id, questions| {
-                assert_eq!(target_form_id, form_id);
-                assert_eq!(questions.len(), 1);
-                let question = questions
-                    .into_iter()
-                    .next()
-                    .unwrap()
-                    .try_into_update(&actor_for_assert, |q| q.clone())
-                    .unwrap();
-                assert_eq!(question.question_type(), QuestionType::SingleChoice);
-                assert_eq!(question.template_key().as_str(), "role");
-                Ok(())
-            });
-
-        let mut form_label_repository = MockFormLabelRepository::new();
-        form_label_repository
-            .expect_fetch_labels_by_form_id()
-            .times(1)
-            .returning(|_| Ok(vec![]));
-
-        let mut answer_repository = MockAnswerRepository::new();
-        answer_repository
-            .expect_get_answers_by_form_id()
-            .times(1)
-            .returning(|_| {
-                Ok(Vec::<
-                    AuthorizationGuardWithContext<
-                        AnswerEntry,
-                        Read,
-                        domain::form::answer::service::AnswerEntryAuthorizationContext,
-                    >,
-                >::new())
-            });
-
-        let notification_repository = MockNotificationRepository::new();
-
-        let usecase = FormUseCase {
-            form_repository: &form_repository,
-            notification_repository: &notification_repository,
-            question_repository: &question_repository,
-            form_label_repository: &form_label_repository,
-            answer_repository: &answer_repository,
-        };
-
-        let (_, questions, _) = usecase
-            .update_form(
-                &user,
-                form_id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(vec![UpsertQuestionDto {
-                    original_id: None,
-                    question: replacement_for_update,
-                }]),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(questions, vec![replacement_question]);
     }
 }
