@@ -175,6 +175,28 @@ impl QuestionSchema {
         }
     }
 
+    pub fn into_parts(
+        self,
+    ) -> (
+        QuestionType,
+        QuestionDefinitionSchema,
+        Option<Vec<ChoiceSchema>>,
+    ) {
+        match self {
+            Self::Text(question) => (QuestionType::Text, question.definition, None),
+            Self::SingleChoice(question) => (
+                QuestionType::SingleChoice,
+                question.definition,
+                Some(question.choices),
+            ),
+            Self::MultipleChoice(question) => (
+                QuestionType::MultipleChoice,
+                question.definition,
+                Some(question.choices),
+            ),
+        }
+    }
+
     pub fn into_choices(self) -> Option<Vec<ChoiceSchema>> {
         match self {
             Self::Text(_) => None,

@@ -422,18 +422,17 @@ fn into_upsert_question_dto(
     form_id: FormId,
     question: QuestionSchema,
 ) -> Result<UpsertQuestionDto, errors::domain::DomainError> {
-    let definition = question.definition().clone();
+    let (question_type, definition, choices) = question.into_parts();
     let original_id = definition.id;
-    let question_type = question.question_type();
-    let choices = into_domain_choices(question.into_choices())?;
+    let choices = into_domain_choices(choices)?;
     let question = match original_id {
         Some(question_id) => domain::form::question::models::Question::from_raw_parts(
             question_id,
             form_id,
-            definition.template_key.clone(),
+            definition.template_key,
             definition.position,
-            definition.title.clone(),
-            definition.description.clone(),
+            definition.title,
+            definition.description,
             question_type,
             choices,
             definition.is_required,
@@ -442,20 +441,20 @@ fn into_upsert_question_dto(
             domain::form::question::models::QuestionType::Text => {
                 domain::form::question::models::Question::new_text(
                     form_id,
-                    definition.template_key.clone(),
+                    definition.template_key,
                     definition.position,
-                    definition.title.clone(),
-                    definition.description.clone(),
+                    definition.title,
+                    definition.description,
                     definition.is_required,
                 )?
             }
             domain::form::question::models::QuestionType::SingleChoice => {
                 domain::form::question::models::Question::new_single_choice(
                     form_id,
-                    definition.template_key.clone(),
+                    definition.template_key,
                     definition.position,
-                    definition.title.clone(),
-                    definition.description.clone(),
+                    definition.title,
+                    definition.description,
                     required_choices(choices)?,
                     definition.is_required,
                 )?
@@ -463,10 +462,10 @@ fn into_upsert_question_dto(
             domain::form::question::models::QuestionType::MultipleChoice => {
                 domain::form::question::models::Question::new_multiple_choice(
                     form_id,
-                    definition.template_key.clone(),
+                    definition.template_key,
                     definition.position,
-                    definition.title.clone(),
-                    definition.description.clone(),
+                    definition.title,
+                    definition.description,
                     required_choices(choices)?,
                     definition.is_required,
                 )?

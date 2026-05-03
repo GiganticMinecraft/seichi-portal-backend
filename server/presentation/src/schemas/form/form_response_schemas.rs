@@ -156,26 +156,34 @@ impl From<domain::form::question::models::Question> for QuestionResponseSchema {
             description: val.description().cloned().map(NonEmptyString::into_inner),
             is_required: val.is_required(),
         };
-        let choices = val
-            .choices()
-            .cloned()
-            .map(|choices| choices.into_inner())
-            .unwrap_or_default()
-            .into_iter()
-            .map(Into::into)
-            .collect();
 
         match val.question_type() {
             domain::form::question::models::QuestionType::Text => {
                 Self::Text(TextQuestionResponseSchema { definition })
             }
             domain::form::question::models::QuestionType::SingleChoice => {
+                let choices = val
+                    .choices()
+                    .cloned()
+                    .map(|choices| choices.into_inner())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
                 Self::SingleChoice(SelectQuestionResponseSchema {
                     definition,
                     choices,
                 })
             }
             domain::form::question::models::QuestionType::MultipleChoice => {
+                let choices = val
+                    .choices()
+                    .cloned()
+                    .map(|choices| choices.into_inner())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
                 Self::MultipleChoice(SelectQuestionResponseSchema {
                     definition,
                     choices,
