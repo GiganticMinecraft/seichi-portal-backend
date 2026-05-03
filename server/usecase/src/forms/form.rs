@@ -439,3 +439,128 @@ fn validate_answered_form_question_update(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::{
+        form::{
+            models::{FormDescription, FormMeta, FormSettings, FormTitle},
+            question::models::{QuestionId, QuestionType},
+        },
+        repository::{
+            form::{
+                answer_repository::MockAnswerRepository,
+                form_label_repository::MockFormLabelRepository,
+                form_repository::MockFormRepository, question_repository::MockQuestionRepository,
+            },
+            notification_repository::MockNotificationRepository,
+        },
+        user::models::{Role, User},
+    };
+    use uuid::Uuid;
+
+    fn admin_user() -> User {
+        User {
+            name: "admin".to_string(),
+            id: Uuid::nil(),
+            role: Role::Administrator,
+        }
+    }
+
+    fn sample_form(form_id: FormId) -> domain::form::models::Form {
+        domain::form::models::Form::from_raw_parts(
+            form_id,
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new("description".to_string()),
+            FormMeta::new(),
+            FormSettings::new(),
+        )
+    }
+
+    fn text_question(
+        form_id: FormId,
+        question_id: QuestionId,
+        position: u16,
+        template_key: &str,
+    ) -> Question {
+        Question::from_raw_parts(
+            question_id,
+            form_id,
+            template_key.to_string().try_into().unwrap(),
+            position,
+            template_key.to_string().try_into().unwrap(),
+            None,
+            QuestionType::Text,
+            None,
+            true,
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn update_form_keeps_existing_questions_when_questions_field_is_omitted() {
+        let user = admin_user();
+        let form_id = FormId::from(Uuid::new_v4());
+        let form = sample_form(form_id);
+        let existing_question = text_question(form_id, QuestionId::from(Uuid::new_v4()), 0, "body");
+
+        let mut form_repository = MockFormRepository::new();
+        form_repository
+            .expect_get()
+            .times(2)
+            .returning(move |_| Ok(Some(sample_form(form_id).into())));
+        form_repository
+            .expect_update_form()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let mut question_repository = MockQuestionRepository::new();
+        let current_questions = vec![existing_question.clone()];
+        question_repository
+            .expect_get_questions()
+            .times(2)
+            .returning(move |_| {
+                Ok(current_questions
+                    .clone()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect())
+            });
+
+        let mut form_label_repository = MockFormLabelRepository::new();
+        form_label_repository
+            .expect_fetch_labels_by_form_id()
+            .times(1)
+            .returning(|_| Ok(vec![]));
+
+        let answer_repository = MockAnswerRepository::new();
+        let notification_repository = MockNotificationRepository::new();
+
+        let usecase = FormUseCase {
+            form_repository: &form_repository,
+            notification_repository: &notification_repository,
+            question_repository: &question_repository,
+            form_label_repository: &form_label_repository,
+            answer_repository: &answer_repository,
+        };
+
+        let (_, questions, _) = usecase
+            .update_form(
+                &user,
+                form.id().to_owned(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(questions, vec![existing_question]);
+    }
+}

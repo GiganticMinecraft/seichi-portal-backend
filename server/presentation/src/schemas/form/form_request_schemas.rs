@@ -6,6 +6,7 @@ use domain::form::{
     },
     models::{FormLabelId, FormTitle, Visibility, WebhookUrl},
 };
+use errors::domain::DomainError;
 use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;
 
@@ -85,6 +86,8 @@ pub struct FormUpdateSchema {
     pub description: Option<String>,
     #[serde(default)]
     pub settings: Option<FormSettingsSchema>,
+    /// When provided, replaces the full set of question definitions under the form.
+    /// Omit this field to leave existing questions unchanged.
     #[serde(default)]
     pub questions: Option<Vec<QuestionSchema>>,
 }
@@ -117,8 +120,16 @@ pub struct ChoiceSchema {
     pub label: NonEmptyString,
 }
 
-#[derive(Deserialize, Debug, utoipa::ToSchema)]
-pub struct QuestionSchema {
+impl TryFrom<ChoiceSchema> for domain::form::question::models::Choice {
+    type Error = DomainError;
+
+    fn try_from(choice: ChoiceSchema) -> Result<Self, Self::Error> {
+        Self::new(choice.id, choice.position, choice.label)
+    }
+}
+
+#[derive(Clone, Deserialize, Debug, utoipa::ToSchema)]
+pub struct QuestionDefinitionSchema {
     #[schema(value_type = Option<String>, format = "uuid")]
     pub id: Option<QuestionId>,
     #[schema(value_type = String)]
@@ -126,13 +137,81 @@ pub struct QuestionSchema {
     pub position: u16,
     #[schema(value_type = String)]
     pub title: NonEmptyString,
-    #[schema(value_type = String)]
-    pub question_type: QuestionType,
     #[schema(value_type = Option<String>)]
     pub description: Option<NonEmptyString>,
-    #[serde(default)]
-    pub choices: Vec<ChoiceSchema>,
     pub is_required: bool,
+}
+
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TextQuestionSchema {
+    #[serde(flatten)]
+    pub definition: QuestionDefinitionSchema,
+}
+
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SelectQuestionSchema {
+    #[serde(flatten)]
+    pub definition: QuestionDefinitionSchema,
+    pub choices: Vec<ChoiceSchema>,
+}
+
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
+#[serde(tag = "question_type")]
+pub enum QuestionSchema {
+    #[serde(rename = "Text")]
+    Text(TextQuestionSchema),
+    #[serde(rename = "SingleChoice")]
+    SingleChoice(SelectQuestionSchema),
+    #[serde(rename = "MultipleChoice")]
+    MultipleChoice(SelectQuestionSchema),
+}
+
+impl QuestionSchema {
+    pub fn definition(&self) -> &QuestionDefinitionSchema {
+        match self {
+            Self::Text(question) => &question.definition,
+            Self::SingleChoice(question) | Self::MultipleChoice(question) => &question.definition,
+        }
+    }
+
+    pub fn question_type(&self) -> QuestionType {
+        match self {
+            Self::Text(_) => QuestionType::Text,
+            Self::SingleChoice(_) => QuestionType::SingleChoice,
+            Self::MultipleChoice(_) => QuestionType::MultipleChoice,
+        }
+    }
+
+    pub fn into_parts(
+        self,
+    ) -> (
+        QuestionType,
+        QuestionDefinitionSchema,
+        Option<Vec<ChoiceSchema>>,
+    ) {
+        match self {
+            Self::Text(question) => (QuestionType::Text, question.definition, None),
+            Self::SingleChoice(question) => (
+                QuestionType::SingleChoice,
+                question.definition,
+                Some(question.choices),
+            ),
+            Self::MultipleChoice(question) => (
+                QuestionType::MultipleChoice,
+                question.definition,
+                Some(question.choices),
+            ),
+        }
+    }
+
+    pub fn into_choices(self) -> Option<Vec<ChoiceSchema>> {
+        match self {
+            Self::Text(_) => None,
+            Self::SingleChoice(question) | Self::MultipleChoice(question) => Some(question.choices),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]

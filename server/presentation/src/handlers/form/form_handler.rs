@@ -22,7 +22,7 @@ use usecase::{
 use crate::handlers::error_handler::handle_error;
 use crate::schemas::error_responses::*;
 use crate::schemas::form::{
-    form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
+    form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit, QuestionSchema},
     form_response_schemas::{
         FormMetaSchema, FormSchema, FormSettingsSchema, QuestionResponseSchema,
     },
@@ -305,6 +305,7 @@ pub async fn delete_form_handler(
     put,
     path = "/forms/{id}",
     summary = "フォームの更新",
+    description = "questions を含めた場合、その form 配下の question 定義全体を指定内容で置換します。questions を省略した場合は既存 question を保持します。",
     params(
         ("id" = String, Path, description = "Form ID"),
     ),
@@ -363,108 +364,7 @@ pub async fn update_form_handler(
         };
     let questions = targets
         .questions
-        .map(|questions| {
-            questions
-                .into_iter()
-                .map(|question| {
-                    let original_id = question.id;
-                    let choices = question
-                        .choices
-                        .into_iter()
-                        .map(|choice| {
-                            domain::form::question::models::Choice::new(
-                                choice.id,
-                                choice.position,
-                                choice.label,
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let choices = (!choices.is_empty())
-                        .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"));
-                    let question = match original_id {
-                        Some(question_id) => {
-                            domain::form::question::models::Question::from_raw_parts(
-                                question_id,
-                                form_id,
-                                question.template_key,
-                                question.position,
-                                question.title,
-                                question.description,
-                                question.question_type,
-                                choices,
-                                question.is_required,
-                            )?
-                        }
-                        None => match question.question_type {
-                            domain::form::question::models::QuestionType::Text => {
-                                if choices.is_some() {
-                                    return Err(errors::domain::DomainError::InvalidEntity {
-                                        message: "text question must not have choices".to_string(),
-                                    });
-                                }
-
-                                domain::form::question::models::Question::new_text(
-                                    form_id,
-                                    question.template_key,
-                                    question.position,
-                                    question.title,
-                                    question.description,
-                                    question.is_required,
-                                )?
-                            }
-                            domain::form::question::models::QuestionType::SingleChoice => {
-                                domain::form::question::models::Question::new_single_choice(
-                                    form_id,
-                                    question.template_key,
-                                    question.position,
-                                    question.title,
-                                    question.description,
-                                    choices.ok_or_else(|| {
-                                        errors::domain::DomainError::InvalidEntity {
-                                            message:
-                                                "choice question must have at least one choice"
-                                                    .to_string(),
-                                        }
-                                    })?,
-                                    question.is_required,
-                                )?
-                            }
-                            domain::form::question::models::QuestionType::MultipleChoice => {
-                                domain::form::question::models::Question::new_multiple_choice(
-                                    form_id,
-                                    question.template_key,
-                                    question.position,
-                                    question.title,
-                                    question.description,
-                                    choices.ok_or_else(|| {
-                                        errors::domain::DomainError::InvalidEntity {
-                                            message:
-                                                "choice question must have at least one choice"
-                                                    .to_string(),
-                                        }
-                                    })?,
-                                    question.is_required,
-                                )?
-                            }
-                        },
-                    };
-
-                    Ok::<_, errors::domain::DomainError>(UpsertQuestionDto {
-                        original_id,
-                        question,
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .and_then(|questions| {
-                    QuestionSet::try_new(
-                        questions
-                            .iter()
-                            .map(|question| question.question.clone())
-                            .collect(),
-                    )?;
-                    Ok(questions)
-                })
-        })
+        .map(|questions| into_upsert_question_dtos(form_id, questions))
         .transpose()
         .map_err(errors::Error::from)
         .map_err(handle_error)?;
@@ -497,4 +397,179 @@ pub async fn update_form_handler(
             .collect(),
         labels,
     }))
+}
+
+fn into_upsert_question_dtos(
+    form_id: FormId,
+    questions: Vec<QuestionSchema>,
+) -> Result<Vec<UpsertQuestionDto>, errors::domain::DomainError> {
+    let questions = questions
+        .into_iter()
+        .map(|question| into_upsert_question_dto(form_id, question))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    QuestionSet::try_new(
+        questions
+            .iter()
+            .map(|question| question.question.clone())
+            .collect(),
+    )?;
+
+    Ok(questions)
+}
+
+fn into_upsert_question_dto(
+    form_id: FormId,
+    question: QuestionSchema,
+) -> Result<UpsertQuestionDto, errors::domain::DomainError> {
+    let (question_type, definition, choices) = question.into_parts();
+    let original_id = definition.id;
+    let choices = into_domain_choices(choices)?;
+    let question = match original_id {
+        Some(question_id) => domain::form::question::models::Question::from_raw_parts(
+            question_id,
+            form_id,
+            definition.template_key,
+            definition.position,
+            definition.title,
+            definition.description,
+            question_type,
+            choices,
+            definition.is_required,
+        )?,
+        None => match question_type {
+            domain::form::question::models::QuestionType::Text => {
+                domain::form::question::models::Question::new_text(
+                    form_id,
+                    definition.template_key,
+                    definition.position,
+                    definition.title,
+                    definition.description,
+                    definition.is_required,
+                )?
+            }
+            domain::form::question::models::QuestionType::SingleChoice => {
+                domain::form::question::models::Question::new_single_choice(
+                    form_id,
+                    definition.template_key,
+                    definition.position,
+                    definition.title,
+                    definition.description,
+                    required_choices(choices)?,
+                    definition.is_required,
+                )?
+            }
+            domain::form::question::models::QuestionType::MultipleChoice => {
+                domain::form::question::models::Question::new_multiple_choice(
+                    form_id,
+                    definition.template_key,
+                    definition.position,
+                    definition.title,
+                    definition.description,
+                    required_choices(choices)?,
+                    definition.is_required,
+                )?
+            }
+        },
+    };
+
+    Ok(UpsertQuestionDto {
+        original_id,
+        question,
+    })
+}
+
+fn into_domain_choices(
+    choices: Option<Vec<crate::schemas::form::form_request_schemas::ChoiceSchema>>,
+) -> Result<Option<NonEmptyVec<domain::form::question::models::Choice>>, errors::domain::DomainError>
+{
+    let Some(choices) = choices else {
+        return Ok(None);
+    };
+
+    let choices = choices
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok((!choices.is_empty()).then(|| NonEmptyVec::try_new(choices).expect("non-empty choices")))
+}
+
+fn required_choices(
+    choices: Option<NonEmptyVec<domain::form::question::models::Choice>>,
+) -> Result<NonEmptyVec<domain::form::question::models::Choice>, errors::domain::DomainError> {
+    choices.ok_or_else(|| errors::domain::DomainError::InvalidEntity {
+        message: "choice question must have at least one choice".to_string(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn text_question_with_choices_is_rejected_during_deserialization() {
+        let result = serde_json::from_value::<QuestionSchema>(json!({
+            "question_type": "Text",
+            "template_key": "body",
+            "position": 0,
+            "title": "Body",
+            "is_required": true,
+            "choices": [
+                { "position": 0, "label": "unexpected" }
+            ]
+        }));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn choice_question_without_choices_is_rejected() {
+        let question: QuestionSchema = serde_json::from_value(json!({
+            "question_type": "SingleChoice",
+            "template_key": "role",
+            "position": 0,
+            "title": "Role",
+            "is_required": true,
+            "choices": []
+        }))
+        .unwrap();
+
+        let result = into_upsert_question_dto(FormId::from(Uuid::nil()), question);
+
+        assert!(matches!(
+            result,
+            Err(errors::domain::DomainError::InvalidEntity { .. })
+        ));
+    }
+
+    #[test]
+    fn duplicate_positions_are_rejected_for_replacement_payload() {
+        let questions: Vec<QuestionSchema> = serde_json::from_value(json!([
+            {
+                "question_type": "Text",
+                "template_key": "body",
+                "position": 0,
+                "title": "Body",
+                "is_required": true
+            },
+            {
+                "question_type": "Text",
+                "template_key": "summary",
+                "position": 0,
+                "title": "Summary",
+                "is_required": true
+            }
+        ]))
+        .unwrap();
+
+        let result = into_upsert_question_dtos(FormId::from(Uuid::nil()), questions);
+
+        assert!(matches!(
+            result,
+            Err(errors::domain::DomainError::InvalidEntity { .. })
+        ));
+    }
 }

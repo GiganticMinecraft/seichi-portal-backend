@@ -113,7 +113,7 @@ pub struct FormSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct QuestionResponseSchema {
+pub struct QuestionDefinitionResponseSchema {
     #[schema(value_type = String, format = "uuid")]
     pub id: String,
     pub form_id: String,
@@ -121,30 +121,74 @@ pub struct QuestionResponseSchema {
     pub position: u16,
     pub title: String,
     pub description: Option<String>,
-    pub question_type: String,
-    pub choices: Vec<ChoiceResponseSchema>,
     pub is_required: bool,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct TextQuestionResponseSchema {
+    #[serde(flatten)]
+    pub definition: QuestionDefinitionResponseSchema,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct SelectQuestionResponseSchema {
+    #[serde(flatten)]
+    pub definition: QuestionDefinitionResponseSchema,
+    pub choices: Vec<ChoiceResponseSchema>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[serde(tag = "question_type")]
+pub enum QuestionResponseSchema {
+    Text(TextQuestionResponseSchema),
+    SingleChoice(SelectQuestionResponseSchema),
+    MultipleChoice(SelectQuestionResponseSchema),
 }
 
 impl From<domain::form::question::models::Question> for QuestionResponseSchema {
     fn from(val: domain::form::question::models::Question) -> Self {
-        QuestionResponseSchema {
+        let definition = QuestionDefinitionResponseSchema {
             id: val.id().into_inner().to_string(),
             form_id: val.form_id().into_inner().to_string(),
             template_key: val.template_key().to_owned().into_inner(),
             position: val.position(),
             title: val.title().to_owned().into_inner(),
             description: val.description().cloned().map(NonEmptyString::into_inner),
-            question_type: val.question_type().to_string(),
-            choices: val
-                .choices()
-                .cloned()
-                .map(|choices| choices.into_inner())
-                .unwrap_or_default()
-                .into_iter()
-                .map(Into::into)
-                .collect(),
             is_required: val.is_required(),
+        };
+
+        match val.question_type() {
+            domain::form::question::models::QuestionType::Text => {
+                Self::Text(TextQuestionResponseSchema { definition })
+            }
+            domain::form::question::models::QuestionType::SingleChoice => {
+                let choices = val
+                    .choices()
+                    .cloned()
+                    .map(|choices| choices.into_inner())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+                Self::SingleChoice(SelectQuestionResponseSchema {
+                    definition,
+                    choices,
+                })
+            }
+            domain::form::question::models::QuestionType::MultipleChoice => {
+                let choices = val
+                    .choices()
+                    .cloned()
+                    .map(|choices| choices.into_inner())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+                Self::MultipleChoice(SelectQuestionResponseSchema {
+                    definition,
+                    choices,
+                })
+            }
         }
     }
 }
@@ -343,6 +387,27 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
+    fn question_response_schema_serializes_text_variant_without_choices() {
+        let question = Question::new_text(
+            FormId::from(Uuid::nil()),
+            "body".to_string().try_into().unwrap(),
+            0,
+            "Body".to_string().try_into().unwrap(),
+            Some("desc".to_string().try_into().unwrap()),
+            true,
+        )
+        .unwrap();
+
+        let schema = QuestionResponseSchema::from(question);
+        let serialized = serde_json::to_value(schema).unwrap();
+
+        assert_eq!(serialized["question_type"], "Text");
+        assert_eq!(serialized["template_key"], "body");
+        assert!(serialized.get("choices").is_none());
+        assert_eq!(serialized["is_required"], true);
+    }
+
+    #[test]
     fn question_response_schema_preserves_api_shape_for_choice_question() {
         let question = Question::new_single_choice(
             FormId::from(Uuid::nil()),
@@ -360,10 +425,11 @@ mod tests {
         .unwrap();
 
         let schema = QuestionResponseSchema::from(question);
+        let serialized = serde_json::to_value(schema).unwrap();
 
-        assert_eq!(schema.question_type, "SingleChoice");
-        assert_eq!(schema.choices.len(), 2);
-        assert_eq!(schema.choices[0].label, "Admin");
-        assert!(schema.is_required);
+        assert_eq!(serialized["question_type"], "SingleChoice");
+        assert_eq!(serialized["choices"].as_array().unwrap().len(), 2);
+        assert_eq!(serialized["choices"][0]["label"], "Admin");
+        assert_eq!(serialized["is_required"], true);
     }
 }

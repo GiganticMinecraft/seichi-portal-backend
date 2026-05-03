@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use errors::Error;
+use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
     user::models::User,
 };
 
+#[automock]
 #[async_trait]
 pub trait NotificationRepository: Send + Sync + 'static {
     async fn create_notification_settings(

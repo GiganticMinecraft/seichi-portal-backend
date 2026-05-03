@@ -32,6 +32,7 @@ impl IntoResponse for GetQuestionsResponse {
     get,
     path = "/forms/{id}/questions",
     summary = "質問の一覧取得",
+    description = "フォーム配下の question 定義を取得します。question 定義の更新は PUT /forms/{id} の questions 全置換で行います。",
     params(
         ("id" = String, Path, description = "Form ID"),
     ),
