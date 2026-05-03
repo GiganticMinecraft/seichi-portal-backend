@@ -49,6 +49,7 @@ impl FormQuestionDatabase for ConnectionPool {
                 let (existing_questions, new_questions): (Vec<_>, Vec<_>) =
                     questions.iter().partition(|question| question.id.is_some());
 
+                temporarily_relocate_existing_questions(txn, &form_id_string).await?;
                 upsert_existing_questions(txn, &form_id_string, &existing_questions).await?;
                 let inserted_questions = insert_new_questions(txn, &form_id, new_questions).await?;
 
@@ -163,6 +164,94 @@ async fn fetch_question_ids(
         .map(|row| row.try_get::<i32, _>("question_id"))
         .collect::<Result<Vec<_>, _>>()
         .map_err(Into::into)
+}
+
+#[derive(Debug, Clone)]
+struct ExistingQuestionRow {
+    question_id: i32,
+    template_key: String,
+    position: u16,
+}
+
+async fn fetch_existing_questions(
+    txn: &mut MySqlConnection,
+    form_id: &str,
+) -> Result<Vec<ExistingQuestionRow>, InfraError> {
+    sqlx::query(
+        "SELECT question_id, template_key, position FROM form_questions WHERE form_id = ? ORDER BY position ASC, question_id ASC",
+    )
+    .bind(form_id)
+    .fetch_all(&mut *txn)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(ExistingQuestionRow {
+            question_id: row.try_get("question_id")?,
+            template_key: row.try_get("template_key")?,
+            position: row.try_get("position")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()
+    .map_err(Into::into)
+}
+
+fn temporary_template_key_prefix(existing_template_keys: &[String]) -> String {
+    let mut prefix = "__tmp_form_question__".to_string();
+
+    while existing_template_keys
+        .iter()
+        .any(|template_key| template_key.starts_with(&prefix))
+    {
+        prefix.push('_');
+    }
+
+    prefix
+}
+
+async fn temporarily_relocate_existing_questions(
+    txn: &mut MySqlConnection,
+    form_id: &str,
+) -> Result<(), InfraError> {
+    let existing_questions = fetch_existing_questions(txn, form_id).await?;
+    if existing_questions.is_empty() {
+        return Ok(());
+    }
+
+    let position_offset =
+        u16::try_from(existing_questions.len()).map_err(|_| InfraError::Unexpected {
+            cause: "too many questions to relocate temporarily".to_string(),
+        })?;
+    let temporary_prefix = temporary_template_key_prefix(
+        &existing_questions
+            .iter()
+            .map(|question| question.template_key.clone())
+            .collect_vec(),
+    );
+
+    for question in existing_questions {
+        let temporary_position =
+            question
+                .position
+                .checked_add(position_offset)
+                .ok_or_else(|| InfraError::Unexpected {
+                    cause: format!(
+                        "temporary position overflow for question_id {}",
+                        question.question_id
+                    ),
+                })?;
+        let temporary_template_key = format!("{temporary_prefix}{}", question.question_id);
+
+        sqlx::query(
+            "UPDATE form_questions SET template_key = ?, position = ? WHERE question_id = ?",
+        )
+        .bind(temporary_template_key)
+        .bind(temporary_position)
+        .bind(question.question_id)
+        .execute(&mut *txn)
+        .await?;
+    }
+
+    Ok(())
 }
 
 async fn upsert_existing_questions(
