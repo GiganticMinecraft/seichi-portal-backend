@@ -1,15 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
-    "common",
-    "domain",
-    "entrypoint",
-    "errors",
-    "infra/resource",
-    "migration",
-    "presentation",
-    "types",
-    "usecase",
+    "server/common",
+    "server/domain",
+    "server/entrypoint",
+    "server/errors",
+    "server/infra/resource",
+    "server/migration",
+    "server/presentation",
+    "server/types",
+    "server/usecase",
 ]
 
 [workspace.package]

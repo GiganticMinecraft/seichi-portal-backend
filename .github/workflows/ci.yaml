@@ -26,7 +26,6 @@ jobs:
           components: rustfmt
       - name: Rustfmt check
         run: cargo fmt --all -- --check
-        working-directory: ./server
 
   lint-and-test:
     needs: [ rustfmt ]
@@ -66,17 +65,15 @@ jobs:
 
       - name: Cargo build
         run: cargo build
-        working-directory: ./server
 
       - uses: LoliGothick/clippy-check@v0.3.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           deny: warnings
-          working-directory: ./server
+          working-directory: .
 
       - name: Cargo test
         run: cargo test --all-features
-        working-directory: ./server
 
   sqlx-prepare-check:
     needs: [ rustfmt ]
@@ -121,10 +118,7 @@ jobs:
           toolchain: ${{ env.RUST_VERSION }}
       - name: Install sqlx CLI
         run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features rustls,mysql
-        working-directory: ./server
       - name: Apply migrations
-        run: cargo sqlx migrate run --source ./migration/migrations
-        working-directory: ./server
+        run: cargo sqlx migrate run --source ./server/migration/migrations
       - name: Check sqlx offline metadata
         run: cargo sqlx prepare --check --workspace
-        working-directory: ./server
