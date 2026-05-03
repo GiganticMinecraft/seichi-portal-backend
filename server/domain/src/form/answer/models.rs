@@ -293,8 +293,9 @@ mod tests {
             None,
             crate::form::question::models::QuestionType::SingleChoice,
             NonEmptyVec::try_new(vec![
-                Choice::new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap()).unwrap(),
-                Choice::new(Some(2.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
+                Choice::try_new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap())
+                    .unwrap(),
+                Choice::try_new(Some(2.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
             ])
             .unwrap()
             .into(),
@@ -313,13 +314,13 @@ mod tests {
             None,
             crate::form::question::models::QuestionType::MultipleChoice,
             NonEmptyVec::try_new(vec![
-                Choice::new(
+                Choice::try_new(
                     Some(3.into()),
                     0,
                     "Admin, Owner".to_string().try_into().unwrap(),
                 )
                 .unwrap(),
-                Choice::new(Some(4.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
+                Choice::try_new(Some(4.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
             ])
             .unwrap()
             .into(),

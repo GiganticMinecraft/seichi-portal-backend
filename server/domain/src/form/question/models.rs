@@ -27,7 +27,7 @@ pub struct Choice {
 }
 
 impl Choice {
-    pub fn new(
+    pub fn try_new(
         id: Option<ChoiceId>,
         position: u16,
         label: NonEmptyString,
@@ -44,7 +44,7 @@ impl Choice {
         position: u16,
         label: NonEmptyString,
     ) -> Result<Self, DomainError> {
-        Self::new(id, position, label)
+        Self::try_new(id, position, label)
     }
 }
 
@@ -457,7 +457,7 @@ mod test {
             QuestionType::Text,
             Some(
                 NonEmptyVec::try_new(vec![
-                    Choice::new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
+                    Choice::try_new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
                 ])
                 .unwrap(),
             ),
@@ -492,8 +492,8 @@ mod test {
             "Question".to_string().try_into().unwrap(),
             None,
             NonEmptyVec::try_new(vec![
-                Choice::new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
-                Choice::new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
+                Choice::try_new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
+                Choice::try_new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
             ])
             .unwrap(),
             true,
@@ -511,8 +511,8 @@ mod test {
             "Question".to_string().try_into().unwrap(),
             None,
             NonEmptyVec::try_new(vec![
-                Choice::new(None, 1, "A".to_string().try_into().unwrap()).unwrap(),
-                Choice::new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
+                Choice::try_new(None, 1, "A".to_string().try_into().unwrap()).unwrap(),
+                Choice::try_new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
             ])
             .unwrap(),
             true,

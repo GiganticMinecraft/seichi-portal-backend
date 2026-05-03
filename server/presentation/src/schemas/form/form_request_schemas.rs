@@ -124,7 +124,7 @@ impl TryFrom<ChoiceSchema> for domain::form::question::models::Choice {
     type Error = DomainError;
 
     fn try_from(choice: ChoiceSchema) -> Result<Self, Self::Error> {
-        Self::new(choice.id, choice.position, choice.label)
+        Self::try_new(choice.id, choice.position, choice.label)
     }
 }
 
