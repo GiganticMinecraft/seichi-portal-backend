@@ -130,7 +130,7 @@ impl TryFrom<FormMetaData> for domain::search::models::FormMetaData {
 pub struct RealAnswers {
     pub id: String,
     pub answer_id: String,
-    pub question_id: i32,
+    pub question_id: String,
     pub answer: String,
 }
 
@@ -139,7 +139,7 @@ impl From<domain::search::models::RealAnswers> for RealAnswers {
         Self {
             id: real_answers.id.to_string(),
             answer_id: real_answers.answer_id.to_string(),
-            question_id: real_answers.question_id.into_inner(),
+            question_id: real_answers.question_id.into_inner().to_string(),
             answer: real_answers.answer,
         }
     }
@@ -152,7 +152,7 @@ impl TryFrom<RealAnswers> for domain::search::models::RealAnswers {
         Ok(Self {
             id: Uuid::from_str(&real_answers.id)?.into(),
             answer_id: Uuid::from_str(&real_answers.answer_id)?.into(),
-            question_id: real_answers.question_id.into(),
+            question_id: Uuid::from_str(&real_answers.question_id)?.into(),
             answer: real_answers.answer,
         })
     }

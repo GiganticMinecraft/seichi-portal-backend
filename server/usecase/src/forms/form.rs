@@ -1,4 +1,4 @@
-use domain::form::question::models::{Question, QuestionSet};
+use domain::form::question::models::Question;
 use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
@@ -16,7 +16,7 @@ use domain::{
 use errors::{Error, domain::DomainError, usecase::UseCaseError::FormNotFound};
 use std::collections::{BTreeSet, HashMap};
 
-use crate::dto::FormDto;
+use crate::dto::{FormDto, UpsertQuestionDto};
 
 pub struct FormUseCase<
     'a,
@@ -163,7 +163,7 @@ impl<
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
-        questions: Option<QuestionSet>,
+        questions: Option<Vec<UpsertQuestionDto>>,
     ) -> Result<(Form, Vec<Question>, Vec<FormLabel>), Error> {
         let current_form = self
             .form_repository
@@ -181,10 +181,11 @@ impl<
         if let Some(questions) = &questions {
             let existing_question_ids = current_questions
                 .iter()
-                .filter_map(|question| question.id().map(|id| id.into_inner()))
+                .map(|question| question.id().into_inner())
                 .collect::<BTreeSet<_>>();
             if let Some(invalid_question) = questions
                 .iter()
+                .map(|question| &question.question)
                 .find(|question| question.form_id() != &form_id)
             {
                 return Err(DomainError::InvalidEntity {
@@ -197,7 +198,7 @@ impl<
             }
             if let Some(invalid_id) = questions
                 .iter()
-                .filter_map(|question| question.id().map(|id| id.into_inner()))
+                .filter_map(|question| question.original_id.map(|id| id.into_inner()))
                 .find(|id| !existing_question_ids.contains(id))
             {
                 return Err(DomainError::InvalidEntity {
@@ -265,7 +266,10 @@ impl<
                 .put_questions(
                     actor,
                     form_id,
-                    questions.into_inner().into_iter().map(Into::into).collect(),
+                    questions
+                        .into_iter()
+                        .map(|question| question.question.into())
+                        .collect(),
                 )
                 .await?;
         }
@@ -301,24 +305,20 @@ impl<
 
 fn validate_answered_form_question_update(
     current_questions: &[Question],
-    updated_questions: &[Question],
+    updated_questions: &[UpsertQuestionDto],
 ) -> Result<(), Error> {
     let current_by_id = current_questions
         .iter()
-        .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
+        .map(|question| (question.id().into_inner(), question))
         .collect::<HashMap<_, _>>();
     let updated_by_id = updated_questions
         .iter()
-        .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
+        .map(|question| (question.question.id().into_inner(), &question.question))
         .collect::<HashMap<_, _>>();
 
     if let Some(error) = current_questions
         .iter()
-        .filter_map(|current_question| {
-            current_question
-                .id()
-                .map(|id| (id.into_inner(), current_question))
-        })
+        .map(|current_question| (current_question.id().into_inner(), current_question))
         .find_map(|(current_id, current_question)| {
             let updated_question =
                 updated_by_id
@@ -393,8 +393,8 @@ fn validate_answered_form_question_update(
         .iter()
         .filter_map(|updated_question| {
             updated_question
-                .id()
-                .map(|id| (id.into_inner(), updated_question))
+                .original_id
+                .map(|id| (id.into_inner(), &updated_question.question))
         })
         .find_map(|(updated_id, updated_question)| {
             current_by_id

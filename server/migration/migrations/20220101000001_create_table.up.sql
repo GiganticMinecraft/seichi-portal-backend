@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS form_meta_data(
 );
 
 CREATE TABLE IF NOT EXISTS form_questions(
-    question_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    question_id CHAR(36) NOT NULL PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
     template_key VARCHAR(255) NOT NULL,
     position SMALLINT UNSIGNED NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS form_questions(
 
 CREATE TABLE IF NOT EXISTS form_choices(
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    question_id INT NOT NULL,
+    question_id CHAR(36) NOT NULL,
     position SMALLINT UNSIGNED NOT NULL,
     label TEXT NOT NULL,
     UNIQUE KEY uk_form_choices_question_id_position(question_id, position),
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS answers(
 CREATE TABLE IF NOT EXISTS real_answers(
     id CHAR(36) NOT NULL PRIMARY KEY,
     answer_id CHAR(36) NOT NULL,
-    question_id INT NOT NULL,
+    question_id CHAR(36) NOT NULL,
     answer TEXT NOT NULL,
     FOREIGN KEY fk_real_answers_answer_id(answer_id) REFERENCES answers(id),
     FOREIGN KEY fk_real_answers_quesiton_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE

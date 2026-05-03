@@ -114,7 +114,8 @@ pub struct FormSchema {
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct QuestionResponseSchema {
-    pub id: Option<i32>,
+    #[schema(value_type = String, format = "uuid")]
+    pub id: String,
     pub form_id: String,
     pub template_key: String,
     pub position: u16,
@@ -128,7 +129,7 @@ pub struct QuestionResponseSchema {
 impl From<domain::form::question::models::Question> for QuestionResponseSchema {
     fn from(val: domain::form::question::models::Question) -> Self {
         QuestionResponseSchema {
-            id: val.id().map(|id| id.into_inner()),
+            id: val.id().into_inner().to_string(),
             form_id: val.form_id().into_inner().to_string(),
             template_key: val.template_key().to_owned().into_inner(),
             position: val.position(),
@@ -231,14 +232,15 @@ impl From<domain::user::models::User> for User {
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct AnswerContent {
-    question_id: i32,
+    #[schema(value_type = String, format = "uuid")]
+    question_id: String,
     answer: String,
 }
 
 impl AnswerContent {
     pub fn from_ref(val: &domain::form::answer::models::FormAnswerContent) -> Self {
         AnswerContent {
-            question_id: val.question_id.into_inner(),
+            question_id: val.question_id.into_inner().to_string(),
             answer: val.answer.to_string(),
         }
     }
@@ -343,7 +345,6 @@ mod tests {
     #[test]
     fn question_response_schema_preserves_api_shape_for_choice_question() {
         let question = Question::new_single_choice(
-            Some(1.into()),
             FormId::from(Uuid::nil()),
             "role".to_string().try_into().unwrap(),
             0,

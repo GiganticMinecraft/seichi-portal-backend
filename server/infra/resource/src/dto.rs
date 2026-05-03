@@ -41,7 +41,7 @@ impl TryFrom<ChoiceDto> for Choice {
 
 #[derive(Clone)]
 pub struct QuestionDto {
-    pub id: Option<i32>,
+    pub id: String,
     pub form_id: String,
     pub template_key: String,
     pub position: u16,
@@ -78,7 +78,9 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
             })?;
 
         Question::from_raw_parts(
-            id.map(Into::into),
+            Uuid::from_str(&id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
             FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
             template_key.try_into()?,
             position,
@@ -143,7 +145,7 @@ impl TryFrom<FormDto> for domain::form::models::Form {
 #[derive(Clone)]
 pub struct FormAnswerContentDto {
     pub id: String,
-    pub question_id: i32,
+    pub question_id: String,
     pub answer: String,
 }
 
@@ -159,7 +161,7 @@ impl TryFrom<FormAnswerContentDto> for domain::form::answer::models::FormAnswerC
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::answer::models::FormAnswerContent {
             id: Uuid::parse_str(&id)?.into(),
-            question_id: question_id.into(),
+            question_id: Uuid::parse_str(&question_id)?.into(),
             answer,
         })
     }
@@ -233,7 +235,7 @@ mod tests {
     #[test]
     fn question_dto_rejects_text_question_with_choices() {
         let result: Result<domain::form::question::models::Question, _> = QuestionDto {
-            id: Some(1),
+            id: Uuid::nil().to_string(),
             form_id: Uuid::nil().to_string(),
             template_key: "template".to_string(),
             position: 0,

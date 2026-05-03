@@ -91,7 +91,7 @@ pub struct FormUpdateSchema {
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct AnswerContentSchema {
-    #[schema(value_type = i32)]
+    #[schema(value_type = String, format = "uuid")]
     pub question_id: QuestionId,
     pub answer: String,
 }
@@ -119,7 +119,7 @@ pub struct ChoiceSchema {
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct QuestionSchema {
-    #[schema(value_type = Option<i32>)]
+    #[schema(value_type = Option<String>, format = "uuid")]
     pub id: Option<QuestionId>,
     #[schema(value_type = String)]
     pub template_key: NonEmptyString,
