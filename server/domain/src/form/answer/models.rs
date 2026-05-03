@@ -11,7 +11,7 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     form::{
         models::FormId,
-        question::models::{Question, QuestionId, QuestionType},
+        question::models::{Question, QuestionId},
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role, User},
@@ -49,7 +49,7 @@ impl PostedAnswerContents {
     ) -> Result<Self, DomainError> {
         let questions_by_id = questions
             .iter()
-            .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+            .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
             .collect::<HashMap<_, _>>();
         let answered_question_ids = contents
             .iter()
@@ -73,35 +73,33 @@ impl PostedAnswerContents {
                 });
 
             question
-                .and_then(|question| match question.question_type {
-                    QuestionType::Text => Ok(()),
-                    QuestionType::SingleChoice => question
-                        .choices
+                .and_then(|question| match question {
+                    Question::Text(_) => Ok(()),
+                    Question::SingleChoice(choice_question) => choice_question
+                        .choices()
                         .iter()
-                        .flat_map(|choices| choices.iter())
                         .any(|choice| choice.label.as_str() == answer.answer.as_str())
                         .then_some(())
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "answer for question {} must match one of the available choices",
-                                question.template_key.as_str()
+                                question.template_key().as_str()
                             ),
                         }),
-                    QuestionType::MultipleChoice => {
+                    Question::MultipleChoice(choice_question) => {
                         let values = parse_multiple_choice_answer(&answer.answer);
                         (!values.is_empty()
                             && values.iter().all(|value| {
-                                question
-                                    .choices
+                                choice_question
+                                    .choices()
                                     .iter()
-                                    .flat_map(|choices| choices.iter())
                                     .any(|choice| choice.label.as_str() == value.as_str())
                             }))
                         .then_some(())
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "answer for question {} must reference only existing choices",
-                                question.template_key.as_str()
+                                question.template_key().as_str()
                             ),
                         })
                     }
@@ -113,15 +111,15 @@ impl PostedAnswerContents {
 
         if let Some(missing_question) = questions
             .iter()
-            .filter(|question| question.is_required)
-            .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+            .filter(|question| question.is_required())
+            .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
             .find(|(question_id, _)| !answered_question_ids.contains(question_id))
             .map(|(_, question)| question)
         {
             return Err(DomainError::InvalidEntity {
                 message: format!(
                     "required question {} is missing",
-                    missing_question.template_key.as_str()
+                    missing_question.template_key().as_str()
                 ),
             });
         }
@@ -262,22 +260,17 @@ fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::form::{
-        models::FormId,
-        question::models::{Choice, QuestionType},
-    };
+    use crate::form::{models::FormId, question::models::Choice};
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
     fn text_question() -> Question {
-        Question::new(
+        Question::new_text(
             Some(QuestionId::from(1)),
             FormId::from(Uuid::nil()),
             "name".to_string().try_into().unwrap(),
             0,
             "Name".to_string().try_into().unwrap(),
-            None,
-            QuestionType::Text,
             None,
             true,
         )
@@ -285,48 +278,41 @@ mod tests {
     }
 
     fn single_choice_question() -> Question {
-        Question::new(
+        Question::new_single_choice(
             Some(QuestionId::from(2)),
             FormId::from(Uuid::nil()),
             "role".to_string().try_into().unwrap(),
             1,
             "Role".to_string().try_into().unwrap(),
             None,
-            QuestionType::SingleChoice,
-            Some(
-                NonEmptyVec::try_new(vec![
-                    Choice::new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap())
-                        .unwrap(),
-                    Choice::new(Some(2.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
-                ])
-                .unwrap(),
-            ),
+            NonEmptyVec::try_new(vec![
+                Choice::new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap()).unwrap(),
+                Choice::new(Some(2.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
+            ])
+            .unwrap(),
             true,
         )
         .unwrap()
     }
 
     fn multiple_choice_question() -> Question {
-        Question::new(
+        Question::new_multiple_choice(
             Some(QuestionId::from(3)),
             FormId::from(Uuid::nil()),
             "tags".to_string().try_into().unwrap(),
             2,
             "Tags".to_string().try_into().unwrap(),
             None,
-            QuestionType::MultipleChoice,
-            Some(
-                NonEmptyVec::try_new(vec![
-                    Choice::new(
-                        Some(3.into()),
-                        0,
-                        "Admin, Owner".to_string().try_into().unwrap(),
-                    )
-                    .unwrap(),
-                    Choice::new(Some(4.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
-                ])
+            NonEmptyVec::try_new(vec![
+                Choice::new(
+                    Some(3.into()),
+                    0,
+                    "Admin, Owner".to_string().try_into().unwrap(),
+                )
                 .unwrap(),
-            ),
+                Choice::new(Some(4.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
+            ])
+            .unwrap(),
             false,
         )
         .unwrap()

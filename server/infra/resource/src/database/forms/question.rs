@@ -46,8 +46,9 @@ impl FormQuestionDatabase for ConnectionPool {
                 let form_id_string = form_id.into_inner().to_string();
                 let existing_question_ids = fetch_question_ids(txn, &form_id_string).await?;
 
-                let (existing_questions, new_questions): (Vec<_>, Vec<_>) =
-                    questions.iter().partition(|question| question.id.is_some());
+                let (existing_questions, new_questions): (Vec<_>, Vec<_>) = questions
+                    .iter()
+                    .partition(|question| question.id().is_some());
 
                 temporarily_relocate_existing_questions(txn, &form_id_string).await?;
                 upsert_existing_questions(txn, &form_id_string, &existing_questions).await?;
@@ -55,7 +56,7 @@ impl FormQuestionDatabase for ConnectionPool {
 
                 let retained_question_ids = existing_questions
                     .iter()
-                    .filter_map(|question| question.id.map(|id| id.into_inner()))
+                    .filter_map(|question| question.id().map(|id| id.into_inner()))
                     .chain(
                         inserted_questions
                             .iter()
@@ -73,7 +74,7 @@ impl FormQuestionDatabase for ConnectionPool {
 
                 let assigned_questions = existing_questions
                     .into_iter()
-                    .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+                    .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
                     .chain(inserted_questions)
                     .collect_vec();
 
@@ -280,19 +281,19 @@ async fn upsert_existing_questions(
         .iter()
         .fold(query(&sql), |query, question| {
             query
-                .bind(question.id.map(|id| id.into_inner()))
+                .bind(question.id().map(|id| id.into_inner()))
                 .bind(form_id)
-                .bind(question.template_key.to_owned().into_inner())
-                .bind(question.position)
-                .bind(question.title.to_owned().into_inner())
+                .bind(question.template_key().to_owned().into_inner())
+                .bind(question.position())
+                .bind(question.title().to_owned().into_inner())
                 .bind(
                     question
-                        .description
-                        .to_owned()
+                        .description()
+                        .cloned()
                         .map(|description| description.into_inner()),
                 )
-                .bind(question.question_type.to_string())
-                .bind(question.is_required)
+                .bind(question.question_type().to_string())
+                .bind(question.is_required())
         })
         .execute(&mut *txn)
         .await?;
@@ -318,17 +319,17 @@ async fn insert_new_questions<'a>(
         .fold(query(&sql), |query, question| {
             query
                 .bind(form_id.to_owned().into_inner().to_string())
-                .bind(question.template_key.to_owned().into_inner())
-                .bind(question.position)
-                .bind(question.title.to_owned().into_inner())
+                .bind(question.template_key().to_owned().into_inner())
+                .bind(question.position())
+                .bind(question.title().to_owned().into_inner())
                 .bind(
                     question
-                        .description
-                        .to_owned()
+                        .description()
+                        .cloned()
                         .map(|description| description.into_inner()),
                 )
-                .bind(question.question_type.to_string())
-                .bind(question.is_required)
+                .bind(question.question_type().to_string())
+                .bind(question.is_required())
         })
         .execute(&mut *txn)
         .await?;
@@ -379,7 +380,7 @@ async fn sync_choices_for_questions(
     let retained_choice_ids = assigned_questions
         .iter()
         .flat_map(|(_, question)| {
-            question.choices.iter().flat_map(|choices| {
+            question.choices().into_iter().flat_map(|choices| {
                 choices
                     .iter()
                     .filter_map(|choice| choice.id.map(|id| id.into_inner()))
@@ -400,7 +401,7 @@ async fn sync_choices_for_questions(
     let existing_choices = assigned_questions
         .iter()
         .flat_map(|(question_id, question)| {
-            question.choices.iter().flat_map(|choices| {
+            question.choices().into_iter().flat_map(|choices| {
                 choices.iter().filter_map(|choice| {
                     choice.id.map(|id| {
                         (
@@ -418,9 +419,9 @@ async fn sync_choices_for_questions(
 
     let new_choices = assigned_questions
         .iter()
-        .filter(|(_, question)| question.question_type != QuestionType::Text)
+        .filter(|(_, question)| question.question_type() != QuestionType::Text)
         .flat_map(|(question_id, question)| {
-            question.choices.iter().flat_map(|choices| {
+            question.choices().into_iter().flat_map(|choices| {
                 choices
                     .iter()
                     .filter(|choice| choice.id.is_none())

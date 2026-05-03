@@ -181,23 +181,23 @@ impl<
         if let Some(questions) = &questions {
             let existing_question_ids = current_questions
                 .iter()
-                .filter_map(|question| question.id.map(|id| id.into_inner()))
+                .filter_map(|question| question.id().map(|id| id.into_inner()))
                 .collect::<BTreeSet<_>>();
             if let Some(invalid_question) = questions
                 .iter()
-                .find(|question| question.form_id != form_id)
+                .find(|question| question.form_id() != &form_id)
             {
                 return Err(DomainError::InvalidEntity {
                     message: format!(
                         "question.form_id must match the target form: {}",
-                        invalid_question.template_key.as_str()
+                        invalid_question.template_key().as_str()
                     ),
                 }
                 .into());
             }
             if let Some(invalid_id) = questions
                 .iter()
-                .filter_map(|question| question.id.map(|id| id.into_inner()))
+                .filter_map(|question| question.id().map(|id| id.into_inner()))
                 .find(|id| !existing_question_ids.contains(id))
             {
                 return Err(DomainError::InvalidEntity {
@@ -305,18 +305,18 @@ fn validate_answered_form_question_update(
 ) -> Result<(), Error> {
     let current_by_id = current_questions
         .iter()
-        .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+        .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
         .collect::<HashMap<_, _>>();
     let updated_by_id = updated_questions
         .iter()
-        .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+        .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
         .collect::<HashMap<_, _>>();
 
     if let Some(error) = current_questions
         .iter()
         .filter_map(|current_question| {
             current_question
-                .id
+                .id()
                 .map(|id| (id.into_inner(), current_question))
         })
         .find_map(|(current_id, current_question)| {
@@ -326,35 +326,35 @@ fn validate_answered_form_question_update(
                     .ok_or_else(|| DomainError::InvalidEntity {
                         message: format!(
                             "cannot delete question {} from a form that already has answers",
-                            current_question.template_key.as_str()
+                            current_question.template_key().as_str()
                         ),
                     });
 
             updated_question
                 .and_then(|updated_question| {
-                    (current_question.template_key == updated_question.template_key)
+                    (current_question.template_key() == updated_question.template_key())
                         .then_some(updated_question)
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "cannot change template_key for answered question {}",
-                                current_question.template_key.as_str()
+                                current_question.template_key().as_str()
                             ),
                         })
                 })
                 .and_then(|updated_question| {
-                    (current_question.question_type == updated_question.question_type)
+                    (current_question.question_type() == updated_question.question_type())
                         .then_some((current_question, updated_question))
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "cannot change question_type for answered question {}",
-                                current_question.template_key.as_str()
+                                current_question.template_key().as_str()
                             ),
                         })
                 })
                 .and_then(|(current_question, updated_question)| {
                     let current_choice_ids = current_question
-                        .choices
-                        .iter()
+                        .choices()
+                        .into_iter()
                         .flat_map(|choices| {
                             choices
                                 .iter()
@@ -362,8 +362,8 @@ fn validate_answered_form_question_update(
                         })
                         .collect::<BTreeSet<_>>();
                     let updated_choice_ids = updated_question
-                        .choices
-                        .iter()
+                        .choices()
+                        .into_iter()
                         .flat_map(|choices| {
                             choices
                                 .iter()
@@ -378,7 +378,7 @@ fn validate_answered_form_question_update(
                             message: format!(
                                 "cannot delete choice {} from answered question {}",
                                 choice_id,
-                                current_question.template_key.as_str()
+                                current_question.template_key().as_str()
                             ),
                         })
                         .map_or(Ok(()), Err)
@@ -393,7 +393,7 @@ fn validate_answered_form_question_update(
         .iter()
         .filter_map(|updated_question| {
             updated_question
-                .id
+                .id()
                 .map(|id| (id.into_inner(), updated_question))
         })
         .find_map(|(updated_id, updated_question)| {
@@ -404,8 +404,8 @@ fn validate_answered_form_question_update(
                 })
                 .and_then(|current_question| {
                     let current_choice_ids = current_question
-                        .choices
-                        .iter()
+                        .choices()
+                        .into_iter()
                         .flat_map(|choices| {
                             choices
                                 .iter()
@@ -414,8 +414,8 @@ fn validate_answered_form_question_update(
                         .collect::<BTreeSet<_>>();
 
                     updated_question
-                        .choices
-                        .iter()
+                        .choices()
+                        .into_iter()
                         .flat_map(|choices| {
                             choices
                                 .iter()
@@ -426,7 +426,7 @@ fn validate_answered_form_question_update(
                             message: format!(
                                 "cannot regenerate choice id {} for answered question {}",
                                 choice_id,
-                                updated_question.template_key.as_str()
+                                updated_question.template_key().as_str()
                             ),
                         })
                         .map_or(Ok(()), Err)
