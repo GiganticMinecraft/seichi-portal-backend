@@ -68,6 +68,15 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
             is_required,
         }: QuestionDto,
     ) -> Result<Self, Self::Error> {
+        let choices = choices
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()
+            .map(|choices| {
+                (!choices.is_empty())
+                    .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"))
+            })?;
+
         Question::from_raw_parts(
             id.map(Into::into),
             FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
@@ -76,14 +85,7 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
             title.try_into()?,
             description.map(TryInto::try_into).transpose()?,
             QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
-            choices
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, _>>()
-                .map(|choices| {
-                    (!choices.is_empty())
-                        .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"))
-                })?,
+            choices,
             is_required,
         )
         .map_err(Into::into)
@@ -221,6 +223,33 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
             }
             .try_into()?,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn question_dto_rejects_text_question_with_choices() {
+        let result: Result<domain::form::question::models::Question, _> = QuestionDto {
+            id: Some(1),
+            form_id: Uuid::nil().to_string(),
+            template_key: "template".to_string(),
+            position: 0,
+            title: "Question".to_string(),
+            description: None,
+            question_type: "Text".to_string(),
+            choices: vec![ChoiceDto {
+                id: Some(1),
+                position: 0,
+                label: "A".to_string(),
+            }],
+            is_required: true,
+        }
+        .try_into();
+
+        assert!(result.is_err());
     }
 }
 

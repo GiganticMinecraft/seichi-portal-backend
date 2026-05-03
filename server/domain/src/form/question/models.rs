@@ -50,18 +50,98 @@ impl Choice {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
-pub struct Question {
+pub struct QuestionDefinition {
     #[serde(default)]
-    pub id: Option<QuestionId>,
-    pub form_id: FormId,
-    pub template_key: NonEmptyString,
-    pub position: u16,
-    pub title: NonEmptyString,
-    pub description: Option<NonEmptyString>,
-    pub question_type: QuestionType,
-    #[serde(default)]
-    pub choices: Option<NonEmptyVec<Choice>>,
-    pub is_required: bool,
+    id: Option<QuestionId>,
+    form_id: FormId,
+    template_key: NonEmptyString,
+    position: u16,
+    title: NonEmptyString,
+    description: Option<NonEmptyString>,
+    is_required: bool,
+}
+
+impl QuestionDefinition {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: Option<QuestionId>,
+        form_id: FormId,
+        template_key: NonEmptyString,
+        position: u16,
+        title: NonEmptyString,
+        description: Option<NonEmptyString>,
+        is_required: bool,
+    ) -> Self {
+        Self {
+            id,
+            form_id,
+            template_key,
+            position,
+            title,
+            description,
+            is_required,
+        }
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
+pub struct TextQuestion {
+    #[serde(flatten)]
+    definition: QuestionDefinition,
+}
+
+impl TextQuestion {
+    pub fn new(definition: QuestionDefinition) -> Self {
+        Self { definition }
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
+pub struct SelectQuestion {
+    #[serde(flatten)]
+    definition: QuestionDefinition,
+    choices: NonEmptyVec<Choice>,
+}
+
+impl SelectQuestion {
+    pub fn try_new(
+        definition: QuestionDefinition,
+        choices: NonEmptyVec<Choice>,
+    ) -> Result<Self, DomainError> {
+        let choice_positions = choices
+            .iter()
+            .map(|choice| choice.position)
+            .collect::<BTreeSet<_>>();
+
+        if choice_positions.len() != choices.len()
+            || choice_positions
+                .into_iter()
+                .enumerate()
+                .any(|(index, position)| position != index as u16)
+        {
+            return Err(DomainError::InvalidEntity {
+                message: format!(
+                    "choice.position must be contiguous from 0 for question {}",
+                    definition.template_key.as_str()
+                ),
+            });
+        }
+
+        Ok(Self {
+            definition,
+            choices,
+        })
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum Question {
+    Text(TextQuestion),
+    SingleChoice(SelectQuestion),
+    MultipleChoice(SelectQuestion),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -71,7 +151,7 @@ impl QuestionSet {
     pub fn try_new(questions: Vec<Question>) -> Result<Self, DomainError> {
         let positions = questions
             .iter()
-            .map(|question| question.position)
+            .map(|question| question.position())
             .collect::<BTreeSet<_>>();
         if positions.len() != questions.len()
             || positions
@@ -86,7 +166,7 @@ impl QuestionSet {
 
         let template_keys = questions
             .iter()
-            .map(|question| question.template_key.as_str())
+            .map(|question| question.template_key().as_str())
             .collect::<BTreeSet<_>>();
         if template_keys.len() != questions.len() {
             return Err(DomainError::InvalidEntity {
@@ -112,30 +192,74 @@ impl QuestionSet {
 
 impl Question {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn new_text(
         id: Option<QuestionId>,
         form_id: FormId,
         template_key: NonEmptyString,
         position: u16,
         title: NonEmptyString,
         description: Option<NonEmptyString>,
-        question_type: QuestionType,
-        choices: Option<NonEmptyVec<Choice>>,
         is_required: bool,
     ) -> Result<Self, DomainError> {
-        let question = Self {
+        Ok(Self::Text(TextQuestion::new(QuestionDefinition::new(
             id,
             form_id,
             template_key,
             position,
             title,
             description,
-            question_type,
-            choices,
             is_required,
-        };
-        question.validate()?;
-        Ok(question)
+        ))))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_single_choice(
+        id: Option<QuestionId>,
+        form_id: FormId,
+        template_key: NonEmptyString,
+        position: u16,
+        title: NonEmptyString,
+        description: Option<NonEmptyString>,
+        choices: NonEmptyVec<Choice>,
+        is_required: bool,
+    ) -> Result<Self, DomainError> {
+        Ok(Self::SingleChoice(SelectQuestion::try_new(
+            QuestionDefinition::new(
+                id,
+                form_id,
+                template_key,
+                position,
+                title,
+                description,
+                is_required,
+            ),
+            choices,
+        )?))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_multiple_choice(
+        id: Option<QuestionId>,
+        form_id: FormId,
+        template_key: NonEmptyString,
+        position: u16,
+        title: NonEmptyString,
+        description: Option<NonEmptyString>,
+        choices: NonEmptyVec<Choice>,
+        is_required: bool,
+    ) -> Result<Self, DomainError> {
+        Ok(Self::MultipleChoice(SelectQuestion::try_new(
+            QuestionDefinition::new(
+                id,
+                form_id,
+                template_key,
+                position,
+                title,
+                description,
+                is_required,
+            ),
+            choices,
+        )?))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -150,58 +274,110 @@ impl Question {
         choices: Option<NonEmptyVec<Choice>>,
         is_required: bool,
     ) -> Result<Self, DomainError> {
-        Self::new(
-            id,
-            form_id,
-            template_key,
-            position,
-            title,
-            description,
-            question_type,
-            choices,
-            is_required,
-        )
-    }
-
-    fn validate(&self) -> Result<(), DomainError> {
-        let choice_positions = self
-            .choices
-            .iter()
-            .flat_map(|choices| choices.iter().map(|choice| choice.position))
-            .collect::<BTreeSet<_>>();
-
-        match self.question_type {
+        match question_type {
             QuestionType::Text => {
-                if self.choices.is_some() {
+                if choices.is_some() {
                     return Err(DomainError::InvalidEntity {
                         message: "text question must not have choices".to_string(),
                     });
                 }
+                Self::new_text(
+                    id,
+                    form_id,
+                    template_key,
+                    position,
+                    title,
+                    description,
+                    is_required,
+                )
             }
-            QuestionType::SingleChoice | QuestionType::MultipleChoice => {
-                let Some(choices) = &self.choices else {
+            QuestionType::SingleChoice => {
+                let Some(choices) = choices else {
                     return Err(DomainError::InvalidEntity {
                         message: "choice question must have at least one choice".to_string(),
                     });
                 };
-
-                if choice_positions.len() != choices.len()
-                    || choice_positions
-                        .into_iter()
-                        .enumerate()
-                        .any(|(index, position)| position != index as u16)
-                {
+                Self::new_single_choice(
+                    id,
+                    form_id,
+                    template_key,
+                    position,
+                    title,
+                    description,
+                    choices,
+                    is_required,
+                )
+            }
+            QuestionType::MultipleChoice => {
+                let Some(choices) = choices else {
                     return Err(DomainError::InvalidEntity {
-                        message: format!(
-                            "choice.position must be contiguous from 0 for question {}",
-                            self.template_key.as_str()
-                        ),
+                        message: "choice question must have at least one choice".to_string(),
                     });
-                }
+                };
+                Self::new_multiple_choice(
+                    id,
+                    form_id,
+                    template_key,
+                    position,
+                    title,
+                    description,
+                    choices,
+                    is_required,
+                )
             }
         }
+    }
 
-        Ok(())
+    pub fn definition(&self) -> &QuestionDefinition {
+        match self {
+            Self::Text(question) => &question.definition,
+            Self::SingleChoice(question) | Self::MultipleChoice(question) => &question.definition,
+        }
+    }
+
+    pub fn id(&self) -> Option<QuestionId> {
+        *self.definition().id()
+    }
+
+    pub fn form_id(&self) -> &FormId {
+        self.definition().form_id()
+    }
+
+    pub fn template_key(&self) -> &NonEmptyString {
+        self.definition().template_key()
+    }
+
+    pub fn position(&self) -> u16 {
+        *self.definition().position()
+    }
+
+    pub fn title(&self) -> &NonEmptyString {
+        self.definition().title()
+    }
+
+    pub fn description(&self) -> Option<&NonEmptyString> {
+        self.definition().description().as_ref()
+    }
+
+    pub fn is_required(&self) -> bool {
+        *self.definition().is_required()
+    }
+
+    pub fn question_type(&self) -> QuestionType {
+        match self {
+            Self::Text(_) => QuestionType::Text,
+            Self::SingleChoice(_) => QuestionType::SingleChoice,
+            Self::MultipleChoice(_) => QuestionType::MultipleChoice,
+        }
+    }
+
+    pub fn choices(&self) -> Option<&NonEmptyVec<Choice>> {
+        match self {
+            Self::Text(_) => None,
+            Self::SingleChoice(question) | Self::MultipleChoice(question) => {
+                Some(&question.choices)
+            }
+        }
     }
 }
 
@@ -287,7 +463,7 @@ mod test {
 
     #[test]
     fn text_question_rejects_choices() {
-        let result = Question::new(
+        let result = Question::from_raw_parts(
             Some(1.into()),
             FormId::from(Uuid::nil()),
             "template".to_string().try_into().unwrap(),
@@ -308,29 +484,82 @@ mod test {
     }
 
     #[test]
+    fn text_question_has_no_choices() {
+        let question = Question::new_text(
+            Some(1.into()),
+            FormId::from(Uuid::nil()),
+            "template".to_string().try_into().unwrap(),
+            0,
+            "Question".to_string().try_into().unwrap(),
+            None,
+            true,
+        )
+        .unwrap();
+
+        assert!(matches!(question, Question::Text(_)));
+        assert!(question.choices().is_none());
+    }
+
+    #[test]
+    fn single_choice_question_requires_contiguous_choice_positions() {
+        let result = Question::new_single_choice(
+            Some(1.into()),
+            FormId::from(Uuid::nil()),
+            "template".to_string().try_into().unwrap(),
+            0,
+            "Question".to_string().try_into().unwrap(),
+            None,
+            NonEmptyVec::try_new(vec![
+                Choice::new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
+                Choice::new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
+            ])
+            .unwrap(),
+            true,
+        );
+
+        assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
+    }
+
+    #[test]
+    fn multiple_choice_question_requires_contiguous_choice_positions() {
+        let result = Question::new_multiple_choice(
+            Some(1.into()),
+            FormId::from(Uuid::nil()),
+            "template".to_string().try_into().unwrap(),
+            0,
+            "Question".to_string().try_into().unwrap(),
+            None,
+            NonEmptyVec::try_new(vec![
+                Choice::new(None, 1, "A".to_string().try_into().unwrap()).unwrap(),
+                Choice::new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
+            ])
+            .unwrap(),
+            true,
+        );
+
+        assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
+    }
+
+    #[test]
     fn question_set_accepts_unique_template_keys_and_contiguous_positions() {
         let form_id = FormId::from(Uuid::nil());
         let questions = vec![
-            Question::new(
+            Question::new_text(
                 Some(1.into()),
                 form_id,
                 "first".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
                 None,
-                QuestionType::Text,
-                None,
                 true,
             )
             .unwrap(),
-            Question::new(
+            Question::new_text(
                 Some(2.into()),
                 form_id,
                 "second".to_string().try_into().unwrap(),
                 1,
                 "Question 2".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
                 None,
                 false,
             )
@@ -346,26 +575,22 @@ mod test {
     fn question_set_rejects_duplicate_position() {
         let form_id = FormId::from(Uuid::nil());
         let questions = vec![
-            Question::new(
+            Question::new_text(
                 Some(1.into()),
                 form_id,
                 "first".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
                 None,
-                QuestionType::Text,
-                None,
                 true,
             )
             .unwrap(),
-            Question::new(
+            Question::new_text(
                 Some(2.into()),
                 form_id,
                 "second".to_string().try_into().unwrap(),
                 0,
                 "Question 2".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
                 None,
                 false,
             )
@@ -382,26 +607,22 @@ mod test {
     fn question_set_rejects_non_contiguous_position() {
         let form_id = FormId::from(Uuid::nil());
         let questions = vec![
-            Question::new(
+            Question::new_text(
                 Some(1.into()),
                 form_id,
                 "first".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
                 None,
-                QuestionType::Text,
-                None,
                 true,
             )
             .unwrap(),
-            Question::new(
+            Question::new_text(
                 Some(2.into()),
                 form_id,
                 "second".to_string().try_into().unwrap(),
                 2,
                 "Question 2".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
                 None,
                 false,
             )
@@ -418,26 +639,22 @@ mod test {
     fn question_set_rejects_duplicate_template_keys() {
         let form_id = FormId::from(Uuid::nil());
         let questions = vec![
-            Question::new(
+            Question::new_text(
                 Some(1.into()),
                 form_id,
                 "same".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
                 None,
-                QuestionType::Text,
-                None,
                 true,
             )
             .unwrap(),
-            Question::new(
+            Question::new_text(
                 Some(2.into()),
                 form_id,
                 "same".to_string().try_into().unwrap(),
                 1,
                 "Question 2".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
                 None,
                 false,
             )

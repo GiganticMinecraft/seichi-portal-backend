@@ -46,8 +46,8 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
                     .iter()
                     .filter_map(|question| {
                         question
-                            .id
-                            .map(|id| (id.into_inner(), question.template_key.as_str()))
+                            .id()
+                            .map(|id| (id.into_inner(), question.template_key().as_str()))
                     })
                     .collect::<HashMap<_, _>>();
                 let answers_by_template_key = answers

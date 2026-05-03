@@ -375,18 +375,57 @@ pub async fn update_form_handler(
                             )
                         })
                         .collect::<Result<Vec<_>, _>>()?;
-                    domain::form::question::models::Question::new(
-                        question.id,
-                        form_id,
-                        question.template_key,
-                        question.position,
-                        question.title,
-                        question.description,
-                        question.question_type,
-                        (!choices.is_empty())
-                            .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices")),
-                        question.is_required,
-                    )
+                    let choices = (!choices.is_empty())
+                        .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"));
+                    match question.question_type {
+                        domain::form::question::models::QuestionType::Text => {
+                            domain::form::question::models::Question::from_raw_parts(
+                                question.id,
+                                form_id,
+                                question.template_key,
+                                question.position,
+                                question.title,
+                                question.description,
+                                question.question_type,
+                                choices,
+                                question.is_required,
+                            )
+                        }
+                        domain::form::question::models::QuestionType::SingleChoice => {
+                            domain::form::question::models::Question::new_single_choice(
+                                question.id,
+                                form_id,
+                                question.template_key,
+                                question.position,
+                                question.title,
+                                question.description,
+                                choices.ok_or_else(|| {
+                                    errors::domain::DomainError::InvalidEntity {
+                                        message: "choice question must have at least one choice"
+                                            .to_string(),
+                                    }
+                                })?,
+                                question.is_required,
+                            )
+                        }
+                        domain::form::question::models::QuestionType::MultipleChoice => {
+                            domain::form::question::models::Question::new_multiple_choice(
+                                question.id,
+                                form_id,
+                                question.template_key,
+                                question.position,
+                                question.title,
+                                question.description,
+                                choices.ok_or_else(|| {
+                                    errors::domain::DomainError::InvalidEntity {
+                                        message: "choice question must have at least one choice"
+                                            .to_string(),
+                                    }
+                                })?,
+                                question.is_required,
+                            )
+                        }
+                    }
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(QuestionSet::try_new)
