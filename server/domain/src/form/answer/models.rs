@@ -79,12 +79,12 @@ impl PostedAnswerContents {
                         .choices
                         .iter()
                         .flat_map(|choices| choices.iter())
-                        .any(|choice| choice.label == answer.answer)
+                        .any(|choice| choice.label.as_str() == answer.answer.as_str())
                         .then_some(())
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "answer for question {} must match one of the available choices",
-                                question.template_key
+                                question.template_key.as_str()
                             ),
                         }),
                     QuestionType::MultipleChoice => {
@@ -95,13 +95,13 @@ impl PostedAnswerContents {
                                     .choices
                                     .iter()
                                     .flat_map(|choices| choices.iter())
-                                    .any(|choice| choice.label == *value)
+                                    .any(|choice| choice.label.as_str() == value.as_str())
                             }))
                         .then_some(())
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "answer for question {} must reference only existing choices",
-                                question.template_key
+                                question.template_key.as_str()
                             ),
                         })
                     }
@@ -121,7 +121,7 @@ impl PostedAnswerContents {
             return Err(DomainError::InvalidEntity {
                 message: format!(
                     "required question {} is missing",
-                    missing_question.template_key
+                    missing_question.template_key.as_str()
                 ),
             });
         }
@@ -273,9 +273,9 @@ mod tests {
         Question::new(
             Some(QuestionId::from(1)),
             FormId::from(Uuid::nil()),
-            "name".to_string(),
+            "name".to_string().try_into().unwrap(),
             0,
-            "Name".to_string(),
+            "Name".to_string().try_into().unwrap(),
             None,
             QuestionType::Text,
             None,
@@ -288,15 +288,16 @@ mod tests {
         Question::new(
             Some(QuestionId::from(2)),
             FormId::from(Uuid::nil()),
-            "role".to_string(),
+            "role".to_string().try_into().unwrap(),
             1,
-            "Role".to_string(),
+            "Role".to_string().try_into().unwrap(),
             None,
             QuestionType::SingleChoice,
             Some(
                 NonEmptyVec::try_new(vec![
-                    Choice::new(Some(1.into()), 0, "Admin".to_string()).unwrap(),
-                    Choice::new(Some(2.into()), 1, "User".to_string()).unwrap(),
+                    Choice::new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap())
+                        .unwrap(),
+                    Choice::new(Some(2.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
                 ])
                 .unwrap(),
             ),
@@ -309,15 +310,20 @@ mod tests {
         Question::new(
             Some(QuestionId::from(3)),
             FormId::from(Uuid::nil()),
-            "tags".to_string(),
+            "tags".to_string().try_into().unwrap(),
             2,
-            "Tags".to_string(),
+            "Tags".to_string().try_into().unwrap(),
             None,
             QuestionType::MultipleChoice,
             Some(
                 NonEmptyVec::try_new(vec![
-                    Choice::new(Some(3.into()), 0, "Admin, Owner".to_string()).unwrap(),
-                    Choice::new(Some(4.into()), 1, "User".to_string()).unwrap(),
+                    Choice::new(
+                        Some(3.into()),
+                        0,
+                        "Admin, Owner".to_string().try_into().unwrap(),
+                    )
+                    .unwrap(),
+                    Choice::new(Some(4.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
                 ])
                 .unwrap(),
             ),

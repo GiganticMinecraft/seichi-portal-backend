@@ -35,7 +35,7 @@ impl TryFrom<ChoiceDto> for Choice {
             label,
         }: ChoiceDto,
     ) -> Result<Self, Self::Error> {
-        Choice::from_raw_parts(id.map(Into::into), position, label).map_err(Into::into)
+        Choice::from_raw_parts(id.map(Into::into), position, label.try_into()?).map_err(Into::into)
     }
 }
 
@@ -71,10 +71,10 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
         Question::from_raw_parts(
             id.map(Into::into),
             FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
-            template_key,
+            template_key.try_into()?,
             position,
-            title,
-            description,
+            title.try_into()?,
+            description.map(TryInto::try_into).transpose()?,
             QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
             choices
                 .into_iter()
