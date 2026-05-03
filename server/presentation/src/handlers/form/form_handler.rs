@@ -489,9 +489,7 @@ fn into_domain_choices(
 
     let choices = choices
         .into_iter()
-        .map(|choice| {
-            domain::form::question::models::Choice::new(choice.id, choice.position, choice.label)
-        })
+        .map(TryInto::try_into)
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok((!choices.is_empty()).then(|| NonEmptyVec::try_new(choices).expect("non-empty choices")))
