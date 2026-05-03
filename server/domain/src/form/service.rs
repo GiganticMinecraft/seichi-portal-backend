@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use crate::{
     form::{
         answer::{
-            models::{AnswerTitle, FormAnswerContent},
+            models::{AnswerTitle, PostedAnswerContents},
             settings::models::DefaultAnswerTitle,
         },
         models::FormId,
@@ -33,10 +33,10 @@ pub struct DefaultAnswerTitleDomainService<
 impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: AnswerRepository>
     DefaultAnswerTitleDomainService<'_, FormRepo, QuestionRepo, AnswerRepo>
 {
-    fn generate_embedded_answer_title(
+    pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
         questions: &[Question],
-        answers: &[FormAnswerContent],
+        answers: &PostedAnswerContents,
         actor: &User,
     ) -> Result<AnswerTitle, Error> {
         match default_answer_title.into_inner() {
@@ -51,6 +51,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
                     })
                     .collect::<HashMap<_, _>>();
                 let answers_by_template_key = answers
+                    .as_slice()
                     .iter()
                     .filter_map(|answer| {
                         question_template_key_by_id
@@ -81,7 +82,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
         &self,
         actor: &User,
         form_id: FormId,
-        answers: &[FormAnswerContent],
+        answers: &PostedAnswerContents,
     ) -> Result<AnswerTitle, Error> {
         let form = self
             .form_repo
@@ -103,7 +104,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
             .map(|question| question.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Self::generate_embedded_answer_title(default_answer_title, &questions, answers, actor)
+        Self::to_answer_title_from_questions(default_answer_title, &questions, answers, actor)
     }
 }
 
@@ -177,23 +178,27 @@ mod tests {
             )
             .unwrap(),
         ];
-        let answers = vec![
-            FormAnswerContent {
-                id: FormAnswerContentId::new(),
-                question_id: first_question_id,
-                answer: "Answer1".to_string(),
-            },
-            FormAnswerContent {
-                id: FormAnswerContentId::new(),
-                question_id: second_question_id,
-                answer: "Answer2".to_string(),
-            },
-            FormAnswerContent {
-                id: FormAnswerContentId::new(),
-                question_id: third_question_id,
-                answer: "Answer3".to_string(),
-            },
-        ];
+        let answers = PostedAnswerContents::try_new(
+            questions.as_slice(),
+            vec![
+                FormAnswerContent {
+                    id: FormAnswerContentId::new(),
+                    question_id: first_question_id,
+                    answer: "Answer1".to_string(),
+                },
+                FormAnswerContent {
+                    id: FormAnswerContentId::new(),
+                    question_id: second_question_id,
+                    answer: "Answer2".to_string(),
+                },
+                FormAnswerContent {
+                    id: FormAnswerContentId::new(),
+                    question_id: third_question_id,
+                    answer: "Answer3".to_string(),
+                },
+            ],
+        )
+        .unwrap();
 
         let actor = User {
             name: "respondent_name".to_string(),
@@ -205,10 +210,10 @@ mod tests {
             MockFormRepository,
             MockQuestionRepository,
             MockAnswerRepository,
-        >::generate_embedded_answer_title(
+        >::to_answer_title_from_questions(
             default_answer_title,
             questions.as_slice(),
-            answers.as_slice(),
+            &answers,
             &actor,
         )
         .unwrap();

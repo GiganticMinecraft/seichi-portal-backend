@@ -1,13 +1,18 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
+use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    form::{models::FormId, question::models::QuestionId},
+    form::{
+        models::FormId,
+        question::models::{Question, QuestionId, QuestionType},
+    },
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role, User},
 };
@@ -27,11 +32,110 @@ impl AnswerTitle {
 
 pub type FormAnswerContentId = types::Id<FormAnswerContent>;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct FormAnswerContent {
     pub id: FormAnswerContentId,
     pub question_id: QuestionId,
     pub answer: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PostedAnswerContents(Vec<FormAnswerContent>);
+
+impl PostedAnswerContents {
+    pub fn try_new(
+        questions: &[Question],
+        contents: Vec<FormAnswerContent>,
+    ) -> Result<Self, DomainError> {
+        let questions_by_id = questions
+            .iter()
+            .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+            .collect::<HashMap<_, _>>();
+        let answered_question_ids = contents
+            .iter()
+            .map(|answer| answer.question_id.into_inner())
+            .collect::<BTreeSet<_>>();
+
+        if answered_question_ids.len() != contents.len() {
+            return Err(DomainError::InvalidEntity {
+                message: "duplicate answer for the same question".to_string(),
+            });
+        }
+
+        if let Some(error) = contents.iter().find_map(|answer| {
+            let question = questions_by_id
+                .get(&answer.question_id.into_inner())
+                .ok_or_else(|| DomainError::InvalidEntity {
+                    message: format!(
+                        "question {} does not belong to the form",
+                        answer.question_id
+                    ),
+                });
+
+            question
+                .and_then(|question| match question.question_type {
+                    QuestionType::Text => Ok(()),
+                    QuestionType::SingleChoice => question
+                        .choices
+                        .iter()
+                        .flat_map(|choices| choices.iter())
+                        .any(|choice| choice.label == answer.answer)
+                        .then_some(())
+                        .ok_or_else(|| DomainError::InvalidEntity {
+                            message: format!(
+                                "answer for question {} must match one of the available choices",
+                                question.template_key
+                            ),
+                        }),
+                    QuestionType::MultipleChoice => {
+                        let values = parse_multiple_choice_answer(&answer.answer);
+                        (!values.is_empty()
+                            && values.iter().all(|value| {
+                                question
+                                    .choices
+                                    .iter()
+                                    .flat_map(|choices| choices.iter())
+                                    .any(|choice| choice.label == *value)
+                            }))
+                        .then_some(())
+                        .ok_or_else(|| DomainError::InvalidEntity {
+                            message: format!(
+                                "answer for question {} must reference only existing choices",
+                                question.template_key
+                            ),
+                        })
+                    }
+                })
+                .err()
+        }) {
+            return Err(error);
+        }
+
+        if let Some(missing_question) = questions
+            .iter()
+            .filter(|question| question.is_required)
+            .filter_map(|question| question.id.map(|id| (id.into_inner(), question)))
+            .find(|(question_id, _)| !answered_question_ids.contains(question_id))
+            .map(|(_, question)| question)
+        {
+            return Err(DomainError::InvalidEntity {
+                message: format!(
+                    "required question {} is missing",
+                    missing_question.template_key
+                ),
+            });
+        }
+
+        Ok(Self(contents))
+    }
+
+    pub fn as_slice(&self) -> &[FormAnswerContent] {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Vec<FormAnswerContent> {
+        self.0
+    }
 }
 
 #[derive(Serialize, Deserialize, Getters, PartialEq, Debug)]
@@ -50,7 +154,7 @@ impl AnswerEntry {
         user: User,
         form_id: FormId,
         title: AnswerTitle,
-        contents: Vec<FormAnswerContent>,
+        contents: PostedAnswerContents,
     ) -> Self {
         Self {
             id: AnswerId::new(),
@@ -58,7 +162,7 @@ impl AnswerEntry {
             timestamp: Utc::now(),
             form_id,
             title,
-            contents,
+            contents: contents.into_inner(),
         }
     }
 
@@ -131,5 +235,259 @@ impl AuthorizationGuardDefinitions for AnswerLabel {
 
     fn can_delete(&self, actor: &User) -> bool {
         actor.role == Role::Administrator
+    }
+}
+
+fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
+    let trimmed = answer.trim();
+    if trimmed.starts_with('[')
+        && trimmed.ends_with(']')
+        && let Ok(values) = serde_json::from_str::<Vec<String>>(trimmed)
+    {
+        return values
+            .into_iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect();
+    }
+
+    trimmed
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::form::{
+        models::FormId,
+        question::models::{Choice, QuestionType},
+    };
+    use types::non_empty_vec::NonEmptyVec;
+    use uuid::Uuid;
+
+    fn text_question() -> Question {
+        Question::new(
+            Some(QuestionId::from(1)),
+            FormId::from(Uuid::nil()),
+            "name".to_string(),
+            0,
+            "Name".to_string(),
+            None,
+            QuestionType::Text,
+            None,
+            true,
+        )
+        .unwrap()
+    }
+
+    fn single_choice_question() -> Question {
+        Question::new(
+            Some(QuestionId::from(2)),
+            FormId::from(Uuid::nil()),
+            "role".to_string(),
+            1,
+            "Role".to_string(),
+            None,
+            QuestionType::SingleChoice,
+            Some(
+                NonEmptyVec::try_new(vec![
+                    Choice::new(Some(1.into()), 0, "Admin".to_string()).unwrap(),
+                    Choice::new(Some(2.into()), 1, "User".to_string()).unwrap(),
+                ])
+                .unwrap(),
+            ),
+            true,
+        )
+        .unwrap()
+    }
+
+    fn multiple_choice_question() -> Question {
+        Question::new(
+            Some(QuestionId::from(3)),
+            FormId::from(Uuid::nil()),
+            "tags".to_string(),
+            2,
+            "Tags".to_string(),
+            None,
+            QuestionType::MultipleChoice,
+            Some(
+                NonEmptyVec::try_new(vec![
+                    Choice::new(Some(3.into()), 0, "Admin, Owner".to_string()).unwrap(),
+                    Choice::new(Some(4.into()), 1, "User".to_string()).unwrap(),
+                ])
+                .unwrap(),
+            ),
+            false,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn posted_answer_contents_rejects_duplicate_question_ids() {
+        let questions = vec![text_question()];
+        let answers = vec![
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Alice".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Bob".to_string(),
+            },
+        ];
+
+        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+    }
+
+    #[test]
+    fn posted_answer_contents_rejects_question_outside_form() {
+        let questions = vec![text_question()];
+        let answers = vec![FormAnswerContent {
+            id: FormAnswerContentId::new(),
+            question_id: QuestionId::from(999),
+            answer: "Alice".to_string(),
+        }];
+
+        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+    }
+
+    #[test]
+    fn posted_answer_contents_rejects_invalid_single_choice() {
+        let questions = vec![text_question(), single_choice_question()];
+        let answers = vec![
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Alice".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(2),
+                answer: "Guest".to_string(),
+            },
+        ];
+
+        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+    }
+
+    #[test]
+    fn posted_answer_contents_rejects_invalid_multiple_choice_values() {
+        let questions = vec![
+            text_question(),
+            single_choice_question(),
+            multiple_choice_question(),
+        ];
+        let answers = vec![
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Alice".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(2),
+                answer: "Admin".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(3),
+                answer: r#"["Admin","Guest"]"#.to_string(),
+            },
+        ];
+
+        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+    }
+
+    #[test]
+    fn posted_answer_contents_rejects_empty_multiple_choice_values() {
+        let questions = vec![
+            text_question(),
+            single_choice_question(),
+            multiple_choice_question(),
+        ];
+        let answers = vec![
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Alice".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(2),
+                answer: "Admin".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(3),
+                answer: "[]".to_string(),
+            },
+        ];
+
+        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+    }
+
+    #[test]
+    fn posted_answer_contents_rejects_missing_required_question() {
+        let questions = vec![text_question(), single_choice_question()];
+        let answers = vec![FormAnswerContent {
+            id: FormAnswerContentId::new(),
+            question_id: QuestionId::from(1),
+            answer: "Alice".to_string(),
+        }];
+
+        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+    }
+
+    #[test]
+    fn posted_answer_contents_preserves_valid_answers() {
+        let questions = vec![
+            text_question(),
+            single_choice_question(),
+            multiple_choice_question(),
+        ];
+        let answers = vec![
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(1),
+                answer: "Alice".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(2),
+                answer: "Admin".to_string(),
+            },
+            FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: QuestionId::from(3),
+                answer: r#"["Admin, Owner","User"]"#.to_string(),
+            },
+        ];
+
+        let posted_answers = PostedAnswerContents::try_new(&questions, answers.clone()).unwrap();
+
+        assert_eq!(posted_answers.as_slice(), answers.as_slice());
+        assert_eq!(posted_answers.into_inner(), answers);
+    }
+
+    #[test]
+    fn parse_multiple_choice_answer_accepts_json_with_commas_in_values() {
+        assert_eq!(
+            parse_multiple_choice_answer(r#"["Admin, Owner","User"]"#),
+            vec!["Admin, Owner".to_string(), "User".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_multiple_choice_answer_falls_back_to_legacy_csv_format() {
+        assert_eq!(
+            parse_multiple_choice_answer("Admin, User"),
+            vec!["Admin".to_string(), "User".to_string()]
+        );
     }
 }
