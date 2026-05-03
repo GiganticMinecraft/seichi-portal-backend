@@ -19,14 +19,10 @@ command = "cargo"
 args = ["test", "--doc"]
 
 [tasks.nextest]
-script_runner = "@shell"
-script = """
-if ! cargo nextest --version >/dev/null 2>&1; then
-  cargo install --locked cargo-nextest
-fi
-
-cargo nextest run
-"""
+install_crate = { crate_name = "cargo-nextest", binary = "cargo", test_arg = ["nextest", "--version"] }
+install_crate_args = ["--locked"]
+command = "cargo"
+args = ["nextest", "run"]
 
 [tasks.test]
 dependencies = ["nextest", "doctest"]
