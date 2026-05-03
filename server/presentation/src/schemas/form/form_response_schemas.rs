@@ -130,10 +130,10 @@ impl From<domain::form::question::models::Question> for QuestionResponseSchema {
         QuestionResponseSchema {
             id: val.id.map(|id| id.into_inner()),
             form_id: val.form_id.into_inner().to_string(),
-            template_key: val.template_key,
+            template_key: val.template_key.into_inner(),
             position: val.position,
-            title: val.title,
-            description: val.description,
+            title: val.title.into_inner(),
+            description: val.description.map(NonEmptyString::into_inner),
             question_type: val.question_type.to_string(),
             choices: val
                 .choices
@@ -159,7 +159,7 @@ impl From<Choice> for ChoiceResponseSchema {
         Self {
             id: val.id.map(|id| id.into_inner()),
             position: val.position,
-            label: val.label,
+            label: val.label.into_inner(),
         }
     }
 }

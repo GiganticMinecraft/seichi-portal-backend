@@ -190,7 +190,7 @@ impl<
                 return Err(DomainError::InvalidEntity {
                     message: format!(
                         "question.form_id must match the target form: {}",
-                        invalid_question.template_key
+                        invalid_question.template_key.as_str()
                     ),
                 }
                 .into());
@@ -326,7 +326,7 @@ fn validate_answered_form_question_update(
                     .ok_or_else(|| DomainError::InvalidEntity {
                         message: format!(
                             "cannot delete question {} from a form that already has answers",
-                            current_question.template_key
+                            current_question.template_key.as_str()
                         ),
                     });
 
@@ -337,7 +337,7 @@ fn validate_answered_form_question_update(
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "cannot change template_key for answered question {}",
-                                current_question.template_key
+                                current_question.template_key.as_str()
                             ),
                         })
                 })
@@ -347,7 +347,7 @@ fn validate_answered_form_question_update(
                         .ok_or_else(|| DomainError::InvalidEntity {
                             message: format!(
                                 "cannot change question_type for answered question {}",
-                                current_question.template_key
+                                current_question.template_key.as_str()
                             ),
                         })
                 })
@@ -377,7 +377,8 @@ fn validate_answered_form_question_update(
                         .map(|choice_id| DomainError::InvalidEntity {
                             message: format!(
                                 "cannot delete choice {} from answered question {}",
-                                choice_id, current_question.template_key
+                                choice_id,
+                                current_question.template_key.as_str()
                             ),
                         })
                         .map_or(Ok(()), Err)
@@ -424,7 +425,8 @@ fn validate_answered_form_question_update(
                         .map(|choice_id| DomainError::InvalidEntity {
                             message: format!(
                                 "cannot regenerate choice id {} for answered question {}",
-                                choice_id, updated_question.template_key
+                                choice_id,
+                                updated_question.template_key.as_str()
                             ),
                         })
                         .map_or(Ok(()), Err)

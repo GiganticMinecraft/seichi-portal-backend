@@ -28,7 +28,7 @@ pub struct NonEmptyString(String);
 
 impl NonEmptyString {
     pub fn try_new(value: String) -> Result<Self, ValidationError> {
-        if value.is_empty() {
+        if value.trim().is_empty() {
             return Err(EmptyValue);
         }
 
@@ -89,7 +89,7 @@ mod tests {
         fn non_empty_string(value in "\\PC*") {
             let result = NonEmptyString::try_new(value.clone());
 
-            if value.is_empty() {
+            if value.trim().is_empty() {
                 prop_assert_eq!(result, Err(EmptyValue));
             } else {
                 prop_assert_eq!(result, Ok(NonEmptyString(value)));
@@ -104,5 +104,12 @@ mod tests {
         let deserialized: NonEmptyString = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(value, deserialized);
+    }
+
+    #[test]
+    fn rejects_whitespace_only_string() {
+        let value = NonEmptyString::try_new("   \n\t".to_string());
+
+        assert_eq!(value, Err(EmptyValue));
     }
 }

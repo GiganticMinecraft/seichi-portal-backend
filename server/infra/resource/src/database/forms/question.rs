@@ -193,10 +193,15 @@ async fn upsert_existing_questions(
             query
                 .bind(question.id.map(|id| id.into_inner()))
                 .bind(form_id)
-                .bind(question.template_key.clone())
+                .bind(question.template_key.to_owned().into_inner())
                 .bind(question.position)
-                .bind(question.title.clone())
-                .bind(question.description.clone())
+                .bind(question.title.to_owned().into_inner())
+                .bind(
+                    question
+                        .description
+                        .to_owned()
+                        .map(|description| description.into_inner()),
+                )
                 .bind(question.question_type.to_string())
                 .bind(question.is_required)
         })
@@ -224,10 +229,15 @@ async fn insert_new_questions<'a>(
         .fold(query(&sql), |query, question| {
             query
                 .bind(form_id.to_owned().into_inner().to_string())
-                .bind(question.template_key.clone())
+                .bind(question.template_key.to_owned().into_inner())
                 .bind(question.position)
-                .bind(question.title.clone())
-                .bind(question.description.clone())
+                .bind(question.title.to_owned().into_inner())
+                .bind(
+                    question
+                        .description
+                        .to_owned()
+                        .map(|description| description.into_inner()),
+                )
                 .bind(question.question_type.to_string())
                 .bind(question.is_required)
         })
@@ -308,7 +318,7 @@ async fn sync_choices_for_questions(
                             id.into_inner(),
                             *question_id,
                             choice.position,
-                            choice.label.clone(),
+                            choice.label.to_owned().into_inner(),
                         )
                     })
                 })
@@ -325,7 +335,13 @@ async fn sync_choices_for_questions(
                 choices
                     .iter()
                     .filter(|choice| choice.id.is_none())
-                    .map(|choice| (*question_id, choice.position, choice.label.clone()))
+                    .map(|choice| {
+                        (
+                            *question_id,
+                            choice.position,
+                            choice.label.to_owned().into_inner(),
+                        )
+                    })
             })
         })
         .collect_vec();

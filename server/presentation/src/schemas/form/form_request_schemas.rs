@@ -113,19 +113,23 @@ pub struct ChoiceSchema {
     #[schema(value_type = Option<i32>)]
     pub id: Option<ChoiceId>,
     pub position: u16,
-    pub label: String,
+    #[schema(value_type = String)]
+    pub label: NonEmptyString,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct QuestionSchema {
     #[schema(value_type = Option<i32>)]
     pub id: Option<QuestionId>,
-    pub template_key: String,
+    #[schema(value_type = String)]
+    pub template_key: NonEmptyString,
     pub position: u16,
-    pub title: String,
+    #[schema(value_type = String)]
+    pub title: NonEmptyString,
     #[schema(value_type = String)]
     pub question_type: QuestionType,
-    pub description: Option<String>,
+    #[schema(value_type = Option<String>)]
+    pub description: Option<NonEmptyString>,
     #[serde(default)]
     pub choices: Vec<ChoiceSchema>,
     pub is_required: bool,

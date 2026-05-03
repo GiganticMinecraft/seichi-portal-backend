@@ -5,6 +5,7 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use strum_macros::EnumString;
+use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 
 use crate::{
@@ -22,36 +23,28 @@ pub struct Choice {
     #[serde(default)]
     pub id: Option<ChoiceId>,
     pub position: u16,
-    pub label: String,
+    pub label: NonEmptyString,
 }
 
 impl Choice {
-    pub fn new(id: Option<ChoiceId>, position: u16, label: String) -> Result<Self, DomainError> {
-        let choice = Self {
+    pub fn new(
+        id: Option<ChoiceId>,
+        position: u16,
+        label: NonEmptyString,
+    ) -> Result<Self, DomainError> {
+        Ok(Self {
             id,
             position,
             label,
-        };
-        choice.validate()?;
-        Ok(choice)
+        })
     }
 
     pub fn from_raw_parts(
         id: Option<ChoiceId>,
         position: u16,
-        label: String,
+        label: NonEmptyString,
     ) -> Result<Self, DomainError> {
         Self::new(id, position, label)
-    }
-
-    fn validate(&self) -> Result<(), DomainError> {
-        if self.label.trim().is_empty() {
-            return Err(DomainError::InvalidEntity {
-                message: "choice.label must not be empty".to_string(),
-            });
-        }
-
-        Ok(())
     }
 }
 
@@ -61,10 +54,10 @@ pub struct Question {
     #[serde(default)]
     pub id: Option<QuestionId>,
     pub form_id: FormId,
-    pub template_key: String,
+    pub template_key: NonEmptyString,
     pub position: u16,
-    pub title: String,
-    pub description: Option<String>,
+    pub title: NonEmptyString,
+    pub description: Option<NonEmptyString>,
     pub question_type: QuestionType,
     #[serde(default)]
     pub choices: Option<NonEmptyVec<Choice>>,
@@ -122,10 +115,10 @@ impl Question {
     pub fn new(
         id: Option<QuestionId>,
         form_id: FormId,
-        template_key: String,
+        template_key: NonEmptyString,
         position: u16,
-        title: String,
-        description: Option<String>,
+        title: NonEmptyString,
+        description: Option<NonEmptyString>,
         question_type: QuestionType,
         choices: Option<NonEmptyVec<Choice>>,
         is_required: bool,
@@ -149,10 +142,10 @@ impl Question {
     pub fn from_raw_parts(
         id: Option<QuestionId>,
         form_id: FormId,
-        template_key: String,
+        template_key: NonEmptyString,
         position: u16,
-        title: String,
-        description: Option<String>,
+        title: NonEmptyString,
+        description: Option<NonEmptyString>,
         question_type: QuestionType,
         choices: Option<NonEmptyVec<Choice>>,
         is_required: bool,
@@ -171,18 +164,6 @@ impl Question {
     }
 
     fn validate(&self) -> Result<(), DomainError> {
-        if self.template_key.trim().is_empty() {
-            return Err(DomainError::InvalidEntity {
-                message: "question.template_key must not be empty".to_string(),
-            });
-        }
-
-        if self.title.trim().is_empty() {
-            return Err(DomainError::InvalidEntity {
-                message: "question.title must not be empty".to_string(),
-            });
-        }
-
         let choice_positions = self
             .choices
             .iter()
@@ -213,7 +194,7 @@ impl Question {
                     return Err(DomainError::InvalidEntity {
                         message: format!(
                             "choice.position must be contiguous from 0 for question {}",
-                            self.template_key
+                            self.template_key.as_str()
                         ),
                     });
                 }
@@ -309,13 +290,16 @@ mod test {
         let result = Question::new(
             Some(1.into()),
             FormId::from(Uuid::nil()),
-            "template".to_string(),
+            "template".to_string().try_into().unwrap(),
             0,
-            "Question".to_string(),
+            "Question".to_string().try_into().unwrap(),
             None,
             QuestionType::Text,
             Some(
-                NonEmptyVec::try_new(vec![Choice::new(None, 0, "A".to_string()).unwrap()]).unwrap(),
+                NonEmptyVec::try_new(vec![
+                    Choice::new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
+                ])
+                .unwrap(),
             ),
             true,
         );
@@ -330,9 +314,9 @@ mod test {
             Question::new(
                 Some(1.into()),
                 form_id,
-                "first".to_string(),
+                "first".to_string().try_into().unwrap(),
                 0,
-                "Question 1".to_string(),
+                "Question 1".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
@@ -342,9 +326,9 @@ mod test {
             Question::new(
                 Some(2.into()),
                 form_id,
-                "second".to_string(),
+                "second".to_string().try_into().unwrap(),
                 1,
-                "Question 2".to_string(),
+                "Question 2".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
@@ -365,9 +349,9 @@ mod test {
             Question::new(
                 Some(1.into()),
                 form_id,
-                "first".to_string(),
+                "first".to_string().try_into().unwrap(),
                 0,
-                "Question 1".to_string(),
+                "Question 1".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
@@ -377,9 +361,9 @@ mod test {
             Question::new(
                 Some(2.into()),
                 form_id,
-                "second".to_string(),
+                "second".to_string().try_into().unwrap(),
                 0,
-                "Question 2".to_string(),
+                "Question 2".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
@@ -401,9 +385,9 @@ mod test {
             Question::new(
                 Some(1.into()),
                 form_id,
-                "first".to_string(),
+                "first".to_string().try_into().unwrap(),
                 0,
-                "Question 1".to_string(),
+                "Question 1".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
@@ -413,9 +397,9 @@ mod test {
             Question::new(
                 Some(2.into()),
                 form_id,
-                "second".to_string(),
+                "second".to_string().try_into().unwrap(),
                 2,
-                "Question 2".to_string(),
+                "Question 2".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
@@ -437,9 +421,9 @@ mod test {
             Question::new(
                 Some(1.into()),
                 form_id,
-                "same".to_string(),
+                "same".to_string().try_into().unwrap(),
                 0,
-                "Question 1".to_string(),
+                "Question 1".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
@@ -449,9 +433,9 @@ mod test {
             Question::new(
                 Some(2.into()),
                 form_id,
-                "same".to_string(),
+                "same".to_string().try_into().unwrap(),
                 1,
-                "Question 2".to_string(),
+                "Question 2".to_string().try_into().unwrap(),
                 None,
                 QuestionType::Text,
                 None,
