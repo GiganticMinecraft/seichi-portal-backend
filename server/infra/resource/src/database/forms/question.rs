@@ -226,66 +226,30 @@ async fn temporarily_relocate_existing_questions(
             .map(|question| question.template_key.clone())
             .collect_vec(),
     );
-    let temporary_questions = existing_questions
-        .into_iter()
-        .map(|question| {
-            question
-                .position
-                .checked_add(position_offset)
-                .map(|temporary_position| {
-                    (
-                        question.question_id,
-                        format!("{temporary_prefix}{}", question.question_id),
-                        temporary_position,
-                    )
-                })
-                .ok_or_else(|| InfraError::Unexpected {
-                    cause: format!(
-                        "temporary position overflow for question_id {}",
-                        question.question_id
-                    ),
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    existing_questions.iter().try_for_each(|question| {
+        question
+            .position
+            .checked_add(position_offset)
+            .ok_or_else(|| InfraError::Unexpected {
+                cause: format!(
+                    "temporary position overflow for question_id {}",
+                    question.question_id
+                ),
+            })
+            .map(|_| ())
+    })?;
 
-    let template_key_cases = temporary_questions
-        .iter()
-        .map(|_| "WHEN ? THEN ?".to_string())
-        .join(" ");
-    let position_cases = temporary_questions
-        .iter()
-        .map(|_| "WHEN ? THEN ?")
-        .join(" ");
-    let question_ids = temporary_questions
-        .iter()
-        .map(|(question_id, _, _)| *question_id)
-        .collect_vec();
-    let where_placeholders = std::iter::repeat_n("?", question_ids.len()).join(", ");
-    let sql = format!(
-        "UPDATE form_questions \
-         SET template_key = CASE question_id {template_key_cases} END, \
-         position = CASE question_id {position_cases} END \
-         WHERE question_id IN ({where_placeholders})"
-    );
-
-    temporary_questions
-        .iter()
-        .fold(
-            query(&sql),
-            |query, (question_id, temporary_template_key, _)| {
-                query.bind(question_id).bind(temporary_template_key)
-            },
-        )
-        .bind_all(
-            temporary_questions
-                .iter()
-                .flat_map(|(question_id, _, temporary_position)| {
-                    [*question_id, i32::from(*temporary_position)]
-                }),
-        )
-        .bind_all(question_ids)
-        .execute(&mut *txn)
-        .await?;
+    sqlx::query(
+        "UPDATE form_questions
+         SET template_key = CONCAT(?, question_id),
+             position = position + ?
+         WHERE form_id = ?",
+    )
+    .bind(temporary_prefix)
+    .bind(position_offset)
+    .bind(form_id)
+    .execute(&mut *txn)
+    .await?;
 
     Ok(())
 }
