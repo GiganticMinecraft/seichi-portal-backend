@@ -6,7 +6,11 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::IntoResponse,
 };
-use domain::{form::models::FormId, repository::Repositories, user::models::User};
+use domain::{
+    form::{models::FormId, question::models::QuestionSet},
+    repository::Repositories,
+    user::models::User,
+};
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -385,6 +389,7 @@ pub async fn update_form_handler(
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()
+                .and_then(QuestionSet::try_new)
         })
         .transpose()
         .map_err(errors::Error::from)

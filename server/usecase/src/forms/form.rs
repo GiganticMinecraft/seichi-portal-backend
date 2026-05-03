@@ -1,4 +1,4 @@
-use domain::form::question::models::Question;
+use domain::form::question::models::{Question, QuestionSet};
 use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
@@ -163,7 +163,7 @@ impl<
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
-        questions: Option<Vec<Question>>,
+        questions: Option<QuestionSet>,
     ) -> Result<(Form, Vec<Question>, Vec<FormLabel>), Error> {
         let current_form = self
             .form_repository
@@ -179,8 +179,6 @@ impl<
             .collect::<Result<Vec<_>, _>>()?;
 
         if let Some(questions) = &questions {
-            Question::validate_set(questions)?;
-
             let existing_question_ids = current_questions
                 .iter()
                 .filter_map(|question| question.id.map(|id| id.into_inner()))
@@ -214,7 +212,7 @@ impl<
                 .await?
                 .is_empty();
             if has_answers {
-                validate_answered_form_question_update(&current_questions, questions)?;
+                validate_answered_form_question_update(&current_questions, questions.as_slice())?;
             }
         }
 
@@ -267,7 +265,7 @@ impl<
                 .put_questions(
                     actor,
                     form_id,
-                    questions.into_iter().map(Into::into).collect(),
+                    questions.into_inner().into_iter().map(Into::into).collect(),
                 )
                 .await?;
         }

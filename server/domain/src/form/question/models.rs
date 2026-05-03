@@ -71,6 +71,52 @@ pub struct Question {
     pub is_required: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct QuestionSet(Vec<Question>);
+
+impl QuestionSet {
+    pub fn try_new(questions: Vec<Question>) -> Result<Self, DomainError> {
+        let positions = questions
+            .iter()
+            .map(|question| question.position)
+            .collect::<BTreeSet<_>>();
+        if positions.len() != questions.len()
+            || positions
+                .into_iter()
+                .enumerate()
+                .any(|(index, position)| position != index as u16)
+        {
+            return Err(DomainError::InvalidEntity {
+                message: "question.position must be contiguous from 0".to_string(),
+            });
+        }
+
+        let template_keys = questions
+            .iter()
+            .map(|question| question.template_key.as_str())
+            .collect::<BTreeSet<_>>();
+        if template_keys.len() != questions.len() {
+            return Err(DomainError::InvalidEntity {
+                message: "question.template_key must be unique within a form".to_string(),
+            });
+        }
+
+        Ok(Self(questions))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Question> {
+        self.0.iter()
+    }
+
+    pub fn as_slice(&self) -> &[Question] {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Vec<Question> {
+        self.0
+    }
+}
+
 impl Question {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -122,35 +168,6 @@ impl Question {
             choices,
             is_required,
         )
-    }
-
-    pub fn validate_set(questions: &[Question]) -> Result<(), DomainError> {
-        let positions = questions
-            .iter()
-            .map(|question| question.position)
-            .collect::<BTreeSet<_>>();
-        if positions.len() != questions.len()
-            || positions
-                .into_iter()
-                .enumerate()
-                .any(|(index, position)| position != index as u16)
-        {
-            return Err(DomainError::InvalidEntity {
-                message: "question.position must be contiguous from 0".to_string(),
-            });
-        }
-
-        let template_keys = questions
-            .iter()
-            .map(|question| question.template_key.as_str())
-            .collect::<BTreeSet<_>>();
-        if template_keys.len() != questions.len() {
-            return Err(DomainError::InvalidEntity {
-                message: "question.template_key must be unique within a form".to_string(),
-            });
-        }
-
-        Ok(())
     }
 
     fn validate(&self) -> Result<(), DomainError> {
@@ -307,7 +324,114 @@ mod test {
     }
 
     #[test]
-    fn validate_question_set_requires_unique_template_keys_and_contiguous_positions() {
+    fn question_set_accepts_unique_template_keys_and_contiguous_positions() {
+        let form_id = FormId::from(Uuid::nil());
+        let questions = vec![
+            Question::new(
+                Some(1.into()),
+                form_id,
+                "first".to_string(),
+                0,
+                "Question 1".to_string(),
+                None,
+                QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap(),
+            Question::new(
+                Some(2.into()),
+                form_id,
+                "second".to_string(),
+                1,
+                "Question 2".to_string(),
+                None,
+                QuestionType::Text,
+                None,
+                false,
+            )
+            .unwrap(),
+        ];
+
+        let result = QuestionSet::try_new(questions);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn question_set_rejects_duplicate_position() {
+        let form_id = FormId::from(Uuid::nil());
+        let questions = vec![
+            Question::new(
+                Some(1.into()),
+                form_id,
+                "first".to_string(),
+                0,
+                "Question 1".to_string(),
+                None,
+                QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap(),
+            Question::new(
+                Some(2.into()),
+                form_id,
+                "second".to_string(),
+                0,
+                "Question 2".to_string(),
+                None,
+                QuestionType::Text,
+                None,
+                false,
+            )
+            .unwrap(),
+        ];
+
+        assert!(matches!(
+            QuestionSet::try_new(questions),
+            Err(DomainError::InvalidEntity { .. })
+        ));
+    }
+
+    #[test]
+    fn question_set_rejects_non_contiguous_position() {
+        let form_id = FormId::from(Uuid::nil());
+        let questions = vec![
+            Question::new(
+                Some(1.into()),
+                form_id,
+                "first".to_string(),
+                0,
+                "Question 1".to_string(),
+                None,
+                QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap(),
+            Question::new(
+                Some(2.into()),
+                form_id,
+                "second".to_string(),
+                2,
+                "Question 2".to_string(),
+                None,
+                QuestionType::Text,
+                None,
+                false,
+            )
+            .unwrap(),
+        ];
+
+        assert!(matches!(
+            QuestionSet::try_new(questions),
+            Err(DomainError::InvalidEntity { .. })
+        ));
+    }
+
+    #[test]
+    fn question_set_rejects_duplicate_template_keys() {
         let form_id = FormId::from(Uuid::nil());
         let questions = vec![
             Question::new(
@@ -326,7 +450,7 @@ mod test {
                 Some(2.into()),
                 form_id,
                 "same".to_string(),
-                2,
+                1,
                 "Question 2".to_string(),
                 None,
                 QuestionType::Text,
@@ -337,7 +461,7 @@ mod test {
         ];
 
         assert!(matches!(
-            Question::validate_set(&questions),
+            QuestionSet::try_new(questions),
             Err(DomainError::InvalidEntity { .. })
         ));
     }
