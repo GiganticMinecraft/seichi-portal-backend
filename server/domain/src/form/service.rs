@@ -44,11 +44,7 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
                 let default_answer_title = default_answer_title.to_string();
                 let question_template_key_by_id = questions
                     .iter()
-                    .filter_map(|question| {
-                        question
-                            .id()
-                            .map(|id| (id.into_inner(), question.template_key().as_str()))
-                    })
+                    .map(|question| (question.id().into_inner(), question.template_key().as_str()))
                     .collect::<HashMap<_, _>>();
                 let answers_by_template_key = answers
                     .as_slice()
@@ -116,6 +112,7 @@ fn question_placeholder_regex() -> &'static Regex {
 #[cfg(test)]
 mod tests {
     use types::non_empty_string::NonEmptyString;
+    use uuid::Uuid;
 
     use super::*;
     use crate::form::answer::models::FormAnswerContentId;
@@ -127,11 +124,15 @@ mod tests {
         },
     };
 
+    fn question_id(seed: &str) -> QuestionId {
+        Uuid::parse_str(seed).unwrap().into()
+    }
+
     #[test]
     fn test_embedded_answer_title() {
-        let first_question_id = QuestionId::from(0);
-        let second_question_id = QuestionId::from(1);
-        let third_question_id = QuestionId::from(2);
+        let first_question_id = question_id("00000000-0000-7000-8000-000000000001");
+        let second_question_id = question_id("00000000-0000-7000-8000-000000000002");
+        let third_question_id = question_id("00000000-0000-7000-8000-000000000003");
 
         let default_answer_title = DefaultAnswerTitle::new(Some(
             NonEmptyString::try_new(
@@ -142,7 +143,7 @@ mod tests {
         ));
         let questions = vec![
             Question::from_raw_parts(
-                Some(first_question_id),
+                first_question_id,
                 Default::default(),
                 "first".to_string().try_into().unwrap(),
                 0,
@@ -154,7 +155,7 @@ mod tests {
             )
             .unwrap(),
             Question::from_raw_parts(
-                Some(second_question_id),
+                second_question_id,
                 Default::default(),
                 "second".to_string().try_into().unwrap(),
                 1,
@@ -166,7 +167,7 @@ mod tests {
             )
             .unwrap(),
             Question::from_raw_parts(
-                Some(third_question_id),
+                third_question_id,
                 Default::default(),
                 "third".to_string().try_into().unwrap(),
                 2,

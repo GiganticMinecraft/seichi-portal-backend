@@ -49,7 +49,7 @@ impl PostedAnswerContents {
     ) -> Result<Self, DomainError> {
         let questions_by_id = questions
             .iter()
-            .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
+            .map(|question| (question.id().into_inner(), question))
             .collect::<HashMap<_, _>>();
         let answered_question_ids = contents
             .iter()
@@ -112,7 +112,7 @@ impl PostedAnswerContents {
         if let Some(missing_question) = questions
             .iter()
             .filter(|question| question.is_required())
-            .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
+            .map(|question| (question.id().into_inner(), question))
             .find(|(question_id, _)| !answered_question_ids.contains(question_id))
             .map(|(_, question)| question)
         {
@@ -264,13 +264,19 @@ mod tests {
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
+    fn question_id(seed: &str) -> QuestionId {
+        Uuid::parse_str(seed).unwrap().into()
+    }
+
     fn text_question() -> Question {
-        Question::new_text(
-            Some(QuestionId::from(1)),
+        Question::from_raw_parts(
+            question_id("00000000-0000-7000-8000-000000000001"),
             FormId::from(Uuid::nil()),
             "name".to_string().try_into().unwrap(),
             0,
             "Name".to_string().try_into().unwrap(),
+            None,
+            crate::form::question::models::QuestionType::Text,
             None,
             true,
         )
@@ -278,31 +284,34 @@ mod tests {
     }
 
     fn single_choice_question() -> Question {
-        Question::new_single_choice(
-            Some(QuestionId::from(2)),
+        Question::from_raw_parts(
+            question_id("00000000-0000-7000-8000-000000000002"),
             FormId::from(Uuid::nil()),
             "role".to_string().try_into().unwrap(),
             1,
             "Role".to_string().try_into().unwrap(),
             None,
+            crate::form::question::models::QuestionType::SingleChoice,
             NonEmptyVec::try_new(vec![
                 Choice::new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap()).unwrap(),
                 Choice::new(Some(2.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
             ])
-            .unwrap(),
+            .unwrap()
+            .into(),
             true,
         )
         .unwrap()
     }
 
     fn multiple_choice_question() -> Question {
-        Question::new_multiple_choice(
-            Some(QuestionId::from(3)),
+        Question::from_raw_parts(
+            question_id("00000000-0000-7000-8000-000000000003"),
             FormId::from(Uuid::nil()),
             "tags".to_string().try_into().unwrap(),
             2,
             "Tags".to_string().try_into().unwrap(),
             None,
+            crate::form::question::models::QuestionType::MultipleChoice,
             NonEmptyVec::try_new(vec![
                 Choice::new(
                     Some(3.into()),
@@ -312,7 +321,8 @@ mod tests {
                 .unwrap(),
                 Choice::new(Some(4.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
             ])
-            .unwrap(),
+            .unwrap()
+            .into(),
             false,
         )
         .unwrap()
@@ -324,12 +334,12 @@ mod tests {
         let answers = vec![
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(1),
+                question_id: question_id("00000000-0000-7000-8000-000000000001"),
                 answer: "Alice".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(1),
+                question_id: question_id("00000000-0000-7000-8000-000000000001"),
                 answer: "Bob".to_string(),
             },
         ];
@@ -342,7 +352,7 @@ mod tests {
         let questions = vec![text_question()];
         let answers = vec![FormAnswerContent {
             id: FormAnswerContentId::new(),
-            question_id: QuestionId::from(999),
+            question_id: question_id("00000000-0000-7000-8000-000000000999"),
             answer: "Alice".to_string(),
         }];
 
@@ -355,12 +365,12 @@ mod tests {
         let answers = vec![
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(1),
+                question_id: question_id("00000000-0000-7000-8000-000000000001"),
                 answer: "Alice".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(2),
+                question_id: question_id("00000000-0000-7000-8000-000000000002"),
                 answer: "Guest".to_string(),
             },
         ];
@@ -378,17 +388,17 @@ mod tests {
         let answers = vec![
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(1),
+                question_id: question_id("00000000-0000-7000-8000-000000000001"),
                 answer: "Alice".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(2),
+                question_id: question_id("00000000-0000-7000-8000-000000000002"),
                 answer: "Admin".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(3),
+                question_id: question_id("00000000-0000-7000-8000-000000000003"),
                 answer: r#"["Admin","Guest"]"#.to_string(),
             },
         ];
@@ -406,17 +416,17 @@ mod tests {
         let answers = vec![
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(1),
+                question_id: question_id("00000000-0000-7000-8000-000000000001"),
                 answer: "Alice".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(2),
+                question_id: question_id("00000000-0000-7000-8000-000000000002"),
                 answer: "Admin".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(3),
+                question_id: question_id("00000000-0000-7000-8000-000000000003"),
                 answer: "[]".to_string(),
             },
         ];
@@ -429,7 +439,7 @@ mod tests {
         let questions = vec![text_question(), single_choice_question()];
         let answers = vec![FormAnswerContent {
             id: FormAnswerContentId::new(),
-            question_id: QuestionId::from(1),
+            question_id: question_id("00000000-0000-7000-8000-000000000001"),
             answer: "Alice".to_string(),
         }];
 
@@ -446,17 +456,17 @@ mod tests {
         let answers = vec![
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(1),
+                question_id: question_id("00000000-0000-7000-8000-000000000001"),
                 answer: "Alice".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(2),
+                question_id: question_id("00000000-0000-7000-8000-000000000002"),
                 answer: "Admin".to_string(),
             },
             FormAnswerContent {
                 id: FormAnswerContentId::new(),
-                question_id: QuestionId::from(3),
+                question_id: question_id("00000000-0000-7000-8000-000000000003"),
                 answer: r#"["Admin, Owner","User"]"#.to_string(),
             },
         ];

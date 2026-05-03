@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use domain::form::{
     models::FormId,
-    question::models::{Question, QuestionType},
+    question::models::{Question, QuestionId, QuestionType},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
 use sqlx::{MySqlConnection, Row, query};
 use std::collections::{BTreeMap, BTreeSet};
+use uuid::Uuid;
 
 use crate::{
     database::{components::FormQuestionDatabase, connection::ConnectionPool},
@@ -45,10 +46,15 @@ impl FormQuestionDatabase for ConnectionPool {
             Box::pin(async move {
                 let form_id_string = form_id.into_inner().to_string();
                 let existing_question_ids = fetch_question_ids(txn, &form_id_string).await?;
-
-                let (existing_questions, new_questions): (Vec<_>, Vec<_>) = questions
+                let existing_question_id_set = existing_question_ids
                     .iter()
-                    .partition(|question| question.id().is_some());
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+
+                let (existing_questions, new_questions): (Vec<_>, Vec<_>) =
+                    questions.iter().partition(|question| {
+                        existing_question_id_set.contains(&question.id().into_inner())
+                    });
 
                 temporarily_relocate_existing_questions(txn, &form_id_string).await?;
                 upsert_existing_questions(txn, &form_id_string, &existing_questions).await?;
@@ -56,11 +62,11 @@ impl FormQuestionDatabase for ConnectionPool {
 
                 let retained_question_ids = existing_questions
                     .iter()
-                    .filter_map(|question| question.id().map(|id| id.into_inner()))
+                    .map(|question| question.id().into_inner())
                     .chain(
                         inserted_questions
                             .iter()
-                            .map(|(question_id, _)| *question_id),
+                            .map(|(question_id, _)| question_id.into_inner()),
                     )
                     .collect::<BTreeSet<_>>();
                 delete_questions(
@@ -74,7 +80,7 @@ impl FormQuestionDatabase for ConnectionPool {
 
                 let assigned_questions = existing_questions
                     .into_iter()
-                    .filter_map(|question| question.id().map(|id| (id.into_inner(), question)))
+                    .map(|question| (question.id(), question))
                     .chain(inserted_questions)
                     .collect_vec();
 
@@ -111,8 +117,9 @@ impl FormQuestionDatabase for ConnectionPool {
                 .await?
                 .into_iter()
                 .map(|choice_rs| {
+                    let question_id = Uuid::parse_str(&choice_rs.try_get::<String, _>("question_id")?)?;
                     Ok::<_, InfraError>((
-                        choice_rs.try_get::<i32, _>("question_id")?,
+                        question_id,
                         ChoiceDto {
                             id: Some(choice_rs.try_get("id")?),
                             position: choice_rs.try_get::<u16, _>("position")?,
@@ -127,10 +134,10 @@ impl FormQuestionDatabase for ConnectionPool {
                 questions_rs
                     .into_iter()
                     .map(|question_rs| {
-                        let question_id = question_rs.try_get::<i32, _>("question_id")?;
+                        let question_id = Uuid::parse_str(&question_rs.try_get::<String, _>("question_id")?)?;
 
                         Ok::<_, InfraError>(QuestionDto {
-                            id: Some(question_id),
+                            id: question_id.to_string(),
                             form_id: question_rs.try_get("form_id")?,
                             template_key: question_rs.try_get("template_key")?,
                             position: question_rs.try_get::<u16, _>("position")?,
@@ -156,20 +163,22 @@ impl FormQuestionDatabase for ConnectionPool {
 async fn fetch_question_ids(
     txn: &mut MySqlConnection,
     form_id: &str,
-) -> Result<Vec<i32>, InfraError> {
-    sqlx::query("SELECT question_id FROM form_questions WHERE form_id = ? ORDER BY position ASC")
-        .bind(form_id)
-        .fetch_all(&mut *txn)
-        .await?
-        .into_iter()
-        .map(|row| row.try_get::<i32, _>("question_id"))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(Into::into)
+) -> Result<Vec<Uuid>, InfraError> {
+    let rows = sqlx::query(
+        "SELECT question_id FROM form_questions WHERE form_id = ? ORDER BY position ASC",
+    )
+    .bind(form_id)
+    .fetch_all(&mut *txn)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| Ok::<_, InfraError>(Uuid::parse_str(&row.try_get::<String, _>("question_id")?)?))
+        .collect()
 }
 
 #[derive(Debug, Clone)]
 struct ExistingQuestionRow {
-    question_id: i32,
+    question_id: QuestionId,
     template_key: String,
     position: u16,
 }
@@ -178,22 +187,22 @@ async fn fetch_existing_questions(
     txn: &mut MySqlConnection,
     form_id: &str,
 ) -> Result<Vec<ExistingQuestionRow>, InfraError> {
-    sqlx::query(
+    let rows = sqlx::query(
         "SELECT question_id, template_key, position FROM form_questions WHERE form_id = ? ORDER BY position ASC, question_id ASC",
     )
     .bind(form_id)
     .fetch_all(&mut *txn)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(ExistingQuestionRow {
-            question_id: row.try_get("question_id")?,
-            template_key: row.try_get("template_key")?,
-            position: row.try_get("position")?,
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>(ExistingQuestionRow {
+                question_id: Uuid::parse_str(&row.try_get::<String, _>("question_id")?)?.into(),
+                template_key: row.try_get("template_key")?,
+                position: row.try_get("position")?,
+            })
         })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()
-    .map_err(Into::into)
+        .collect()
 }
 
 fn temporary_template_key_prefix(existing_template_keys: &[String]) -> String {
@@ -234,7 +243,7 @@ async fn temporarily_relocate_existing_questions(
             .ok_or_else(|| InfraError::Unexpected {
                 cause: format!(
                     "temporary position overflow for question_id {}",
-                    question.question_id
+                    question.question_id.into_inner()
                 ),
             })
             .map(|_| ())
@@ -281,7 +290,7 @@ async fn upsert_existing_questions(
         .iter()
         .fold(query(&sql), |query, question| {
             query
-                .bind(question.id().map(|id| id.into_inner()))
+                .bind(question.id().into_inner().to_string())
                 .bind(form_id)
                 .bind(question.template_key().to_owned().into_inner())
                 .bind(question.position())
@@ -305,19 +314,20 @@ async fn insert_new_questions<'a>(
     txn: &mut MySqlConnection,
     form_id: &FormId,
     questions: Vec<&'a Question>,
-) -> Result<Vec<(i32, &'a Question)>, InfraError> {
+) -> Result<Vec<(QuestionId, &'a Question)>, InfraError> {
     if questions.is_empty() {
         return Ok(vec![]);
     }
 
     let sql = format!(
-        "INSERT INTO form_questions (form_id, template_key, position, title, description, question_type, is_required) VALUES {}",
-        std::iter::repeat_n("(?, ?, ?, ?, ?, ?, ?)", questions.len()).join(", ")
+        "INSERT INTO form_questions (question_id, form_id, template_key, position, title, description, question_type, is_required) VALUES {}",
+        std::iter::repeat_n("(?, ?, ?, ?, ?, ?, ?, ?)", questions.len()).join(", ")
     );
-    let result = questions
+    questions
         .iter()
         .fold(query(&sql), |query, question| {
             query
+                .bind(question.id().into_inner().to_string())
                 .bind(form_id.to_owned().into_inner().to_string())
                 .bind(question.template_key().to_owned().into_inner())
                 .bind(question.position())
@@ -334,18 +344,15 @@ async fn insert_new_questions<'a>(
         .execute(&mut *txn)
         .await?;
 
-    let first_insert_id = result.last_insert_id() as i32;
-
     Ok(questions
         .into_iter()
-        .zip(first_insert_id..)
-        .map(|(question, question_id)| (question_id, question))
+        .map(|question| (question.id(), question))
         .collect())
 }
 
 async fn delete_questions(
     txn: &mut MySqlConnection,
-    question_ids: Vec<i32>,
+    question_ids: Vec<Uuid>,
 ) -> Result<(), InfraError> {
     if question_ids.is_empty() {
         return Ok(());
@@ -357,7 +364,9 @@ async fn delete_questions(
     );
     question_ids
         .iter()
-        .fold(query(&sql), |query, question_id| query.bind(question_id))
+        .fold(query(&sql), |query, question_id| {
+            query.bind(question_id.to_string())
+        })
         .execute(&mut *txn)
         .await?;
 
@@ -366,7 +375,7 @@ async fn delete_questions(
 
 async fn sync_choices_for_questions(
     txn: &mut MySqlConnection,
-    assigned_questions: &[(i32, &Question)],
+    assigned_questions: &[(QuestionId, &Question)],
 ) -> Result<(), InfraError> {
     let question_ids = assigned_questions
         .iter()
@@ -440,20 +449,29 @@ async fn sync_choices_for_questions(
 
 async fn fetch_existing_choices(
     txn: &mut MySqlConnection,
-    question_ids: &[i32],
-) -> Result<BTreeMap<i32, i32>, InfraError> {
+    question_ids: &[QuestionId],
+) -> Result<BTreeMap<i32, QuestionId>, InfraError> {
     let sql = format!(
         "SELECT id, question_id FROM form_choices WHERE question_id IN ({})",
         std::iter::repeat_n("?", question_ids.len()).join(", ")
     );
 
-    sqlx::query(&sql)
-        .bind_all(question_ids.iter().copied())
+    let rows = question_ids
+        .iter()
+        .fold(sqlx::query(&sql), |query, question_id| {
+            query.bind(question_id.into_inner().to_string())
+        })
         .fetch_all(&mut *txn)
-        .await?
-        .into_iter()
-        .map(|row| Ok::<_, InfraError>((row.try_get("id")?, row.try_get("question_id")?)))
-        .collect::<Result<BTreeMap<_, _>, _>>()
+        .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>((
+                row.try_get("id")?,
+                Uuid::parse_str(&row.try_get::<String, _>("question_id")?)?.into(),
+            ))
+        })
+        .collect()
 }
 
 async fn delete_choices(txn: &mut MySqlConnection, choice_ids: Vec<i32>) -> Result<(), InfraError> {
@@ -476,7 +494,7 @@ async fn delete_choices(txn: &mut MySqlConnection, choice_ids: Vec<i32>) -> Resu
 
 async fn upsert_existing_choices(
     txn: &mut MySqlConnection,
-    choices: Vec<(i32, i32, u16, String)>,
+    choices: Vec<(i32, QuestionId, u16, String)>,
 ) -> Result<(), InfraError> {
     if choices.is_empty() {
         return Ok(());
@@ -497,7 +515,7 @@ async fn upsert_existing_choices(
             |query, (choice_id, question_id, position, label)| {
                 query
                     .bind(choice_id)
-                    .bind(question_id)
+                    .bind(question_id.into_inner().to_string())
                     .bind(position)
                     .bind(label)
             },
@@ -510,7 +528,7 @@ async fn upsert_existing_choices(
 
 async fn insert_new_choices(
     txn: &mut MySqlConnection,
-    choices: Vec<(i32, u16, String)>,
+    choices: Vec<(QuestionId, u16, String)>,
 ) -> Result<(), InfraError> {
     if choices.is_empty() {
         return Ok(());
@@ -523,27 +541,13 @@ async fn insert_new_choices(
     choices
         .iter()
         .fold(query(&sql), |query, (question_id, position, label)| {
-            query.bind(question_id).bind(position).bind(label)
+            query
+                .bind(question_id.into_inner().to_string())
+                .bind(position)
+                .bind(label)
         })
         .execute(&mut *txn)
         .await?;
 
     Ok(())
-}
-
-trait BindAll<'a> {
-    fn bind_all<T>(self, values: T) -> Self
-    where
-        T: IntoIterator<Item = i32>;
-}
-
-impl<'a> BindAll<'a> for sqlx::query::Query<'a, sqlx::MySql, sqlx::mysql::MySqlArguments> {
-    fn bind_all<T>(self, values: T) -> Self
-    where
-        T: IntoIterator<Item = i32>,
-    {
-        values
-            .into_iter()
-            .fold(self, |query, value| query.bind(value))
-    }
 }

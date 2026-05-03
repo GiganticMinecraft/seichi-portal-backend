@@ -14,7 +14,10 @@ use domain::{
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
-use usecase::{dto::FormDto, forms::form::FormUseCase};
+use usecase::{
+    dto::{FormDto, UpsertQuestionDto},
+    forms::form::FormUseCase,
+};
 
 use crate::handlers::error_handler::handle_error;
 use crate::schemas::error_responses::*;
@@ -364,6 +367,7 @@ pub async fn update_form_handler(
             questions
                 .into_iter()
                 .map(|question| {
+                    let original_id = question.id;
                     let choices = question
                         .choices
                         .into_iter()
@@ -377,10 +381,10 @@ pub async fn update_form_handler(
                         .collect::<Result<Vec<_>, _>>()?;
                     let choices = (!choices.is_empty())
                         .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"));
-                    match question.question_type {
-                        domain::form::question::models::QuestionType::Text => {
+                    let question = match original_id {
+                        Some(question_id) => {
                             domain::form::question::models::Question::from_raw_parts(
-                                question.id,
+                                question_id,
                                 form_id,
                                 question.template_key,
                                 question.position,
@@ -389,46 +393,77 @@ pub async fn update_form_handler(
                                 question.question_type,
                                 choices,
                                 question.is_required,
-                            )
+                            )?
                         }
-                        domain::form::question::models::QuestionType::SingleChoice => {
-                            domain::form::question::models::Question::new_single_choice(
-                                question.id,
-                                form_id,
-                                question.template_key,
-                                question.position,
-                                question.title,
-                                question.description,
-                                choices.ok_or_else(|| {
-                                    errors::domain::DomainError::InvalidEntity {
-                                        message: "choice question must have at least one choice"
-                                            .to_string(),
-                                    }
-                                })?,
-                                question.is_required,
-                            )
-                        }
-                        domain::form::question::models::QuestionType::MultipleChoice => {
-                            domain::form::question::models::Question::new_multiple_choice(
-                                question.id,
-                                form_id,
-                                question.template_key,
-                                question.position,
-                                question.title,
-                                question.description,
-                                choices.ok_or_else(|| {
-                                    errors::domain::DomainError::InvalidEntity {
-                                        message: "choice question must have at least one choice"
-                                            .to_string(),
-                                    }
-                                })?,
-                                question.is_required,
-                            )
-                        }
-                    }
+                        None => match question.question_type {
+                            domain::form::question::models::QuestionType::Text => {
+                                if choices.is_some() {
+                                    return Err(errors::domain::DomainError::InvalidEntity {
+                                        message: "text question must not have choices".to_string(),
+                                    });
+                                }
+
+                                domain::form::question::models::Question::new_text(
+                                    form_id,
+                                    question.template_key,
+                                    question.position,
+                                    question.title,
+                                    question.description,
+                                    question.is_required,
+                                )?
+                            }
+                            domain::form::question::models::QuestionType::SingleChoice => {
+                                domain::form::question::models::Question::new_single_choice(
+                                    form_id,
+                                    question.template_key,
+                                    question.position,
+                                    question.title,
+                                    question.description,
+                                    choices.ok_or_else(|| {
+                                        errors::domain::DomainError::InvalidEntity {
+                                            message:
+                                                "choice question must have at least one choice"
+                                                    .to_string(),
+                                        }
+                                    })?,
+                                    question.is_required,
+                                )?
+                            }
+                            domain::form::question::models::QuestionType::MultipleChoice => {
+                                domain::form::question::models::Question::new_multiple_choice(
+                                    form_id,
+                                    question.template_key,
+                                    question.position,
+                                    question.title,
+                                    question.description,
+                                    choices.ok_or_else(|| {
+                                        errors::domain::DomainError::InvalidEntity {
+                                            message:
+                                                "choice question must have at least one choice"
+                                                    .to_string(),
+                                        }
+                                    })?,
+                                    question.is_required,
+                                )?
+                            }
+                        },
+                    };
+
+                    Ok::<_, errors::domain::DomainError>(UpsertQuestionDto {
+                        original_id,
+                        question,
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()
-                .and_then(QuestionSet::try_new)
+                .and_then(|questions| {
+                    QuestionSet::try_new(
+                        questions
+                            .iter()
+                            .map(|question| question.question.clone())
+                            .collect(),
+                    )?;
+                    Ok(questions)
+                })
         })
         .transpose()
         .map_err(errors::Error::from)

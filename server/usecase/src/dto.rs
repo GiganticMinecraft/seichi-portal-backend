@@ -3,7 +3,7 @@ use domain::{
         answer::models::{AnswerEntry, AnswerLabel},
         comment::models::Comment,
         models::{Form, FormLabel},
-        question::models::Question,
+        question::models::{Question, QuestionId},
     },
     user::models::{DiscordUser, User},
 };
@@ -18,6 +18,11 @@ pub struct FormDto {
     pub form: Form,
     pub questions: Vec<Question>,
     pub labels: Vec<FormLabel>,
+}
+
+pub struct UpsertQuestionDto {
+    pub original_id: Option<QuestionId>,
+    pub question: Question,
 }
 
 pub struct UserDto {
