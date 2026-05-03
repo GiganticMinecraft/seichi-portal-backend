@@ -19,7 +19,8 @@ command = "cargo"
 args = ["test", "--doc"]
 
 [tasks.nextest]
-install_crate = { crate_name = "cargo-nextst" }
+install_crate = { crate_name = "cargo-nextest", binary = "cargo", test_arg = ["nextest", "--version"] }
+install_crate_args = ["--locked"]
 command = "cargo"
 args = ["nextest", "run"]
 
