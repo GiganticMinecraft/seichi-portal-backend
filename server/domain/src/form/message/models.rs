@@ -24,7 +24,10 @@ impl Message {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::{answer::models::AnswerEntry, message::models::Message},
+    ///     form::{
+    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         message::models::Message,
+    ///     },
     ///     user::models::{Role, User},
     /// };
     /// use uuid::Uuid;
@@ -39,7 +42,7 @@ impl Message {
     ///     user.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
-    ///     Default::default(),
+    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     ///
     /// let success_message = Message::try_new(
@@ -52,7 +55,7 @@ impl Message {
     ///     user.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
-    ///     Default::default(),
+    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     /// let message_with_empty_body = Message::try_new(*related_answer.id(), user, "".to_string());
     ///
@@ -84,7 +87,7 @@ impl Message {
     /// use chrono::{DateTime, Utc};
     /// use domain::{
     ///     form::{
-    ///         answer::models::AnswerEntry,
+    ///         answer::models::{AnswerEntry, PostedAnswerContents},
     ///         message::models::{Message, MessageId},
     ///     },
     ///     user::models::{Role, User},
@@ -101,7 +104,7 @@ impl Message {
     ///     user.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
-    ///     Default::default(),
+    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     ///
     /// unsafe {

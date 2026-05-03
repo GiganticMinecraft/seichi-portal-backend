@@ -63,7 +63,7 @@ use utoipa_swagger_ui::SwaggerUi;
         presentation::schemas::form::form_response_schemas::FormSchema,
         presentation::schemas::form::form_response_schemas::FormSettingsSchema,
         presentation::schemas::form::form_response_schemas::MessageContentSchema,
-        presentation::schemas::form::form_response_schemas::PutQuestionsResponseSchema,
+        presentation::schemas::form::form_response_schemas::ChoiceResponseSchema,
         presentation::schemas::form::form_response_schemas::QuestionResponseSchema,
         presentation::schemas::form::form_response_schemas::ResponsePeriodSchema,
         presentation::schemas::form::form_response_schemas::Role,
@@ -180,10 +180,7 @@ async fn main() -> anyhow::Result<()> {
             answer_handler::get_answer_by_form_id_handler,
             answer_handler::post_answer_handler
         ))
-        .routes(routes!(
-            question_handler::get_questions_handler,
-            question_handler::put_question_handler
-        ))
+        .routes(routes!(question_handler::get_questions_handler))
         .routes(routes!(answer_handler::get_all_answers))
         .routes(routes!(
             answer_label_handler::get_labels_for_answers,

@@ -3,7 +3,7 @@ use domain::form::answer::settings::models::AnswerSettings;
 use domain::form::{
     answer::settings::models::DefaultAnswerTitle,
     models::{FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility},
-    question::models::Question,
+    question::models::Choice,
 };
 use itertools::Itertools;
 use serde::Serialize;
@@ -107,8 +107,7 @@ pub struct FormSchema {
     pub description: FormDescription,
     pub settings: FormSettingsSchema,
     pub metadata: FormMetaSchema,
-    #[schema(value_type = Vec<QuestionResponseSchema>)]
-    pub questions: Vec<Question>,
+    pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
 }
@@ -117,10 +116,12 @@ pub struct FormSchema {
 pub struct QuestionResponseSchema {
     pub id: Option<i32>,
     pub form_id: String,
+    pub template_key: String,
+    pub position: u16,
     pub title: String,
     pub description: Option<String>,
     pub question_type: String,
-    pub choices: Vec<String>,
+    pub choices: Vec<ChoiceResponseSchema>,
     pub is_required: bool,
 }
 
@@ -129,11 +130,36 @@ impl From<domain::form::question::models::Question> for QuestionResponseSchema {
         QuestionResponseSchema {
             id: val.id.map(|id| id.into_inner()),
             form_id: val.form_id.into_inner().to_string(),
+            template_key: val.template_key,
+            position: val.position,
             title: val.title,
             description: val.description,
             question_type: val.question_type.to_string(),
-            choices: val.choices,
+            choices: val
+                .choices
+                .map(|choices| choices.into_inner())
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             is_required: val.is_required,
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct ChoiceResponseSchema {
+    pub id: Option<i32>,
+    pub position: u16,
+    pub label: String,
+}
+
+impl From<Choice> for ChoiceResponseSchema {
+    fn from(val: Choice) -> Self {
+        Self {
+            id: val.id.map(|id| id.into_inner()),
+            position: val.position,
+            label: val.label,
         }
     }
 }
@@ -166,11 +192,6 @@ impl From<domain::form::answer::models::AnswerLabel> for AnswerLabelResponseSche
             name: val.name().to_string(),
         }
     }
-}
-
-#[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct PutQuestionsResponseSchema {
-    pub questions: Vec<QuestionResponseSchema>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]

@@ -1,5 +1,6 @@
 pub mod natural_f32;
 pub mod non_empty_string;
+pub mod non_empty_vec;
 
 #[cfg(feature = "arbitrary")]
 use common::test_utils::arbitrary_uuid_v7;

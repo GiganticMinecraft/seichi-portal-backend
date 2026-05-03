@@ -34,17 +34,23 @@ CREATE TABLE IF NOT EXISTS form_meta_data(
 CREATE TABLE IF NOT EXISTS form_questions(
     question_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
+    template_key VARCHAR(255) NOT NULL,
+    position SMALLINT UNSIGNED NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
-    question_type ENUM('TEXT', 'SINGLE', 'MULTIPLE'),
+    question_type VARCHAR(32) NOT NULL,
     is_required BOOL DEFAULT FALSE,
+    UNIQUE KEY uk_form_questions_form_id_template_key(form_id, template_key),
+    UNIQUE KEY uk_form_questions_form_id_position(form_id, position),
     FOREIGN KEY fk_form_questions_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS form_choices(
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     question_id INT NOT NULL,
-    choice TEXT NOT NULL,
+    position SMALLINT UNSIGNED NOT NULL,
+    label TEXT NOT NULL,
+    UNIQUE KEY uk_form_choices_question_id_position(question_id, position),
     FOREIGN KEY fk_form_choices_question_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
 );
 

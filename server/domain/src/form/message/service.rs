@@ -20,7 +20,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::AnswerEntry,
+    ///         answer::models::{AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -41,7 +41,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
-    ///     Default::default(),
+    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     ///
     /// let message = Message::try_new(
@@ -93,7 +93,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::AnswerEntry,
+    ///         answer::models::{AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -114,7 +114,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
-    ///     Default::default(),
+    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     ///
     /// let message = Message::try_new(
@@ -166,7 +166,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::AnswerEntry,
+    ///         answer::models::{AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -187,7 +187,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
-    ///     Default::default(),
+    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     ///
     /// let message = Message::try_new(
@@ -233,7 +233,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::AnswerEntry,
+    ///         answer::models::{AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -254,7 +254,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///     respondent.to_owned(),
     ///     Default::default(),
     ///     Default::default(),
-    ///     Default::default(),
+    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     ///
     /// let message = Message::try_new(

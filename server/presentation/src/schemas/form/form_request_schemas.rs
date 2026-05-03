@@ -1,4 +1,4 @@
-use domain::form::question::models::{QuestionId, QuestionType};
+use domain::form::question::models::{ChoiceId, QuestionId, QuestionType};
 use domain::form::{
     answer::{
         models::{AnswerLabelId, AnswerTitle},
@@ -85,6 +85,8 @@ pub struct FormUpdateSchema {
     pub description: Option<String>,
     #[serde(default)]
     pub settings: Option<FormSettingsSchema>,
+    #[serde(default)]
+    pub questions: Option<Vec<QuestionSchema>>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
@@ -107,22 +109,26 @@ pub struct AnswerUpdateSchema {
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
+pub struct ChoiceSchema {
+    #[schema(value_type = Option<i32>)]
+    pub id: Option<ChoiceId>,
+    pub position: u16,
+    pub label: String,
+}
+
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct QuestionSchema {
     #[schema(value_type = Option<i32>)]
     pub id: Option<QuestionId>,
+    pub template_key: String,
+    pub position: u16,
     pub title: String,
     #[schema(value_type = String)]
     pub question_type: QuestionType,
     pub description: Option<String>,
     #[serde(default)]
-    pub choices: Vec<String>,
+    pub choices: Vec<ChoiceSchema>,
     pub is_required: bool,
-}
-
-#[derive(Deserialize, Debug, utoipa::ToSchema)]
-pub struct FormQuestionPutSchema {
-    #[serde(default)]
-    pub questions: Vec<QuestionSchema>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]

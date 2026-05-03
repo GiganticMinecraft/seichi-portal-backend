@@ -1,7 +1,7 @@
 use domain::{
     form::{
         answer::{
-            models::{AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent},
+            models::{AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent, PostedAnswerContents},
             service::AnswerEntryAuthorizationContext,
         },
         comment::service::CommentAuthorizationContext,
@@ -53,22 +53,32 @@ impl<
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let form_service = DefaultAnswerTitleDomainService {
-            form_repo: self.form_repository,
-            question_repo: self.question_repository,
-            answer_repo: self.answer_repository,
-        };
-
-        let (form, title) = try_join!(
+        let (form, question_guards) = try_join!(
             self.form_repository.get(form_id),
-            form_service.to_answer_title(&user, form_id, answers.as_slice())
+            self.question_repository.get_questions(form_id)
         )?;
 
-        let form = form.ok_or(Error::from(FormNotFound))?;
+        let form = form
+            .ok_or(Error::from(FormNotFound))?
+            .try_into_read(&user)?;
+        let questions = question_guards
+            .into_iter()
+            .map(|question| question.try_into_read(&user))
+            .collect::<Result<Vec<_>, _>>()?;
+        let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
+        let title = DefaultAnswerTitleDomainService::<R2, R5, R1>::to_answer_title_from_questions(
+            form.settings()
+                .answer_settings()
+                .default_answer_title()
+                .to_owned(),
+            &questions,
+            &posted_answers,
+            &user,
+        )?;
 
-        let form_settings = form.try_read(&user)?.settings();
+        let form_settings = form.settings();
 
-        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title, answers);
+        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title, posted_answers);
         let context = AnswerEntryAuthorizationContext {
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),

@@ -6,7 +6,11 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::IntoResponse,
 };
-use domain::{form::models::FormId, repository::Repositories, user::models::User};
+use domain::{
+    form::{models::FormId, question::models::QuestionSet},
+    repository::Repositories,
+    user::models::User,
+};
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -16,11 +20,14 @@ use crate::handlers::error_handler::handle_error;
 use crate::schemas::error_responses::*;
 use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit},
-    form_response_schemas::{FormMetaSchema, FormSchema, FormSettingsSchema},
+    form_response_schemas::{
+        FormMetaSchema, FormSchema, FormSettingsSchema, QuestionResponseSchema,
+    },
 };
 use axum::extract::rejection::PathRejection;
 use domain::form::models::FormDescription;
 use errors::ErrorExtra;
+use types::non_empty_vec::NonEmptyVec;
 
 #[derive(utoipa::IntoResponses)]
 pub enum CreateFormResponse {
@@ -116,6 +123,7 @@ pub async fn create_form_handler(
         notification_repository: repository.notification_repository(),
         question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
+        answer_repository: repository.form_answer_repository(),
     };
 
     let Json(form) = json.map_err_to_error().map_err(handle_error)?;
@@ -166,6 +174,7 @@ pub async fn form_list_handler(
         notification_repository: repository.notification_repository(),
         question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
+        answer_repository: repository.form_answer_repository(),
     };
 
     let forms = form_use_case
@@ -181,7 +190,10 @@ pub async fn form_list_handler(
             description: form.description().to_owned(),
             settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
             metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-            questions,
+            questions: questions
+                .into_iter()
+                .map(QuestionResponseSchema::from)
+                .collect(),
             labels,
         })
         .collect_vec();
@@ -217,6 +229,7 @@ pub async fn get_form_handler(
         notification_repository: repository.notification_repository(),
         question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
+        answer_repository: repository.form_answer_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -236,7 +249,10 @@ pub async fn get_form_handler(
         description: form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions,
+        questions: questions
+            .into_iter()
+            .map(QuestionResponseSchema::from)
+            .collect(),
         labels,
     }))
 }
@@ -269,6 +285,7 @@ pub async fn delete_form_handler(
         notification_repository: repository.notification_repository(),
         question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
+        answer_repository: repository.form_answer_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -282,7 +299,7 @@ pub async fn delete_form_handler(
 }
 
 #[utoipa::path(
-    patch,
+    put,
     path = "/forms/{id}",
     summary = "フォームの更新",
     params(
@@ -312,6 +329,7 @@ pub async fn update_form_handler(
         notification_repository: repository.notification_repository(),
         question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
+        answer_repository: repository.form_answer_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -340,6 +358,42 @@ pub async fn update_form_handler(
         } else {
             (None, None, None, None, None)
         };
+    let questions = targets
+        .questions
+        .map(|questions| {
+            questions
+                .into_iter()
+                .map(|question| {
+                    let choices = question
+                        .choices
+                        .into_iter()
+                        .map(|choice| {
+                            domain::form::question::models::Choice::new(
+                                choice.id,
+                                choice.position,
+                                choice.label,
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    domain::form::question::models::Question::new(
+                        question.id,
+                        form_id,
+                        question.template_key,
+                        question.position,
+                        question.title,
+                        question.description,
+                        question.question_type,
+                        (!choices.is_empty())
+                            .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices")),
+                        question.is_required,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .and_then(QuestionSet::try_new)
+        })
+        .transpose()
+        .map_err(errors::Error::from)
+        .map_err(handle_error)?;
 
     let (updated_form, questions, labels) = form_use_case
         .update_form(
@@ -352,6 +406,7 @@ pub async fn update_form_handler(
             default_answer_title,
             visibility,
             answer_visibility,
+            questions,
         )
         .await
         .map_err(handle_error)?;
@@ -362,7 +417,10 @@ pub async fn update_form_handler(
         description: updated_form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
         metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
-        questions,
+        questions: questions
+            .into_iter()
+            .map(QuestionResponseSchema::from)
+            .collect(),
         labels,
     }))
 }

@@ -9,22 +9,46 @@ use domain::{
         },
         comment::models::CommentContent,
         models::{FormDescription, FormId, FormMeta, FormSettings, FormTitle, WebhookUrl},
-        question::models::{Question, QuestionType},
+        question::models::{Choice, Question, QuestionType},
     },
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
 use types::non_empty_string::NonEmptyString;
+use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
+
+#[derive(Clone)]
+pub struct ChoiceDto {
+    pub id: Option<i32>,
+    pub position: u16,
+    pub label: String,
+}
+
+impl TryFrom<ChoiceDto> for Choice {
+    type Error = errors::Error;
+
+    fn try_from(
+        ChoiceDto {
+            id,
+            position,
+            label,
+        }: ChoiceDto,
+    ) -> Result<Self, Self::Error> {
+        Choice::from_raw_parts(id.map(Into::into), position, label).map_err(Into::into)
+    }
+}
 
 #[derive(Clone)]
 pub struct QuestionDto {
     pub id: Option<i32>,
     pub form_id: String,
+    pub template_key: String,
+    pub position: u16,
     pub title: String,
     pub description: Option<String>,
     pub question_type: String,
-    pub choices: Vec<String>,
+    pub choices: Vec<ChoiceDto>,
     pub is_required: bool,
 }
 
@@ -35,6 +59,8 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
         QuestionDto {
             id,
             form_id,
+            template_key,
+            position,
             title,
             description,
             question_type,
@@ -42,15 +68,25 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
             is_required,
         }: QuestionDto,
     ) -> Result<Self, Self::Error> {
-        Ok(Question::from_raw_parts(
+        Question::from_raw_parts(
             id.map(Into::into),
             FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
+            template_key,
+            position,
             title,
             description,
             QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
-            choices,
+            choices
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, _>>()
+                .map(|choices| {
+                    (!choices.is_empty())
+                        .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"))
+                })?,
             is_required,
-        ))
+        )
+        .map_err(Into::into)
     }
 }
 
