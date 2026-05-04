@@ -33,12 +33,12 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --manifest-path server/Cargo.toml --target ${{ matrix.cross-target }} --release
+          args: --manifest-path Cargo.toml --target ${{ matrix.cross-target }} --release
       - name: Upload artifact to collect in next job
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.cross-target }}
-          path: server/target/${{ matrix.cross-target }}/release/entrypoint
+          path: target/${{ matrix.cross-target }}/release/entrypoint
 
   release-all:
     name: Push docker image for all platforms

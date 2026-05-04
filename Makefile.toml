@@ -11,10 +11,13 @@ args = [
 ]
 
 [tasks.run-server]
-script_runner = "@shell"
-script = """
-cd server && cargo run
-"""
+command = "cargo"
+args = ["run", "--package", "entrypoint"]
 
 [tasks.up]
 dependencies = ["up-db", "run-server"]
+
+[tasks.pretty]
+cwd = "server"
+command = "makers"
+args = ["pretty"]
