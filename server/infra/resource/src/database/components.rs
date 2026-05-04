@@ -21,6 +21,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use mockall::automock;
+use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
 
 #[async_trait]
@@ -118,7 +119,7 @@ pub trait FormQuestionDatabase: Send + Sync {
     async fn create_questions(
         &self,
         form_id: FormId,
-        questions: Vec<Question>,
+        questions: NonEmptyVec<Question>,
     ) -> Result<(), InfraError>;
     async fn put_questions(
         &self,

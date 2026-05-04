@@ -140,10 +140,10 @@ pub enum Question {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct QuestionSet(Vec<Question>);
+pub struct QuestionSet(NonEmptyVec<Question>);
 
 impl QuestionSet {
-    pub fn try_new(questions: Vec<Question>) -> Result<Self, DomainError> {
+    pub fn try_new(questions: NonEmptyVec<Question>) -> Result<Self, DomainError> {
         let positions = questions
             .iter()
             .map(|question| question.position())
@@ -180,7 +180,7 @@ impl QuestionSet {
         &self.0
     }
 
-    pub fn into_inner(self) -> Vec<Question> {
+    pub fn into_inner(self) -> NonEmptyVec<Question> {
         self.0
     }
 }
@@ -522,7 +522,7 @@ mod test {
     #[test]
     fn question_set_accepts_unique_template_keys_and_contiguous_positions() {
         let form_id = FormId::from(Uuid::nil());
-        let questions = vec![
+        let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
                 form_id,
                 "first".to_string().try_into().unwrap(),
@@ -541,7 +541,8 @@ mod test {
                 false,
             )
             .unwrap(),
-        ];
+        ])
+        .unwrap();
 
         let result = QuestionSet::try_new(questions);
 
@@ -551,7 +552,7 @@ mod test {
     #[test]
     fn question_set_rejects_duplicate_position() {
         let form_id = FormId::from(Uuid::nil());
-        let questions = vec![
+        let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
                 form_id,
                 "first".to_string().try_into().unwrap(),
@@ -570,7 +571,8 @@ mod test {
                 false,
             )
             .unwrap(),
-        ];
+        ])
+        .unwrap();
 
         assert!(matches!(
             QuestionSet::try_new(questions),
@@ -581,7 +583,7 @@ mod test {
     #[test]
     fn question_set_rejects_non_contiguous_position() {
         let form_id = FormId::from(Uuid::nil());
-        let questions = vec![
+        let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
                 form_id,
                 "first".to_string().try_into().unwrap(),
@@ -600,7 +602,8 @@ mod test {
                 false,
             )
             .unwrap(),
-        ];
+        ])
+        .unwrap();
 
         assert!(matches!(
             QuestionSet::try_new(questions),
@@ -611,7 +614,7 @@ mod test {
     #[test]
     fn question_set_rejects_duplicate_template_keys() {
         let form_id = FormId::from(Uuid::nil());
-        let questions = vec![
+        let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
                 form_id,
                 "same".to_string().try_into().unwrap(),
@@ -630,7 +633,8 @@ mod test {
                 false,
             )
             .unwrap(),
-        ];
+        ])
+        .unwrap();
 
         assert!(matches!(
             QuestionSet::try_new(questions),

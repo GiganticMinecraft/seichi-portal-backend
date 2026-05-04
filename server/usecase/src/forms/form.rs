@@ -15,6 +15,7 @@ use domain::{
 };
 use errors::{Error, domain::DomainError, usecase::UseCaseError::FormNotFound};
 use std::collections::{BTreeSet, HashMap};
+use types::non_empty_vec::NonEmptyVec;
 
 use crate::dto::{FormDto, UpsertQuestionDto};
 
@@ -45,12 +46,29 @@ impl<
         &self,
         title: FormTitle,
         description: FormDescription,
+        questions: NonEmptyVec<Question>,
         user: &User,
-    ) -> Result<Form, Error> {
+    ) -> Result<(Form, NonEmptyVec<Question>), Error> {
         let form = Form::new(title, description);
         let form_id = form.id().to_owned();
+        let questions = questions_for_form(form_id, questions)?;
 
         self.form_repository.create(user, form.into()).await?;
+        self.question_repository
+            .create_questions(
+                user,
+                form_id,
+                NonEmptyVec::try_new(
+                    questions
+                        .clone()
+                        .into_inner()
+                        .into_iter()
+                        .map(Into::into)
+                        .collect::<Vec<_>>(),
+                )
+                .map_err(Error::from)?,
+            )
+            .await?;
 
         let created_form_guard = self
             .form_repository
@@ -58,7 +76,12 @@ impl<
             .await?
             .ok_or(Error::from(FormNotFound))?;
 
-        created_form_guard.try_into_read(user).map_err(Into::into)
+        Ok((
+            created_form_guard
+                .try_into_read(user)
+                .map_err(Error::from)?,
+            questions,
+        ))
     }
 
     /// `actor` が参照可能なフォームのリストを取得する
@@ -303,6 +326,65 @@ impl<
     }
 }
 
+fn questions_for_form(
+    form_id: FormId,
+    questions: NonEmptyVec<Question>,
+) -> Result<NonEmptyVec<Question>, Error> {
+    NonEmptyVec::try_new(
+        questions
+            .into_inner()
+            .into_iter()
+            .map(|question| match question.question_type() {
+                domain::form::question::models::QuestionType::Text => Question::new_text(
+                    form_id,
+                    question.template_key().to_owned(),
+                    question.position(),
+                    question.title().to_owned(),
+                    question.description().cloned(),
+                    question.is_required(),
+                ),
+                domain::form::question::models::QuestionType::SingleChoice => {
+                    let choices =
+                        question
+                            .choices()
+                            .cloned()
+                            .ok_or(DomainError::InvalidEntity {
+                                message: "single choice question must have choices".to_string(),
+                            })?;
+                    Question::new_single_choice(
+                        form_id,
+                        question.template_key().to_owned(),
+                        question.position(),
+                        question.title().to_owned(),
+                        question.description().cloned(),
+                        choices,
+                        question.is_required(),
+                    )
+                }
+                domain::form::question::models::QuestionType::MultipleChoice => {
+                    let choices =
+                        question
+                            .choices()
+                            .cloned()
+                            .ok_or(DomainError::InvalidEntity {
+                                message: "multiple choice question must have choices".to_string(),
+                            })?;
+                    Question::new_multiple_choice(
+                        form_id,
+                        question.template_key().to_owned(),
+                        question.position(),
+                        question.title().to_owned(),
+                        question.description().cloned(),
+                        choices,
+                        question.is_required(),
+                    )
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    )
+    .map_err(Error::from)
+}
+
 fn validate_answered_form_question_update(
     current_questions: &[Question],
     updated_questions: &[UpsertQuestionDto],
@@ -458,6 +540,7 @@ mod tests {
         },
         user::models::{Role, User},
     };
+    use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
     fn admin_user() -> User {
@@ -496,6 +579,70 @@ mod tests {
             true,
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn create_form_always_creates_questions_and_returns_them() {
+        let user = admin_user();
+        let input_questions = NonEmptyVec::try_new(vec![
+            Question::new_text(
+                FormId::from(Uuid::nil()),
+                "body".to_string().try_into().unwrap(),
+                0,
+                "Body".to_string().try_into().unwrap(),
+                None,
+                true,
+            )
+            .unwrap(),
+        ])
+        .unwrap();
+
+        let mut form_repository = MockFormRepository::new();
+        form_repository
+            .expect_create()
+            .times(1)
+            .returning(|_, _| Ok(()));
+        form_repository
+            .expect_get()
+            .times(1)
+            .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
+
+        let mut question_repository = MockQuestionRepository::new();
+        let auth_user = user.clone();
+        question_repository
+            .expect_create_questions()
+            .times(1)
+            .returning(move |_, form_id, questions| {
+                assert_eq!(questions.len(), 1);
+                let question = questions[0].try_create(&auth_user, Clone::clone)?;
+                assert_eq!(question.form_id(), &form_id);
+                Ok(())
+            });
+
+        let form_label_repository = MockFormLabelRepository::new();
+        let answer_repository = MockAnswerRepository::new();
+        let notification_repository = MockNotificationRepository::new();
+
+        let usecase = FormUseCase {
+            form_repository: &form_repository,
+            notification_repository: &notification_repository,
+            question_repository: &question_repository,
+            form_label_repository: &form_label_repository,
+            answer_repository: &answer_repository,
+        };
+
+        let (created_form, created_questions) = usecase
+            .create_form(
+                FormTitle::new("Form".to_string().try_into().unwrap()),
+                FormDescription::new("description".to_string()),
+                input_questions,
+                &user,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(created_questions.len(), 1);
+        assert_eq!(created_questions[0].form_id(), created_form.id());
     }
 
     #[tokio::test]

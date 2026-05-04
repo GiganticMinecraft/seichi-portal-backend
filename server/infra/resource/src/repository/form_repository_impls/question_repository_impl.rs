@@ -10,6 +10,7 @@ use domain::{
 };
 use errors::Error;
 use itertools::Itertools;
+use types::non_empty_vec::NonEmptyVec;
 
 use crate::{
     database::components::{DatabaseComponents, FormQuestionDatabase},
@@ -23,12 +24,14 @@ impl<Client: DatabaseComponents + 'static> QuestionRepository for Repository<Cli
         &self,
         actor: &User,
         form_id: FormId,
-        questions: Vec<AuthorizationGuard<Question, Create>>,
+        questions: NonEmptyVec<AuthorizationGuard<Question, Create>>,
     ) -> Result<(), Error> {
         let questions = questions
+            .into_inner()
             .into_iter()
             .map(|guard| guard.try_into_create(actor, |form| form))
             .collect::<Result<Vec<_>, _>>()?;
+        let questions = NonEmptyVec::try_new(questions).map_err(Error::from)?;
 
         self.client
             .form_question()

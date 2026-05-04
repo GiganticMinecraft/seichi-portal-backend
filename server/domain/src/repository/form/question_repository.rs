@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
+use types::non_empty_vec::NonEmptyVec;
 
 use crate::{
     form::{models::FormId, question::models::Question},
@@ -18,7 +19,7 @@ pub trait QuestionRepository: Send + Sync + 'static {
         &self,
         actor: &User,
         form_id: FormId,
-        questions: Vec<AuthorizationGuard<Question, Create>>,
+        questions: NonEmptyVec<AuthorizationGuard<Question, Create>>,
     ) -> Result<(), Error>;
     async fn put_questions(
         &self,

@@ -130,11 +130,19 @@ pub async fn create_form_handler(
     };
 
     let Json(form) = json.map_err_to_error().map_err(handle_error)?;
+    let FormCreateSchema {
+        title,
+        description,
+        questions,
+    } = form;
 
-    let form_description = FormDescription::new(form.description);
+    let form_description = FormDescription::new(description);
+    let questions = into_create_questions(questions)
+        .map_err(errors::Error::from)
+        .map_err(handle_error)?;
 
-    let form = form_use_case
-        .create_form(form.title, form_description, &user)
+    let (form, questions) = form_use_case
+        .create_form(title, form_description, questions, &user)
         .await
         .map_err(handle_error)?;
 
@@ -144,7 +152,11 @@ pub async fn create_form_handler(
         description: form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: vec![],
+        questions: questions
+            .into_inner()
+            .into_iter()
+            .map(QuestionResponseSchema::from)
+            .collect(),
         labels: vec![],
     }))
 }
@@ -366,7 +378,6 @@ pub async fn update_form_handler(
         .questions
         .map(|questions| into_upsert_question_dtos(form_id, questions))
         .transpose()
-        .map_err(errors::Error::from)
         .map_err(handle_error)?;
 
     let (updated_form, questions, labels) = form_use_case
@@ -402,20 +413,82 @@ pub async fn update_form_handler(
 fn into_upsert_question_dtos(
     form_id: FormId,
     questions: Vec<QuestionSchema>,
-) -> Result<Vec<UpsertQuestionDto>, errors::domain::DomainError> {
+) -> Result<Vec<UpsertQuestionDto>, errors::Error> {
     let questions = questions
         .into_iter()
         .map(|question| into_upsert_question_dto(form_id, question))
         .collect::<Result<Vec<_>, _>>()?;
 
-    QuestionSet::try_new(
+    if questions.is_empty() {
+        return Ok(questions);
+    }
+
+    QuestionSet::try_new(NonEmptyVec::try_new(
         questions
             .iter()
             .map(|question| question.question.clone())
             .collect(),
-    )?;
+    )?)?;
 
     Ok(questions)
+}
+
+fn into_create_questions(
+    questions: NonEmptyVec<QuestionSchema>,
+) -> Result<NonEmptyVec<domain::form::question::models::Question>, errors::domain::DomainError> {
+    let form_id = FormId::new();
+    let questions = questions
+        .into_inner()
+        .into_iter()
+        .enumerate()
+        .map(|(position, question)| into_create_question(form_id, position as u16, question))
+        .collect::<Result<Vec<_>, _>>()?;
+    let questions = NonEmptyVec::try_new(questions).expect("create questions is non-empty");
+
+    Ok(QuestionSet::try_new(questions)?.into_inner())
+}
+
+fn into_create_question(
+    form_id: FormId,
+    position: u16,
+    question: QuestionSchema,
+) -> Result<domain::form::question::models::Question, errors::domain::DomainError> {
+    let (question_type, definition, choices) = question.into_parts();
+
+    match question_type {
+        domain::form::question::models::QuestionType::Text => {
+            domain::form::question::models::Question::new_text(
+                form_id,
+                definition.template_key,
+                position,
+                definition.title,
+                definition.description,
+                definition.is_required,
+            )
+        }
+        domain::form::question::models::QuestionType::SingleChoice => {
+            domain::form::question::models::Question::new_single_choice(
+                form_id,
+                definition.template_key,
+                position,
+                definition.title,
+                definition.description,
+                required_choices(into_domain_choices(choices))?,
+                definition.is_required,
+            )
+        }
+        domain::form::question::models::QuestionType::MultipleChoice => {
+            domain::form::question::models::Question::new_multiple_choice(
+                form_id,
+                definition.template_key,
+                position,
+                definition.title,
+                definition.description,
+                required_choices(into_domain_choices(choices))?,
+                definition.is_required,
+            )
+        }
+    }
 }
 
 fn into_upsert_question_dto(
@@ -538,6 +611,60 @@ mod tests {
     }
 
     #[test]
+    fn create_questions_assigns_contiguous_positions() {
+        let questions: NonEmptyVec<QuestionSchema> = serde_json::from_value(json!([
+            {
+                "question_type": "Text",
+                "template_key": "body",
+                "position": 10,
+                "title": "Body",
+                "is_required": true
+            },
+            {
+                "question_type": "Text",
+                "template_key": "summary",
+                "position": 20,
+                "title": "Summary",
+                "is_required": false
+            }
+        ]))
+        .unwrap();
+
+        let created = into_create_questions(questions).unwrap();
+
+        assert_eq!(created[0].position(), 0);
+        assert_eq!(created[1].position(), 1);
+    }
+
+    #[test]
+    fn create_questions_rejects_duplicate_template_keys() {
+        let questions: NonEmptyVec<QuestionSchema> = serde_json::from_value(json!([
+            {
+                "question_type": "Text",
+                "template_key": "body",
+                "position": 0,
+                "title": "Body",
+                "is_required": true
+            },
+            {
+                "question_type": "Text",
+                "template_key": "body",
+                "position": 1,
+                "title": "Summary",
+                "is_required": false
+            }
+        ]))
+        .unwrap();
+
+        let result = into_create_questions(questions);
+
+        assert!(matches!(
+            result,
+            Err(errors::domain::DomainError::InvalidEntity { .. })
+        ));
+    }
+
+    #[test]
     fn duplicate_positions_are_rejected_for_replacement_payload() {
         let questions: Vec<QuestionSchema> = serde_json::from_value(json!([
             {
@@ -561,7 +688,9 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(errors::domain::DomainError::InvalidEntity { .. })
+            Err(errors::Error::Domain {
+                source: errors::domain::DomainError::InvalidEntity { .. }
+            })
         ));
     }
 }

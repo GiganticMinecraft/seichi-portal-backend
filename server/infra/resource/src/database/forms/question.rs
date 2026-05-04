@@ -7,6 +7,7 @@ use errors::infra::InfraError;
 use itertools::Itertools;
 use sqlx::{MySqlConnection, Row, query};
 use std::collections::{BTreeMap, BTreeSet};
+use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
 
 use crate::{
@@ -20,14 +21,10 @@ impl FormQuestionDatabase for ConnectionPool {
     async fn create_questions(
         &self,
         form_id: FormId,
-        questions: Vec<Question>,
+        questions: NonEmptyVec<Question>,
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                if questions.is_empty() {
-                    return Ok::<_, InfraError>(());
-                }
-
                 let assigned_questions =
                     insert_new_questions(txn, &form_id, questions.iter().collect_vec()).await?;
                 sync_choices_for_questions(txn, &assigned_questions).await
