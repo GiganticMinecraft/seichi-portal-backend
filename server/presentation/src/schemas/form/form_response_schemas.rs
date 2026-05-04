@@ -116,7 +116,6 @@ pub struct FormSchema {
 pub struct QuestionDefinitionResponseSchema {
     #[schema(value_type = String, format = "uuid")]
     pub id: String,
-    pub form_id: String,
     pub template_key: String,
     pub position: u16,
     pub title: String,
@@ -149,7 +148,6 @@ impl From<domain::form::question::models::Question> for QuestionResponseSchema {
     fn from(val: domain::form::question::models::Question) -> Self {
         let definition = QuestionDefinitionResponseSchema {
             id: val.id().into_inner().to_string(),
-            form_id: val.form_id().into_inner().to_string(),
             template_key: val.template_key().to_owned().into_inner(),
             position: val.position(),
             title: val.title().to_owned().into_inner(),
@@ -379,17 +377,12 @@ pub struct SenderSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::form::{
-        models::FormId,
-        question::models::{Choice, Question},
-    };
+    use domain::form::question::models::{Choice, Question};
     use types::non_empty_vec::NonEmptyVec;
-    use uuid::Uuid;
 
     #[test]
     fn question_response_schema_serializes_text_variant_without_choices() {
         let question = Question::new_text(
-            FormId::from(Uuid::nil()),
             "body".to_string().try_into().unwrap(),
             0,
             "Body".to_string().try_into().unwrap(),
@@ -410,7 +403,6 @@ mod tests {
     #[test]
     fn question_response_schema_preserves_api_shape_for_choice_question() {
         let question = Question::new_single_choice(
-            FormId::from(Uuid::nil()),
             "role".to_string().try_into().unwrap(),
             0,
             "Role".to_string().try_into().unwrap(),

@@ -9,7 +9,6 @@ use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 
 use crate::{
-    form::models::FormId,
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Role, User},
 };
@@ -48,7 +47,6 @@ impl Choice {
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
 pub struct QuestionDefinition {
     id: QuestionId,
-    form_id: FormId,
     template_key: NonEmptyString,
     position: u16,
     title: NonEmptyString,
@@ -57,10 +55,8 @@ pub struct QuestionDefinition {
 }
 
 impl QuestionDefinition {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: QuestionId,
-        form_id: FormId,
         template_key: NonEmptyString,
         position: u16,
         title: NonEmptyString,
@@ -69,7 +65,6 @@ impl QuestionDefinition {
     ) -> Self {
         Self {
             id,
-            form_id,
             template_key,
             position,
             title,
@@ -139,6 +134,7 @@ pub enum Question {
     MultipleChoice(SelectQuestion),
 }
 
+#[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct QuestionSet(NonEmptyVec<Question>);
 
@@ -186,9 +182,7 @@ impl QuestionSet {
 }
 
 impl Question {
-    #[allow(clippy::too_many_arguments)]
     pub fn new_text(
-        form_id: FormId,
         template_key: NonEmptyString,
         position: u16,
         title: NonEmptyString,
@@ -197,7 +191,6 @@ impl Question {
     ) -> Result<Self, DomainError> {
         Ok(Self::Text(TextQuestion::new(QuestionDefinition::new(
             QuestionId::new(),
-            form_id,
             template_key,
             position,
             title,
@@ -208,7 +201,6 @@ impl Question {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new_single_choice(
-        form_id: FormId,
         template_key: NonEmptyString,
         position: u16,
         title: NonEmptyString,
@@ -219,7 +211,6 @@ impl Question {
         Ok(Self::SingleChoice(SelectQuestion::try_new(
             QuestionDefinition::new(
                 QuestionId::new(),
-                form_id,
                 template_key,
                 position,
                 title,
@@ -232,7 +223,6 @@ impl Question {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new_multiple_choice(
-        form_id: FormId,
         template_key: NonEmptyString,
         position: u16,
         title: NonEmptyString,
@@ -243,7 +233,6 @@ impl Question {
         Ok(Self::MultipleChoice(SelectQuestion::try_new(
             QuestionDefinition::new(
                 QuestionId::new(),
-                form_id,
                 template_key,
                 position,
                 title,
@@ -257,7 +246,6 @@ impl Question {
     #[allow(clippy::too_many_arguments)]
     pub fn from_raw_parts(
         id: QuestionId,
-        form_id: FormId,
         template_key: NonEmptyString,
         position: u16,
         title: NonEmptyString,
@@ -266,15 +254,8 @@ impl Question {
         choices: Option<NonEmptyVec<Choice>>,
         is_required: bool,
     ) -> Result<Self, DomainError> {
-        let definition = QuestionDefinition::new(
-            id,
-            form_id,
-            template_key,
-            position,
-            title,
-            description,
-            is_required,
-        );
+        let definition =
+            QuestionDefinition::new(id, template_key, position, title, description, is_required);
 
         match question_type {
             QuestionType::Text => {
@@ -317,10 +298,6 @@ impl Question {
 
     pub fn id(&self) -> QuestionId {
         *self.definition().id()
-    }
-
-    pub fn form_id(&self) -> &FormId {
-        self.definition().form_id()
     }
 
     pub fn template_key(&self) -> &NonEmptyString {
@@ -445,7 +422,6 @@ mod test {
     fn text_question_rejects_choices() {
         let result = Question::from_raw_parts(
             Uuid::nil().into(),
-            FormId::from(Uuid::nil()),
             "template".to_string().try_into().unwrap(),
             0,
             "Question".to_string().try_into().unwrap(),
@@ -468,7 +444,6 @@ mod test {
     #[test]
     fn text_question_has_no_choices() {
         let question = Question::new_text(
-            FormId::from(Uuid::nil()),
             "template".to_string().try_into().unwrap(),
             0,
             "Question".to_string().try_into().unwrap(),
@@ -484,7 +459,6 @@ mod test {
     #[test]
     fn single_choice_question_requires_contiguous_choice_positions() {
         let result = Question::new_single_choice(
-            FormId::from(Uuid::nil()),
             "template".to_string().try_into().unwrap(),
             0,
             "Question".to_string().try_into().unwrap(),
@@ -503,7 +477,6 @@ mod test {
     #[test]
     fn multiple_choice_question_requires_contiguous_choice_positions() {
         let result = Question::new_multiple_choice(
-            FormId::from(Uuid::nil()),
             "template".to_string().try_into().unwrap(),
             0,
             "Question".to_string().try_into().unwrap(),
@@ -521,10 +494,8 @@ mod test {
 
     #[test]
     fn question_set_accepts_unique_template_keys_and_contiguous_positions() {
-        let form_id = FormId::from(Uuid::nil());
         let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
-                form_id,
                 "first".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
@@ -533,7 +504,6 @@ mod test {
             )
             .unwrap(),
             Question::new_text(
-                form_id,
                 "second".to_string().try_into().unwrap(),
                 1,
                 "Question 2".to_string().try_into().unwrap(),
@@ -551,10 +521,8 @@ mod test {
 
     #[test]
     fn question_set_rejects_duplicate_position() {
-        let form_id = FormId::from(Uuid::nil());
         let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
-                form_id,
                 "first".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
@@ -563,7 +531,6 @@ mod test {
             )
             .unwrap(),
             Question::new_text(
-                form_id,
                 "second".to_string().try_into().unwrap(),
                 0,
                 "Question 2".to_string().try_into().unwrap(),
@@ -582,10 +549,8 @@ mod test {
 
     #[test]
     fn question_set_rejects_non_contiguous_position() {
-        let form_id = FormId::from(Uuid::nil());
         let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
-                form_id,
                 "first".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
@@ -594,7 +559,6 @@ mod test {
             )
             .unwrap(),
             Question::new_text(
-                form_id,
                 "second".to_string().try_into().unwrap(),
                 2,
                 "Question 2".to_string().try_into().unwrap(),
@@ -613,10 +577,8 @@ mod test {
 
     #[test]
     fn question_set_rejects_duplicate_template_keys() {
-        let form_id = FormId::from(Uuid::nil());
         let questions = NonEmptyVec::try_new(vec![
             Question::new_text(
-                form_id,
                 "same".to_string().try_into().unwrap(),
                 0,
                 "Question 1".to_string().try_into().unwrap(),
@@ -625,7 +587,6 @@ mod test {
             )
             .unwrap(),
             Question::new_text(
-                form_id,
                 "same".to_string().try_into().unwrap(),
                 1,
                 "Question 2".to_string().try_into().unwrap(),

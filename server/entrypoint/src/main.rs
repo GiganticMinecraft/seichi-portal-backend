@@ -85,7 +85,6 @@ use utoipa_swagger_ui::SwaggerUi;
     tags(
         (name = "Forms"),
         (name = "Answers"),
-        (name = "Questions"),
         (name = "Comments"),
         (name = "Labels"),
         (name = "Messages"),
@@ -168,7 +167,7 @@ async fn main() -> anyhow::Result<()> {
 
     use presentation::handlers::form::{
         answer_handler, answer_label_handler, comment_handler, form_handler, form_label_handler,
-        message_handler, question_handler,
+        message_handler,
     };
     use presentation::handlers::{
         health_check_handler, notification_handler, search_handler, user_handler,
@@ -188,7 +187,6 @@ async fn main() -> anyhow::Result<()> {
             answer_handler::get_answer_by_form_id_handler,
             answer_handler::post_answer_handler
         ))
-        .routes(routes!(question_handler::get_questions_handler))
         .routes(routes!(answer_handler::get_all_answers))
         .routes(routes!(
             answer_label_handler::get_labels_for_answers,

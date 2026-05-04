@@ -124,7 +124,6 @@ pub async fn create_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
@@ -141,7 +140,7 @@ pub async fn create_form_handler(
         .map_err(errors::Error::from)
         .map_err(handle_error)?;
 
-    let (form, questions) = form_use_case
+    let form = form_use_case
         .create_form(title, form_description, questions, &user)
         .await
         .map_err(handle_error)?;
@@ -152,9 +151,10 @@ pub async fn create_form_handler(
         description: form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: questions
-            .into_inner()
-            .into_iter()
+        questions: form
+            .questions()
+            .iter()
+            .cloned()
             .map(QuestionResponseSchema::from)
             .collect(),
         labels: vec![],
@@ -187,7 +187,6 @@ pub async fn form_list_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
@@ -199,14 +198,16 @@ pub async fn form_list_handler(
 
     let response_schema = forms
         .into_iter()
-        .map(|(form, questions, labels)| FormSchema {
+        .map(|(form, labels)| FormSchema {
             id: form.id().to_owned(),
             title: form.title().to_owned(),
             description: form.description().to_owned(),
             settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
             metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-            questions: questions
-                .into_iter()
+            questions: form
+                .questions()
+                .iter()
+                .cloned()
                 .map(QuestionResponseSchema::from)
                 .collect(),
             labels,
@@ -242,18 +243,13 @@ pub async fn get_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    let FormDto {
-        form,
-        questions,
-        labels,
-    } = form_use_case
+    let FormDto { form, labels } = form_use_case
         .get_form(&user, form_id)
         .await
         .map_err(handle_error)?;
@@ -264,8 +260,10 @@ pub async fn get_form_handler(
         description: form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: questions
-            .into_iter()
+        questions: form
+            .questions()
+            .iter()
+            .cloned()
             .map(QuestionResponseSchema::from)
             .collect(),
         labels,
@@ -298,7 +296,6 @@ pub async fn delete_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
@@ -343,7 +340,6 @@ pub async fn update_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
@@ -376,11 +372,11 @@ pub async fn update_form_handler(
         };
     let questions = targets
         .questions
-        .map(|questions| into_upsert_question_dtos(form_id, questions))
+        .map(into_upsert_question_dtos)
         .transpose()
         .map_err(handle_error)?;
 
-    let (updated_form, questions, labels) = form_use_case
+    let (updated_form, labels) = form_use_case
         .update_form(
             &user,
             form_id,
@@ -402,8 +398,10 @@ pub async fn update_form_handler(
         description: updated_form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
         metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
-        questions: questions
-            .into_iter()
+        questions: updated_form
+            .questions()
+            .iter()
+            .cloned()
             .map(QuestionResponseSchema::from)
             .collect(),
         labels,
@@ -411,12 +409,11 @@ pub async fn update_form_handler(
 }
 
 fn into_upsert_question_dtos(
-    form_id: FormId,
     questions: Vec<QuestionSchema>,
 ) -> Result<Vec<UpsertQuestionDto>, errors::Error> {
     let questions = questions
         .into_iter()
-        .map(|question| into_upsert_question_dto(form_id, question))
+        .map(into_upsert_question_dto)
         .collect::<Result<Vec<_>, _>>()?;
 
     if questions.is_empty() {
@@ -436,12 +433,11 @@ fn into_upsert_question_dtos(
 fn into_create_questions(
     questions: NonEmptyVec<QuestionSchema>,
 ) -> Result<NonEmptyVec<domain::form::question::models::Question>, errors::domain::DomainError> {
-    let form_id = FormId::new();
     let questions = questions
         .into_inner()
         .into_iter()
         .enumerate()
-        .map(|(position, question)| into_create_question(form_id, position as u16, question))
+        .map(|(position, question)| into_create_question(position as u16, question))
         .collect::<Result<Vec<_>, _>>()?;
     let questions = NonEmptyVec::try_new(questions).expect("create questions is non-empty");
 
@@ -449,7 +445,6 @@ fn into_create_questions(
 }
 
 fn into_create_question(
-    form_id: FormId,
     position: u16,
     question: QuestionSchema,
 ) -> Result<domain::form::question::models::Question, errors::domain::DomainError> {
@@ -458,7 +453,6 @@ fn into_create_question(
     match question_type {
         domain::form::question::models::QuestionType::Text => {
             domain::form::question::models::Question::new_text(
-                form_id,
                 definition.template_key,
                 position,
                 definition.title,
@@ -468,7 +462,6 @@ fn into_create_question(
         }
         domain::form::question::models::QuestionType::SingleChoice => {
             domain::form::question::models::Question::new_single_choice(
-                form_id,
                 definition.template_key,
                 position,
                 definition.title,
@@ -479,7 +472,6 @@ fn into_create_question(
         }
         domain::form::question::models::QuestionType::MultipleChoice => {
             domain::form::question::models::Question::new_multiple_choice(
-                form_id,
                 definition.template_key,
                 position,
                 definition.title,
@@ -492,7 +484,6 @@ fn into_create_question(
 }
 
 fn into_upsert_question_dto(
-    form_id: FormId,
     question: QuestionSchema,
 ) -> Result<UpsertQuestionDto, errors::domain::DomainError> {
     let (question_type, definition, choices) = question.into_parts();
@@ -501,7 +492,6 @@ fn into_upsert_question_dto(
     let question = match original_id {
         Some(question_id) => domain::form::question::models::Question::from_raw_parts(
             question_id,
-            form_id,
             definition.template_key,
             definition.position,
             definition.title,
@@ -513,7 +503,6 @@ fn into_upsert_question_dto(
         None => match question_type {
             domain::form::question::models::QuestionType::Text => {
                 domain::form::question::models::Question::new_text(
-                    form_id,
                     definition.template_key,
                     definition.position,
                     definition.title,
@@ -523,7 +512,6 @@ fn into_upsert_question_dto(
             }
             domain::form::question::models::QuestionType::SingleChoice => {
                 domain::form::question::models::Question::new_single_choice(
-                    form_id,
                     definition.template_key,
                     definition.position,
                     definition.title,
@@ -534,7 +522,6 @@ fn into_upsert_question_dto(
             }
             domain::form::question::models::QuestionType::MultipleChoice => {
                 domain::form::question::models::Question::new_multiple_choice(
-                    form_id,
                     definition.template_key,
                     definition.position,
                     definition.title,
@@ -572,7 +559,6 @@ fn required_choices(
 mod tests {
     use super::*;
     use serde_json::json;
-    use uuid::Uuid;
 
     #[test]
     fn text_question_with_choices_is_rejected_during_deserialization() {
@@ -602,7 +588,7 @@ mod tests {
         }))
         .unwrap();
 
-        let result = into_upsert_question_dto(FormId::from(Uuid::nil()), question);
+        let result = into_upsert_question_dto(question);
 
         assert!(matches!(
             result,
@@ -684,7 +670,7 @@ mod tests {
         ]))
         .unwrap();
 
-        let result = into_upsert_question_dtos(FormId::from(Uuid::nil()), questions);
+        let result = into_upsert_question_dtos(questions);
 
         assert!(matches!(
             result,

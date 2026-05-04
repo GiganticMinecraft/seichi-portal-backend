@@ -260,7 +260,7 @@ fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::form::{models::FormId, question::models::Choice};
+    use crate::form::question::models::Choice;
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
@@ -271,7 +271,6 @@ mod tests {
     fn text_question() -> Question {
         Question::from_raw_parts(
             question_id("00000000-0000-7000-8000-000000000001"),
-            FormId::from(Uuid::nil()),
             "name".to_string().try_into().unwrap(),
             0,
             "Name".to_string().try_into().unwrap(),
@@ -286,7 +285,6 @@ mod tests {
     fn single_choice_question() -> Question {
         Question::from_raw_parts(
             question_id("00000000-0000-7000-8000-000000000002"),
-            FormId::from(Uuid::nil()),
             "role".to_string().try_into().unwrap(),
             1,
             "Role".to_string().try_into().unwrap(),
@@ -306,7 +304,6 @@ mod tests {
     fn multiple_choice_question() -> Question {
         Question::from_raw_parts(
             question_id("00000000-0000-7000-8000-000000000003"),
-            FormId::from(Uuid::nil()),
             "tags".to_string().try_into().unwrap(),
             2,
             "Tags".to_string().try_into().unwrap(),

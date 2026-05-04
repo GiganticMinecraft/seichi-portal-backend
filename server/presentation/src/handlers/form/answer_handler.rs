@@ -106,7 +106,6 @@ pub async fn get_all_answers(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
-        question_repository: repository.form_question_repository(),
     };
 
     let answers = form_answer_use_case
@@ -158,7 +157,6 @@ pub async fn get_answer_handler(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
-        question_repository: repository.form_question_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -204,7 +202,6 @@ pub async fn get_answer_by_form_id_handler(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
-        question_repository: repository.form_question_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -259,7 +256,6 @@ pub async fn post_answer_handler(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
-        question_repository: repository.form_question_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -315,7 +311,6 @@ pub async fn update_answer_handler(
         form_repository: repository.form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
-        question_repository: repository.form_question_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;

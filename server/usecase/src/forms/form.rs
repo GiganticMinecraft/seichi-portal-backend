@@ -1,13 +1,15 @@
-use domain::form::question::models::Question;
 use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-        models::{Form, FormDescription, FormId, FormLabel, FormTitle, Visibility, WebhookUrl},
+        models::{
+            Form, FormDescription, FormId, FormLabel, FormTitle, Question, QuestionSet, Visibility,
+            WebhookUrl,
+        },
     },
     repository::{
         form::{
             answer_repository::AnswerRepository, form_label_repository::FormLabelRepository,
-            form_repository::FormRepository, question_repository::QuestionRepository,
+            form_repository::FormRepository,
         },
         notification_repository::NotificationRepository,
     },
@@ -23,24 +25,17 @@ pub struct FormUseCase<
     'a,
     FormRepo: FormRepository,
     NotificationRepo: NotificationRepository,
-    QuestionRepo: QuestionRepository,
     FormLabelRepo: FormLabelRepository,
     AnswerRepo: AnswerRepository,
 > {
     pub form_repository: &'a FormRepo,
     pub notification_repository: &'a NotificationRepo,
-    pub question_repository: &'a QuestionRepo,
     pub form_label_repository: &'a FormLabelRepo,
     pub answer_repository: &'a AnswerRepo,
 }
 
-impl<
-    R1: FormRepository,
-    R2: NotificationRepository,
-    R3: QuestionRepository,
-    R4: FormLabelRepository,
-    R5: AnswerRepository,
-> FormUseCase<'_, R1, R2, R3, R4, R5>
+impl<R1: FormRepository, R2: NotificationRepository, R4: FormLabelRepository, R5: AnswerRepository>
+    FormUseCase<'_, R1, R2, R4, R5>
 {
     pub async fn create_form(
         &self,
@@ -48,40 +43,22 @@ impl<
         description: FormDescription,
         questions: NonEmptyVec<Question>,
         user: &User,
-    ) -> Result<(Form, NonEmptyVec<Question>), Error> {
-        let form = Form::new(title, description);
-        let form_id = form.id().to_owned();
-        let questions = questions_for_form(form_id, questions)?;
+    ) -> Result<Form, Error> {
+        let form = Form::new(
+            title,
+            description,
+            QuestionSet::try_new(questions).map_err(Error::from)?,
+        );
+        let form_id = *form.id();
 
         self.form_repository.create(user, form.into()).await?;
-        self.question_repository
-            .create_questions(
-                user,
-                form_id,
-                NonEmptyVec::try_new(
-                    questions
-                        .clone()
-                        .into_inner()
-                        .into_iter()
-                        .map(Into::into)
-                        .collect::<Vec<_>>(),
-                )
-                .map_err(Error::from)?,
-            )
-            .await?;
 
-        let created_form_guard = self
-            .form_repository
+        self.form_repository
             .get(form_id)
             .await?
-            .ok_or(Error::from(FormNotFound))?;
-
-        Ok((
-            created_form_guard
-                .try_into_read(user)
-                .map_err(Error::from)?,
-            questions,
-        ))
+            .ok_or(Error::from(FormNotFound))?
+            .try_into_read(user)
+            .map_err(Error::from)
     }
 
     /// `actor` が参照可能なフォームのリストを取得する
@@ -90,7 +67,7 @@ impl<
         actor: &User,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<(Form, Vec<Question>, Vec<FormLabel>)>, Error> {
+    ) -> Result<Vec<(Form, Vec<FormLabel>)>, Error> {
         let forms = self
             .form_repository
             .list(offset, limit)
@@ -104,25 +81,12 @@ impl<
                 .fetch_labels_by_form_id(*form.id())
         }))
         .await?;
-
-        let questions = futures::future::try_join_all(
-            forms
-                .iter()
-                .map(|form| self.question_repository.get_questions(*form.id())),
-        )
-        .await?;
-
         let forms_with_labels = forms
             .into_iter()
             .zip(form_labels)
-            .zip(questions)
-            .map(|((form, labels), questions)| {
+            .map(|(form, labels)| {
                 Ok::<_, Error>((
                     form,
-                    questions
-                        .into_iter()
-                        .map(|question| question.try_into_read(actor))
-                        .collect::<Result<Vec<_>, _>>()?,
                     labels
                         .into_iter()
                         .map(|guard| guard.try_into_read(actor))
@@ -141,14 +105,6 @@ impl<
             .await?
             .ok_or(Error::from(FormNotFound))?
             .try_into_read(actor)?;
-
-        let questions = self
-            .question_repository
-            .get_questions(form_id)
-            .await?
-            .into_iter()
-            .map(|question| question.try_into_read(actor))
-            .collect::<Result<Vec<_>, _>>()?;
         let labels = self
             .form_label_repository
             .fetch_labels_by_form_id(form_id)
@@ -157,11 +113,7 @@ impl<
             .map(|label| label.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(FormDto {
-            form,
-            questions,
-            labels,
-        })
+        Ok(FormDto { form, labels })
     }
 
     pub async fn delete_form(&self, actor: &User, form_id: FormId) -> Result<(), Error> {
@@ -187,38 +139,27 @@ impl<
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
         questions: Option<Vec<UpsertQuestionDto>>,
-    ) -> Result<(Form, Vec<Question>, Vec<FormLabel>), Error> {
+    ) -> Result<(Form, Vec<FormLabel>), Error> {
         let current_form = self
             .form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
         let current_questions = self
-            .question_repository
-            .get_questions(form_id)
+            .form_repository
+            .get(form_id)
             .await?
-            .into_iter()
-            .map(|question| question.try_into_read(actor))
-            .collect::<Result<Vec<_>, _>>()?;
+            .ok_or(Error::from(FormNotFound))?
+            .try_into_read(actor)?
+            .questions()
+            .as_slice()
+            .to_vec();
 
         if let Some(questions) = &questions {
             let existing_question_ids = current_questions
                 .iter()
                 .map(|question| question.id().into_inner())
                 .collect::<BTreeSet<_>>();
-            if let Some(invalid_question) = questions
-                .iter()
-                .map(|question| &question.question)
-                .find(|question| question.form_id() != &form_id)
-            {
-                return Err(DomainError::InvalidEntity {
-                    message: format!(
-                        "question.form_id must match the target form: {}",
-                        invalid_question.template_key().as_str()
-                    ),
-                }
-                .into());
-            }
             if let Some(invalid_id) = questions
                 .iter()
                 .filter_map(|question| question.original_id.map(|id| id.into_inner()))
@@ -281,37 +222,33 @@ impl<
             updated_form.change_settings(updated_settings)
         });
 
+        let updated_form = match questions {
+            Some(questions) => {
+                let questions = NonEmptyVec::try_new(
+                    questions
+                        .into_iter()
+                        .map(|question| question.question)
+                        .collect::<Vec<_>>(),
+                )
+                .map_err(Error::from)?;
+                updated_form.map(|form| {
+                    form.change_questions(QuestionSet::try_new(questions).expect("validated"))
+                })
+            }
+            None => updated_form,
+        };
+
         self.form_repository
             .update_form(actor, updated_form)
             .await?;
-        if let Some(questions) = questions {
-            self.question_repository
-                .put_questions(
-                    actor,
-                    form_id,
-                    questions
-                        .into_iter()
-                        .map(|question| question.question.into())
-                        .collect(),
-                )
-                .await?;
-        }
 
-        let updated_form_guard = self
+        let updated_form = self
             .form_repository
             .get(form_id)
             .await?
-            .ok_or(Error::from(FormNotFound))?;
-
-        let updated_form = updated_form_guard
+            .ok_or(Error::from(FormNotFound))?
             .try_into_read(actor)
             .map_err(|_| Error::from(FormNotFound))?;
-
-        let question_guards = self.question_repository.get_questions(form_id).await?;
-        let questions = question_guards
-            .into_iter()
-            .map(|question| question.try_into_read(actor))
-            .collect::<Result<Vec<_>, _>>()?;
 
         let label_guards = self
             .form_label_repository
@@ -322,67 +259,8 @@ impl<
             .map(|label| label.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok((updated_form, questions, labels))
+        Ok((updated_form, labels))
     }
-}
-
-fn questions_for_form(
-    form_id: FormId,
-    questions: NonEmptyVec<Question>,
-) -> Result<NonEmptyVec<Question>, Error> {
-    NonEmptyVec::try_new(
-        questions
-            .into_inner()
-            .into_iter()
-            .map(|question| match question.question_type() {
-                domain::form::question::models::QuestionType::Text => Question::new_text(
-                    form_id,
-                    question.template_key().to_owned(),
-                    question.position(),
-                    question.title().to_owned(),
-                    question.description().cloned(),
-                    question.is_required(),
-                ),
-                domain::form::question::models::QuestionType::SingleChoice => {
-                    let choices =
-                        question
-                            .choices()
-                            .cloned()
-                            .ok_or(DomainError::InvalidEntity {
-                                message: "single choice question must have choices".to_string(),
-                            })?;
-                    Question::new_single_choice(
-                        form_id,
-                        question.template_key().to_owned(),
-                        question.position(),
-                        question.title().to_owned(),
-                        question.description().cloned(),
-                        choices,
-                        question.is_required(),
-                    )
-                }
-                domain::form::question::models::QuestionType::MultipleChoice => {
-                    let choices =
-                        question
-                            .choices()
-                            .cloned()
-                            .ok_or(DomainError::InvalidEntity {
-                                message: "multiple choice question must have choices".to_string(),
-                            })?;
-                    Question::new_multiple_choice(
-                        form_id,
-                        question.template_key().to_owned(),
-                        question.position(),
-                        question.title().to_owned(),
-                        question.description().cloned(),
-                        choices,
-                        question.is_required(),
-                    )
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-    )
-    .map_err(Error::from)
 }
 
 fn validate_answered_form_question_update(
@@ -528,13 +406,13 @@ mod tests {
     use domain::{
         form::{
             models::{FormDescription, FormMeta, FormSettings, FormTitle},
-            question::models::{QuestionId, QuestionType},
+            question::models::{QuestionId, QuestionSet, QuestionType},
         },
         repository::{
             form::{
                 answer_repository::MockAnswerRepository,
                 form_label_repository::MockFormLabelRepository,
-                form_repository::MockFormRepository, question_repository::MockQuestionRepository,
+                form_repository::MockFormRepository,
             },
             notification_repository::MockNotificationRepository,
         },
@@ -552,24 +430,28 @@ mod tests {
     }
 
     fn sample_form(form_id: FormId) -> domain::form::models::Form {
+        let questions = QuestionSet::try_new(
+            NonEmptyVec::try_new(vec![text_question(
+                QuestionId::from(Uuid::new_v4()),
+                0,
+                "body",
+            )])
+            .unwrap(),
+        )
+        .unwrap();
         domain::form::models::Form::from_raw_parts(
             form_id,
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             FormMeta::new(),
             FormSettings::new(),
+            questions,
         )
     }
 
-    fn text_question(
-        form_id: FormId,
-        question_id: QuestionId,
-        position: u16,
-        template_key: &str,
-    ) -> Question {
+    fn text_question(question_id: QuestionId, position: u16, template_key: &str) -> Question {
         Question::from_raw_parts(
             question_id,
-            form_id,
             template_key.to_string().try_into().unwrap(),
             position,
             template_key.to_string().try_into().unwrap(),
@@ -586,7 +468,6 @@ mod tests {
         let user = admin_user();
         let input_questions = NonEmptyVec::try_new(vec![
             Question::new_text(
-                FormId::from(Uuid::nil()),
                 "body".to_string().try_into().unwrap(),
                 0,
                 "Body".to_string().try_into().unwrap(),
@@ -607,18 +488,6 @@ mod tests {
             .times(1)
             .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
 
-        let mut question_repository = MockQuestionRepository::new();
-        let auth_user = user.clone();
-        question_repository
-            .expect_create_questions()
-            .times(1)
-            .returning(move |_, form_id, questions| {
-                assert_eq!(questions.len(), 1);
-                let question = questions[0].try_create(&auth_user, Clone::clone)?;
-                assert_eq!(question.form_id(), &form_id);
-                Ok(())
-            });
-
         let form_label_repository = MockFormLabelRepository::new();
         let answer_repository = MockAnswerRepository::new();
         let notification_repository = MockNotificationRepository::new();
@@ -626,12 +495,11 @@ mod tests {
         let usecase = FormUseCase {
             form_repository: &form_repository,
             notification_repository: &notification_repository,
-            question_repository: &question_repository,
             form_label_repository: &form_label_repository,
             answer_repository: &answer_repository,
         };
 
-        let (created_form, created_questions) = usecase
+        let created_form = usecase
             .create_form(
                 FormTitle::new("Form".to_string().try_into().unwrap()),
                 FormDescription::new("description".to_string()),
@@ -641,8 +509,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(created_questions.len(), 1);
-        assert_eq!(created_questions[0].form_id(), created_form.id());
+        assert_eq!(created_form.questions().as_slice().len(), 1);
     }
 
     #[tokio::test]
@@ -650,30 +517,15 @@ mod tests {
         let user = admin_user();
         let form_id = FormId::from(Uuid::new_v4());
         let form = sample_form(form_id);
-        let existing_question = text_question(form_id, QuestionId::from(Uuid::new_v4()), 0, "body");
-
         let mut form_repository = MockFormRepository::new();
         form_repository
             .expect_get()
-            .times(2)
+            .times(3)
             .returning(move |_| Ok(Some(sample_form(form_id).into())));
         form_repository
             .expect_update_form()
             .times(1)
             .returning(|_, _| Ok(()));
-
-        let mut question_repository = MockQuestionRepository::new();
-        let current_questions = vec![existing_question.clone()];
-        question_repository
-            .expect_get_questions()
-            .times(2)
-            .returning(move |_| {
-                Ok(current_questions
-                    .clone()
-                    .into_iter()
-                    .map(Into::into)
-                    .collect())
-            });
 
         let mut form_label_repository = MockFormLabelRepository::new();
         form_label_repository
@@ -687,12 +539,11 @@ mod tests {
         let usecase = FormUseCase {
             form_repository: &form_repository,
             notification_repository: &notification_repository,
-            question_repository: &question_repository,
             form_label_repository: &form_label_repository,
             answer_repository: &answer_repository,
         };
 
-        let (_, questions, _) = usecase
+        let (updated_form, _) = usecase
             .update_form(
                 &user,
                 form.id().to_owned(),
@@ -708,6 +559,13 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(questions, vec![existing_question]);
+        assert_eq!(
+            updated_form.questions().as_slice().len(),
+            form.questions().as_slice().len()
+        );
+        assert_eq!(
+            updated_form.questions().as_slice()[0].template_key(),
+            form.questions().as_slice()[0].template_key()
+        );
     }
 }

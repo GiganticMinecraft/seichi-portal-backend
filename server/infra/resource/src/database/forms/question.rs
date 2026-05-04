@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use domain::form::{
     models::FormId,
     question::models::{Question, QuestionId, QuestionType},
@@ -11,150 +10,131 @@ use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
 
 use crate::{
-    database::{components::FormQuestionDatabase, connection::ConnectionPool},
+    database::connection::DatabaseTransaction,
     dto::{ChoiceDto, QuestionDto},
 };
 
-#[async_trait]
-impl FormQuestionDatabase for ConnectionPool {
-    #[tracing::instrument]
-    async fn create_questions(
-        &self,
-        form_id: FormId,
-        questions: NonEmptyVec<Question>,
-    ) -> Result<(), InfraError> {
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                let assigned_questions =
-                    insert_new_questions(txn, &form_id, questions.iter().collect_vec()).await?;
-                sync_choices_for_questions(txn, &assigned_questions).await
+pub(crate) async fn create_questions_txn(
+    txn: &mut MySqlConnection,
+    form_id: FormId,
+    questions: NonEmptyVec<Question>,
+) -> Result<(), InfraError> {
+    let assigned_questions =
+        insert_new_questions(txn, &form_id, questions.iter().collect_vec()).await?;
+    sync_choices_for_questions(txn, &assigned_questions).await
+}
+
+pub(crate) async fn put_questions_txn(
+    txn: &mut MySqlConnection,
+    form_id: FormId,
+    questions: Vec<Question>,
+) -> Result<(), InfraError> {
+    let form_id_string = form_id.into_inner().to_string();
+    let existing_question_ids = fetch_question_ids(txn, &form_id_string).await?;
+    let existing_question_id_set = existing_question_ids
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    let (existing_questions, new_questions): (Vec<_>, Vec<_>) = questions
+        .iter()
+        .partition(|question| existing_question_id_set.contains(&question.id().into_inner()));
+
+    temporarily_relocate_existing_questions(txn, &form_id_string).await?;
+    upsert_existing_questions(txn, &form_id_string, &existing_questions).await?;
+    let inserted_questions = insert_new_questions(txn, &form_id, new_questions).await?;
+
+    let retained_question_ids = existing_questions
+        .iter()
+        .map(|question| question.id().into_inner())
+        .chain(
+            inserted_questions
+                .iter()
+                .map(|(question_id, _)| question_id.into_inner()),
+        )
+        .collect::<BTreeSet<_>>();
+    delete_questions(
+        txn,
+        existing_question_ids
+            .into_iter()
+            .filter(|question_id| !retained_question_ids.contains(question_id))
+            .collect_vec(),
+    )
+    .await?;
+
+    let assigned_questions = existing_questions
+        .into_iter()
+        .map(|question| (question.id(), question))
+        .chain(inserted_questions)
+        .collect_vec();
+
+    sync_choices_for_questions(txn, &assigned_questions).await
+}
+
+pub(crate) async fn get_questions_txn(
+    txn: &mut DatabaseTransaction,
+    form_id: FormId,
+) -> Result<Vec<QuestionDto>, InfraError> {
+    let form_id = form_id.into_inner().to_string();
+    let questions_rs = sqlx::query(
+        r"SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
+        FROM form_questions
+        WHERE form_id = ?
+        ORDER BY position ASC, question_id ASC",
+    )
+    .bind(form_id.clone())
+    .fetch_all(&mut **txn)
+    .await?;
+
+    let choices_by_question_id = sqlx::query(
+        r"SELECT form_choices.id, form_choices.question_id, form_choices.position, form_choices.label
+        FROM form_choices
+        INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
+        WHERE form_questions.form_id = ?
+        ORDER BY form_choices.position ASC, form_choices.id ASC",
+    )
+    .bind(form_id)
+    .fetch_all(&mut **txn)
+    .await?
+    .into_iter()
+    .map(|choice_rs| {
+        let question_id = Uuid::parse_str(&choice_rs.try_get::<String, _>("question_id")?)?;
+        Ok::<_, InfraError>((
+            question_id,
+            ChoiceDto {
+                id: Some(choice_rs.try_get("id")?),
+                position: choice_rs.try_get::<u16, _>("position")?,
+                label: choice_rs.try_get("label")?,
+            },
+        ))
+    })
+    .collect::<Result<Vec<_>, _>>()?
+    .into_iter()
+    .into_group_map();
+
+    questions_rs
+        .into_iter()
+        .map(|question_rs| {
+            let question_id = Uuid::parse_str(&question_rs.try_get::<String, _>("question_id")?)?;
+
+            Ok::<_, InfraError>(QuestionDto {
+                id: question_id.to_string(),
+                form_id: question_rs.try_get("form_id")?,
+                template_key: question_rs.try_get("template_key")?,
+                position: question_rs.try_get::<u16, _>("position")?,
+                title: question_rs.try_get("title")?,
+                description: question_rs.try_get("description")?,
+                question_type: question_rs.try_get::<String, _>("question_type")?,
+                choices: choices_by_question_id
+                    .get(&question_id)
+                    .cloned()
+                    .unwrap_or_default(),
+                is_required: question_rs
+                    .try_get::<Option<bool>, _>("is_required")?
+                    .unwrap_or(false),
             })
         })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn put_questions(
-        &self,
-        form_id: FormId,
-        questions: Vec<Question>,
-    ) -> Result<(), InfraError> {
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                let form_id_string = form_id.into_inner().to_string();
-                let existing_question_ids = fetch_question_ids(txn, &form_id_string).await?;
-                let existing_question_id_set = existing_question_ids
-                    .iter()
-                    .copied()
-                    .collect::<BTreeSet<_>>();
-
-                let (existing_questions, new_questions): (Vec<_>, Vec<_>) =
-                    questions.iter().partition(|question| {
-                        existing_question_id_set.contains(&question.id().into_inner())
-                    });
-
-                temporarily_relocate_existing_questions(txn, &form_id_string).await?;
-                upsert_existing_questions(txn, &form_id_string, &existing_questions).await?;
-                let inserted_questions = insert_new_questions(txn, &form_id, new_questions).await?;
-
-                let retained_question_ids = existing_questions
-                    .iter()
-                    .map(|question| question.id().into_inner())
-                    .chain(
-                        inserted_questions
-                            .iter()
-                            .map(|(question_id, _)| question_id.into_inner()),
-                    )
-                    .collect::<BTreeSet<_>>();
-                delete_questions(
-                    txn,
-                    existing_question_ids
-                        .into_iter()
-                        .filter(|question_id| !retained_question_ids.contains(question_id))
-                        .collect_vec(),
-                )
-                .await?;
-
-                let assigned_questions = existing_questions
-                    .into_iter()
-                    .map(|question| (question.id(), question))
-                    .chain(inserted_questions)
-                    .collect_vec();
-
-                sync_choices_for_questions(txn, &assigned_questions).await
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError> {
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let form_id = form_id.into_inner().to_string();
-                let questions_rs = sqlx::query(
-                    r"SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
-                    FROM form_questions
-                    WHERE form_id = ?
-                    ORDER BY position ASC, question_id ASC",
-                )
-                .bind(form_id.clone())
-                .fetch_all(&mut **txn)
-                .await?;
-
-                let choices_by_question_id = sqlx::query(
-                    r"SELECT form_choices.id, form_choices.question_id, form_choices.position, form_choices.label
-                    FROM form_choices
-                    INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
-                    WHERE form_questions.form_id = ?
-                    ORDER BY form_choices.position ASC, form_choices.id ASC",
-                )
-                .bind(form_id)
-                .fetch_all(&mut **txn)
-                .await?
-                .into_iter()
-                .map(|choice_rs| {
-                    let question_id = Uuid::parse_str(&choice_rs.try_get::<String, _>("question_id")?)?;
-                    Ok::<_, InfraError>((
-                        question_id,
-                        ChoiceDto {
-                            id: Some(choice_rs.try_get("id")?),
-                            position: choice_rs.try_get::<u16, _>("position")?,
-                            label: choice_rs.try_get("label")?,
-                        },
-                    ))
-                })
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter()
-                .into_group_map();
-
-                questions_rs
-                    .into_iter()
-                    .map(|question_rs| {
-                        let question_id = Uuid::parse_str(&question_rs.try_get::<String, _>("question_id")?)?;
-
-                        Ok::<_, InfraError>(QuestionDto {
-                            id: question_id.to_string(),
-                            form_id: question_rs.try_get("form_id")?,
-                            template_key: question_rs.try_get("template_key")?,
-                            position: question_rs.try_get::<u16, _>("position")?,
-                            title: question_rs.try_get("title")?,
-                            description: question_rs.try_get("description")?,
-                            question_type: question_rs.try_get::<String, _>("question_type")?,
-                            choices: choices_by_question_id
-                                .get(&question_id)
-                                .cloned()
-                                .unwrap_or_default(),
-                            is_required: question_rs
-                                .try_get::<Option<bool>, _>("is_required")?
-                                .unwrap_or(false),
-                        })
-                    })
-                    .collect::<Result<Vec<QuestionDto>, _>>()
-            })
-        })
-        .await
-    }
+        .collect::<Result<Vec<QuestionDto>, _>>()
 }
 
 async fn fetch_question_ids(
