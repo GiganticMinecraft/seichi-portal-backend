@@ -416,8 +416,8 @@ mod tests {
             "Role".to_string().try_into().unwrap(),
             Some("desc".to_string().try_into().unwrap()),
             NonEmptyVec::try_new(vec![
-                Choice::new(Some(10.into()), 0, "Admin".to_string().try_into().unwrap()).unwrap(),
-                Choice::new(Some(11.into()), 1, "User".to_string().try_into().unwrap()).unwrap(),
+                Choice::new(Some(10.into()), 0, "Admin".to_string().try_into().unwrap()),
+                Choice::new(Some(11.into()), 1, "User".to_string().try_into().unwrap()),
             ])
             .unwrap(),
             true,

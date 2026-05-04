@@ -27,16 +27,12 @@ pub struct Choice {
 }
 
 impl Choice {
-    pub fn new(
-        id: Option<ChoiceId>,
-        position: u16,
-        label: NonEmptyString,
-    ) -> Result<Self, DomainError> {
-        Ok(Self {
+    pub fn new(id: Option<ChoiceId>, position: u16, label: NonEmptyString) -> Self {
+        Self {
             id,
             position,
             label,
-        })
+        }
     }
 
     pub fn from_raw_parts(
@@ -44,7 +40,7 @@ impl Choice {
         position: u16,
         label: NonEmptyString,
     ) -> Result<Self, DomainError> {
-        Self::new(id, position, label)
+        Ok(Self::new(id, position, label))
     }
 }
 
@@ -456,9 +452,11 @@ mod test {
             None,
             QuestionType::Text,
             Some(
-                NonEmptyVec::try_new(vec![
-                    Choice::new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
-                ])
+                NonEmptyVec::try_new(vec![Choice::new(
+                    None,
+                    0,
+                    "A".to_string().try_into().unwrap(),
+                )])
                 .unwrap(),
             ),
             true,
@@ -492,8 +490,8 @@ mod test {
             "Question".to_string().try_into().unwrap(),
             None,
             NonEmptyVec::try_new(vec![
-                Choice::new(None, 0, "A".to_string().try_into().unwrap()).unwrap(),
-                Choice::new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
+                Choice::new(None, 0, "A".to_string().try_into().unwrap()),
+                Choice::new(None, 2, "B".to_string().try_into().unwrap()),
             ])
             .unwrap(),
             true,
@@ -511,8 +509,8 @@ mod test {
             "Question".to_string().try_into().unwrap(),
             None,
             NonEmptyVec::try_new(vec![
-                Choice::new(None, 1, "A".to_string().try_into().unwrap()).unwrap(),
-                Choice::new(None, 2, "B".to_string().try_into().unwrap()).unwrap(),
+                Choice::new(None, 1, "A".to_string().try_into().unwrap()),
+                Choice::new(None, 2, "B".to_string().try_into().unwrap()),
             ])
             .unwrap(),
             true,

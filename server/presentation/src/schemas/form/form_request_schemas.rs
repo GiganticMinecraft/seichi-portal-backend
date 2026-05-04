@@ -6,7 +6,6 @@ use domain::form::{
     },
     models::{FormLabelId, FormTitle, Visibility, WebhookUrl},
 };
-use errors::domain::DomainError;
 use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;
 
@@ -120,10 +119,8 @@ pub struct ChoiceSchema {
     pub label: NonEmptyString,
 }
 
-impl TryFrom<ChoiceSchema> for domain::form::question::models::Choice {
-    type Error = DomainError;
-
-    fn try_from(choice: ChoiceSchema) -> Result<Self, Self::Error> {
+impl From<ChoiceSchema> for domain::form::question::models::Choice {
+    fn from(choice: ChoiceSchema) -> Self {
         Self::new(choice.id, choice.position, choice.label)
     }
 }
