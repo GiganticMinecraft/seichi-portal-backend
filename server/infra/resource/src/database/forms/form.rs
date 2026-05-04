@@ -322,68 +322,13 @@ async fn update_form_root(
 // ---------------------------------------------------------------------------
 // Question 子集合の同期
 //
-// 用語: 本セクションで使う「desired (期待状態)」は、ドメイン側 (今回のリクエスト
-// で受け取った Form 集約) が「DB をこの状態にしたい」と表明している子集合を指す。
-// 反対側として「current (現状)」= DB に今ある子集合がある。同期処理は両者を突き合わせ、
-// 以下の流れで DB を desired に一致させる:
-//   1. 差分計算 (current と desired から upsert / insert / delete に振り分ける)
-//   2. UNIQUE 制約回避のための一時退避 (Question のみ)
-//   3. upsert / insert / delete の適用
-//   4. Choice 子集合へ再帰
-// Choice 同期も同じ4ステップを踏む (一時退避は不要)。
+// ドメイン側 (Form 集約) の questions を desired、DB 側の現状を current として
+// 突き合わせ、DB を desired に一致させる。Question id はクライアント採番 (Uuid)
+// なので、desired 全件を 1 本の INSERT ... ON DUPLICATE KEY UPDATE で永続化し、
+// desired に含まれない既存 id を削除すればよい。ただし (form_id, template_key)
+// と (form_id, position) の UNIQUE 制約があるため、upsert の前に既存行を一時値へ
+// 退避する。
 // ---------------------------------------------------------------------------
-
-/// 集約の子集合における「現状 (DB)」と「期待状態 (desired = ドメインが要求する内容)」
-/// の差分。各フィールドはこの差分を解消するために DB に対して行うべき操作を表す。
-///
-/// - `to_upsert`: desired に含まれ、DB にも対応 id が存在するもの (UPDATE 相当)
-/// - `to_insert`: desired に含まれるが DB に対応 id が無いもの (INSERT 相当)
-///   - `id_of` が `None` を返した item (= まだ id が割り当てられていない新規)
-///   - `id_of` が `Some` を返したが DB に存在しない id の item
-/// - `to_delete`: DB にあるが desired にもう存在しない id (DELETE 相当)
-struct Diff<'a, T, Id> {
-    to_upsert: Vec<&'a T>,
-    to_insert: Vec<&'a T>,
-    to_delete: Vec<Id>,
-}
-
-/// 子集合の差分計算。
-///
-/// - `existing_ids`: 現状 (DB) 側に存在する子要素の id 一覧
-/// - `desired`: 期待状態 (ドメインが「DB をこうしたい」と表明している子集合)
-/// - `id_of`: desired の各要素に対し「DB 上の対応 id があれば返す」関数。
-///   - id 体系がクライアント生成 (Uuid) で desired 全てが id を持つケース →
-///     `id_of = |item| Some(...)`
-///   - id 体系が DB 採番で `Option<Id>` を持つケース →
-///     `id_of = |item| item.id.map(...)`
-fn diff_children<'a, T, Id>(
-    existing_ids: &[Id],
-    desired: &'a [T],
-    id_of: impl Fn(&T) -> Option<Id>,
-) -> Diff<'a, T, Id>
-where
-    Id: Ord + Copy,
-{
-    let existing_set: BTreeSet<Id> = existing_ids.iter().copied().collect();
-
-    let (to_upsert, to_insert): (Vec<&T>, Vec<&T>) = desired
-        .iter()
-        .partition(|item| matches!(id_of(item), Some(id) if existing_set.contains(&id)));
-
-    let retained: BTreeSet<Id> = to_upsert.iter().filter_map(|item| id_of(item)).collect();
-
-    let to_delete = existing_ids
-        .iter()
-        .copied()
-        .filter(|id| !retained.contains(id))
-        .collect();
-
-    Diff {
-        to_upsert,
-        to_insert,
-        to_delete,
-    }
-}
 
 async fn sync_questions(txn: &mut DatabaseTransaction, form: &Form) -> Result<(), InfraError> {
     let form_id = *form.id();
@@ -392,22 +337,18 @@ async fn sync_questions(txn: &mut DatabaseTransaction, form: &Form) -> Result<()
 
     let conn = &mut **txn;
     let existing_ids = fetch_question_ids(conn, &form_id_string).await?;
-    let Diff {
-        to_upsert,
-        to_insert,
-        to_delete,
-    } = diff_children(&existing_ids, desired, |q| Some(q.id().into_inner()));
+    let desired_ids: BTreeSet<Uuid> = desired.iter().map(|q| q.id().into_inner()).collect();
+    let to_delete: Vec<Uuid> = existing_ids
+        .into_iter()
+        .filter(|id| !desired_ids.contains(id))
+        .collect();
 
     temporarily_relocate_existing_questions(conn, &form_id_string).await?;
-    upsert_existing_questions(conn, &form_id_string, &to_upsert).await?;
-    let inserted = insert_new_questions(conn, &form_id, to_insert).await?;
+    persist_questions(conn, &form_id, desired).await?;
     delete_questions(conn, to_delete).await?;
 
-    let assigned_questions: Vec<(QuestionId, &Question)> = to_upsert
-        .into_iter()
-        .map(|q| (q.id(), q))
-        .chain(inserted)
-        .collect();
+    let assigned_questions: Vec<(QuestionId, &Question)> =
+        desired.iter().map(|q| (q.id(), q)).collect();
 
     sync_choices(conn, &assigned_questions).await
 }
@@ -587,15 +528,16 @@ async fn temporarily_relocate_existing_questions(
     Ok(())
 }
 
-async fn upsert_existing_questions(
+async fn persist_questions(
     txn: &mut MySqlConnection,
-    form_id: &str,
-    questions: &[&Question],
+    form_id: &FormId,
+    questions: &[Question],
 ) -> Result<(), InfraError> {
     if questions.is_empty() {
         return Ok(());
     }
 
+    let form_id_string = form_id.into_inner().to_string();
     let sql = format!(
         r"INSERT INTO form_questions (question_id, form_id, template_key, position, title, description, question_type, is_required)
         VALUES {}
@@ -614,7 +556,7 @@ async fn upsert_existing_questions(
         .fold(query(&sql), |query, question| {
             query
                 .bind(question.id().into_inner().to_string())
-                .bind(form_id)
+                .bind(&form_id_string)
                 .bind(question.template_key().to_owned().into_inner())
                 .bind(question.position())
                 .bind(question.title().to_owned().into_inner())
@@ -631,46 +573,6 @@ async fn upsert_existing_questions(
         .await?;
 
     Ok(())
-}
-
-async fn insert_new_questions<'a>(
-    txn: &mut MySqlConnection,
-    form_id: &FormId,
-    questions: Vec<&'a Question>,
-) -> Result<Vec<(QuestionId, &'a Question)>, InfraError> {
-    if questions.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let sql = format!(
-        "INSERT INTO form_questions (question_id, form_id, template_key, position, title, description, question_type, is_required) VALUES {}",
-        std::iter::repeat_n("(?, ?, ?, ?, ?, ?, ?, ?)", questions.len()).join(", ")
-    );
-    questions
-        .iter()
-        .fold(query(&sql), |query, question| {
-            query
-                .bind(question.id().into_inner().to_string())
-                .bind(form_id.to_owned().into_inner().to_string())
-                .bind(question.template_key().to_owned().into_inner())
-                .bind(question.position())
-                .bind(question.title().to_owned().into_inner())
-                .bind(
-                    question
-                        .description()
-                        .cloned()
-                        .map(|description| description.into_inner()),
-                )
-                .bind(question.question_type().to_string())
-                .bind(question.is_required())
-        })
-        .execute(&mut *txn)
-        .await?;
-
-    Ok(questions
-        .into_iter()
-        .map(|question| (question.id(), question))
-        .collect())
 }
 
 async fn delete_questions(
@@ -734,14 +636,18 @@ async fn sync_choices(
             .collect();
 
     let existing_choice_owners = fetch_existing_choices(txn, &question_ids).await?;
-    let existing_ids = existing_choice_owners.keys().copied().collect_vec();
-    let Diff {
-        to_upsert,
-        to_insert,
-        to_delete,
-    } = diff_children(&existing_ids, &desired_choices, |(_, choice)| {
-        choice.id.map(|id| id.into_inner())
-    });
+    let existing_ids: BTreeSet<i32> = existing_choice_owners.keys().copied().collect();
+
+    // desired と DB の差分を取って delete / upsert / insert を適用する。
+    let (to_upsert, to_insert): (Vec<(QuestionId, &_)>, Vec<(QuestionId, &_)>) =
+        desired_choices.iter().copied().partition(
+            |(_, choice)| matches!(choice.id, Some(id) if existing_ids.contains(&id.into_inner())),
+        );
+    let retained: BTreeSet<i32> = to_upsert
+        .iter()
+        .filter_map(|(_, choice)| choice.id.map(|id| id.into_inner()))
+        .collect();
+    let to_delete: Vec<i32> = existing_ids.difference(&retained).copied().collect();
 
     delete_choices(txn, to_delete).await?;
 
@@ -753,7 +659,7 @@ async fn sync_choices(
                     .id
                     .expect("to_upsert items have Some(id)")
                     .into_inner(),
-                *question_id,
+                question_id,
                 choice.position,
                 choice.label.to_owned().into_inner(),
             )
@@ -765,7 +671,7 @@ async fn sync_choices(
         .into_iter()
         .map(|(question_id, choice)| {
             (
-                *question_id,
+                question_id,
                 choice.position,
                 choice.label.to_owned().into_inner(),
             )
