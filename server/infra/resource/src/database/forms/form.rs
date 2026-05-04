@@ -12,7 +12,6 @@ use itertools::Itertools;
 use sqlx::{MySqlConnection, Row, query};
 use std::collections::{BTreeMap, BTreeSet};
 use types::non_empty_string::NonEmptyString;
-use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
 
 use crate::{
@@ -69,47 +68,8 @@ impl FormDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                let form_id = form.id().to_owned();
-                let form_title = form.title().to_owned();
-                let description = form.description().to_owned().into_inner();
-                let user_id = user.id;
-
-                sqlx::query!(
-                    r#"INSERT INTO form_meta_data (id, title, description, created_by, updated_by)
-                            VALUES (?, ?, ?, ?, ?)"#,
-                    form_id.into_inner().to_string(),
-                    form_title.to_string(),
-                    description,
-                    user_id.to_string(),
-                    user_id.to_string(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                sqlx::query!(
-                    r"INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
-                    form_id.to_owned().into_inner().to_string(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                sqlx::query!(
-                    r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)",
-                    form_id.to_owned().into_inner().to_string(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                sqlx::query!(
-                    r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)",
-                    form_id.to_owned().into_inner().to_string(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                create_questions_txn(txn, form_id, form.questions().clone().into_inner())
-                    .await?;
-
+                insert_form_root(txn, &form, &user).await?;
+                sync_questions(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -200,85 +160,8 @@ impl FormDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                let title = form.title().to_owned().into_inner().into_inner();
-                let description = form.description().to_owned().into_inner();
-                let visibility = form.settings().visibility().to_string();
-                let answer_visibility = form.settings().answer_settings().visibility().to_string();
-                let default_answer_title = form
-                    .settings()
-                    .answer_settings()
-                    .default_answer_title()
-                    .to_owned()
-                    .into_inner()
-                    .map(NonEmptyString::into_inner);
-                let response_period = form.settings().answer_settings().response_period();
-                let updated_by_id = updated_by.id.to_string();
-                let form_id = form.id().into_inner().to_string();
-
-                let webhook_url = form
-                    .settings()
-                    .webhook_url(&updated_by)
-                    .ok()
-                    .map(ToOwned::to_owned)
-                    .and_then(WebhookUrl::into_inner)
-                    .map(NonEmptyString::into_inner);
-
-                sqlx::query!(
-                    r#"UPDATE form_meta_data SET
-                    title = ?,
-                    description = ?,
-                    visibility = ?,
-                    answer_visibility = ?,
-                    updated_by = ?
-                    WHERE id = ?
-                    "#,
-                    title,
-                    description,
-                    visibility,
-                    answer_visibility,
-                    updated_by_id,
-                    form_id.clone(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                sqlx::query!(
-                    r#"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)
-                    ON DUPLICATE KEY UPDATE
-                    url = VALUES(url)
-                    "#,
-                    form_id.clone(),
-                    webhook_url,
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                sqlx::query(
-                    r#"INSERT INTO default_answer_titles (form_id, title) VALUES (?, ?)
-                    ON DUPLICATE KEY UPDATE
-                    title = VALUES(title)
-                    "#,
-                )
-                .bind(form_id.clone())
-                .bind(default_answer_title)
-                .execute(&mut **txn)
-                .await?;
-
-                sqlx::query(
-                    r#"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                    start_at = VALUES(start_at),
-                    end_at = VALUES(end_at)
-                    "#,
-                )
-                .bind(form_id.clone())
-                .bind(response_period.start_at().to_owned())
-                .bind(response_period.end_at().to_owned())
-                .execute(&mut **txn)
-                .await?;
-
-                put_questions_txn(txn, *form.id(), form.questions().as_slice().to_vec()).await?;
-
+                update_form_root(txn, &form, &updated_by).await?;
+                sync_questions(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -301,61 +184,239 @@ impl FormDatabase for ConnectionPool {
     }
 }
 
-pub(crate) async fn create_questions_txn(
-    txn: &mut MySqlConnection,
-    form_id: FormId,
-    questions: NonEmptyVec<Question>,
+// ---------------------------------------------------------------------------
+// Form root (form_meta_data + 1:1 child tables: form_webhooks,
+// default_answer_titles, response_period)
+// ---------------------------------------------------------------------------
+
+async fn insert_form_root(
+    txn: &mut DatabaseTransaction,
+    form: &Form,
+    created_by: &User,
 ) -> Result<(), InfraError> {
-    let assigned_questions =
-        insert_new_questions(txn, &form_id, questions.iter().collect_vec()).await?;
-    sync_choices_for_questions(txn, &assigned_questions).await
-}
+    let form_id = form.id().into_inner().to_string();
+    let title = form.title().to_string();
+    let description = form.description().to_owned().into_inner();
+    let user_id = created_by.id.to_string();
 
-pub(crate) async fn put_questions_txn(
-    txn: &mut MySqlConnection,
-    form_id: FormId,
-    questions: Vec<Question>,
-) -> Result<(), InfraError> {
-    let form_id_string = form_id.into_inner().to_string();
-    let existing_question_ids = fetch_question_ids(txn, &form_id_string).await?;
-    let existing_question_id_set = existing_question_ids
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
-
-    let (existing_questions, new_questions): (Vec<_>, Vec<_>) = questions
-        .iter()
-        .partition(|question| existing_question_id_set.contains(&question.id().into_inner()));
-
-    temporarily_relocate_existing_questions(txn, &form_id_string).await?;
-    upsert_existing_questions(txn, &form_id_string, &existing_questions).await?;
-    let inserted_questions = insert_new_questions(txn, &form_id, new_questions).await?;
-
-    let retained_question_ids = existing_questions
-        .iter()
-        .map(|question| question.id().into_inner())
-        .chain(
-            inserted_questions
-                .iter()
-                .map(|(question_id, _)| question_id.into_inner()),
-        )
-        .collect::<BTreeSet<_>>();
-    delete_questions(
-        txn,
-        existing_question_ids
-            .into_iter()
-            .filter(|question_id| !retained_question_ids.contains(question_id))
-            .collect_vec(),
+    sqlx::query!(
+        r#"INSERT INTO form_meta_data (id, title, description, created_by, updated_by)
+                            VALUES (?, ?, ?, ?, ?)"#,
+        form_id,
+        title,
+        description,
+        user_id,
+        user_id,
     )
+    .execute(&mut **txn)
     .await?;
 
-    let assigned_questions = existing_questions
-        .into_iter()
-        .map(|question| (question.id(), question))
-        .chain(inserted_questions)
-        .collect_vec();
+    sqlx::query!(
+        r"INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
+        form_id,
+    )
+    .execute(&mut **txn)
+    .await?;
 
-    sync_choices_for_questions(txn, &assigned_questions).await
+    sqlx::query!(
+        r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)",
+        form_id,
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query!(
+        r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)",
+        form_id,
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    Ok(())
+}
+
+async fn update_form_root(
+    txn: &mut DatabaseTransaction,
+    form: &Form,
+    updated_by: &User,
+) -> Result<(), InfraError> {
+    let form_id = form.id().into_inner().to_string();
+    let title = form.title().to_owned().into_inner().into_inner();
+    let description = form.description().to_owned().into_inner();
+    let visibility = form.settings().visibility().to_string();
+    let answer_visibility = form.settings().answer_settings().visibility().to_string();
+    let default_answer_title = form
+        .settings()
+        .answer_settings()
+        .default_answer_title()
+        .to_owned()
+        .into_inner()
+        .map(NonEmptyString::into_inner);
+    let response_period = form.settings().answer_settings().response_period();
+    let updated_by_id = updated_by.id.to_string();
+
+    let webhook_url = form
+        .settings()
+        .webhook_url(updated_by)
+        .ok()
+        .map(ToOwned::to_owned)
+        .and_then(WebhookUrl::into_inner)
+        .map(NonEmptyString::into_inner);
+
+    sqlx::query!(
+        r#"UPDATE form_meta_data SET
+                    title = ?,
+                    description = ?,
+                    visibility = ?,
+                    answer_visibility = ?,
+                    updated_by = ?
+                    WHERE id = ?
+                    "#,
+        title,
+        description,
+        visibility,
+        answer_visibility,
+        updated_by_id,
+        form_id,
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query!(
+        r#"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    url = VALUES(url)
+                    "#,
+        form_id,
+        webhook_url,
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r#"INSERT INTO default_answer_titles (form_id, title) VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE title = VALUES(title)
+        "#,
+    )
+    .bind(&form_id)
+    .bind(default_answer_title)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r#"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+        start_at = VALUES(start_at),
+        end_at = VALUES(end_at)
+        "#,
+    )
+    .bind(&form_id)
+    .bind(response_period.start_at().to_owned())
+    .bind(response_period.end_at().to_owned())
+    .execute(&mut **txn)
+    .await?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Question 子集合の同期
+//
+// 用語: 本セクションで使う「desired (期待状態)」は、ドメイン側 (今回のリクエスト
+// で受け取った Form 集約) が「DB をこの状態にしたい」と表明している子集合を指す。
+// 反対側として「current (現状)」= DB に今ある子集合がある。同期処理は両者を突き合わせ、
+// 以下の流れで DB を desired に一致させる:
+//   1. 差分計算 (current と desired から upsert / insert / delete に振り分ける)
+//   2. UNIQUE 制約回避のための一時退避 (Question のみ)
+//   3. upsert / insert / delete の適用
+//   4. Choice 子集合へ再帰
+// Choice 同期も同じ4ステップを踏む (一時退避は不要)。
+// ---------------------------------------------------------------------------
+
+/// 集約の子集合における「現状 (DB)」と「期待状態 (desired = ドメインが要求する内容)」
+/// の差分。各フィールドはこの差分を解消するために DB に対して行うべき操作を表す。
+///
+/// - `to_upsert`: desired に含まれ、DB にも対応 id が存在するもの (UPDATE 相当)
+/// - `to_insert`: desired に含まれるが DB に対応 id が無いもの (INSERT 相当)
+///   - `id_of` が `None` を返した item (= まだ id が割り当てられていない新規)
+///   - `id_of` が `Some` を返したが DB に存在しない id の item
+/// - `to_delete`: DB にあるが desired にもう存在しない id (DELETE 相当)
+struct Diff<'a, T, Id> {
+    to_upsert: Vec<&'a T>,
+    to_insert: Vec<&'a T>,
+    to_delete: Vec<Id>,
+}
+
+/// 子集合の差分計算。
+///
+/// - `existing_ids`: 現状 (DB) 側に存在する子要素の id 一覧
+/// - `desired`: 期待状態 (ドメインが「DB をこうしたい」と表明している子集合)
+/// - `id_of`: desired の各要素に対し「DB 上の対応 id があれば返す」関数。
+///   - id 体系がクライアント生成 (Uuid) で desired 全てが id を持つケース →
+///     `id_of = |item| Some(...)`
+///   - id 体系が DB 採番で `Option<Id>` を持つケース →
+///     `id_of = |item| item.id.map(...)`
+fn diff_children<'a, T, Id>(
+    existing_ids: &[Id],
+    desired: &'a [T],
+    id_of: impl Fn(&T) -> Option<Id>,
+) -> Diff<'a, T, Id>
+where
+    Id: Ord + Copy,
+{
+    let existing_set: BTreeSet<Id> = existing_ids.iter().copied().collect();
+    let mut retained: BTreeSet<Id> = BTreeSet::new();
+    let mut to_upsert = Vec::new();
+    let mut to_insert = Vec::new();
+
+    for item in desired {
+        match id_of(item) {
+            Some(id) if existing_set.contains(&id) => {
+                retained.insert(id);
+                to_upsert.push(item);
+            }
+            _ => to_insert.push(item),
+        }
+    }
+
+    let to_delete = existing_ids
+        .iter()
+        .copied()
+        .filter(|id| !retained.contains(id))
+        .collect();
+
+    Diff {
+        to_upsert,
+        to_insert,
+        to_delete,
+    }
+}
+
+async fn sync_questions(txn: &mut DatabaseTransaction, form: &Form) -> Result<(), InfraError> {
+    let form_id = *form.id();
+    let form_id_string = form_id.into_inner().to_string();
+    let desired = form.questions().as_slice();
+
+    let conn = &mut **txn;
+    let existing_ids = fetch_question_ids(conn, &form_id_string).await?;
+    let Diff {
+        to_upsert,
+        to_insert,
+        to_delete,
+    } = diff_children(&existing_ids, desired, |q| Some(q.id().into_inner()));
+
+    temporarily_relocate_existing_questions(conn, &form_id_string).await?;
+    upsert_existing_questions(conn, &form_id_string, &to_upsert).await?;
+    let inserted = insert_new_questions(conn, &form_id, to_insert).await?;
+    delete_questions(conn, to_delete).await?;
+
+    let assigned_questions: Vec<(QuestionId, &Question)> = to_upsert
+        .into_iter()
+        .map(|q| (q.id(), q))
+        .chain(inserted)
+        .collect();
+
+    sync_choices(conn, &assigned_questions).await
 }
 
 pub(crate) async fn get_questions_txn(
@@ -481,6 +542,11 @@ fn temporary_template_key_prefix(existing_template_keys: &[String]) -> String {
     .expect("successors yields at least one prefix candidate")
 }
 
+/// 既存 Question 行の (form_id, template_key) と (form_id, position) は
+/// UNIQUE 制約下にある。upsert で desired の新しい template_key/position を
+/// 入れるとき、別の既存行がまだ古い値を保持していると衝突するため、先に
+/// 全既存行を一意な一時値へ退避させる。upsert はその後で desired の値で
+/// 上書きする。
 async fn temporarily_relocate_existing_questions(
     txn: &mut MySqlConnection,
     form_id: &str,
@@ -637,7 +703,11 @@ async fn delete_questions(
     Ok(())
 }
 
-async fn sync_choices_for_questions(
+// ---------------------------------------------------------------------------
+// Choice 子集合の同期
+// ---------------------------------------------------------------------------
+
+async fn sync_choices(
     txn: &mut MySqlConnection,
     assigned_questions: &[(QuestionId, &Question)],
 ) -> Result<(), InfraError> {
@@ -649,66 +719,66 @@ async fn sync_choices_for_questions(
         return Ok(());
     }
 
-    let existing_choice_by_id = fetch_existing_choices(txn, &question_ids).await?;
-    let retained_choice_ids = assigned_questions
-        .iter()
-        .flat_map(|(_, question)| {
-            question.choices().into_iter().flat_map(|choices| {
-                choices
-                    .iter()
-                    .filter_map(|choice| choice.id.map(|id| id.into_inner()))
-            })
-        })
-        .collect::<BTreeSet<_>>();
-
-    delete_choices(
-        txn,
-        existing_choice_by_id
-            .keys()
-            .filter(|choice_id| !retained_choice_ids.contains(choice_id))
-            .copied()
-            .collect_vec(),
-    )
-    .await?;
-
-    let existing_choices = assigned_questions
-        .iter()
-        .flat_map(|(question_id, question)| {
-            question.choices().into_iter().flat_map(|choices| {
-                choices.iter().filter_map(|choice| {
-                    choice.id.map(|id| {
-                        (
-                            id.into_inner(),
-                            *question_id,
-                            choice.position,
-                            choice.label.to_owned().into_inner(),
-                        )
+    // desired (期待状態) として diff_children に渡す Choice 集合を構築する。
+    // 質問種別が Text の場合、新規 Choice (id == None) は持ちえないため挿入対象外にする。
+    // ただし既に DB にあった Choice (id == Some) は upsert/delete 判定に乗せたいので残す。
+    // それ以外の質問種別では全 Choice を desired に含める。
+    let desired_choices: Vec<(QuestionId, &domain::form::question::models::Choice)> =
+        assigned_questions
+            .iter()
+            .flat_map(|(question_id, question)| {
+                let accepts_new_choices = question.question_type() != QuestionType::Text;
+                question.choices().into_iter().flat_map(move |choices| {
+                    choices.iter().filter_map(move |choice| {
+                        if choice.id.is_some() || accepts_new_choices {
+                            Some((*question_id, choice))
+                        } else {
+                            None
+                        }
                     })
                 })
             })
-        })
-        .collect_vec();
-    upsert_existing_choices(txn, existing_choices).await?;
+            .collect();
 
-    let new_choices = assigned_questions
-        .iter()
-        .filter(|(_, question)| question.question_type() != QuestionType::Text)
-        .flat_map(|(question_id, question)| {
-            question.choices().into_iter().flat_map(|choices| {
-                choices
-                    .iter()
-                    .filter(|choice| choice.id.is_none())
-                    .map(|choice| {
-                        (
-                            *question_id,
-                            choice.position,
-                            choice.label.to_owned().into_inner(),
-                        )
-                    })
-            })
+    let existing_choice_owners = fetch_existing_choices(txn, &question_ids).await?;
+    let existing_ids = existing_choice_owners.keys().copied().collect_vec();
+    let Diff {
+        to_upsert,
+        to_insert,
+        to_delete,
+    } = diff_children(&existing_ids, &desired_choices, |(_, choice)| {
+        choice.id.map(|id| id.into_inner())
+    });
+
+    delete_choices(txn, to_delete).await?;
+
+    let upsert_rows = to_upsert
+        .into_iter()
+        .map(|(question_id, choice)| {
+            (
+                choice
+                    .id
+                    .expect("to_upsert items have Some(id)")
+                    .into_inner(),
+                *question_id,
+                choice.position,
+                choice.label.to_owned().into_inner(),
+            )
         })
         .collect_vec();
-    insert_new_choices(txn, new_choices).await
+    upsert_existing_choices(txn, upsert_rows).await?;
+
+    let insert_rows = to_insert
+        .into_iter()
+        .map(|(question_id, choice)| {
+            (
+                *question_id,
+                choice.position,
+                choice.label.to_owned().into_inner(),
+            )
+        })
+        .collect_vec();
+    insert_new_choices(txn, insert_rows).await
 }
 
 async fn fetch_existing_choices(
