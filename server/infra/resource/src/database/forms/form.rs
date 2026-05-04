@@ -365,19 +365,12 @@ where
     Id: Ord + Copy,
 {
     let existing_set: BTreeSet<Id> = existing_ids.iter().copied().collect();
-    let mut retained: BTreeSet<Id> = BTreeSet::new();
-    let mut to_upsert = Vec::new();
-    let mut to_insert = Vec::new();
 
-    for item in desired {
-        match id_of(item) {
-            Some(id) if existing_set.contains(&id) => {
-                retained.insert(id);
-                to_upsert.push(item);
-            }
-            _ => to_insert.push(item),
-        }
-    }
+    let (to_upsert, to_insert): (Vec<&T>, Vec<&T>) = desired
+        .iter()
+        .partition(|item| matches!(id_of(item), Some(id) if existing_set.contains(&id)));
+
+    let retained: BTreeSet<Id> = to_upsert.iter().filter_map(|item| id_of(item)).collect();
 
     let to_delete = existing_ids
         .iter()
