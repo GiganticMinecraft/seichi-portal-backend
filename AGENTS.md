@@ -15,7 +15,7 @@ cargo build
 ### lint, フォーマット
 
 ```bash
-cd server/ && makers pretty
+makers pretty
 ```
 
 ### `sqlx` メタデータ
