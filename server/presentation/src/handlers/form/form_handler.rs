@@ -424,7 +424,7 @@ fn into_upsert_question_dto(
 ) -> Result<UpsertQuestionDto, errors::domain::DomainError> {
     let (question_type, definition, choices) = question.into_parts();
     let original_id = definition.id;
-    let choices = into_domain_choices(choices)?;
+    let choices = into_domain_choices(choices);
     let question = match original_id {
         Some(question_id) => domain::form::question::models::Question::from_raw_parts(
             question_id,
@@ -481,18 +481,10 @@ fn into_upsert_question_dto(
 
 fn into_domain_choices(
     choices: Option<Vec<crate::schemas::form::form_request_schemas::ChoiceSchema>>,
-) -> Result<Option<NonEmptyVec<domain::form::question::models::Choice>>, errors::domain::DomainError>
-{
-    let Some(choices) = choices else {
-        return Ok(None);
-    };
-
-    let choices = choices
-        .into_iter()
-        .map(TryInto::try_into)
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok((!choices.is_empty()).then(|| NonEmptyVec::try_new(choices).expect("non-empty choices")))
+) -> Option<NonEmptyVec<domain::form::question::models::Choice>> {
+    let choices = choices?;
+    let choices = choices.into_iter().map(Into::into).collect::<Vec<_>>();
+    (!choices.is_empty()).then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"))
 }
 
 fn required_choices(
