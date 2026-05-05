@@ -131,7 +131,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         &self,
         answer_id: AnswerId,
     ) -> Result<Vec<AnswerLabelDto>, InfraError> {
-        let answer_id = answer_id.into_inner();
+        let answer_id = answer_id.into_inner().to_string();
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
