@@ -104,6 +104,7 @@ impl FormAnswerDatabase for ConnectionPool {
             .iter()
             .map(|content| {
                 (
+                    content.id.to_owned().into_inner().to_string(),
                     answer_id.clone(),
                     content.question_id.to_owned().into_inner().to_string(),
                     content.answer.to_owned(),
@@ -126,13 +127,13 @@ impl FormAnswerDatabase for ConnectionPool {
 
                 if !contents.is_empty() {
                     let sql = format!(
-                        "INSERT INTO real_answers (answer_id, question_id, answer) VALUES {}",
-                        std::iter::repeat_n("(?, ?, ?)", contents.len()).join(", ")
+                        "INSERT INTO real_answers (id, answer_id, question_id, answer) VALUES {}",
+                        std::iter::repeat_n("(?, ?, ?, ?)", contents.len()).join(", ")
                     );
                     contents
                         .into_iter()
-                        .flat_map(|(answer_id, question_id, answer)| {
-                            [answer_id, question_id, answer]
+                        .flat_map(|(id, answer_id, question_id, answer)| {
+                            [id, answer_id, question_id, answer]
                         })
                         .fold(query(&sql), |query, value| query.bind(value))
                         .execute(&mut **txn)
