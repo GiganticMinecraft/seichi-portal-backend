@@ -16,7 +16,6 @@ pub struct AnswerDto {
 
 pub struct FormDto {
     pub form: Form,
-    pub questions: Vec<Question>,
     pub labels: Vec<FormLabel>,
 }
 

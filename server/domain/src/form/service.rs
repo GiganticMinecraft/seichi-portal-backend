@@ -9,30 +9,17 @@ use crate::{
             models::{AnswerTitle, PostedAnswerContents},
             settings::models::DefaultAnswerTitle,
         },
-        models::FormId,
-        question::models::Question,
+        models::{FormId, Question},
     },
-    repository::form::{
-        answer_repository::AnswerRepository, form_repository::FormRepository,
-        question_repository::QuestionRepository,
-    },
+    repository::form::form_repository::FormRepository,
     user::models::User,
 };
 
-pub struct DefaultAnswerTitleDomainService<
-    'a,
-    FormRepo: FormRepository,
-    QuestionRepo: QuestionRepository,
-    AnswerRepo: AnswerRepository,
-> {
+pub struct DefaultAnswerTitleDomainService<'a, FormRepo: FormRepository> {
     pub form_repo: &'a FormRepo,
-    pub question_repo: &'a QuestionRepo,
-    pub answer_repo: &'a AnswerRepo,
 }
 
-impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: AnswerRepository>
-    DefaultAnswerTitleDomainService<'_, FormRepo, QuestionRepo, AnswerRepo>
-{
+impl<FormRepo: FormRepository> DefaultAnswerTitleDomainService<'_, FormRepo> {
     pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
         questions: &[Question],
@@ -86,19 +73,12 @@ impl<FormRepo: FormRepository, QuestionRepo: QuestionRepository, AnswerRepo: Ans
             .await?
             .ok_or(DomainError::NotFound)?
             .try_into_read(actor)?;
-
         let default_answer_title = form
             .settings()
             .answer_settings()
             .default_answer_title()
             .to_owned();
-        let questions = self
-            .question_repo
-            .get_questions(form_id)
-            .await?
-            .into_iter()
-            .map(|question| question.try_into_read(actor))
-            .collect::<Result<Vec<_>, _>>()?;
+        let questions = form.questions().as_slice().to_vec();
 
         Self::to_answer_title_from_questions(default_answer_title, &questions, answers, actor)
     }
@@ -116,12 +96,9 @@ mod tests {
 
     use super::*;
     use crate::form::answer::models::FormAnswerContentId;
-    use crate::{
-        form::{answer::models::FormAnswerContent, question::models::QuestionId},
-        repository::form::{
-            answer_repository::MockAnswerRepository, form_repository::MockFormRepository,
-            question_repository::MockQuestionRepository,
-        },
+    use crate::form::{
+        answer::models::FormAnswerContent,
+        question::models::{QuestionId, QuestionType},
     };
 
     fn question_id(seed: &str) -> QuestionId {
@@ -144,36 +121,33 @@ mod tests {
         let questions = vec![
             Question::from_raw_parts(
                 first_question_id,
-                Default::default(),
                 "first".to_string().try_into().unwrap(),
                 0,
                 "First".to_string().try_into().unwrap(),
                 None,
-                crate::form::question::models::QuestionType::Text,
+                QuestionType::Text,
                 None,
                 true,
             )
             .unwrap(),
             Question::from_raw_parts(
                 second_question_id,
-                Default::default(),
                 "second".to_string().try_into().unwrap(),
                 1,
                 "Second".to_string().try_into().unwrap(),
                 None,
-                crate::form::question::models::QuestionType::Text,
+                QuestionType::Text,
                 None,
                 true,
             )
             .unwrap(),
             Question::from_raw_parts(
                 third_question_id,
-                Default::default(),
                 "third".to_string().try_into().unwrap(),
                 2,
                 "Third".to_string().try_into().unwrap(),
                 None,
-                crate::form::question::models::QuestionType::Text,
+                QuestionType::Text,
                 None,
                 true,
             )
@@ -208,9 +182,7 @@ mod tests {
         };
 
         let result = DefaultAnswerTitleDomainService::<
-            MockFormRepository,
-            MockQuestionRepository,
-            MockAnswerRepository,
+            crate::repository::form::form_repository::MockFormRepository,
         >::to_answer_title_from_questions(
             default_answer_title,
             questions.as_slice(),

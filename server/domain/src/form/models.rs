@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
+pub use crate::form::question::models::{Question, QuestionSet};
+
 use crate::{
     form::answer::settings::models::{
         AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
@@ -159,7 +161,7 @@ impl TryFrom<String> for Visibility {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     #[serde(default = "chrono::Utc::now")]
@@ -186,7 +188,7 @@ impl FormMeta {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct Form {
     #[serde(default)]
     id: FormId,
@@ -197,16 +199,18 @@ pub struct Form {
     metadata: FormMeta,
     #[serde(default)]
     settings: FormSettings,
+    questions: QuestionSet,
 }
 
 impl Form {
-    pub fn new(title: FormTitle, description: FormDescription) -> Self {
+    pub fn new(title: FormTitle, description: FormDescription, questions: QuestionSet) -> Self {
         Self {
             id: FormId::new(),
             title,
             description,
             metadata: FormMeta::new(),
             settings: FormSettings::new(),
+            questions,
         }
     }
 
@@ -225,12 +229,17 @@ impl Form {
         Self { settings, ..self }
     }
 
+    pub fn change_questions(self, questions: QuestionSet) -> Self {
+        Self { questions, ..self }
+    }
+
     pub fn from_raw_parts(
         id: FormId,
         title: FormTitle,
         description: FormDescription,
         metadata: FormMeta,
         settings: FormSettings,
+        questions: QuestionSet,
     ) -> Self {
         Self {
             id,
@@ -238,6 +247,7 @@ impl Form {
             description,
             metadata,
             settings,
+            questions,
         }
     }
 }
@@ -251,12 +261,14 @@ impl AuthorizationGuardDefinitions for Form {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormSettings},
+    ///     form::models::{Form, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormTitle};
+    /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
+    /// use domain::form::models::{Visibility, WebhookUrl};
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
@@ -271,9 +283,23 @@ impl AuthorizationGuardDefinitions for Form {
     /// };
     ///
     ///
-    /// let form = Form::new(
+    /// let form = Form::from_raw_parts(
+    ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from(""))
+    ///     FormDescription::new(String::from("")),
+    ///     FormMeta::new(),
+    ///     FormSettings::new(),
+    ///     domain::form::models::QuestionSet::try_new(
+    ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
+    ///             domain::form::question::models::Question::new_text(
+    ///                 "q".to_string().try_into().unwrap(),
+    ///                 0,
+    ///                 "Q".to_string().try_into().unwrap(),
+    ///                 None,
+    ///                 true,
+    ///             ).unwrap(),
+    ///         ]).unwrap(),
+    ///     ).unwrap(),
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -315,6 +341,18 @@ impl AuthorizationGuardDefinitions for Form {
     /// };
     ///
     ///
+    /// let sample_questions = || domain::form::models::QuestionSet::try_new(
+    ///     types::non_empty_vec::NonEmptyVec::try_new(vec![
+    ///         domain::form::question::models::Question::new_text(
+    ///             "q".to_string().try_into().unwrap(),
+    ///             0,
+    ///             "Q".to_string().try_into().unwrap(),
+    ///             None,
+    ///             true,
+    ///         ).unwrap(),
+    ///     ]).unwrap(),
+    /// ).unwrap();
+    ///
     /// let private_form = Form::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
@@ -326,7 +364,8 @@ impl AuthorizationGuardDefinitions for Form {
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PRIVATE,
     ///         AnswerVisibility::PRIVATE
-    ///     )
+    ///     ),
+    ///     sample_questions(),
     /// );
     ///
     ///  let public_form = Form::from_raw_parts(
@@ -340,7 +379,8 @@ impl AuthorizationGuardDefinitions for Form {
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PUBLIC,
     ///         AnswerVisibility::PRIVATE
-    ///     )
+    ///     ),
+    ///     sample_questions(),
     /// );
     ///
     /// assert!(private_form.can_read(&administrator));
@@ -359,7 +399,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormSettings},
+    ///     form::models::{Form, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -379,9 +419,23 @@ impl AuthorizationGuardDefinitions for Form {
     /// };
     ///
     ///
-    /// let form = Form::new(
+    /// let form = Form::from_raw_parts(
+    ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from(""))
+    ///     FormDescription::new(String::from("")),
+    ///     FormMeta::new(),
+    ///     FormSettings::new(),
+    ///     domain::form::models::QuestionSet::try_new(
+    ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
+    ///             domain::form::question::models::Question::new_text(
+    ///                 "q".to_string().try_into().unwrap(),
+    ///                 0,
+    ///                 "Q".to_string().try_into().unwrap(),
+    ///                 None,
+    ///                 true,
+    ///             ).unwrap(),
+    ///         ]).unwrap(),
+    ///     ).unwrap(),
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -398,7 +452,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormSettings},
+    ///     form::models::{Form, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -418,9 +472,23 @@ impl AuthorizationGuardDefinitions for Form {
     /// };
     ///
     ///
-    /// let form = Form::new(
+    /// let form = Form::from_raw_parts(
+    ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from(""))
+    ///     FormDescription::new(String::from("")),
+    ///     FormMeta::new(),
+    ///     FormSettings::new(),
+    ///     domain::form::models::QuestionSet::try_new(
+    ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
+    ///             domain::form::question::models::Question::new_text(
+    ///                 "q".to_string().try_into().unwrap(),
+    ///                 0,
+    ///                 "Q".to_string().try_into().unwrap(),
+    ///                 None,
+    ///                 true,
+    ///             ).unwrap(),
+    ///         ]).unwrap(),
+    ///     ).unwrap(),
     /// );
     ///
     /// assert!(form.can_delete(&administrator));

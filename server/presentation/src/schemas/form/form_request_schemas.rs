@@ -8,6 +8,7 @@ use domain::form::{
 };
 use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;
+use types::non_empty_vec::NonEmptyVec;
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct OffsetAndLimit {
@@ -20,6 +21,8 @@ pub struct FormCreateSchema {
     #[schema(value_type = String)]
     pub title: FormTitle,
     pub description: String,
+    #[schema(value_type = Vec<QuestionSchema>, min_items = 1)]
+    pub questions: NonEmptyVec<QuestionSchema>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]

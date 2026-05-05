@@ -124,17 +124,24 @@ pub async fn create_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
 
     let Json(form) = json.map_err_to_error().map_err(handle_error)?;
+    let FormCreateSchema {
+        title,
+        description,
+        questions,
+    } = form;
 
-    let form_description = FormDescription::new(form.description);
+    let form_description = FormDescription::new(description);
+    let questions = into_create_questions(questions)
+        .map_err(errors::Error::from)
+        .map_err(handle_error)?;
 
     let form = form_use_case
-        .create_form(form.title, form_description, &user)
+        .create_form(title, form_description, questions, &user)
         .await
         .map_err(handle_error)?;
 
@@ -144,7 +151,12 @@ pub async fn create_form_handler(
         description: form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: vec![],
+        questions: form
+            .questions()
+            .iter()
+            .cloned()
+            .map(QuestionResponseSchema::from)
+            .collect(),
         labels: vec![],
     }))
 }
@@ -175,7 +187,6 @@ pub async fn form_list_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
@@ -187,14 +198,16 @@ pub async fn form_list_handler(
 
     let response_schema = forms
         .into_iter()
-        .map(|(form, questions, labels)| FormSchema {
+        .map(|(form, labels)| FormSchema {
             id: form.id().to_owned(),
             title: form.title().to_owned(),
             description: form.description().to_owned(),
             settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
             metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-            questions: questions
-                .into_iter()
+            questions: form
+                .questions()
+                .iter()
+                .cloned()
                 .map(QuestionResponseSchema::from)
                 .collect(),
             labels,
@@ -230,18 +243,13 @@ pub async fn get_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    let FormDto {
-        form,
-        questions,
-        labels,
-    } = form_use_case
+    let FormDto { form, labels } = form_use_case
         .get_form(&user, form_id)
         .await
         .map_err(handle_error)?;
@@ -252,8 +260,10 @@ pub async fn get_form_handler(
         description: form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: questions
-            .into_iter()
+        questions: form
+            .questions()
+            .iter()
+            .cloned()
             .map(QuestionResponseSchema::from)
             .collect(),
         labels,
@@ -286,7 +296,6 @@ pub async fn delete_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
@@ -331,7 +340,6 @@ pub async fn update_form_handler(
     let form_use_case = FormUseCase {
         form_repository: repository.form_repository(),
         notification_repository: repository.notification_repository(),
-        question_repository: repository.form_question_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
     };
@@ -364,12 +372,11 @@ pub async fn update_form_handler(
         };
     let questions = targets
         .questions
-        .map(|questions| into_upsert_question_dtos(form_id, questions))
+        .map(into_upsert_question_dtos)
         .transpose()
-        .map_err(errors::Error::from)
         .map_err(handle_error)?;
 
-    let (updated_form, questions, labels) = form_use_case
+    let (updated_form, labels) = form_use_case
         .update_form(
             &user,
             form_id,
@@ -391,8 +398,10 @@ pub async fn update_form_handler(
         description: updated_form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
         metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
-        questions: questions
-            .into_iter()
+        questions: updated_form
+            .questions()
+            .iter()
+            .cloned()
             .map(QuestionResponseSchema::from)
             .collect(),
         labels,
@@ -400,26 +409,81 @@ pub async fn update_form_handler(
 }
 
 fn into_upsert_question_dtos(
-    form_id: FormId,
     questions: Vec<QuestionSchema>,
-) -> Result<Vec<UpsertQuestionDto>, errors::domain::DomainError> {
+) -> Result<Vec<UpsertQuestionDto>, errors::Error> {
     let questions = questions
         .into_iter()
-        .map(|question| into_upsert_question_dto(form_id, question))
+        .map(into_upsert_question_dto)
         .collect::<Result<Vec<_>, _>>()?;
 
-    QuestionSet::try_new(
+    if questions.is_empty() {
+        return Ok(questions);
+    }
+
+    QuestionSet::try_new(NonEmptyVec::try_new(
         questions
             .iter()
             .map(|question| question.question.clone())
             .collect(),
-    )?;
+    )?)?;
 
     Ok(questions)
 }
 
+fn into_create_questions(
+    questions: NonEmptyVec<QuestionSchema>,
+) -> Result<NonEmptyVec<domain::form::question::models::Question>, errors::domain::DomainError> {
+    let questions = questions
+        .into_inner()
+        .into_iter()
+        .enumerate()
+        .map(|(position, question)| into_create_question(position as u16, question))
+        .collect::<Result<Vec<_>, _>>()?;
+    let questions = NonEmptyVec::try_new(questions).expect("create questions is non-empty");
+
+    Ok(QuestionSet::try_new(questions)?.into_inner())
+}
+
+fn into_create_question(
+    position: u16,
+    question: QuestionSchema,
+) -> Result<domain::form::question::models::Question, errors::domain::DomainError> {
+    let (question_type, definition, choices) = question.into_parts();
+
+    match question_type {
+        domain::form::question::models::QuestionType::Text => {
+            domain::form::question::models::Question::new_text(
+                definition.template_key,
+                position,
+                definition.title,
+                definition.description,
+                definition.is_required,
+            )
+        }
+        domain::form::question::models::QuestionType::SingleChoice => {
+            domain::form::question::models::Question::new_single_choice(
+                definition.template_key,
+                position,
+                definition.title,
+                definition.description,
+                required_choices(into_domain_choices(choices))?,
+                definition.is_required,
+            )
+        }
+        domain::form::question::models::QuestionType::MultipleChoice => {
+            domain::form::question::models::Question::new_multiple_choice(
+                definition.template_key,
+                position,
+                definition.title,
+                definition.description,
+                required_choices(into_domain_choices(choices))?,
+                definition.is_required,
+            )
+        }
+    }
+}
+
 fn into_upsert_question_dto(
-    form_id: FormId,
     question: QuestionSchema,
 ) -> Result<UpsertQuestionDto, errors::domain::DomainError> {
     let (question_type, definition, choices) = question.into_parts();
@@ -428,7 +492,6 @@ fn into_upsert_question_dto(
     let question = match original_id {
         Some(question_id) => domain::form::question::models::Question::from_raw_parts(
             question_id,
-            form_id,
             definition.template_key,
             definition.position,
             definition.title,
@@ -440,7 +503,6 @@ fn into_upsert_question_dto(
         None => match question_type {
             domain::form::question::models::QuestionType::Text => {
                 domain::form::question::models::Question::new_text(
-                    form_id,
                     definition.template_key,
                     definition.position,
                     definition.title,
@@ -450,7 +512,6 @@ fn into_upsert_question_dto(
             }
             domain::form::question::models::QuestionType::SingleChoice => {
                 domain::form::question::models::Question::new_single_choice(
-                    form_id,
                     definition.template_key,
                     definition.position,
                     definition.title,
@@ -461,7 +522,6 @@ fn into_upsert_question_dto(
             }
             domain::form::question::models::QuestionType::MultipleChoice => {
                 domain::form::question::models::Question::new_multiple_choice(
-                    form_id,
                     definition.template_key,
                     definition.position,
                     definition.title,
@@ -499,7 +559,6 @@ fn required_choices(
 mod tests {
     use super::*;
     use serde_json::json;
-    use uuid::Uuid;
 
     #[test]
     fn text_question_with_choices_is_rejected_during_deserialization() {
@@ -529,7 +588,61 @@ mod tests {
         }))
         .unwrap();
 
-        let result = into_upsert_question_dto(FormId::from(Uuid::nil()), question);
+        let result = into_upsert_question_dto(question);
+
+        assert!(matches!(
+            result,
+            Err(errors::domain::DomainError::InvalidEntity { .. })
+        ));
+    }
+
+    #[test]
+    fn create_questions_assigns_contiguous_positions() {
+        let questions: NonEmptyVec<QuestionSchema> = serde_json::from_value(json!([
+            {
+                "question_type": "Text",
+                "template_key": "body",
+                "position": 10,
+                "title": "Body",
+                "is_required": true
+            },
+            {
+                "question_type": "Text",
+                "template_key": "summary",
+                "position": 20,
+                "title": "Summary",
+                "is_required": false
+            }
+        ]))
+        .unwrap();
+
+        let created = into_create_questions(questions).unwrap();
+
+        assert_eq!(created[0].position(), 0);
+        assert_eq!(created[1].position(), 1);
+    }
+
+    #[test]
+    fn create_questions_rejects_duplicate_template_keys() {
+        let questions: NonEmptyVec<QuestionSchema> = serde_json::from_value(json!([
+            {
+                "question_type": "Text",
+                "template_key": "body",
+                "position": 0,
+                "title": "Body",
+                "is_required": true
+            },
+            {
+                "question_type": "Text",
+                "template_key": "body",
+                "position": 1,
+                "title": "Summary",
+                "is_required": false
+            }
+        ]))
+        .unwrap();
+
+        let result = into_create_questions(questions);
 
         assert!(matches!(
             result,
@@ -557,11 +670,13 @@ mod tests {
         ]))
         .unwrap();
 
-        let result = into_upsert_question_dtos(FormId::from(Uuid::nil()), questions);
+        let result = into_upsert_question_dtos(questions);
 
         assert!(matches!(
             result,
-            Err(errors::domain::DomainError::InvalidEntity { .. })
+            Err(errors::Error::Domain {
+                source: errors::domain::DomainError::InvalidEntity { .. }
+            })
         ));
     }
 }

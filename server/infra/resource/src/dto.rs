@@ -3,12 +3,9 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use domain::{
     form::{
-        answer::{
-            models::AnswerTitle,
-            settings::models::{DefaultAnswerTitle, ResponsePeriod},
-        },
+        answer::models::AnswerTitle,
         comment::models::CommentContent,
-        models::{FormDescription, FormId, FormMeta, FormSettings, FormTitle, WebhookUrl},
+        models::{Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle},
         question::models::{Choice, Question, QuestionType},
     },
     user::models::{Role, User},
@@ -58,7 +55,7 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
     fn try_from(
         QuestionDto {
             id,
-            form_id,
+            form_id: _,
             template_key,
             position,
             title,
@@ -81,7 +78,6 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
             Uuid::from_str(&id)
                 .map_err(Into::<InfraError>::into)?
                 .into(),
-            FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
             template_key.try_into()?,
             position,
             title.try_into()?,
@@ -106,9 +102,10 @@ pub struct FormDto {
     pub default_answer_title: Option<String>,
     pub visibility: String,
     pub answer_visibility: String,
+    pub questions: Vec<QuestionDto>,
 }
 
-impl TryFrom<FormDto> for domain::form::models::Form {
+impl TryFrom<FormDto> for Form {
     type Error = errors::Error;
 
     fn try_from(
@@ -124,20 +121,34 @@ impl TryFrom<FormDto> for domain::form::models::Form {
             default_answer_title,
             visibility,
             answer_visibility,
+            questions,
         }: FormDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::Form::from_raw_parts(
-            FormId::from(Uuid::from_str(&id).map_err(Into::<InfraError>::into)?),
+        let questions = questions
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()?;
+        let questions = NonEmptyVec::try_new(questions).map_err(errors::Error::from)?;
+
+        Ok(Form::from_raw_parts(
+            FormId::from(Uuid::parse_str(&id).map_err(Into::<InfraError>::into)?),
             FormTitle::new(title.try_into()?),
             FormDescription::new(description),
             FormMeta::from_raw_parts(created_at, updated_at),
             FormSettings::from_raw_parts(
-                ResponsePeriod::try_new(start_at, end_at)?,
-                WebhookUrl::try_new(webhook_url.map(TryInto::try_into).transpose()?)?,
-                DefaultAnswerTitle::new(default_answer_title.map(TryInto::try_into).transpose()?),
+                domain::form::answer::settings::models::ResponsePeriod::try_new(start_at, end_at)?,
+                domain::form::models::WebhookUrl::try_new(
+                    webhook_url.map(NonEmptyString::try_new).transpose()?,
+                )?,
+                domain::form::answer::settings::models::DefaultAnswerTitle::new(
+                    default_answer_title
+                        .map(NonEmptyString::try_new)
+                        .transpose()?,
+                ),
                 visibility.try_into()?,
                 answer_visibility.try_into()?,
             ),
+            domain::form::models::QuestionSet::try_new(questions).map_err(errors::Error::from)?,
         ))
     }
 }

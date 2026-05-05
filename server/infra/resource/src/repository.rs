@@ -10,7 +10,10 @@ use domain::repository::Repositories;
 use domain::repository::health_check_repository::HealthCheckRepository;
 
 use crate::{
-    database::{components::DatabaseComponents, connection::ConnectionPool},
+    database::{
+        components::DatabaseComponents,
+        connection::{ConnectionPool, DatabaseTransaction},
+    },
     health_check::HealthCheckRepositoryImpl,
 };
 
@@ -55,15 +58,16 @@ impl<Client: DatabaseComponents + 'static> Repository<Client> {
     }
 }
 
-impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Sync + 'static>
-    Repositories for SharedRepository<Client, H>
+impl<
+    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+    H: HealthCheckRepository + Send + Sync + 'static,
+> Repositories for SharedRepository<Client, H>
 {
     type ConcreteAnswerLabelRepository = Repository<Client>;
     type ConcreteFormAnswerRepository = Repository<Client>;
     type ConcreteFormCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
     type ConcreteFormMessageRepository = Repository<Client>;
-    type ConcreteFormQuestionRepository = Repository<Client>;
     type ConcreteFormRepository = Repository<Client>;
     type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
@@ -79,10 +83,6 @@ impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Syn
     }
 
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository {
-        &self.db
-    }
-
-    fn form_question_repository(&self) -> &Self::ConcreteFormQuestionRepository {
         &self.db
     }
 

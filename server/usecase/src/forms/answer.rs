@@ -11,7 +11,6 @@ use domain::{
     repository::form::{
         answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
         comment_repository::CommentRepository, form_repository::FormRepository,
-        question_repository::QuestionRepository,
     },
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
     user::models::User,
@@ -30,22 +29,15 @@ pub struct AnswerUseCase<
     FormRepo: FormRepository,
     CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
-    QuestionRepo: QuestionRepository,
 > {
     pub answer_repository: &'a AnswerRepo,
     pub form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
-    pub question_repository: &'a QuestionRepo,
 }
 
-impl<
-    R1: AnswerRepository,
-    R2: FormRepository,
-    R3: CommentRepository,
-    R4: AnswerLabelRepository,
-    R5: QuestionRepository,
-> AnswerUseCase<'_, R1, R2, R3, R4, R5>
+impl<R1: AnswerRepository, R2: FormRepository, R3: CommentRepository, R4: AnswerLabelRepository>
+    AnswerUseCase<'_, R1, R2, R3, R4>
 {
     pub async fn post_answers(
         &self,
@@ -53,20 +45,14 @@ impl<
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let (form, question_guards) = try_join!(
-            self.form_repository.get(form_id),
-            self.question_repository.get_questions(form_id)
-        )?;
+        let form = self.form_repository.get(form_id).await?;
 
         let form = form
             .ok_or(Error::from(FormNotFound))?
             .try_into_read(&user)?;
-        let questions = question_guards
-            .into_iter()
-            .map(|question| question.try_into_read(&user))
-            .collect::<Result<Vec<_>, _>>()?;
+        let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
-        let title = DefaultAnswerTitleDomainService::<R2, R5, R1>::to_answer_title_from_questions(
+        let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
             form.settings()
                 .answer_settings()
                 .default_answer_title()

@@ -1,7 +1,7 @@
 use crate::{
     dto::{
         AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerDto, FormDto, FormLabelDto,
-        MessageDto, NotificationSettingsDto, QuestionDto,
+        MessageDto, NotificationSettingsDto,
     },
     external::discord_api::DiscordAPI,
 };
@@ -13,7 +13,6 @@ use domain::{
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{Form, FormId, FormLabel, FormLabelId, FormLabelName},
-        question::models::Question,
     },
     notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
@@ -28,7 +27,6 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteFormAnswerDatabase: FormAnswerDatabase;
     type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
-    type ConcreteFormQuestionDatabase: FormQuestionDatabase;
     type ConcreteFormMessageDatabase: FormMessageDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
@@ -42,7 +40,6 @@ pub trait DatabaseComponents: Send + Sync {
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
-    fn form_question(&self) -> &Self::ConcreteFormQuestionDatabase;
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
@@ -110,22 +107,6 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
-}
-
-#[automock]
-#[async_trait]
-pub trait FormQuestionDatabase: Send + Sync {
-    async fn create_questions(
-        &self,
-        form_id: FormId,
-        questions: Vec<Question>,
-    ) -> Result<(), InfraError>;
-    async fn put_questions(
-        &self,
-        form_id: FormId,
-        questions: Vec<Question>,
-    ) -> Result<(), InfraError>;
-    async fn get_questions(&self, form_id: FormId) -> Result<Vec<QuestionDto>, InfraError>;
 }
 
 #[async_trait]
