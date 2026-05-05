@@ -15,7 +15,7 @@ impl FormMessageDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn post_message(&self, message: &Message) -> Result<(), InfraError> {
         let id = message.id().to_string().to_owned();
-        let related_answer_id = message.related_answer_id().into_inner().to_owned();
+        let related_answer_id = message.related_answer_id().to_string();
         let sender = message.sender().id.to_string().to_owned();
         let body = message.body().to_owned();
         let timestamp = message.timestamp().to_owned();
@@ -49,7 +49,7 @@ impl FormMessageDatabase for ConnectionPool {
                 sqlx::query!(
                     "UPDATE messages SET body = ? WHERE id = ?",
                     body,
-                    message_id.into_inner(),
+                    message_id.to_string(),
                 )
                 .execute(&mut **txn)
                 .await?;
