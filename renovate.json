@@ -5,6 +5,10 @@
   ],
   "automerge": true,
   "platformAutomerge": true,
+  "enabledManagers": [
+    "cargo",
+    "rust-toolchain"
+  ],
   "packageRules": [
     {
       "matchManagers": [
