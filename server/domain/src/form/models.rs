@@ -256,8 +256,6 @@ impl ActiveForm {
     }
 }
 
-pub type Form = ActiveForm;
-
 #[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct ArchivedForm {
     form: ActiveForm,
@@ -302,7 +300,7 @@ impl AuthorizationGuardDefinitions for ArchivedForm {
 }
 
 impl AuthorizationGuardDefinitions for ActiveForm {
-    /// [`Form`] の作成権限があるかどうかを判定します。
+    /// [`ActiveForm`] の作成権限があるかどうかを判定します。
     ///
     /// 作成権限は以下の条件を満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
@@ -310,7 +308,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormId, FormMeta, FormSettings},
+    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -332,7 +330,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// };
     ///
     ///
-    /// let form = Form::from_raw_parts(
+    /// let form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -357,16 +355,16 @@ impl AuthorizationGuardDefinitions for ActiveForm {
         actor.role == Administrator
     }
 
-    /// [`Form`] の読み取り権限があるかどうかを判定します。
+    /// [`ActiveForm`] の読み取り権限があるかどうかを判定します。
     ///
     /// 読み取り権限は以下の条件のどちらかを満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
-    /// - [`Form`] が全体公開されている場合
+    /// - [`ActiveForm`] が全体公開されている場合
     ///
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormSettings},
+    ///     form::models::{ActiveForm, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -402,7 +400,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     ]).unwrap(),
     /// ).unwrap();
     ///
-    /// let private_form = Form::from_raw_parts(
+    /// let private_form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -417,7 +415,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     sample_questions(),
     /// );
     ///
-    ///  let public_form = Form::from_raw_parts(
+    ///  let public_form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -440,7 +438,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
         self.settings.visibility == Visibility::PUBLIC || actor.role == Administrator
     }
 
-    /// [`Form`] の更新権限があるかどうかを判定します。
+    /// [`ActiveForm`] の更新権限があるかどうかを判定します。
     ///
     /// 更新権限は以下の条件を満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
@@ -448,7 +446,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormId, FormMeta, FormSettings},
+    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -468,7 +466,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// };
     ///
     ///
-    /// let form = Form::from_raw_parts(
+    /// let form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -493,7 +491,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
         actor.role == Administrator
     }
 
-    /// [`Form`] の削除権限があるかどうかを判定します。
+    /// [`ActiveForm`] の削除権限があるかどうかを判定します。
     ///
     /// 削除権限は以下の条件を満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
@@ -501,7 +499,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormId, FormMeta, FormSettings},
+    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -521,7 +519,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// };
     ///
     ///
-    /// let form = Form::from_raw_parts(
+    /// let form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),

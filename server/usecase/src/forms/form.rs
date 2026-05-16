@@ -515,7 +515,7 @@ mod tests {
         }
     }
 
-    fn sample_form(form_id: FormId) -> domain::form::models::Form {
+    fn sample_form(form_id: FormId) -> domain::form::models::ActiveForm {
         let questions = QuestionSet::try_new(
             NonEmptyVec::try_new(vec![text_question(
                 QuestionId::from(Uuid::new_v4()),
@@ -525,7 +525,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        domain::form::models::Form::from_raw_parts(
+        domain::form::models::ActiveForm::from_raw_parts(
             form_id,
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
