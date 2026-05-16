@@ -66,7 +66,7 @@ pub async fn get_form_comment(
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
         answer_repository: repository.form_answer_repository(),
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -114,7 +114,7 @@ pub async fn post_form_comment(
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
         answer_repository: repository.form_answer_repository(),
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -165,7 +165,7 @@ pub async fn update_form_comment(
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
         answer_repository: repository.form_answer_repository(),
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -214,7 +214,7 @@ pub async fn delete_form_comment_handler(
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
         answer_repository: repository.form_answer_repository(),
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;

@@ -160,13 +160,18 @@ impl FormLabelDatabase for ConnectionPool {
         &self,
         form_id: FormId,
     ) -> Result<Vec<FormLabelDto>, InfraError> {
+        let form_id = form_id.into_inner().to_string();
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let labels_rs = sqlx::query(
-                    "SELECT id, name FROM label_for_forms WHERE id IN (SELECT label_id FROM \
-                     label_settings_for_forms WHERE form_id = ?)",
+                    "SELECT id, name FROM label_for_forms WHERE id IN (
+                        SELECT label_id FROM label_settings_for_forms WHERE form_id = ?
+                        UNION
+                        SELECT label_id FROM archived_label_settings_for_forms WHERE form_id = ?
+                    )",
                 )
-                .bind(form_id.into_inner().to_string())
+                .bind(form_id.clone())
+                .bind(form_id)
                 .fetch_all(&mut **txn)
                 .await?;
 

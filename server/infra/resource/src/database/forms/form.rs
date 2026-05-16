@@ -1,16 +1,18 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::form::{
     models::WebhookUrl,
     question::models::{Question, QuestionId, QuestionType},
 };
 use domain::{
-    form::models::{Form, FormId},
-    user::models::User,
+    form::models::{ActiveForm, ArchivedForm, FormId},
+    user::models::{Role, User},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
 use sqlx::{MySqlConnection, Row, query};
 use std::collections::{BTreeMap, BTreeSet};
+use std::str::FromStr;
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
@@ -20,24 +22,103 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    dto::{ChoiceDto, FormDto, QuestionDto},
+    dto::{ArchivedFormDto, ChoiceDto, FormDto, QuestionDto},
 };
 
 struct FormRowDto {
     id: String,
     title: String,
     description: String,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-    start_at: Option<chrono::DateTime<chrono::Utc>>,
-    end_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    start_at: Option<DateTime<Utc>>,
+    end_at: Option<DateTime<Utc>>,
     webhook_url: Option<String>,
     default_answer_title: Option<String>,
     visibility: String,
     answer_visibility: String,
 }
 
-async fn form_dto_from_row(
+struct ArchivedFormRowDto {
+    form: FormRowDto,
+    archived_at: DateTime<Utc>,
+    archived_by_name: String,
+    archived_by_id: String,
+    archived_by_role: Role,
+}
+
+async fn get_questions_txn_with_tables(
+    txn: &mut DatabaseTransaction,
+    form_id: FormId,
+    questions_table: &str,
+    choices_table: &str,
+) -> Result<Vec<QuestionDto>, InfraError> {
+    let form_id = form_id.into_inner().to_string();
+    let questions_sql = format!(
+        "SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
+        FROM {questions_table}
+        WHERE form_id = ?
+        ORDER BY position ASC, question_id ASC"
+    );
+    let choices_sql = format!(
+        "SELECT c.id, c.question_id, c.position, c.label
+        FROM {choices_table} c
+        INNER JOIN {questions_table} q ON c.question_id = q.question_id
+        WHERE q.form_id = ?
+        ORDER BY c.position ASC, c.id ASC"
+    );
+
+    let questions_rs = sqlx::query(&questions_sql)
+        .bind(form_id.clone())
+        .fetch_all(&mut **txn)
+        .await?;
+
+    let choices_by_question_id = sqlx::query(&choices_sql)
+        .bind(form_id)
+        .fetch_all(&mut **txn)
+        .await?
+        .into_iter()
+        .map(|choice_rs| {
+            let question_id = Uuid::parse_str(&choice_rs.try_get::<String, _>("question_id")?)?;
+            Ok::<_, InfraError>((
+                question_id,
+                ChoiceDto {
+                    id: Some(choice_rs.try_get("id")?),
+                    position: choice_rs.try_get::<u16, _>("position")?,
+                    label: choice_rs.try_get("label")?,
+                },
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .into_group_map();
+
+    questions_rs
+        .into_iter()
+        .map(|question_rs| {
+            let question_id = Uuid::parse_str(&question_rs.try_get::<String, _>("question_id")?)?;
+
+            Ok::<_, InfraError>(QuestionDto {
+                id: question_id.to_string(),
+                form_id: question_rs.try_get("form_id")?,
+                template_key: question_rs.try_get("template_key")?,
+                position: question_rs.try_get::<u16, _>("position")?,
+                title: question_rs.try_get("title")?,
+                description: question_rs.try_get("description")?,
+                question_type: question_rs.try_get::<String, _>("question_type")?,
+                choices: choices_by_question_id
+                    .get(&question_id)
+                    .cloned()
+                    .unwrap_or_default(),
+                is_required: question_rs
+                    .try_get::<Option<bool>, _>("is_required")?
+                    .unwrap_or(false),
+            })
+        })
+        .collect::<Result<Vec<QuestionDto>, _>>()
+}
+
+async fn active_form_dto_from_row(
     txn: &mut DatabaseTransaction,
     row: FormRowDto,
 ) -> Result<FormDto, InfraError> {
@@ -55,143 +136,132 @@ async fn form_dto_from_row(
         default_answer_title: row.default_answer_title,
         visibility: row.visibility,
         answer_visibility: row.answer_visibility,
-        questions: get_questions_txn(txn, form_id).await?,
+        questions: get_questions_txn_with_tables(txn, form_id, "form_questions", "form_choices")
+            .await?,
     })
 }
 
-#[async_trait]
-impl FormDatabase for ConnectionPool {
-    #[tracing::instrument]
-    async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError> {
-        let form = form.clone();
-        let user = user.clone();
+async fn archived_form_dto_from_row(
+    txn: &mut DatabaseTransaction,
+    row: ArchivedFormRowDto,
+) -> Result<ArchivedFormDto, InfraError> {
+    let form_id = FormId::from(Uuid::parse_str(&row.form.id)?);
 
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                insert_form_root(txn, &form, &user).await?;
-                sync_questions(txn, &form).await?;
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn list(
-        &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<FormDto>, InfraError> {
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let form_rows = sqlx::query_as!(
-                    FormRowDto,
-                    r"SELECT form_meta_data.id AS id, form_meta_data.title AS title, description, visibility, answer_visibility, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`, updated_at AS `updated_at!: chrono::DateTime<chrono::Utc>`, form_webhooks.url AS webhook_url, start_at AS `start_at: chrono::DateTime<chrono::Utc>`, end_at AS `end_at: chrono::DateTime<chrono::Utc>`, default_answer_titles.title AS default_answer_title
-                    FROM form_meta_data
-                    LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
-                    LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
-                    LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
-                    ORDER BY form_meta_data.id
-                    LIMIT ? OFFSET ?",
-                    limit.unwrap_or(u32::MAX),
-                    offset.unwrap_or(0),
-                )
-                .fetch_all(&mut **txn)
-                .await?;
-
-                let mut forms = Vec::with_capacity(form_rows.len());
-                for form_row in form_rows {
-                    forms.push(form_dto_from_row(txn, form_row).await?);
-                }
-
-                Ok::<_, InfraError>(forms)
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError> {
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let form_row = sqlx::query_as!(
-                    FormRowDto,
-                    r"SELECT form_meta_data.id AS id, form_meta_data.title AS title, description, visibility, answer_visibility, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`, updated_at AS `updated_at!: chrono::DateTime<chrono::Utc>`, form_webhooks.url AS webhook_url, start_at AS `start_at: chrono::DateTime<chrono::Utc>`, end_at AS `end_at: chrono::DateTime<chrono::Utc>`, default_answer_titles.title AS default_answer_title
-                    FROM form_meta_data
-                    LEFT JOIN form_webhooks ON form_meta_data.id = form_webhooks.form_id
-                    LEFT JOIN response_period ON form_meta_data.id = response_period.form_id
-                    LEFT JOIN default_answer_titles ON form_meta_data.id = default_answer_titles.form_id
-                    WHERE form_meta_data.id = ?",
-                    form_id.into_inner().to_string(),
-                )
-                .fetch_optional(&mut **txn)
-                .await?;
-
-                match form_row {
-                    Some(form_row) => form_dto_from_row(txn, form_row).await.map(Some),
-                    None => Ok(None),
-                }
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn delete(&self, form_id: FormId) -> Result<(), InfraError> {
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                sqlx::query!(
-                    "DELETE FROM form_meta_data WHERE id = ?",
-                    form_id.into_inner().to_string(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError> {
-        let form = form.clone();
-        let updated_by = updated_by.clone();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                update_form_root(txn, &form, &updated_by).await?;
-                sync_questions(txn, &form).await?;
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn size(&self) -> Result<u32, InfraError> {
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let size =
-                    sqlx::query_scalar!("SELECT COUNT(*) AS `count!: i64` FROM form_meta_data")
-                        .fetch_one(&mut **txn)
-                        .await?;
-
-                count_as_u32(size, "form_meta_data")
-            })
-        })
-        .await
-    }
+    Ok(ArchivedFormDto {
+        form: FormDto {
+            id: row.form.id,
+            title: row.form.title,
+            description: row.form.description,
+            created_at: row.form.created_at,
+            updated_at: row.form.updated_at,
+            start_at: row.form.start_at,
+            end_at: row.form.end_at,
+            webhook_url: row.form.webhook_url,
+            default_answer_title: row.form.default_answer_title,
+            visibility: row.form.visibility,
+            answer_visibility: row.form.answer_visibility,
+            questions: get_questions_txn_with_tables(
+                txn,
+                form_id,
+                "archived_form_questions",
+                "archived_form_choices",
+            )
+            .await?,
+        },
+        archived_at: row.archived_at,
+        archived_by_name: row.archived_by_name,
+        archived_by_id: row.archived_by_id,
+        archived_by_role: row.archived_by_role,
+    })
 }
 
-// ---------------------------------------------------------------------------
-// Form root (form_meta_data + 1:1 child tables: form_webhooks,
-// default_answer_titles, response_period)
-// ---------------------------------------------------------------------------
+fn form_row_from_db_row(row: sqlx::mysql::MySqlRow) -> Result<FormRowDto, InfraError> {
+    Ok(FormRowDto {
+        id: row.try_get("id")?,
+        title: row.try_get("title")?,
+        description: row.try_get("description")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+        start_at: row.try_get("start_at")?,
+        end_at: row.try_get("end_at")?,
+        webhook_url: row.try_get("webhook_url")?,
+        default_answer_title: row.try_get("default_answer_title")?,
+        visibility: row.try_get("visibility")?,
+        answer_visibility: row.try_get("answer_visibility")?,
+    })
+}
+
+fn archived_form_row_from_db_row(
+    row: sqlx::mysql::MySqlRow,
+) -> Result<ArchivedFormRowDto, InfraError> {
+    Ok(ArchivedFormRowDto {
+        form: FormRowDto {
+            id: row.try_get("id")?,
+            title: row.try_get("title")?,
+            description: row.try_get("description")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+            start_at: row.try_get("start_at")?,
+            end_at: row.try_get("end_at")?,
+            webhook_url: row.try_get("webhook_url")?,
+            default_answer_title: row.try_get("default_answer_title")?,
+            visibility: row.try_get("visibility")?,
+            answer_visibility: row.try_get("answer_visibility")?,
+        },
+        archived_at: row.try_get("archived_at")?,
+        archived_by_name: row.try_get("archived_by_name")?,
+        archived_by_id: row.try_get("archived_by_id")?,
+        archived_by_role: Role::from_str(&row.try_get::<String, _>("archived_by_role")?)?,
+    })
+}
+
+async fn fetch_form_row(
+    txn: &mut DatabaseTransaction,
+    form_id: FormId,
+) -> Result<Option<FormRowDto>, InfraError> {
+    let row = sqlx::query(
+        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+            f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
+            d.title AS default_answer_title
+        FROM form_meta_data f
+        LEFT JOIN form_webhooks w ON f.id = w.form_id
+        LEFT JOIN response_period p ON f.id = p.form_id
+        LEFT JOIN default_answer_titles d ON f.id = d.form_id
+        WHERE f.id = ?",
+    )
+    .bind(form_id.into_inner().to_string())
+    .fetch_optional(&mut **txn)
+    .await?;
+
+    row.map(form_row_from_db_row).transpose()
+}
+
+async fn fetch_archived_form_row(
+    txn: &mut DatabaseTransaction,
+    form_id: FormId,
+) -> Result<Option<ArchivedFormRowDto>, InfraError> {
+    let row = sqlx::query(
+        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+            f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
+            d.title AS default_answer_title, f.archived_at, u.name AS archived_by_name,
+            u.id AS archived_by_id, u.role AS archived_by_role
+        FROM archived_form_meta_data f
+        INNER JOIN users u ON f.archived_by = u.id
+        LEFT JOIN archived_form_webhooks w ON f.id = w.form_id
+        LEFT JOIN archived_response_period p ON f.id = p.form_id
+        LEFT JOIN archived_default_answer_titles d ON f.id = d.form_id
+        WHERE f.id = ?",
+    )
+    .bind(form_id.into_inner().to_string())
+    .fetch_optional(&mut **txn)
+    .await?;
+
+    row.map(archived_form_row_from_db_row).transpose()
+}
 
 async fn insert_form_root(
     txn: &mut DatabaseTransaction,
-    form: &Form,
+    form: &ActiveForm,
     created_by: &User,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
@@ -199,45 +269,39 @@ async fn insert_form_root(
     let description = form.description().to_owned().into_inner();
     let user_id = created_by.id.to_string();
 
-    sqlx::query!(
+    sqlx::query(
         r#"INSERT INTO form_meta_data (id, title, description, created_by, updated_by)
-                            VALUES (?, ?, ?, ?, ?)"#,
-        form_id,
-        title,
-        description,
-        user_id,
-        user_id,
+        VALUES (?, ?, ?, ?, ?)"#,
     )
+    .bind(form_id.clone())
+    .bind(title)
+    .bind(description)
+    .bind(user_id.clone())
+    .bind(user_id)
     .execute(&mut **txn)
     .await?;
 
-    sqlx::query!(
-        r"INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)",
-        form_id,
-    )
-    .execute(&mut **txn)
-    .await?;
+    sqlx::query(r"INSERT INTO default_answer_titles (form_id, title) VALUES (?, NULL)")
+        .bind(form_id.clone())
+        .execute(&mut **txn)
+        .await?;
 
-    sqlx::query!(
-        r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)",
-        form_id,
-    )
-    .execute(&mut **txn)
-    .await?;
+    sqlx::query(r"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, NULL, NULL)")
+        .bind(form_id.clone())
+        .execute(&mut **txn)
+        .await?;
 
-    sqlx::query!(
-        r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)",
-        form_id,
-    )
-    .execute(&mut **txn)
-    .await?;
+    sqlx::query(r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)")
+        .bind(form_id)
+        .execute(&mut **txn)
+        .await?;
 
     Ok(())
 }
 
 async fn update_form_root(
     txn: &mut DatabaseTransaction,
-    form: &Form,
+    form: &ActiveForm,
     updated_by: &User,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
@@ -263,40 +327,36 @@ async fn update_form_root(
         .and_then(WebhookUrl::into_inner)
         .map(NonEmptyString::into_inner);
 
-    sqlx::query!(
+    sqlx::query(
         r#"UPDATE form_meta_data SET
-                    title = ?,
-                    description = ?,
-                    visibility = ?,
-                    answer_visibility = ?,
-                    updated_by = ?
-                    WHERE id = ?
-                    "#,
-        title,
-        description,
-        visibility,
-        answer_visibility,
-        updated_by_id,
-        form_id,
+            title = ?,
+            description = ?,
+            visibility = ?,
+            answer_visibility = ?,
+            updated_by = ?
+            WHERE id = ?"#,
     )
+    .bind(title)
+    .bind(description)
+    .bind(visibility)
+    .bind(answer_visibility)
+    .bind(updated_by_id)
+    .bind(form_id.clone())
     .execute(&mut **txn)
     .await?;
 
-    sqlx::query!(
+    sqlx::query(
         r#"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)
-                    ON DUPLICATE KEY UPDATE
-                    url = VALUES(url)
-                    "#,
-        form_id,
-        webhook_url,
+        ON DUPLICATE KEY UPDATE url = VALUES(url)"#,
     )
+    .bind(form_id.clone())
+    .bind(webhook_url)
     .execute(&mut **txn)
     .await?;
 
     sqlx::query(
         r#"INSERT INTO default_answer_titles (form_id, title) VALUES (?, ?)
-        ON DUPLICATE KEY UPDATE title = VALUES(title)
-        "#,
+        ON DUPLICATE KEY UPDATE title = VALUES(title)"#,
     )
     .bind(&form_id)
     .bind(default_answer_title)
@@ -305,10 +365,7 @@ async fn update_form_root(
 
     sqlx::query(
         r#"INSERT INTO response_period (form_id, start_at, end_at) VALUES (?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-        start_at = VALUES(start_at),
-        end_at = VALUES(end_at)
-        "#,
+        ON DUPLICATE KEY UPDATE start_at = VALUES(start_at), end_at = VALUES(end_at)"#,
     )
     .bind(&form_id)
     .bind(response_period.start_at().to_owned())
@@ -319,18 +376,487 @@ async fn update_form_root(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Question 子集合の同期
-//
-// ドメイン側 (Form 集約) の questions を desired、DB 側の現状を current として
-// 突き合わせ、DB を desired に一致させる。Question id はクライアント採番 (Uuid)
-// なので、desired 全件を 1 本の INSERT ... ON DUPLICATE KEY UPDATE で永続化し、
-// desired に含まれない既存 id を削除すればよい。ただし (form_id, template_key)
-// と (form_id, position) の UNIQUE 制約があるため、upsert の前に既存行を一時値へ
-// 退避する。
-// ---------------------------------------------------------------------------
+async fn copy_active_form_to_archive(
+    txn: &mut DatabaseTransaction,
+    form_id: FormId,
+    actor: &User,
+) -> Result<(), InfraError> {
+    let form_id = form_id.into_inner().to_string();
+    let actor_id = actor.id.to_string();
 
-async fn sync_questions(txn: &mut DatabaseTransaction, form: &Form) -> Result<(), InfraError> {
+    sqlx::query(
+        r"INSERT INTO archived_form_meta_data
+        (id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
+        SELECT id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by, CURRENT_TIMESTAMP, ?
+        FROM form_meta_data
+        WHERE id = ?",
+    )
+    .bind(actor_id)
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_form_questions
+        (question_id, form_id, template_key, position, title, description, question_type, is_required)
+        SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
+        FROM form_questions WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_form_choices (id, question_id, position, label)
+        SELECT c.id, c.question_id, c.position, c.label
+        FROM form_choices c
+        INNER JOIN form_questions q ON c.question_id = q.question_id
+        WHERE q.form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_response_period (id, form_id, start_at, end_at)
+        SELECT id, form_id, start_at, end_at FROM response_period WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_form_webhooks (id, form_id, url)
+        SELECT id, form_id, url FROM form_webhooks WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_default_answer_titles (id, form_id, title)
+        SELECT id, form_id, title FROM default_answer_titles WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_answers (id, form_id, user, title, timestamp)
+        SELECT id, form_id, user, title, timestamp FROM answers WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_real_answers (id, answer_id, question_id, answer)
+        SELECT r.id, r.answer_id, r.question_id, r.answer
+        FROM real_answers r
+        INNER JOIN answers a ON r.answer_id = a.id
+        WHERE a.form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_form_answer_comments (id, answer_id, commented_by, content, timestamp)
+        SELECT c.id, c.answer_id, c.commented_by, c.content, c.timestamp
+        FROM form_answer_comments c
+        INNER JOIN answers a ON c.answer_id = a.id
+        WHERE a.form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_messages (id, related_answer_id, sender, body, timestamp)
+        SELECT m.id, m.related_answer_id, m.sender, m.body, m.timestamp
+        FROM messages m
+        INNER JOIN answers a ON m.related_answer_id = a.id
+        WHERE a.form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_label_settings_for_forms (id, form_id, label_id)
+        SELECT id, form_id, label_id FROM label_settings_for_forms WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO archived_label_settings_for_form_answers (id, answer_id, label_id)
+        SELECT s.id, s.answer_id, s.label_id
+        FROM label_settings_for_form_answers s
+        INNER JOIN answers a ON s.answer_id = a.id
+        WHERE a.form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query("DELETE FROM form_meta_data WHERE id = ?")
+        .bind(form_id)
+        .execute(&mut **txn)
+        .await?;
+
+    Ok(())
+}
+
+async fn restore_archived_form_to_active(
+    txn: &mut DatabaseTransaction,
+    form_id: FormId,
+) -> Result<(), InfraError> {
+    let form_id = form_id.into_inner().to_string();
+
+    sqlx::query(
+        r"INSERT INTO form_meta_data
+        (id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by)
+        SELECT id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by
+        FROM archived_form_meta_data
+        WHERE id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO form_questions
+        (question_id, form_id, template_key, position, title, description, question_type, is_required)
+        SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
+        FROM archived_form_questions WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO form_choices (question_id, position, label)
+        SELECT question_id, position, label
+        FROM archived_form_choices
+        WHERE question_id IN (
+            SELECT question_id FROM archived_form_questions WHERE form_id = ?
+        )",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO response_period (form_id, start_at, end_at)
+        SELECT form_id, start_at, end_at FROM archived_response_period WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO form_webhooks (form_id, url)
+        SELECT form_id, url FROM archived_form_webhooks WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO default_answer_titles (form_id, title)
+        SELECT form_id, title FROM archived_default_answer_titles WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO answers (id, form_id, user, title, timestamp)
+        SELECT id, form_id, user, title, timestamp FROM archived_answers WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO real_answers (id, answer_id, question_id, answer)
+        SELECT id, answer_id, question_id, answer
+        FROM archived_real_answers
+        WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO form_answer_comments (id, answer_id, commented_by, content, timestamp)
+        SELECT id, answer_id, commented_by, content, timestamp
+        FROM archived_form_answer_comments
+        WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO messages (id, related_answer_id, sender, body, timestamp)
+        SELECT id, related_answer_id, sender, body, timestamp
+        FROM archived_messages
+        WHERE related_answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO label_settings_for_forms (form_id, label_id)
+        SELECT form_id, label_id FROM archived_label_settings_for_forms WHERE form_id = ?",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query(
+        r"INSERT INTO label_settings_for_form_answers (answer_id, label_id)
+        SELECT answer_id, label_id
+        FROM archived_label_settings_for_form_answers
+        WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+    )
+    .bind(&form_id)
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query("DELETE FROM archived_form_meta_data WHERE id = ?")
+        .bind(form_id)
+        .execute(&mut **txn)
+        .await?;
+
+    Ok(())
+}
+
+#[async_trait]
+impl FormDatabase for ConnectionPool {
+    #[tracing::instrument]
+    async fn create(&self, form: &ActiveForm, user: &User) -> Result<(), InfraError> {
+        let form = form.clone();
+        let user = user.clone();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                insert_form_root(txn, &form, &user).await?;
+                sync_questions(txn, &form).await?;
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn list(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<Vec<FormDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rows = sqlx::query(
+                    r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+                    f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
+                    d.title AS default_answer_title
+                    FROM form_meta_data f
+                    LEFT JOIN form_webhooks w ON f.id = w.form_id
+                    LEFT JOIN response_period p ON f.id = p.form_id
+                    LEFT JOIN default_answer_titles d ON f.id = d.form_id
+                    ORDER BY f.id
+                    LIMIT ? OFFSET ?",
+                )
+                .bind(limit.unwrap_or(u32::MAX))
+                .bind(offset.unwrap_or(0))
+                .fetch_all(&mut **txn)
+                .await?;
+
+                let mut forms = Vec::with_capacity(rows.len());
+                for row in rows {
+                    forms.push(active_form_dto_from_row(txn, form_row_from_db_row(row)?).await?);
+                }
+                Ok::<_, InfraError>(forms)
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                match fetch_form_row(txn, form_id).await? {
+                    Some(row) => active_form_dto_from_row(txn, row).await.map(Some),
+                    None => Ok(None),
+                }
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn list_archived(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        query_text: Option<String>,
+    ) -> Result<Vec<ArchivedFormDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rows = if let Some(query_text) = query_text {
+                    let like = format!("%{query_text}%");
+                    sqlx::query(
+                        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+                        f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
+                        d.title AS default_answer_title, f.archived_at, u.name AS archived_by_name,
+                        u.id AS archived_by_id, u.role AS archived_by_role
+                        FROM archived_form_meta_data f
+                        INNER JOIN users u ON f.archived_by = u.id
+                        LEFT JOIN archived_form_webhooks w ON f.id = w.form_id
+                        LEFT JOIN archived_response_period p ON f.id = p.form_id
+                        LEFT JOIN archived_default_answer_titles d ON f.id = d.form_id
+                        WHERE f.title LIKE ? OR f.description LIKE ?
+                        ORDER BY f.archived_at DESC, f.id
+                        LIMIT ? OFFSET ?",
+                    )
+                    .bind(&like)
+                    .bind(&like)
+                    .bind(limit.unwrap_or(u32::MAX))
+                    .bind(offset.unwrap_or(0))
+                    .fetch_all(&mut **txn)
+                    .await?
+                } else {
+                    sqlx::query(
+                        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+                        f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
+                        d.title AS default_answer_title, f.archived_at, u.name AS archived_by_name,
+                        u.id AS archived_by_id, u.role AS archived_by_role
+                        FROM archived_form_meta_data f
+                        INNER JOIN users u ON f.archived_by = u.id
+                        LEFT JOIN archived_form_webhooks w ON f.id = w.form_id
+                        LEFT JOIN archived_response_period p ON f.id = p.form_id
+                        LEFT JOIN archived_default_answer_titles d ON f.id = d.form_id
+                        ORDER BY f.archived_at DESC, f.id
+                        LIMIT ? OFFSET ?",
+                    )
+                    .bind(limit.unwrap_or(u32::MAX))
+                    .bind(offset.unwrap_or(0))
+                    .fetch_all(&mut **txn)
+                    .await?
+                };
+
+                let mut forms = Vec::with_capacity(rows.len());
+                for row in rows {
+                    forms.push(
+                        archived_form_dto_from_row(txn, archived_form_row_from_db_row(row)?)
+                            .await?,
+                    );
+                }
+                Ok::<_, InfraError>(forms)
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn get_archived(&self, form_id: FormId) -> Result<Option<ArchivedFormDto>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                match fetch_archived_form_row(txn, form_id).await? {
+                    Some(row) => archived_form_dto_from_row(txn, row).await.map(Some),
+                    None => Ok(None),
+                }
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn archive(&self, form_id: FormId, actor: &User) -> Result<ArchivedForm, InfraError> {
+        let actor = actor.clone();
+        self.read_write_transaction(move |txn| {
+            Box::pin(async move {
+                if fetch_form_row(txn, form_id).await?.is_none() {
+                    return Err(InfraError::FormNotFound {
+                        id: form_id.into_inner(),
+                    });
+                }
+
+                copy_active_form_to_archive(txn, form_id, &actor).await?;
+
+                let row = fetch_archived_form_row(txn, form_id)
+                    .await?
+                    .ok_or_else(|| InfraError::FormNotFound {
+                        id: form_id.into_inner(),
+                    })?;
+
+                archived_form_dto_from_row(txn, row)
+                    .await?
+                    .try_into()
+                    .map_err(|error: errors::Error| InfraError::Unexpected {
+                        cause: error.to_string(),
+                    })
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn restore(&self, form_id: FormId) -> Result<(), InfraError> {
+        self.read_write_transaction(move |txn| {
+            Box::pin(async move {
+                if fetch_archived_form_row(txn, form_id).await?.is_none() {
+                    return Err(InfraError::FormNotFound {
+                        id: form_id.into_inner(),
+                    });
+                }
+
+                restore_archived_form_to_active(txn, form_id).await
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError> {
+        let form = form.clone();
+        let updated_by = updated_by.clone();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                update_form_root(txn, &form, &updated_by).await?;
+                sync_questions(txn, &form).await?;
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn size(&self) -> Result<u32, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let row = sqlx::query("SELECT COUNT(*) AS count FROM form_meta_data")
+                    .fetch_one(&mut **txn)
+                    .await?;
+                let size: i64 = row.try_get("count")?;
+                count_as_u32(size, "form_meta_data")
+            })
+        })
+        .await
+    }
+}
+
+async fn sync_questions(
+    txn: &mut DatabaseTransaction,
+    form: &ActiveForm,
+) -> Result<(), InfraError> {
     let form_id = *form.id();
     let form_id_string = form_id.into_inner().to_string();
     let desired = form.questions().as_slice();
@@ -351,72 +877,6 @@ async fn sync_questions(txn: &mut DatabaseTransaction, form: &Form) -> Result<()
         desired.iter().map(|q| (q.id(), q)).collect();
 
     sync_choices(conn, &assigned_questions).await
-}
-
-pub(crate) async fn get_questions_txn(
-    txn: &mut DatabaseTransaction,
-    form_id: FormId,
-) -> Result<Vec<QuestionDto>, InfraError> {
-    let form_id = form_id.into_inner().to_string();
-    let questions_rs = sqlx::query(
-        r"SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
-        FROM form_questions
-        WHERE form_id = ?
-        ORDER BY position ASC, question_id ASC",
-    )
-    .bind(form_id.clone())
-    .fetch_all(&mut **txn)
-    .await?;
-
-    let choices_by_question_id = sqlx::query(
-        r"SELECT form_choices.id, form_choices.question_id, form_choices.position, form_choices.label
-        FROM form_choices
-        INNER JOIN form_questions ON form_choices.question_id = form_questions.question_id
-        WHERE form_questions.form_id = ?
-        ORDER BY form_choices.position ASC, form_choices.id ASC",
-    )
-    .bind(form_id)
-    .fetch_all(&mut **txn)
-    .await?
-    .into_iter()
-    .map(|choice_rs| {
-        let question_id = Uuid::parse_str(&choice_rs.try_get::<String, _>("question_id")?)?;
-        Ok::<_, InfraError>((
-            question_id,
-            ChoiceDto {
-                id: Some(choice_rs.try_get("id")?),
-                position: choice_rs.try_get::<u16, _>("position")?,
-                label: choice_rs.try_get("label")?,
-            },
-        ))
-    })
-    .collect::<Result<Vec<_>, _>>()?
-    .into_iter()
-    .into_group_map();
-
-    questions_rs
-        .into_iter()
-        .map(|question_rs| {
-            let question_id = Uuid::parse_str(&question_rs.try_get::<String, _>("question_id")?)?;
-
-            Ok::<_, InfraError>(QuestionDto {
-                id: question_id.to_string(),
-                form_id: question_rs.try_get("form_id")?,
-                template_key: question_rs.try_get("template_key")?,
-                position: question_rs.try_get::<u16, _>("position")?,
-                title: question_rs.try_get("title")?,
-                description: question_rs.try_get("description")?,
-                question_type: question_rs.try_get::<String, _>("question_type")?,
-                choices: choices_by_question_id
-                    .get(&question_id)
-                    .cloned()
-                    .unwrap_or_default(),
-                is_required: question_rs
-                    .try_get::<Option<bool>, _>("is_required")?
-                    .unwrap_or(false),
-            })
-        })
-        .collect::<Result<Vec<QuestionDto>, _>>()
 }
 
 async fn fetch_question_ids(
@@ -476,11 +936,6 @@ fn temporary_template_key_prefix(existing_template_keys: &[String]) -> String {
     .expect("successors yields at least one prefix candidate")
 }
 
-/// 既存 Question 行の (form_id, template_key) と (form_id, position) は
-/// UNIQUE 制約下にある。upsert で desired の新しい template_key/position を
-/// 入れるとき、別の既存行がまだ古い値を保持していると衝突するため、先に
-/// 全既存行を一意な一時値へ退避させる。upsert はその後で desired の値で
-/// 上書きする。
 async fn temporarily_relocate_existing_questions(
     txn: &mut MySqlConnection,
     form_id: &str,
@@ -598,10 +1053,6 @@ async fn delete_questions(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Choice 子集合の同期
-// ---------------------------------------------------------------------------
-
 async fn sync_choices(
     txn: &mut MySqlConnection,
     assigned_questions: &[(QuestionId, &Question)],
@@ -614,10 +1065,6 @@ async fn sync_choices(
         return Ok(());
     }
 
-    // desired (期待状態) として diff_children に渡す Choice 集合を構築する。
-    // 質問種別が Text の場合、新規 Choice (id == None) は持ちえないため挿入対象外にする。
-    // ただし既に DB にあった Choice (id == Some) は upsert/delete 判定に乗せたいので残す。
-    // それ以外の質問種別では全 Choice を desired に含める。
     let desired_choices: Vec<(QuestionId, &domain::form::question::models::Choice)> =
         assigned_questions
             .iter()
@@ -638,7 +1085,6 @@ async fn sync_choices(
     let existing_choice_owners = fetch_existing_choices(txn, &question_ids).await?;
     let existing_ids: BTreeSet<i32> = existing_choice_owners.keys().copied().collect();
 
-    // desired と DB の差分を取って delete / upsert / insert を適用する。
     let (to_upsert, to_insert): (Vec<(QuestionId, &_)>, Vec<(QuestionId, &_)>) =
         desired_choices.iter().copied().partition(
             |(_, choice)| matches!(choice.id, Some(id) if existing_ids.contains(&id.into_inner())),

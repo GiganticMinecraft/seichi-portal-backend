@@ -5,7 +5,8 @@ pub mod search_repository;
 pub mod user_repository;
 
 pub trait Repositories: Send + Sync {
-    type ConcreteFormRepository: form::form_repository::FormRepository;
+    type ConcreteActiveFormRepository: form::active_form_repository::ActiveFormRepository;
+    type ConcreteArchivedFormRepository: form::archived_form_repository::ArchivedFormRepository;
     type ConcreteFormAnswerRepository: form::answer_repository::AnswerRepository;
     type ConcreteAnswerLabelRepository: form::answer_label_repository::AnswerLabelRepository;
     type ConcreteFormMessageRepository: form::message_repository::MessageRepository;
@@ -15,7 +16,8 @@ pub trait Repositories: Send + Sync {
     type ConcreteSearchRepository: search_repository::SearchRepository;
     type ConcreteNotificationRepository: notification_repository::NotificationRepository;
     type ConcreteHealthCheckRepository: health_check_repository::HealthCheckRepository;
-    fn form_repository(&self) -> &Self::ConcreteFormRepository;
+    fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository;
+    fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository;
     fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository;
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository;
     fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository;

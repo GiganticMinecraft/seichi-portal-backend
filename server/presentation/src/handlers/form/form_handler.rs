@@ -15,7 +15,7 @@ use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{
-    dto::{FormDto, UpsertQuestionDto},
+    dto::{ActiveFormDto, ArchivedFormDto, UpsertQuestionDto},
     forms::form::FormUseCase,
 };
 
@@ -24,7 +24,7 @@ use crate::schemas::error_responses::*;
 use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit, QuestionSchema},
     form_response_schemas::{
-        FormMetaSchema, FormSchema, FormSettingsSchema, QuestionResponseSchema,
+        ArchivedFormSchema, FormMetaSchema, FormSchema, FormSettingsSchema, QuestionResponseSchema,
     },
 };
 use axum::extract::rejection::PathRejection;
@@ -100,6 +100,79 @@ impl IntoResponse for UpdateFormResponse {
     }
 }
 
+#[derive(utoipa::IntoResponses)]
+pub enum ArchivedFormListResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<ArchivedFormSchema>),
+}
+
+impl IntoResponse for ArchivedFormListResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum ArchivedFormResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(ArchivedFormSchema),
+}
+
+impl IntoResponse for ArchivedFormResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
+
+type ResourceRepository =
+    resource::repository::Repository<resource::database::connection::ConnectionPool>;
+type ResourceFormUseCase<'a> = FormUseCase<
+    'a,
+    ResourceRepository,
+    ResourceRepository,
+    ResourceRepository,
+    ResourceRepository,
+    ResourceRepository,
+>;
+
+fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFormUseCase<'_> {
+    FormUseCase {
+        active_form_repository: repository.active_form_repository(),
+        archived_form_repository: repository.archived_form_repository(),
+        notification_repository: repository.notification_repository(),
+        form_label_repository: repository.form_label_repository(),
+        answer_repository: repository.form_answer_repository(),
+    }
+}
+
+fn archived_form_schema_from_parts(
+    user: &User,
+    form: domain::form::models::ArchivedForm,
+    labels: Vec<domain::form::models::FormLabel>,
+) -> ArchivedFormSchema {
+    ArchivedFormSchema {
+        id: form.form().id().to_owned(),
+        title: form.form().title().to_owned(),
+        description: form.form().description().to_owned(),
+        settings: FormSettingsSchema::from_settings_ref(user, form.form().settings()),
+        metadata: FormMetaSchema::from_meta_ref(form.form().metadata()),
+        archived_at: *form.archived_at(),
+        archived_by: form.archived_by().clone(),
+        questions: form
+            .form()
+            .questions()
+            .iter()
+            .cloned()
+            .map(QuestionResponseSchema::from)
+            .collect(),
+        labels,
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/forms",
@@ -121,12 +194,7 @@ pub async fn create_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormCreateSchema>, JsonRejection>,
 ) -> Result<CreateFormResponse, Response> {
-    let form_use_case = FormUseCase {
-        form_repository: repository.form_repository(),
-        notification_repository: repository.notification_repository(),
-        form_label_repository: repository.form_label_repository(),
-        answer_repository: repository.form_answer_repository(),
-    };
+    let form_use_case = build_form_use_case(&repository);
 
     let Json(form) = json.map_err_to_error().map_err(handle_error)?;
     let FormCreateSchema {
@@ -184,12 +252,7 @@ pub async fn form_list_handler(
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> Result<FormListResponse, Response> {
-    let form_use_case = FormUseCase {
-        form_repository: repository.form_repository(),
-        notification_repository: repository.notification_repository(),
-        form_label_repository: repository.form_label_repository(),
-        answer_repository: repository.form_answer_repository(),
-    };
+    let form_use_case = build_form_use_case(&repository);
 
     let forms = form_use_case
         .form_list(&user, offset_and_limit.offset, offset_and_limit.limit)
@@ -240,16 +303,11 @@ pub async fn get_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<GetFormResponse, Response> {
-    let form_use_case = FormUseCase {
-        form_repository: repository.form_repository(),
-        notification_repository: repository.notification_repository(),
-        form_label_repository: repository.form_label_repository(),
-        answer_repository: repository.form_answer_repository(),
-    };
+    let form_use_case = build_form_use_case(&repository);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    let FormDto { form, labels } = form_use_case
+    let ActiveFormDto { form, labels } = form_use_case
         .get_form(&user, form_id)
         .await
         .map_err(handle_error)?;
@@ -271,9 +329,9 @@ pub async fn get_form_handler(
 }
 
 #[utoipa::path(
-    delete,
-    path = "/forms/{id}",
-    summary = "フォームの削除",
+    post,
+    path = "/forms/{id}/archive",
+    summary = "フォームのアーカイブ",
     params(
         ("id" = String, Path, description = "Form ID"),
     ),
@@ -288,26 +346,29 @@ pub async fn get_form_handler(
     security(("bearer" = [])),
     tag = "Forms"
 )]
-pub async fn delete_form_handler(
+pub async fn archive_form_handler(
     Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
-    let form_use_case = FormUseCase {
-        form_repository: repository.form_repository(),
-        notification_repository: repository.notification_repository(),
-        form_label_repository: repository.form_label_repository(),
-        answer_repository: repository.form_answer_repository(),
-    };
+    let form_use_case = build_form_use_case(&repository);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    form_use_case
-        .delete_form(&user, form_id)
+    let archived_form = form_use_case
+        .archive_form(&user, form_id)
         .await
         .map_err(handle_error)?;
 
-    Ok(StatusCode::NO_CONTENT.into_response())
+    Ok((
+        StatusCode::OK,
+        Json(archived_form_schema_from_parts(
+            &user,
+            archived_form,
+            vec![],
+        )),
+    )
+        .into_response())
 }
 
 #[utoipa::path(
@@ -337,12 +398,7 @@ pub async fn update_form_handler(
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormUpdateSchema>, JsonRejection>,
 ) -> Result<UpdateFormResponse, Response> {
-    let form_use_case = FormUseCase {
-        form_repository: repository.form_repository(),
-        notification_repository: repository.notification_repository(),
-        form_label_repository: repository.form_label_repository(),
-        answer_repository: repository.form_answer_repository(),
-    };
+    let form_use_case = build_form_use_case(&repository);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(targets) = json.map_err_to_error().map_err(handle_error)?;
@@ -406,6 +462,129 @@ pub async fn update_form_handler(
             .collect(),
         labels,
     }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/archived-forms",
+    summary = "アーカイブ済みフォームの一覧取得",
+    params(
+        ("offset" = Option<u32>, Query, description = "Offset for pagination"),
+        ("limit" = Option<u32>, Query, description = "Limit for pagination"),
+        ("query" = Option<String>, Query, description = "Search query"),
+    ),
+    responses(
+        ArchivedFormListResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Archived Forms"
+)]
+pub async fn archived_form_list_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    Query(offset_and_limit): Query<OffsetAndLimit>,
+    query: Result<
+        Query<crate::schemas::search_schemas::SearchQuery>,
+        axum::extract::rejection::QueryRejection,
+    >,
+) -> Result<ArchivedFormListResponse, Response> {
+    let form_use_case = build_form_use_case(&repository);
+    let query = query
+        .map_err_to_error()
+        .map_err(handle_error)?
+        .query
+        .clone();
+
+    let forms = form_use_case
+        .archived_form_list(
+            &user,
+            offset_and_limit.offset,
+            offset_and_limit.limit,
+            query.map(|q| q.into_inner()),
+        )
+        .await
+        .map_err(handle_error)?;
+
+    Ok(ArchivedFormListResponse::Ok(
+        forms
+            .into_iter()
+            .map(|(form, labels)| archived_form_schema_from_parts(&user, form, labels))
+            .collect(),
+    ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/archived-forms/{id}",
+    summary = "アーカイブ済みフォームの取得",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        ArchivedFormResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Archived Forms"
+)]
+pub async fn get_archived_form_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<ArchivedFormResponse, Response> {
+    let form_use_case = build_form_use_case(&repository);
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+
+    let ArchivedFormDto { form, labels } = form_use_case
+        .get_archived_form(&user, form_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
+        &user, form, labels,
+    )))
+}
+
+#[utoipa::path(
+    post,
+    path = "/archived-forms/{id}/restore",
+    summary = "アーカイブ済みフォームの復元",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Archived Forms"
+)]
+pub async fn restore_archived_form_handler(
+    Extension(user): Extension<User>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
+    let form_use_case = build_form_use_case(&repository);
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+
+    form_use_case
+        .restore_form(&user, form_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 fn into_upsert_question_dtos(

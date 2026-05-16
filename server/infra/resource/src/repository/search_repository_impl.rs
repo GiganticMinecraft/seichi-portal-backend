@@ -11,7 +11,7 @@ use domain::{
     form::{
         answer::models::AnswerLabel,
         comment::{models::Comment, service::CommentAuthorizationContext},
-        models::{Form, FormLabel},
+        models::{ActiveForm, FormLabel},
     },
     repository::search_repository::SearchRepository,
     search::models::SearchableFieldsWithOperation,
@@ -43,7 +43,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
     async fn search_forms(
         &self,
         query: &str,
-    ) -> Result<Vec<AuthorizationGuard<Form, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
         Ok(self
             .client
             .search()

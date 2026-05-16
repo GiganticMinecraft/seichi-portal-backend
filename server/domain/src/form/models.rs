@@ -21,7 +21,7 @@ use crate::{
     user::models::{Role::Administrator, User},
 };
 
-pub type FormId = types::Id<Form>;
+pub type FormId = types::Id<ActiveForm>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
@@ -189,7 +189,7 @@ impl FormMeta {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
-pub struct Form {
+pub struct ActiveForm {
     #[serde(default)]
     id: FormId,
     title: FormTitle,
@@ -202,7 +202,7 @@ pub struct Form {
     questions: QuestionSet,
 }
 
-impl Form {
+impl ActiveForm {
     pub fn new(title: FormTitle, description: FormDescription, questions: QuestionSet) -> Self {
         Self {
             id: FormId::new(),
@@ -250,10 +250,61 @@ impl Form {
             questions,
         }
     }
+
+    pub fn archive(self, archived_at: DateTime<Utc>, archived_by: User) -> ArchivedForm {
+        ArchivedForm::new(self, archived_at, archived_by)
+    }
 }
 
-impl AuthorizationGuardDefinitions for Form {
-    /// [`Form`] の作成権限があるかどうかを判定します。
+#[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+pub struct ArchivedForm {
+    form: ActiveForm,
+    archived_at: DateTime<Utc>,
+    archived_by: User,
+}
+
+impl ArchivedForm {
+    pub fn new(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+        Self {
+            form,
+            archived_at,
+            archived_by,
+        }
+    }
+
+    /// [`ArchivedForm`] の各フィールドを指定して再構築します。
+    ///
+    /// データベースから復元したデータなど、通常のアーカイブ操作を経ずに
+    /// [`ArchivedForm`] を組み立てる場合に使用します。
+    pub fn from_persisted(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+        Self::new(form, archived_at, archived_by)
+    }
+
+    pub fn unarchive(self) -> ActiveForm {
+        self.form
+    }
+}
+
+impl AuthorizationGuardDefinitions for ArchivedForm {
+    fn can_create(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    fn can_read(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    fn can_update(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    fn can_delete(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+}
+
+impl AuthorizationGuardDefinitions for ActiveForm {
+    /// [`ActiveForm`] の作成権限があるかどうかを判定します。
     ///
     /// 作成権限は以下の条件を満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
@@ -261,7 +312,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormId, FormMeta, FormSettings},
+    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -283,7 +334,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// };
     ///
     ///
-    /// let form = Form::from_raw_parts(
+    /// let form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -308,16 +359,16 @@ impl AuthorizationGuardDefinitions for Form {
         actor.role == Administrator
     }
 
-    /// [`Form`] の読み取り権限があるかどうかを判定します。
+    /// [`ActiveForm`] の読み取り権限があるかどうかを判定します。
     ///
     /// 読み取り権限は以下の条件のどちらかを満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
-    /// - [`Form`] が全体公開されている場合
+    /// - [`ActiveForm`] が全体公開されている場合
     ///
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormSettings},
+    ///     form::models::{ActiveForm, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -353,7 +404,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///     ]).unwrap(),
     /// ).unwrap();
     ///
-    /// let private_form = Form::from_raw_parts(
+    /// let private_form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -368,7 +419,7 @@ impl AuthorizationGuardDefinitions for Form {
     ///     sample_questions(),
     /// );
     ///
-    ///  let public_form = Form::from_raw_parts(
+    ///  let public_form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -391,7 +442,7 @@ impl AuthorizationGuardDefinitions for Form {
         self.settings.visibility == Visibility::PUBLIC || actor.role == Administrator
     }
 
-    /// [`Form`] の更新権限があるかどうかを判定します。
+    /// [`ActiveForm`] の更新権限があるかどうかを判定します。
     ///
     /// 更新権限は以下の条件を満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
@@ -399,7 +450,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormId, FormMeta, FormSettings},
+    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -419,7 +470,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// };
     ///
     ///
-    /// let form = Form::from_raw_parts(
+    /// let form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -444,7 +495,7 @@ impl AuthorizationGuardDefinitions for Form {
         actor.role == Administrator
     }
 
-    /// [`Form`] の削除権限があるかどうかを判定します。
+    /// [`ActiveForm`] の削除権限があるかどうかを判定します。
     ///
     /// 削除権限は以下の条件を満たしている場合に与えられます。
     /// - [`actor`] が [`Administrator`] である場合
@@ -452,7 +503,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{Form, FormId, FormMeta, FormSettings},
+    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{Role, User},
     /// };
@@ -472,7 +523,7 @@ impl AuthorizationGuardDefinitions for Form {
     /// };
     ///
     ///
-    /// let form = Form::from_raw_parts(
+    /// let form = ActiveForm::from_raw_parts(
     ///     FormId::new(),
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
@@ -491,10 +542,10 @@ impl AuthorizationGuardDefinitions for Form {
     ///     ).unwrap(),
     /// );
     ///
-    /// assert!(form.can_delete(&administrator));
+    /// assert!(!form.can_delete(&administrator));
     /// assert!(!form.can_delete(&standard_user));
-    fn can_delete(&self, actor: &User) -> bool {
-        actor.role == Administrator
+    fn can_delete(&self, _actor: &User) -> bool {
+        false
     }
 }
 

@@ -7,7 +7,7 @@ use domain::{
     form::{
         answer::models::AnswerLabel,
         comment::models::Comment,
-        models::{Form, FormLabel},
+        models::{ActiveForm, FormLabel},
     },
     search::models::{Operation, SearchableFields, SearchableFieldsWithOperation},
     user::models::User,
@@ -35,14 +35,14 @@ impl SearchDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError> {
+    async fn search_forms(&self, query: &str) -> Result<Vec<ActiveForm>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("form_meta_data")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<Form>()
+            .execute::<ActiveForm>()
             .await?
             .hits
             .into_iter()

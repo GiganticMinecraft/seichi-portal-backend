@@ -9,8 +9,9 @@ use domain::{
         service::DefaultAnswerTitleDomainService,
     },
     repository::form::{
+        active_form_repository::ActiveFormRepository,
         answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
-        comment_repository::CommentRepository, form_repository::FormRepository,
+        comment_repository::CommentRepository,
     },
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
     user::models::User,
@@ -26,18 +27,22 @@ use crate::dto::AnswerDto;
 pub struct AnswerUseCase<
     'a,
     AnswerRepo: AnswerRepository,
-    FormRepo: FormRepository,
+    FormRepo: ActiveFormRepository,
     CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
 > {
     pub answer_repository: &'a AnswerRepo,
-    pub form_repository: &'a FormRepo,
+    pub active_form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
 }
 
-impl<R1: AnswerRepository, R2: FormRepository, R3: CommentRepository, R4: AnswerLabelRepository>
-    AnswerUseCase<'_, R1, R2, R3, R4>
+impl<
+    R1: AnswerRepository,
+    R2: ActiveFormRepository,
+    R3: CommentRepository,
+    R4: AnswerLabelRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4>
 {
     pub async fn post_answers(
         &self,
@@ -45,7 +50,7 @@ impl<R1: AnswerRepository, R2: FormRepository, R3: CommentRepository, R4: Answer
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let form = self.form_repository.get(form_id).await?;
+        let form = self.active_form_repository.get(form_id).await?;
 
         let form = form
             .ok_or(Error::from(FormNotFound))?
@@ -86,7 +91,7 @@ impl<R1: AnswerRepository, R2: FormRepository, R3: CommentRepository, R4: Answer
     ) -> Result<AnswerDto, Error> {
         if let Some(form_answer_guard) = self.answer_repository.get_answer(answer_id).await? {
             let form_guard = self
-                .form_repository
+                .active_form_repository
                 .get(form_id)
                 .await?
                 .ok_or(FormNotFound)?;
@@ -145,7 +150,7 @@ impl<R1: AnswerRepository, R2: FormRepository, R3: CommentRepository, R4: Answer
         actor: &User,
     ) -> Result<Vec<AnswerDto>, Error> {
         let form = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
@@ -220,7 +225,7 @@ impl<R1: AnswerRepository, R2: FormRepository, R3: CommentRepository, R4: Answer
 
                         async move {
                             let guard = self
-                                .form_repository
+                                .active_form_repository
                                 .get(form_id)
                                 .await?
                                 .ok_or(FormNotFound)?;
@@ -293,7 +298,7 @@ impl<R1: AnswerRepository, R2: FormRepository, R3: CommentRepository, R4: Answer
         title: Option<AnswerTitle>,
     ) -> Result<AnswerDto, Error> {
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;

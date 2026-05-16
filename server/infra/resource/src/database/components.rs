@@ -1,7 +1,7 @@
 use crate::{
     dto::{
-        AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerDto, FormDto, FormLabelDto,
-        MessageDto, NotificationSettingsDto,
+        ActiveFormDto, AnswerLabelDto, ArchivedFormDto, CommentDto, DiscordUserDto, FormAnswerDto,
+        FormLabelDto, MessageDto, NotificationSettingsDto,
     },
     external::discord_api::DiscordAPI,
 };
@@ -12,7 +12,7 @@ use domain::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
-        models::{Form, FormId, FormLabel, FormLabelId, FormLabelName},
+        models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
     },
     notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
@@ -52,15 +52,23 @@ pub trait DatabaseComponents: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormDatabase: Send + Sync {
-    async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError>;
+    async fn create(&self, form: &ActiveForm, user: &User) -> Result<(), InfraError>;
     async fn list(
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<FormDto>, InfraError>;
-    async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
-    async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
-    async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError>;
+    ) -> Result<Vec<ActiveFormDto>, InfraError>;
+    async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormDto>, InfraError>;
+    async fn list_archived(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        query: Option<String>,
+    ) -> Result<Vec<ArchivedFormDto>, InfraError>;
+    async fn get_archived(&self, form_id: FormId) -> Result<Option<ArchivedFormDto>, InfraError>;
+    async fn archive(&self, form_id: FormId, actor: &User) -> Result<ArchivedForm, InfraError>;
+    async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
+    async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
 
@@ -201,7 +209,7 @@ pub trait UserDatabase: Send + Sync {
 #[async_trait]
 pub trait SearchDatabase: Send + Sync {
     async fn search_users(&self, query: &str) -> Result<Vec<User>, InfraError>;
-    async fn search_forms(&self, query: &str) -> Result<Vec<Form>, InfraError>;
+    async fn search_forms(&self, query: &str) -> Result<Vec<ActiveForm>, InfraError>;
     async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError>;
     async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
     async fn search_answers(&self, query: &str) -> Result<Vec<RealAnswers>, InfraError>;

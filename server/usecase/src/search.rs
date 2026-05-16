@@ -11,7 +11,7 @@ use domain::{
         comment::service::CommentAuthorizationContext,
     },
     repository::{
-        form::{answer_repository::AnswerRepository, form_repository::FormRepository},
+        form::{active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository},
         search_repository::SearchRepository,
     },
     search::models::SearchableFieldsWithOperation,
@@ -31,7 +31,7 @@ pub struct SearchUseCase<
     'a,
     SearchRepo: SearchRepository,
     AnswerRepo: AnswerRepository,
-    FormRepo: FormRepository,
+    FormRepo: ActiveFormRepository,
     CommentRepo: CommentRepository,
     FormAnswerLabelRepo: AnswerLabelRepository,
     FormLabelRepo: FormLabelRepository,
@@ -39,7 +39,7 @@ pub struct SearchUseCase<
 > {
     pub search_repository: &'a SearchRepo,
     pub answer_repository: &'a AnswerRepo,
-    pub form_repository: &'a FormRepo,
+    pub active_form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub form_answer_label_repository: &'a FormAnswerLabelRepo,
     pub form_label_repository: &'a FormLabelRepo,
@@ -49,7 +49,7 @@ pub struct SearchUseCase<
 impl<
     R1: SearchRepository,
     R2: AnswerRepository,
-    R3: FormRepository,
+    R3: ActiveFormRepository,
     R4: CommentRepository,
     R5: AnswerLabelRepository,
     R6: FormLabelRepository,
@@ -95,7 +95,7 @@ impl<
 
                         async move {
                             let form_guard = self
-                                .form_repository
+                                .active_form_repository
                                 .get(form_id)
                                 .await?
                                 .ok_or(Error::from(FormNotFound))?;
@@ -146,7 +146,7 @@ impl<
 
                                     async move {
                                         let form_guard = self
-                                            .form_repository
+                                            .active_form_repository
                                             .get(form_id)
                                             .await?
                                             .ok_or(Error::from(FormNotFound))?;
@@ -234,7 +234,7 @@ impl<
                     let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
 
                     let repository_records = NumberOfRecordsPerAggregate {
-                        form_meta_data: NumberOfRecords(self.form_repository.size().await?),
+                        form_meta_data: NumberOfRecords(self.active_form_repository.size().await?),
                         real_answers: NumberOfRecords(self.answer_repository.size().await?),
                         form_answer_comments: NumberOfRecords(self.comment_repository.size().await?),
                         label_for_form_answers: NumberOfRecords(
@@ -248,7 +248,7 @@ impl<
 
                     if sync_rate.is_out_of_sync() {
                         let forms = self
-                            .form_repository
+                            .active_form_repository
                             .list(None, None)
                             .await?
                             .into_iter()
