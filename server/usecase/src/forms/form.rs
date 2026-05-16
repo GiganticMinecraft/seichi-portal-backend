@@ -676,13 +676,11 @@ mod tests {
             .times(1)
             .returning(move |_, _| {
                 let form = sample_form(form_id);
-                Ok(unsafe {
-                    ArchivedForm::from_raw_parts(
-                        form.clone(),
-                        form.metadata().created_at,
-                        admin_user(),
-                    )
-                }
+                Ok(ArchivedForm::from_persisted(
+                    form.clone(),
+                    form.metadata().created_at,
+                    admin_user(),
+                )
                 .into())
             });
 

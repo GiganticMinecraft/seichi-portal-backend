@@ -169,18 +169,16 @@ impl TryFrom<ArchivedFormDto> for ArchivedForm {
     type Error = errors::Error;
 
     fn try_from(value: ArchivedFormDto) -> Result<Self, Self::Error> {
-        Ok(unsafe {
-            ArchivedForm::from_raw_parts(
-                value.form.try_into()?,
-                value.archived_at,
-                UserDto {
-                    name: value.archived_by_name,
-                    id: value.archived_by_id,
-                    role: value.archived_by_role,
-                }
-                .try_into()?,
-            )
-        })
+        Ok(ArchivedForm::from_persisted(
+            value.form.try_into()?,
+            value.archived_at,
+            UserDto {
+                name: value.archived_by_name,
+                id: value.archived_by_id,
+                role: value.archived_by_role,
+            }
+            .try_into()?,
+        ))
     }
 }
 

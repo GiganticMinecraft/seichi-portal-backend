@@ -252,7 +252,7 @@ impl ActiveForm {
     }
 
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: User) -> ArchivedForm {
-        unsafe { ArchivedForm::from_raw_parts(self, archived_at, archived_by) }
+        ArchivedForm::new(self, archived_at, archived_by)
     }
 }
 
@@ -264,22 +264,20 @@ pub struct ArchivedForm {
 }
 
 impl ArchivedForm {
-    /// [`ArchivedForm`] の各フィールドを指定して新しく作成します。
-    ///
-    /// # Safety
-    /// この関数は [`ArchivedForm`] のバリデーションをスキップするため、
-    /// データベースからすでに検証済みのデータを読み出すときなど、
-    /// データの信頼性が保証されている場合にのみ使用してください。
-    pub unsafe fn from_raw_parts(
-        form: ActiveForm,
-        archived_at: DateTime<Utc>,
-        archived_by: User,
-    ) -> Self {
+    pub fn new(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
         Self {
             form,
             archived_at,
             archived_by,
         }
+    }
+
+    /// [`ArchivedForm`] の各フィールドを指定して再構築します。
+    ///
+    /// データベースから復元したデータなど、通常のアーカイブ操作を経ずに
+    /// [`ArchivedForm`] を組み立てる場合に使用します。
+    pub fn from_persisted(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+        Self::new(form, archived_at, archived_by)
     }
 
     pub fn unarchive(self) -> ActiveForm {
@@ -818,8 +816,7 @@ mod tests {
     #[test]
     fn archived_form_can_restore_to_active_form() {
         let form = sample_form();
-        let archived =
-            unsafe { ArchivedForm::from_raw_parts(form.clone(), Utc::now(), admin_user()) };
+        let archived = ArchivedForm::from_persisted(form.clone(), Utc::now(), admin_user());
 
         let restored = archived.unarchive();
 
