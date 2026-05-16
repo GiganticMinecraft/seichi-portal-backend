@@ -6,7 +6,7 @@ use crate::{
     form::models::{Form, FormId},
     types::{
         authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Delete, Read, Update},
+        authorization_guard_with_context::{Create, Read, Update},
     },
     user::models::User,
 };
@@ -25,11 +25,6 @@ pub trait FormRepository: Send + Sync + 'static {
         limit: Option<u32>,
     ) -> Result<Vec<AuthorizationGuard<Form, Read>>, Error>;
     async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<Form, Read>>, Error>;
-    async fn delete(
-        &self,
-        actor: &User,
-        form: AuthorizationGuard<Form, Delete>,
-    ) -> Result<(), Error>;
     async fn update_form(
         &self,
         actor: &User,

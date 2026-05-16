@@ -57,6 +57,7 @@ use utoipa_swagger_ui::SwaggerUi;
         presentation::schemas::form::form_response_schemas::AnswerLabelResponseSchema,
         presentation::schemas::form::form_response_schemas::AnswerSettingsSchema,
         presentation::schemas::form::form_response_schemas::AnswerVisibility,
+        presentation::schemas::form::form_response_schemas::ArchivedFormSchema,
         presentation::schemas::form::form_response_schemas::FormAnswer,
         presentation::schemas::form::form_response_schemas::FormLabelResponseSchema,
         presentation::schemas::form::form_response_schemas::FormMetaSchema,
@@ -84,6 +85,7 @@ use utoipa_swagger_ui::SwaggerUi;
     modifiers(&SecurityAddon),
     tags(
         (name = "Forms"),
+        (name = "Archived Forms"),
         (name = "Answers"),
         (name = "Comments"),
         (name = "Labels"),
@@ -180,8 +182,13 @@ async fn main() -> anyhow::Result<()> {
         ))
         .routes(routes!(
             form_handler::get_form_handler,
-            form_handler::delete_form_handler,
+            form_handler::archive_form_handler,
             form_handler::update_form_handler
+        ))
+        .routes(routes!(
+            form_handler::archived_form_list_handler,
+            form_handler::get_archived_form_handler,
+            form_handler::restore_archived_form_handler
         ))
         .routes(routes!(
             answer_handler::get_answer_by_form_id_handler,

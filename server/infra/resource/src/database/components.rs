@@ -1,7 +1,7 @@
 use crate::{
     dto::{
-        AnswerLabelDto, CommentDto, DiscordUserDto, FormAnswerDto, FormDto, FormLabelDto,
-        MessageDto, NotificationSettingsDto,
+        AnswerLabelDto, ArchivedFormDto, CommentDto, DiscordUserDto, FormAnswerDto, FormDto,
+        FormLabelDto, MessageDto, NotificationSettingsDto,
     },
     external::discord_api::DiscordAPI,
 };
@@ -12,7 +12,7 @@ use domain::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
-        models::{Form, FormId, FormLabel, FormLabelId, FormLabelName},
+        models::{ArchivedForm, Form, FormId, FormLabel, FormLabelId, FormLabelName},
     },
     notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
@@ -59,7 +59,15 @@ pub trait FormDatabase: Send + Sync {
         limit: Option<u32>,
     ) -> Result<Vec<FormDto>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError>;
-    async fn delete(&self, form_id: FormId) -> Result<(), InfraError>;
+    async fn list_archived(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        query: Option<String>,
+    ) -> Result<Vec<ArchivedFormDto>, InfraError>;
+    async fn get_archived(&self, form_id: FormId) -> Result<Option<ArchivedFormDto>, InfraError>;
+    async fn archive(&self, form_id: FormId, actor: &User) -> Result<ArchivedForm, InfraError>;
+    async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }

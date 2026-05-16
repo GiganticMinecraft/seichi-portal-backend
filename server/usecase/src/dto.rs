@@ -2,7 +2,7 @@ use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerLabel},
         comment::models::Comment,
-        models::{Form, FormLabel},
+        models::{ArchivedForm, Form, FormLabel},
         question::models::{Question, QuestionId},
     },
     user::models::{DiscordUser, User},
@@ -16,6 +16,11 @@ pub struct AnswerDto {
 
 pub struct FormDto {
     pub form: Form,
+    pub labels: Vec<FormLabel>,
+}
+
+pub struct ArchivedFormDto {
+    pub form: ArchivedForm,
     pub labels: Vec<FormLabel>,
 }
 

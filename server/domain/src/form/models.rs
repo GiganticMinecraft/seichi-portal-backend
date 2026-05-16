@@ -252,6 +252,41 @@ impl Form {
     }
 }
 
+#[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+pub struct ArchivedForm {
+    form: Form,
+    archived_at: DateTime<Utc>,
+    archived_by: User,
+}
+
+impl ArchivedForm {
+    pub fn from_raw_parts(form: Form, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+        Self {
+            form,
+            archived_at,
+            archived_by,
+        }
+    }
+}
+
+impl AuthorizationGuardDefinitions for ArchivedForm {
+    fn can_create(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    fn can_read(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    fn can_update(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+
+    fn can_delete(&self, actor: &User) -> bool {
+        actor.role == Administrator
+    }
+}
+
 impl AuthorizationGuardDefinitions for Form {
     /// [`Form`] の作成権限があるかどうかを判定します。
     ///

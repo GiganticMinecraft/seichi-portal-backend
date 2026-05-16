@@ -5,7 +5,7 @@ use domain::{
     form::{
         answer::models::AnswerTitle,
         comment::models::CommentContent,
-        models::{Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle},
+        models::{ArchivedForm, Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle},
         question::models::{Choice, Question, QuestionType},
     },
     user::models::{Role, User},
@@ -149,6 +149,31 @@ impl TryFrom<FormDto> for Form {
                 answer_visibility.try_into()?,
             ),
             domain::form::models::QuestionSet::try_new(questions).map_err(errors::Error::from)?,
+        ))
+    }
+}
+
+pub struct ArchivedFormDto {
+    pub form: FormDto,
+    pub archived_at: DateTime<Utc>,
+    pub archived_by_name: String,
+    pub archived_by_id: String,
+    pub archived_by_role: Role,
+}
+
+impl TryFrom<ArchivedFormDto> for ArchivedForm {
+    type Error = errors::Error;
+
+    fn try_from(value: ArchivedFormDto) -> Result<Self, Self::Error> {
+        Ok(ArchivedForm::from_raw_parts(
+            value.form.try_into()?,
+            value.archived_at,
+            UserDto {
+                name: value.archived_by_name,
+                id: value.archived_by_id,
+                role: value.archived_by_role,
+            }
+            .try_into()?,
         ))
     }
 }

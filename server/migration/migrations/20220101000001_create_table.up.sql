@@ -143,3 +143,123 @@ CREATE TABLE IF NOT EXISTS messages(
     FOREIGN KEY fk_message_related_answer_id(related_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
     FOREIGN KEY fk_message_sender(sender) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS archived_form_meta_data(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    created_at DATETIME NOT NULL,
+    created_by CHAR(36) NOT NULL,
+    updated_at DATETIME NOT NULL,
+    updated_by CHAR(36) NOT NULL,
+    archived_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    archived_by CHAR(36) NOT NULL,
+    FOREIGN KEY fk_archived_form_meta_data_created_by(created_by) REFERENCES users(id),
+    FOREIGN KEY fk_archived_form_meta_data_updated_by(updated_by) REFERENCES users(id),
+    FOREIGN KEY fk_archived_form_meta_data_archived_by(archived_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS archived_form_questions(
+    question_id CHAR(36) NOT NULL PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    template_key VARCHAR(255) NOT NULL,
+    position SMALLINT UNSIGNED NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    question_type VARCHAR(32) NOT NULL,
+    is_required BOOL DEFAULT FALSE,
+    UNIQUE KEY uk_archived_form_questions_form_id_template_key(form_id, template_key),
+    UNIQUE KEY uk_archived_form_questions_form_id_position(form_id, position),
+    FOREIGN KEY fk_archived_form_questions_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_form_choices(
+    id INT NOT NULL PRIMARY KEY,
+    question_id CHAR(36) NOT NULL,
+    position SMALLINT UNSIGNED NOT NULL,
+    label TEXT NOT NULL,
+    UNIQUE KEY uk_archived_form_choices_question_id_position(question_id, position),
+    FOREIGN KEY fk_archived_form_choices_question_id(question_id) REFERENCES archived_form_questions(question_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_response_period(
+    id INT NOT NULL PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    start_at DATETIME,
+    end_at DATETIME,
+    UNIQUE KEY uk_archived_response_period_form_id(form_id),
+    FOREIGN KEY fk_archived_response_period_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_form_webhooks(
+    id INT NOT NULL PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    url TEXT,
+    UNIQUE KEY uk_archived_form_webhooks_form_id(form_id),
+    FOREIGN KEY fk_archived_form_webhooks_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_default_answer_titles(
+    id INT NOT NULL PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    title TEXT,
+    UNIQUE KEY uk_archived_default_answer_titles_form_id(form_id),
+    FOREIGN KEY fk_archived_default_answer_titles_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_answers(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    user CHAR(36) NOT NULL,
+    title TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY fk_archived_answers_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_answers_user(user) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS archived_real_answers(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL,
+    question_id CHAR(36) NOT NULL,
+    answer TEXT NOT NULL,
+    FOREIGN KEY fk_archived_real_answers_answer_id(answer_id) REFERENCES archived_answers(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_real_answers_question_id(question_id) REFERENCES archived_form_questions(question_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_form_answer_comments(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL,
+    commented_by CHAR(36) NOT NULL,
+    content TEXT NOT NULL,
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY fk_archived_form_answer_comments_answer_id(answer_id) REFERENCES archived_answers(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_form_answer_comments_commented_by(commented_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS archived_messages(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    related_answer_id CHAR(36) NOT NULL,
+    sender CHAR(36) NOT NULL,
+    body TEXT NOT NULL,
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY fk_archived_messages_related_answer_id(related_answer_id) REFERENCES archived_answers(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_messages_sender(sender) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS archived_label_settings_for_forms(
+    id INT NOT NULL PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    label_id CHAR(36) NOT NULL,
+    FOREIGN KEY fk_archived_label_settings_for_forms_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_label_settings_for_forms_label_id(label_id) REFERENCES label_for_forms(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_label_settings_for_form_answers(
+    id INT NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL,
+    label_id CHAR(36) NOT NULL,
+    FOREIGN KEY fk_archived_label_settings_for_form_answers_answer_id(answer_id) REFERENCES archived_answers(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_label_settings_for_form_answers_label_id(label_id) REFERENCES label_for_form_answers(id) ON DELETE CASCADE
+);

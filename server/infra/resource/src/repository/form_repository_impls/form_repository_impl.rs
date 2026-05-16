@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{Form, FormId},
-    repository::form::form_repository::FormRepository,
+    form::models::{ArchivedForm, Form, FormId},
+    repository::form::{
+        archived_form_repository::ArchivedFormRepository, form_repository::FormRepository,
+    },
     types::{
         authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Delete, Read, Update},
+        authorization_guard_with_context::{Create, Read, Update},
     },
     user::models::User,
 };
@@ -62,17 +64,6 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete(
-        &self,
-        actor: &User,
-        form: AuthorizationGuard<Form, Delete>,
-    ) -> Result<(), Error> {
-        form.try_delete(actor, |form| self.client.form().delete(*form.id()))?
-            .await
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(skip(self))]
     async fn update_form(
         &self,
         actor: &User,
@@ -86,5 +77,67 @@ where
     #[tracing::instrument(skip(self))]
     async fn size(&self) -> Result<u32, Error> {
         self.client.form().size().await.map_err(Into::into)
+    }
+}
+
+#[async_trait]
+impl<Client> ArchivedFormRepository for Repository<Client>
+where
+    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+{
+    #[tracing::instrument(skip(self))]
+    async fn list(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        query: Option<String>,
+    ) -> Result<Vec<AuthorizationGuard<ArchivedForm, Read>>, Error> {
+        self.client
+            .form()
+            .list_archived(offset, limit, query)
+            .await?
+            .into_iter()
+            .map(TryInto::<ArchivedForm>::try_into)
+            .map(|form| {
+                form.map(|form| AuthorizationGuard::<ArchivedForm, Create>::from(form).into_read())
+            })
+            .collect()
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get(
+        &self,
+        id: FormId,
+    ) -> Result<Option<AuthorizationGuard<ArchivedForm, Read>>, Error> {
+        self.client
+            .form()
+            .get_archived(id)
+            .await?
+            .map(TryInto::<ArchivedForm>::try_into)
+            .transpose()
+            .map(|form| {
+                form.map(|form| AuthorizationGuard::<ArchivedForm, Create>::from(form).into_read())
+            })
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn archive(
+        &self,
+        actor: &User,
+        form_id: FormId,
+    ) -> Result<AuthorizationGuard<ArchivedForm, Read>, Error> {
+        let archived_form = self.client.form().archive(form_id, actor).await?;
+        Ok(AuthorizationGuard::<ArchivedForm, Create>::from(archived_form).into_read())
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn restore(
+        &self,
+        actor: &User,
+        form: AuthorizationGuard<ArchivedForm, Update>,
+    ) -> Result<(), Error> {
+        let form = form.try_into_update(actor, |form| form)?;
+        self.client.form().restore(*form.form().id()).await?;
+        Ok(())
     }
 }

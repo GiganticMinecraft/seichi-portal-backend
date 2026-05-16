@@ -113,6 +113,24 @@ pub struct FormSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct ArchivedFormSchema {
+    #[schema(value_type = String, format = "uuid")]
+    pub id: FormId,
+    #[schema(value_type = String)]
+    pub title: FormTitle,
+    #[schema(value_type = String)]
+    pub description: FormDescription,
+    pub settings: FormSettingsSchema,
+    pub metadata: FormMetaSchema,
+    pub archived_at: DateTime<Utc>,
+    #[schema(value_type = serde_json::Value)]
+    pub archived_by: domain::user::models::User,
+    pub questions: Vec<QuestionResponseSchema>,
+    #[schema(value_type = Vec<FormLabelResponseSchema>)]
+    pub labels: Vec<FormLabel>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct QuestionDefinitionResponseSchema {
     #[schema(value_type = String, format = "uuid")]
     pub id: String,
