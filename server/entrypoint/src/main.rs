@@ -182,14 +182,12 @@ async fn main() -> anyhow::Result<()> {
         ))
         .routes(routes!(
             form_handler::get_form_handler,
-            form_handler::archive_form_handler,
             form_handler::update_form_handler
         ))
-        .routes(routes!(
-            form_handler::archived_form_list_handler,
-            form_handler::get_archived_form_handler,
-            form_handler::restore_archived_form_handler
-        ))
+        .routes(routes!(form_handler::archive_form_handler))
+        .routes(routes!(form_handler::archived_form_list_handler))
+        .routes(routes!(form_handler::get_archived_form_handler))
+        .routes(routes!(form_handler::restore_archived_form_handler))
         .routes(routes!(
             answer_handler::get_answer_by_form_id_handler,
             answer_handler::post_answer_handler
