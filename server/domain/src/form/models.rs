@@ -252,7 +252,7 @@ impl ActiveForm {
     }
 
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: User) -> ArchivedForm {
-        ArchivedForm::restore_from_persistence(self, archived_at, archived_by)
+        unsafe { ArchivedForm::from_raw_parts(self, archived_at, archived_by) }
     }
 }
 
@@ -264,7 +264,13 @@ pub struct ArchivedForm {
 }
 
 impl ArchivedForm {
-    pub fn restore_from_persistence(
+    /// [`ArchivedForm`] の各フィールドを指定して新しく作成します。
+    ///
+    /// # Safety
+    /// この関数は [`ArchivedForm`] のバリデーションをスキップするため、
+    /// データベースからすでに検証済みのデータを読み出すときなど、
+    /// データの信頼性が保証されている場合にのみ使用してください。
+    pub unsafe fn from_raw_parts(
         form: ActiveForm,
         archived_at: DateTime<Utc>,
         archived_by: User,
@@ -276,7 +282,7 @@ impl ArchivedForm {
         }
     }
 
-    pub fn restore(self) -> ActiveForm {
+    pub fn unarchive(self) -> ActiveForm {
         self.form
     }
 }
@@ -813,9 +819,9 @@ mod tests {
     fn archived_form_can_restore_to_active_form() {
         let form = sample_form();
         let archived =
-            ArchivedForm::restore_from_persistence(form.clone(), Utc::now(), admin_user());
+            unsafe { ArchivedForm::from_raw_parts(form.clone(), Utc::now(), admin_user()) };
 
-        let restored = archived.restore();
+        let restored = archived.unarchive();
 
         assert_eq!(restored, form);
     }

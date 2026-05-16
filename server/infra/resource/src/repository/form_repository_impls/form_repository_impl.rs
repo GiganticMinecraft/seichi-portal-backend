@@ -147,7 +147,7 @@ where
     ) -> Result<(), Error> {
         let form = form.try_into_update(actor, |form| form)?;
         let form_id = *form.form().id();
-        let _restored = form.restore();
+        let _restored = form.unarchive();
         self.client.form().restore(form_id).await?;
         Ok(())
     }
