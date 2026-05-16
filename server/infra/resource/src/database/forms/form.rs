@@ -537,8 +537,8 @@ async fn restore_archived_form_to_active(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO form_choices (id, question_id, position, label)
-        SELECT id, question_id, position, label
+        r"INSERT INTO form_choices (question_id, position, label)
+        SELECT question_id, position, label
         FROM archived_form_choices
         WHERE question_id IN (
             SELECT question_id FROM archived_form_questions WHERE form_id = ?
@@ -549,24 +549,24 @@ async fn restore_archived_form_to_active(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO response_period (id, form_id, start_at, end_at)
-        SELECT id, form_id, start_at, end_at FROM archived_response_period WHERE form_id = ?",
+        r"INSERT INTO response_period (form_id, start_at, end_at)
+        SELECT form_id, start_at, end_at FROM archived_response_period WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
     .await?;
 
     sqlx::query(
-        r"INSERT INTO form_webhooks (id, form_id, url)
-        SELECT id, form_id, url FROM archived_form_webhooks WHERE form_id = ?",
+        r"INSERT INTO form_webhooks (form_id, url)
+        SELECT form_id, url FROM archived_form_webhooks WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
     .await?;
 
     sqlx::query(
-        r"INSERT INTO default_answer_titles (id, form_id, title)
-        SELECT id, form_id, title FROM archived_default_answer_titles WHERE form_id = ?",
+        r"INSERT INTO default_answer_titles (form_id, title)
+        SELECT form_id, title FROM archived_default_answer_titles WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
@@ -611,16 +611,16 @@ async fn restore_archived_form_to_active(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO label_settings_for_forms (id, form_id, label_id)
-        SELECT id, form_id, label_id FROM archived_label_settings_for_forms WHERE form_id = ?",
+        r"INSERT INTO label_settings_for_forms (form_id, label_id)
+        SELECT form_id, label_id FROM archived_label_settings_for_forms WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
     .await?;
 
     sqlx::query(
-        r"INSERT INTO label_settings_for_form_answers (id, answer_id, label_id)
-        SELECT id, answer_id, label_id
+        r"INSERT INTO label_settings_for_form_answers (answer_id, label_id)
+        SELECT answer_id, label_id
         FROM archived_label_settings_for_form_answers
         WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
     )

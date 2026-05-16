@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS real_answers(
     answer_id CHAR(36) NOT NULL,
     question_id CHAR(36) NOT NULL,
     answer TEXT NOT NULL,
-    FOREIGN KEY fk_real_answers_answer_id(answer_id) REFERENCES answers(id),
-    FOREIGN KEY fk_real_answers_quesiton_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
+    FOREIGN KEY fk_real_answers_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_real_answers_question_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS default_answer_titles(
