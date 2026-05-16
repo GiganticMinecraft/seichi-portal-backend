@@ -2,7 +2,7 @@ use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerLabel},
         comment::models::Comment,
-        models::{ArchivedForm, Form, FormLabel},
+        models::{ActiveForm, ArchivedForm, FormLabel},
         question::models::{Question, QuestionId},
     },
     user::models::{DiscordUser, User},
@@ -14,10 +14,12 @@ pub struct AnswerDto {
     pub comments: Vec<Comment>,
 }
 
-pub struct FormDto {
-    pub form: Form,
+pub struct ActiveFormDto {
+    pub form: ActiveForm,
     pub labels: Vec<FormLabel>,
 }
+
+pub type FormDto = ActiveFormDto;
 
 pub struct ArchivedFormDto {
     pub form: ArchivedForm,
@@ -35,7 +37,7 @@ pub struct UserDto {
 }
 
 pub struct CrossSearchDto {
-    pub forms: Vec<Form>,
+    pub forms: Vec<ActiveForm>,
     pub users: Vec<User>,
     pub answers: Vec<AnswerEntry>,
     pub label_for_forms: Vec<FormLabel>,

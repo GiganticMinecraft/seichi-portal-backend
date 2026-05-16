@@ -2,14 +2,15 @@ use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
         models::{
-            ArchivedForm, Form, FormDescription, FormId, FormLabel, FormTitle, Question,
+            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormTitle, Question,
             QuestionSet, Visibility, WebhookUrl,
         },
     },
     repository::{
         form::{
-            answer_repository::AnswerRepository, archived_form_repository::ArchivedFormRepository,
-            form_label_repository::FormLabelRepository, form_repository::FormRepository,
+            active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository,
+            archived_form_repository::ArchivedFormRepository,
+            form_label_repository::FormLabelRepository,
         },
         notification_repository::NotificationRepository,
     },
@@ -19,17 +20,17 @@ use errors::{Error, domain::DomainError, usecase::UseCaseError::FormNotFound};
 use std::collections::{BTreeSet, HashMap};
 use types::non_empty_vec::NonEmptyVec;
 
-use crate::dto::{ArchivedFormDto, FormDto, UpsertQuestionDto};
+use crate::dto::{ActiveFormDto, ArchivedFormDto, UpsertQuestionDto};
 
 pub struct FormUseCase<
     'a,
-    FormRepo: FormRepository,
+    FormRepo: ActiveFormRepository,
     ArchivedFormRepo: ArchivedFormRepository,
     NotificationRepo: NotificationRepository,
     FormLabelRepo: FormLabelRepository,
     AnswerRepo: AnswerRepository,
 > {
-    pub form_repository: &'a FormRepo,
+    pub active_form_repository: &'a FormRepo,
     pub archived_form_repository: &'a ArchivedFormRepo,
     pub notification_repository: &'a NotificationRepo,
     pub form_label_repository: &'a FormLabelRepo,
@@ -37,7 +38,7 @@ pub struct FormUseCase<
 }
 
 impl<
-    R1: FormRepository,
+    R1: ActiveFormRepository,
     R2: ArchivedFormRepository,
     R3: NotificationRepository,
     R4: FormLabelRepository,
@@ -50,17 +51,19 @@ impl<
         description: FormDescription,
         questions: NonEmptyVec<Question>,
         user: &User,
-    ) -> Result<Form, Error> {
-        let form = Form::new(
+    ) -> Result<ActiveForm, Error> {
+        let form = ActiveForm::new(
             title,
             description,
             QuestionSet::try_new(questions).map_err(Error::from)?,
         );
         let form_id = *form.id();
 
-        self.form_repository.create(user, form.into()).await?;
+        self.active_form_repository
+            .create(user, form.into())
+            .await?;
 
-        self.form_repository
+        self.active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
@@ -74,9 +77,9 @@ impl<
         actor: &User,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<(Form, Vec<FormLabel>)>, Error> {
+    ) -> Result<Vec<(ActiveForm, Vec<FormLabel>)>, Error> {
         let forms = self
-            .form_repository
+            .active_form_repository
             .list(offset, limit)
             .await?
             .into_iter()
@@ -105,9 +108,9 @@ impl<
         Ok(forms_with_labels)
     }
 
-    pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<FormDto, Error> {
+    pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<ActiveFormDto, Error> {
         let form = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
@@ -120,7 +123,7 @@ impl<
             .map(|label| label.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(FormDto { form, labels })
+        Ok(ActiveFormDto { form, labels })
     }
 
     pub async fn archived_form_list(
@@ -216,14 +219,14 @@ impl<
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
         questions: Option<Vec<UpsertQuestionDto>>,
-    ) -> Result<(Form, Vec<FormLabel>), Error> {
+    ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
         let current_form = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
         let current_questions = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
@@ -315,12 +318,12 @@ impl<
             None => updated_form,
         };
 
-        self.form_repository
+        self.active_form_repository
             .update_form(actor, updated_form)
             .await?;
 
         let updated_form = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
@@ -572,7 +575,7 @@ mod tests {
         let notification_repository = MockNotificationRepository::new();
 
         let usecase = FormUseCase {
-            form_repository: &form_repository,
+            active_form_repository: &form_repository,
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
@@ -618,7 +621,7 @@ mod tests {
         let notification_repository = MockNotificationRepository::new();
 
         let usecase = FormUseCase {
-            form_repository: &form_repository,
+            active_form_repository: &form_repository,
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,

@@ -63,23 +63,19 @@ impl<
     H: HealthCheckRepository + Send + Sync + 'static,
 > Repositories for SharedRepository<Client, H>
 {
+    type ConcreteActiveFormRepository = Repository<Client>;
     type ConcreteArchivedFormRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
     type ConcreteFormAnswerRepository = Repository<Client>;
     type ConcreteFormCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
     type ConcreteFormMessageRepository = Repository<Client>;
-    type ConcreteFormRepository = Repository<Client>;
     type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
     type ConcreteUserRepository = Repository<Client>;
     type ConcreteHealthCheckRepository = H;
 
-    fn form_repository(&self) -> &Self::ConcreteFormRepository {
-        &self.db
-    }
-
-    fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository {
+    fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository {
         &self.db
     }
 
@@ -117,5 +113,9 @@ impl<
 
     fn health_check_repository(&self) -> &Self::ConcreteHealthCheckRepository {
         &self.health_check
+    }
+
+    fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository {
+        &self.db
     }
 }

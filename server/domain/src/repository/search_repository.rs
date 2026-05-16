@@ -9,7 +9,7 @@ use crate::{
     form::{
         answer::models::AnswerLabel,
         comment::{models::Comment, service::CommentAuthorizationContext},
-        models::{Form, FormLabel},
+        models::{ActiveForm, FormLabel},
     },
     search::models::SearchableFieldsWithOperation,
     types::{
@@ -24,8 +24,10 @@ use crate::{
 pub trait SearchRepository: Send + Sync + 'static {
     async fn search_users(&self, query: &str)
     -> Result<Vec<AuthorizationGuard<User, Read>>, Error>;
-    async fn search_forms(&self, query: &str)
-    -> Result<Vec<AuthorizationGuard<Form, Read>>, Error>;
+    async fn search_forms(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error>;
     async fn search_labels_for_forms(
         &self,
         query: &str,

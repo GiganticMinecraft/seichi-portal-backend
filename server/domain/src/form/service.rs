@@ -11,15 +11,15 @@ use crate::{
         },
         models::{FormId, Question},
     },
-    repository::form::form_repository::FormRepository,
+    repository::form::active_form_repository::ActiveFormRepository,
     user::models::User,
 };
 
-pub struct DefaultAnswerTitleDomainService<'a, FormRepo: FormRepository> {
+pub struct DefaultAnswerTitleDomainService<'a, FormRepo: ActiveFormRepository> {
     pub form_repo: &'a FormRepo,
 }
 
-impl<FormRepo: FormRepository> DefaultAnswerTitleDomainService<'_, FormRepo> {
+impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRepo> {
     pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
         questions: &[Question],

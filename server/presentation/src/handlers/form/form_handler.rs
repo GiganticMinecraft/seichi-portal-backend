@@ -15,7 +15,7 @@ use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{
-    dto::{ArchivedFormDto, FormDto, UpsertQuestionDto},
+    dto::{ActiveFormDto, ArchivedFormDto, UpsertQuestionDto},
     forms::form::FormUseCase,
 };
 
@@ -141,7 +141,7 @@ type ResourceFormUseCase<'a> = FormUseCase<
 
 fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFormUseCase<'_> {
     FormUseCase {
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
         archived_form_repository: repository.archived_form_repository(),
         notification_repository: repository.notification_repository(),
         form_label_repository: repository.form_label_repository(),
@@ -307,7 +307,7 @@ pub async fn get_form_handler(
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    let FormDto { form, labels } = form_use_case
+    let ActiveFormDto { form, labels } = form_use_case
         .get_form(&user, form_id)
         .await
         .map_err(handle_error)?;

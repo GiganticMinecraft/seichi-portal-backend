@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use domain::{
-    form::models::{ArchivedForm, Form, FormId},
+    form::models::{ActiveForm, ArchivedForm, FormId},
     repository::form::{
-        archived_form_repository::ArchivedFormRepository, form_repository::FormRepository,
+        active_form_repository::ActiveFormRepository,
+        archived_form_repository::ArchivedFormRepository,
     },
     types::{
         authorization_guard::AuthorizationGuard,
@@ -21,7 +22,7 @@ use crate::{
 };
 
 #[async_trait]
-impl<Client> FormRepository for Repository<Client>
+impl<Client> ActiveFormRepository for Repository<Client>
 where
     Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
 {
@@ -29,7 +30,7 @@ where
     async fn create(
         &self,
         actor: &User,
-        form: AuthorizationGuard<Form, Create>,
+        form: AuthorizationGuard<ActiveForm, Create>,
     ) -> Result<(), Error> {
         let form = form.try_into_create(actor, |form| form)?;
         self.client.form().create(&form, actor).await?;
@@ -41,33 +42,37 @@ where
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<AuthorizationGuard<Form, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
         self.client
             .form()
             .list(offset, limit)
             .await?
             .into_iter()
-            .map(TryInto::<Form>::try_into)
-            .map(|form| form.map(|form| AuthorizationGuard::<Form, Create>::from(form).into_read()))
+            .map(TryInto::<ActiveForm>::try_into)
+            .map(|form| {
+                form.map(|form| AuthorizationGuard::<ActiveForm, Create>::from(form).into_read())
+            })
             .collect()
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<Form, Read>>, Error> {
+    async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<ActiveForm, Read>>, Error> {
         self.client
             .form()
             .get(id)
             .await?
-            .map(TryInto::<Form>::try_into)
+            .map(TryInto::<ActiveForm>::try_into)
             .transpose()
-            .map(|form| form.map(|form| AuthorizationGuard::<Form, Create>::from(form).into_read()))
+            .map(|form| {
+                form.map(|form| AuthorizationGuard::<ActiveForm, Create>::from(form).into_read())
+            })
     }
 
     #[tracing::instrument(skip(self))]
     async fn update_form(
         &self,
         actor: &User,
-        updated_form: AuthorizationGuard<Form, Update>,
+        updated_form: AuthorizationGuard<ActiveForm, Update>,
     ) -> Result<(), Error> {
         let updated_form = updated_form.try_into_update(actor, |form| form)?;
         self.client.form().update(&updated_form, actor).await?;

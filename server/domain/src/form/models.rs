@@ -21,7 +21,7 @@ use crate::{
     user::models::{Role::Administrator, User},
 };
 
-pub type FormId = types::Id<Form>;
+pub type FormId = types::Id<ActiveForm>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
@@ -189,7 +189,7 @@ impl FormMeta {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
-pub struct Form {
+pub struct ActiveForm {
     #[serde(default)]
     id: FormId,
     title: FormTitle,
@@ -202,7 +202,7 @@ pub struct Form {
     questions: QuestionSet,
 }
 
-impl Form {
+impl ActiveForm {
     pub fn new(title: FormTitle, description: FormDescription, questions: QuestionSet) -> Self {
         Self {
             id: FormId::new(),
@@ -252,15 +252,17 @@ impl Form {
     }
 }
 
+pub type Form = ActiveForm;
+
 #[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct ArchivedForm {
-    form: Form,
+    form: ActiveForm,
     archived_at: DateTime<Utc>,
     archived_by: User,
 }
 
 impl ArchivedForm {
-    pub fn from_raw_parts(form: Form, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+    pub fn from_raw_parts(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
         Self {
             form,
             archived_at,
@@ -287,7 +289,7 @@ impl AuthorizationGuardDefinitions for ArchivedForm {
     }
 }
 
-impl AuthorizationGuardDefinitions for Form {
+impl AuthorizationGuardDefinitions for ActiveForm {
     /// [`Form`] の作成権限があるかどうかを判定します。
     ///
     /// 作成権限は以下の条件を満たしている場合に与えられます。
@@ -526,10 +528,10 @@ impl AuthorizationGuardDefinitions for Form {
     ///     ).unwrap(),
     /// );
     ///
-    /// assert!(form.can_delete(&administrator));
+    /// assert!(!form.can_delete(&administrator));
     /// assert!(!form.can_delete(&standard_user));
-    fn can_delete(&self, actor: &User) -> bool {
-        actor.role == Administrator
+    fn can_delete(&self, _actor: &User) -> bool {
+        false
     }
 }
 

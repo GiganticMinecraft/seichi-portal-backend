@@ -3,7 +3,7 @@ use domain::{
     form::{
         answer::models::{AnswerId, AnswerLabel},
         comment::models::{Comment, CommentId},
-        models::{Form, FormLabel},
+        models::{ActiveForm, FormLabel},
     },
     user::models::User,
 };
@@ -43,7 +43,7 @@ impl From<Comment> for CommentSchema {
 #[derive(Serialize, Debug, PartialEq, utoipa::ToSchema)]
 pub struct CrossSearchResult {
     #[schema(value_type = Vec<serde_json::Value>)]
-    pub forms: Vec<Form>,
+    pub forms: Vec<ActiveForm>,
     #[schema(value_type = Vec<serde_json::Value>)]
     pub users: Vec<User>,
     #[schema(value_type = Vec<serde_json::Value>)]

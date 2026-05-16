@@ -5,7 +5,7 @@ use domain::form::{
     question::models::{Question, QuestionId, QuestionType},
 };
 use domain::{
-    form::models::{ArchivedForm, Form, FormId},
+    form::models::{ActiveForm, ArchivedForm, FormId},
     user::models::{Role, User},
 };
 use errors::infra::InfraError;
@@ -118,7 +118,7 @@ async fn get_questions_txn_with_tables(
         .collect::<Result<Vec<QuestionDto>, _>>()
 }
 
-async fn form_dto_from_row(
+async fn active_form_dto_from_row(
     txn: &mut DatabaseTransaction,
     row: FormRowDto,
 ) -> Result<FormDto, InfraError> {
@@ -261,7 +261,7 @@ async fn fetch_archived_form_row(
 
 async fn insert_form_root(
     txn: &mut DatabaseTransaction,
-    form: &Form,
+    form: &ActiveForm,
     created_by: &User,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
@@ -301,7 +301,7 @@ async fn insert_form_root(
 
 async fn update_form_root(
     txn: &mut DatabaseTransaction,
-    form: &Form,
+    form: &ActiveForm,
     updated_by: &User,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
@@ -639,7 +639,7 @@ async fn restore_archived_form_to_active(
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn create(&self, form: &Form, user: &User) -> Result<(), InfraError> {
+    async fn create(&self, form: &ActiveForm, user: &User) -> Result<(), InfraError> {
         let form = form.clone();
         let user = user.clone();
 
@@ -679,7 +679,7 @@ impl FormDatabase for ConnectionPool {
 
                 let mut forms = Vec::with_capacity(rows.len());
                 for row in rows {
-                    forms.push(form_dto_from_row(txn, form_row_from_db_row(row)?).await?);
+                    forms.push(active_form_dto_from_row(txn, form_row_from_db_row(row)?).await?);
                 }
                 Ok::<_, InfraError>(forms)
             })
@@ -692,7 +692,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 match fetch_form_row(txn, form_id).await? {
-                    Some(row) => form_dto_from_row(txn, row).await.map(Some),
+                    Some(row) => active_form_dto_from_row(txn, row).await.map(Some),
                     None => Ok(None),
                 }
             })
@@ -824,7 +824,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn update(&self, form: &Form, updated_by: &User) -> Result<(), InfraError> {
+    async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError> {
         let form = form.clone();
         let updated_by = updated_by.clone();
 
@@ -853,7 +853,10 @@ impl FormDatabase for ConnectionPool {
     }
 }
 
-async fn sync_questions(txn: &mut DatabaseTransaction, form: &Form) -> Result<(), InfraError> {
+async fn sync_questions(
+    txn: &mut DatabaseTransaction,
+    form: &ActiveForm,
+) -> Result<(), InfraError> {
     let form_id = *form.id();
     let form_id_string = form_id.into_inner().to_string();
     let desired = form.questions().as_slice();

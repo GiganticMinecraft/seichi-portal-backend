@@ -5,7 +5,9 @@ use domain::{
     form::{
         answer::models::AnswerTitle,
         comment::models::CommentContent,
-        models::{ArchivedForm, Form, FormDescription, FormId, FormMeta, FormSettings, FormTitle},
+        models::{
+            ActiveForm, ArchivedForm, FormDescription, FormId, FormMeta, FormSettings, FormTitle,
+        },
         question::models::{Choice, Question, QuestionType},
     },
     user::models::{Role, User},
@@ -90,7 +92,7 @@ impl TryFrom<QuestionDto> for domain::form::question::models::Question {
     }
 }
 
-pub struct FormDto {
+pub struct ActiveFormDto {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -105,11 +107,13 @@ pub struct FormDto {
     pub questions: Vec<QuestionDto>,
 }
 
-impl TryFrom<FormDto> for Form {
+pub type FormDto = ActiveFormDto;
+
+impl TryFrom<ActiveFormDto> for ActiveForm {
     type Error = errors::Error;
 
     fn try_from(
-        FormDto {
+        ActiveFormDto {
             id,
             title,
             description,
@@ -122,7 +126,7 @@ impl TryFrom<FormDto> for Form {
             visibility,
             answer_visibility,
             questions,
-        }: FormDto,
+        }: ActiveFormDto,
     ) -> Result<Self, Self::Error> {
         let questions = questions
             .into_iter()
@@ -130,7 +134,7 @@ impl TryFrom<FormDto> for Form {
             .collect::<Result<Vec<_>, _>>()?;
         let questions = NonEmptyVec::try_new(questions).map_err(errors::Error::from)?;
 
-        Ok(Form::from_raw_parts(
+        Ok(ActiveForm::from_raw_parts(
             FormId::from(Uuid::parse_str(&id).map_err(Into::<InfraError>::into)?),
             FormTitle::new(title.try_into()?),
             FormDescription::new(description),
@@ -154,7 +158,7 @@ impl TryFrom<FormDto> for Form {
 }
 
 pub struct ArchivedFormDto {
-    pub form: FormDto,
+    pub form: ActiveFormDto,
     pub archived_at: DateTime<Utc>,
     pub archived_by_name: String,
     pub archived_by_id: String,
