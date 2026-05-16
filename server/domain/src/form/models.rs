@@ -250,6 +250,10 @@ impl ActiveForm {
             questions,
         }
     }
+
+    pub fn archive(self, archived_at: DateTime<Utc>, archived_by: User) -> ArchivedForm {
+        ArchivedForm::restore_from_persistence(self, archived_at, archived_by)
+    }
 }
 
 pub type Form = ActiveForm;
@@ -262,12 +266,20 @@ pub struct ArchivedForm {
 }
 
 impl ArchivedForm {
-    pub fn from_raw_parts(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+    pub fn restore_from_persistence(
+        form: ActiveForm,
+        archived_at: DateTime<Utc>,
+        archived_by: User,
+    ) -> Self {
         Self {
             form,
             archived_at,
             archived_by,
         }
+    }
+
+    pub fn restore(self) -> ActiveForm {
+        self.form
     }
 }
 
@@ -720,5 +732,93 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// ```
     fn can_delete(&self, actor: &User) -> bool {
         actor.role == Administrator
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::user::models::Role;
+    use types::non_empty_vec::NonEmptyVec;
+    use uuid::Uuid;
+
+    fn sample_questions() -> QuestionSet {
+        QuestionSet::try_new(
+            NonEmptyVec::try_new(vec![
+                Question::new_text(
+                    "body".to_string().try_into().unwrap(),
+                    0,
+                    "Body".to_string().try_into().unwrap(),
+                    None,
+                    true,
+                )
+                .unwrap(),
+            ])
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn sample_form() -> ActiveForm {
+        ActiveForm::from_raw_parts(
+            FormId::from(Uuid::new_v4()),
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new("description".to_string()),
+            FormMeta::new(),
+            FormSettings::new(),
+            sample_questions(),
+        )
+    }
+
+    fn admin_user() -> User {
+        User {
+            name: "admin".to_string(),
+            id: Uuid::new_v4(),
+            role: Role::Administrator,
+        }
+    }
+
+    fn standard_user() -> User {
+        User {
+            name: "standard_user".to_string(),
+            id: Uuid::new_v4(),
+            role: Role::StandardUser,
+        }
+    }
+
+    #[test]
+    fn active_form_can_archive_for_administrator() {
+        let form = sample_form();
+        let actor = admin_user();
+        let archived_at = Utc::now();
+
+        let archived = form.clone().archive(archived_at, actor.clone());
+
+        assert_eq!(archived.form(), &form);
+        assert_eq!(archived.archived_at(), &archived_at);
+        assert_eq!(archived.archived_by(), &actor);
+    }
+
+    #[test]
+    fn active_form_archive_keeps_archived_by_as_given_actor() {
+        let form = sample_form();
+        let actor = standard_user();
+        let archived_at = Utc::now();
+
+        let archived = form.archive(archived_at, actor.clone());
+
+        assert_eq!(archived.archived_at(), &archived_at);
+        assert_eq!(archived.archived_by(), &actor);
+    }
+
+    #[test]
+    fn archived_form_can_restore_to_active_form() {
+        let form = sample_form();
+        let archived =
+            ArchivedForm::restore_from_persistence(form.clone(), Utc::now(), admin_user());
+
+        let restored = archived.restore();
+
+        assert_eq!(restored, form);
     }
 }

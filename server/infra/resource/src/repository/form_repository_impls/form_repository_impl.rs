@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::Utc;
 use domain::{
     form::models::{ActiveForm, ArchivedForm, FormId},
     repository::form::{
@@ -129,8 +130,11 @@ where
     async fn archive(
         &self,
         actor: &User,
-        form_id: FormId,
+        form: AuthorizationGuard<ActiveForm, Update>,
     ) -> Result<AuthorizationGuard<ArchivedForm, Read>, Error> {
+        let form = form.try_into_update(actor, |form| form)?;
+        let form_id = *form.id();
+        let _ = form.archive(Utc::now(), actor.clone());
         let archived_form = self.client.form().archive(form_id, actor).await?;
         Ok(AuthorizationGuard::<ArchivedForm, Create>::from(archived_form).into_read())
     }
@@ -142,7 +146,9 @@ where
         form: AuthorizationGuard<ArchivedForm, Update>,
     ) -> Result<(), Error> {
         let form = form.try_into_update(actor, |form| form)?;
-        self.client.form().restore(*form.form().id()).await?;
+        let form_id = *form.form().id();
+        let _restored = form.restore();
+        self.client.form().restore(form_id).await?;
         Ok(())
     }
 }

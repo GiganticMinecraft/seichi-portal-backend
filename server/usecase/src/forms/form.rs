@@ -187,9 +187,14 @@ impl<
     }
 
     pub async fn archive_form(&self, actor: &User, form_id: FormId) -> Result<ArchivedForm, Error> {
+        let form = self
+            .active_form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
         let archived_form = self
             .archived_form_repository
-            .archive(actor, form_id)
+            .archive(actor, form.into_update())
             .await?;
         archived_form.try_into_read(actor).map_err(Into::into)
     }
@@ -485,7 +490,7 @@ mod tests {
     use super::*;
     use domain::{
         form::{
-            models::{FormDescription, FormMeta, FormSettings, FormTitle},
+            models::{ArchivedForm, FormDescription, FormMeta, FormSettings, FormTitle},
             question::models::{QuestionId, QuestionSet, QuestionType},
         },
         repository::{
@@ -652,5 +657,47 @@ mod tests {
             updated_form.questions().as_slice()[0].template_key(),
             form.questions().as_slice()[0].template_key()
         );
+    }
+
+    #[tokio::test]
+    async fn archive_form_gets_active_form_before_archiving() {
+        let user = admin_user();
+        let form_id = FormId::from(Uuid::new_v4());
+
+        let mut form_repository = MockFormRepository::new();
+        form_repository
+            .expect_get()
+            .times(1)
+            .returning(move |_| Ok(Some(sample_form(form_id).into())));
+
+        let mut archived_form_repository = MockArchivedFormRepository::new();
+        archived_form_repository
+            .expect_archive()
+            .times(1)
+            .returning(move |_, _| {
+                let form = sample_form(form_id);
+                Ok(ArchivedForm::restore_from_persistence(
+                    form.clone(),
+                    form.metadata().created_at,
+                    admin_user(),
+                )
+                .into())
+            });
+
+        let form_label_repository = MockFormLabelRepository::new();
+        let answer_repository = MockAnswerRepository::new();
+        let notification_repository = MockNotificationRepository::new();
+
+        let usecase = FormUseCase {
+            active_form_repository: &form_repository,
+            archived_form_repository: &archived_form_repository,
+            notification_repository: &notification_repository,
+            form_label_repository: &form_label_repository,
+            answer_repository: &answer_repository,
+        };
+
+        let archived = usecase.archive_form(&user, form_id).await.unwrap();
+
+        assert_eq!(archived.form().id(), &form_id);
     }
 }

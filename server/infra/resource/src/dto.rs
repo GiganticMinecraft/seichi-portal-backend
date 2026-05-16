@@ -169,7 +169,7 @@ impl TryFrom<ArchivedFormDto> for ArchivedForm {
     type Error = errors::Error;
 
     fn try_from(value: ArchivedFormDto) -> Result<Self, Self::Error> {
-        Ok(ArchivedForm::from_raw_parts(
+        Ok(ArchivedForm::restore_from_persistence(
             value.form.try_into()?,
             value.archived_at,
             UserDto {
