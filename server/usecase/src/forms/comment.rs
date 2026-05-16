@@ -9,8 +9,8 @@ use domain::{
         },
     },
     repository::form::{
-        answer_repository::AnswerRepository, comment_repository::CommentRepository,
-        form_repository::FormRepository,
+        active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository,
+        comment_repository::CommentRepository,
     },
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
     user::models::User,
@@ -24,14 +24,14 @@ pub struct CommentUseCase<
     'a,
     CommentRepo: CommentRepository,
     AnswerRepo: AnswerRepository,
-    FormRepo: FormRepository,
+    FormRepo: ActiveFormRepository,
 > {
     pub comment_repository: &'a CommentRepo,
     pub answer_repository: &'a AnswerRepo,
-    pub form_repository: &'a FormRepo,
+    pub active_form_repository: &'a FormRepo,
 }
 
-impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
+impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository>
     CommentUseCase<'_, R1, R2, R3>
 {
     pub async fn get_comments(
@@ -47,7 +47,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .ok_or(Error::from(AnswerNotFound))?;
 
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
@@ -89,7 +89,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .ok_or(Error::from(AnswerNotFound))?;
 
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
@@ -130,7 +130,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .ok_or(Error::from(AnswerNotFound))?;
 
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
@@ -183,7 +183,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: FormRepository>
             .into_delete();
 
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;

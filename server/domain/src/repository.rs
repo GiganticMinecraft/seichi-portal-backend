@@ -18,9 +18,6 @@ pub trait Repositories: Send + Sync {
     type ConcreteHealthCheckRepository: health_check_repository::HealthCheckRepository;
     fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository;
     fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository;
-    fn form_repository(&self) -> &Self::ConcreteActiveFormRepository {
-        self.active_form_repository()
-    }
     fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository;
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository;
     fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository;

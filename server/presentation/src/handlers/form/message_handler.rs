@@ -88,7 +88,7 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
         message_repository: state.repository.form_message_repository(),
         answer_repository: state.repository.form_answer_repository(),
         notification_repository: state.repository.notification_repository(),
-        form_repository: state.repository.form_repository(),
+        active_form_repository: state.repository.active_form_repository(),
         user_repository: state.repository.user_repository(),
     };
 
@@ -141,7 +141,7 @@ pub async fn update_message_handler(
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
     };
 
@@ -185,7 +185,7 @@ pub async fn get_messages_handler(
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
     };
 
@@ -242,7 +242,7 @@ pub async fn delete_message_handler(
         message_repository: repository.form_message_repository(),
         answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
-        form_repository: repository.form_repository(),
+        active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
     };
 

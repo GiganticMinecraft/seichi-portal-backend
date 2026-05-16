@@ -495,10 +495,10 @@ mod tests {
         },
         repository::{
             form::{
+                active_form_repository::MockActiveFormRepository,
                 answer_repository::MockAnswerRepository,
                 archived_form_repository::MockArchivedFormRepository,
                 form_label_repository::MockFormLabelRepository,
-                form_repository::MockFormRepository,
             },
             notification_repository::MockNotificationRepository,
         },
@@ -564,12 +564,12 @@ mod tests {
         ])
         .unwrap();
 
-        let mut form_repository = MockFormRepository::new();
-        form_repository
+        let mut active_form_repository = MockActiveFormRepository::new();
+        active_form_repository
             .expect_create()
             .times(1)
             .returning(|_, _| Ok(()));
-        form_repository
+        active_form_repository
             .expect_get()
             .times(1)
             .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
@@ -580,7 +580,7 @@ mod tests {
         let notification_repository = MockNotificationRepository::new();
 
         let usecase = FormUseCase {
-            active_form_repository: &form_repository,
+            active_form_repository: &active_form_repository,
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
@@ -605,12 +605,12 @@ mod tests {
         let user = admin_user();
         let form_id = FormId::from(Uuid::new_v4());
         let form = sample_form(form_id);
-        let mut form_repository = MockFormRepository::new();
-        form_repository
+        let mut active_form_repository = MockActiveFormRepository::new();
+        active_form_repository
             .expect_get()
             .times(3)
             .returning(move |_| Ok(Some(sample_form(form_id).into())));
-        form_repository
+        active_form_repository
             .expect_update_form()
             .times(1)
             .returning(|_, _| Ok(()));
@@ -626,7 +626,7 @@ mod tests {
         let notification_repository = MockNotificationRepository::new();
 
         let usecase = FormUseCase {
-            active_form_repository: &form_repository,
+            active_form_repository: &active_form_repository,
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
@@ -664,8 +664,8 @@ mod tests {
         let user = admin_user();
         let form_id = FormId::from(Uuid::new_v4());
 
-        let mut form_repository = MockFormRepository::new();
-        form_repository
+        let mut active_form_repository = MockActiveFormRepository::new();
+        active_form_repository
             .expect_get()
             .times(1)
             .returning(move |_| Ok(Some(sample_form(form_id).into())));
@@ -689,7 +689,7 @@ mod tests {
         let notification_repository = MockNotificationRepository::new();
 
         let usecase = FormUseCase {
-            active_form_repository: &form_repository,
+            active_form_repository: &active_form_repository,
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,

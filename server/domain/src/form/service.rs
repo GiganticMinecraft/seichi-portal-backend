@@ -182,7 +182,7 @@ mod tests {
         };
 
         let result = DefaultAnswerTitleDomainService::<
-            crate::repository::form::form_repository::MockFormRepository,
+            crate::repository::form::active_form_repository::MockActiveFormRepository,
         >::to_answer_title_from_questions(
             default_answer_title,
             questions.as_slice(),

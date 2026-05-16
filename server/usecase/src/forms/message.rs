@@ -15,7 +15,7 @@ use domain::{
     notification::models::NotificationPreference,
     repository::{
         form::{
-            answer_repository::AnswerRepository, form_repository::FormRepository,
+            active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository,
             message_repository::MessageRepository,
         },
         notification_repository::NotificationRepository,
@@ -37,13 +37,13 @@ pub struct MessageUseCase<
     MessageRepo: MessageRepository,
     AnswerRepo: AnswerRepository,
     NotificationRepo: NotificationRepository,
-    FormRepo: FormRepository,
+    FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
 > {
     pub message_repository: &'a MessageRepo,
     pub answer_repository: &'a AnswerRepo,
     pub notification_repository: &'a NotificationRepo,
-    pub form_repository: &'a FormRepo,
+    pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
 }
 
@@ -51,7 +51,7 @@ impl<
     R1: MessageRepository,
     R2: AnswerRepository,
     R3: NotificationRepository,
-    R4: FormRepository,
+    R4: ActiveFormRepository,
     R5: UserRepository,
 > MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
@@ -64,7 +64,7 @@ impl<
         notification_api: &API,
     ) -> Result<(), Error> {
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
@@ -172,7 +172,7 @@ impl<
         answer_id: AnswerId,
     ) -> Result<Vec<Message>, Error> {
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
@@ -220,7 +220,7 @@ impl<
             .ok_or(MessageNotFound)?;
 
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
@@ -275,7 +275,7 @@ impl<
             .ok_or(MessageNotFound)?;
 
         let form_guard = self
-            .form_repository
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
