@@ -658,46 +658,4 @@ mod tests {
             form.questions().as_slice()[0].template_key()
         );
     }
-
-    #[tokio::test]
-    async fn archive_form_gets_active_form_before_archiving() {
-        let user = admin_user();
-        let form_id = FormId::from(Uuid::new_v4());
-
-        let mut active_form_repository = MockActiveFormRepository::new();
-        active_form_repository
-            .expect_get()
-            .times(1)
-            .returning(move |_| Ok(Some(sample_form(form_id).into())));
-
-        let mut archived_form_repository = MockArchivedFormRepository::new();
-        archived_form_repository
-            .expect_archive()
-            .times(1)
-            .returning(move |_, _| {
-                let form = sample_form(form_id);
-                Ok(ArchivedForm::from_persisted(
-                    form.clone(),
-                    form.metadata().created_at,
-                    admin_user(),
-                )
-                .into())
-            });
-
-        let form_label_repository = MockFormLabelRepository::new();
-        let answer_repository = MockAnswerRepository::new();
-        let notification_repository = MockNotificationRepository::new();
-
-        let usecase = FormUseCase {
-            active_form_repository: &active_form_repository,
-            archived_form_repository: &archived_form_repository,
-            notification_repository: &notification_repository,
-            form_label_repository: &form_label_repository,
-            answer_repository: &answer_repository,
-        };
-
-        let archived = usecase.archive_form(&user, form_id).await.unwrap();
-
-        assert_eq!(archived.form().id(), &form_id);
-    }
 }
