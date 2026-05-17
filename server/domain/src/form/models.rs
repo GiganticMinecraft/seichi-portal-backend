@@ -5,6 +5,8 @@ use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use errors::domain::DomainError;
 #[cfg(test)]
+use proptest::{collection::SizeRange, prelude::*, strategy::BoxedStrategy};
+#[cfg(test)]
 use proptest_derive::Arbitrary;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,7 @@ use crate::{
 };
 
 pub type FormId = types::Id<ActiveForm>;
+pub type FormLabelId = types::Id<FormLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
@@ -187,6 +190,58 @@ impl FormMeta {
     }
 }
 
+#[derive(Serialize, Clone, Default, Debug, PartialEq)]
+pub struct FormLabelIdSet(Vec<FormLabelId>);
+
+impl FormLabelIdSet {
+    pub fn try_new(label_ids: Vec<FormLabelId>) -> Result<Self, DomainError> {
+        if label_ids
+            .iter()
+            .enumerate()
+            .any(|(index, label_id)| label_ids[..index].contains(label_id))
+        {
+            return Err(DomainError::InvalidEntity {
+                message: "form label ids must be unique within a form".to_string(),
+            });
+        }
+
+        Ok(Self(label_ids))
+    }
+
+    pub fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn as_slice(&self) -> &[FormLabelId] {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Vec<FormLabelId> {
+        self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for FormLabelIdSet {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Vec::<FormLabelId>::deserialize(deserializer)
+            .and_then(|value| FormLabelIdSet::try_new(value).map_err(serde::de::Error::custom))
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for FormLabelIdSet {
+    type Parameters = (SizeRange, <FormLabelId as Arbitrary>::Parameters);
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+        Vec::<FormLabelId>::arbitrary_with(args)
+            .prop_filter_map("unique form label ids", |value| {
+                FormLabelIdSet::try_new(value).ok()
+            })
+            .boxed()
+    }
+}
+
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct ActiveForm {
@@ -200,6 +255,8 @@ pub struct ActiveForm {
     #[serde(default)]
     settings: FormSettings,
     questions: QuestionSet,
+    #[serde(default)]
+    label_ids: FormLabelIdSet,
 }
 
 impl ActiveForm {
@@ -211,6 +268,7 @@ impl ActiveForm {
             metadata: FormMeta::new(),
             settings: FormSettings::new(),
             questions,
+            label_ids: FormLabelIdSet::empty(),
         }
     }
 
@@ -233,6 +291,10 @@ impl ActiveForm {
         Self { questions, ..self }
     }
 
+    pub fn replace_label_ids(self, label_ids: FormLabelIdSet) -> Self {
+        Self { label_ids, ..self }
+    }
+
     pub fn from_raw_parts(
         id: FormId,
         title: FormTitle,
@@ -240,6 +302,7 @@ impl ActiveForm {
         metadata: FormMeta,
         settings: FormSettings,
         questions: QuestionSet,
+        label_ids: FormLabelIdSet,
     ) -> Self {
         Self {
             id,
@@ -248,6 +311,7 @@ impl ActiveForm {
             metadata,
             settings,
             questions,
+            label_ids,
         }
     }
 
@@ -351,6 +415,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
+    ///     domain::form::models::FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -417,6 +482,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),
+    ///     domain::form::models::FormLabelIdSet::empty(),
     /// );
     ///
     ///  let public_form = ActiveForm::from_raw_parts(
@@ -432,6 +498,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),
+    ///     domain::form::models::FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(private_form.can_read(&administrator));
@@ -487,6 +554,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
+    ///     domain::form::models::FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -540,6 +608,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
+    ///     domain::form::models::FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(!form.can_delete(&administrator));
@@ -548,8 +617,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
         false
     }
 }
-
-pub type FormLabelId = types::Id<FormLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
@@ -734,5 +801,90 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// ```
     fn can_delete(&self, actor: &User) -> bool {
         actor.role == Administrator
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::form::question::models::{Question, QuestionId, QuestionType};
+    use types::non_empty_vec::NonEmptyVec;
+    use uuid::Uuid;
+
+    fn sample_question_set() -> QuestionSet {
+        QuestionSet::try_new(
+            NonEmptyVec::try_new(vec![
+                Question::from_raw_parts(
+                    QuestionId::from(Uuid::new_v4()),
+                    "body".to_string().try_into().unwrap(),
+                    0,
+                    "Body".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap(),
+            ])
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn form_label_id_set_allows_empty_ids() {
+        let label_ids = FormLabelIdSet::try_new(vec![]).unwrap();
+
+        assert!(label_ids.as_slice().is_empty());
+    }
+
+    #[test]
+    fn form_label_id_set_allows_unique_ids() {
+        let first = FormLabelId::new();
+        let second = FormLabelId::new();
+        let label_ids = FormLabelIdSet::try_new(vec![first, second]).unwrap();
+
+        assert_eq!(label_ids.as_slice(), &[first, second]);
+    }
+
+    #[test]
+    fn form_label_id_set_rejects_duplicate_ids() {
+        let label_id = FormLabelId::new();
+        let result = FormLabelIdSet::try_new(vec![label_id, label_id]);
+
+        assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
+    }
+
+    #[test]
+    fn form_label_id_set_deserialize_rejects_duplicate_ids() {
+        let label_id = FormLabelId::new();
+        let serialized = serde_json::to_string(&vec![label_id, label_id]).unwrap();
+        let result = serde_json::from_str::<FormLabelIdSet>(&serialized);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn active_form_new_has_empty_label_ids() {
+        let form = ActiveForm::new(
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new("description".to_string()),
+            sample_question_set(),
+        );
+
+        assert!(form.label_ids().as_slice().is_empty());
+    }
+
+    #[test]
+    fn active_form_replace_label_ids_replaces_ids() {
+        let label_id = FormLabelId::new();
+        let form = ActiveForm::new(
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new("description".to_string()),
+            sample_question_set(),
+        )
+        .replace_label_ids(FormLabelIdSet::try_new(vec![label_id]).unwrap());
+
+        assert_eq!(form.label_ids().as_slice(), &[label_id]);
     }
 }

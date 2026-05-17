@@ -123,6 +123,8 @@ async fn active_form_dto_from_row(
     row: FormRowDto,
 ) -> Result<FormDto, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.id)?);
+    let label_ids =
+        fetch_label_ids_txn_with_table(txn, form_id, "label_settings_for_forms").await?;
 
     Ok(FormDto {
         id: row.id,
@@ -138,6 +140,7 @@ async fn active_form_dto_from_row(
         answer_visibility: row.answer_visibility,
         questions: get_questions_txn_with_tables(txn, form_id, "form_questions", "form_choices")
             .await?,
+        label_ids,
     })
 }
 
@@ -146,6 +149,8 @@ async fn archived_form_dto_from_row(
     row: ArchivedFormRowDto,
 ) -> Result<ArchivedFormDto, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.form.id)?);
+    let label_ids =
+        fetch_label_ids_txn_with_table(txn, form_id, "archived_label_settings_for_forms").await?;
 
     Ok(ArchivedFormDto {
         form: FormDto {
@@ -167,6 +172,7 @@ async fn archived_form_dto_from_row(
                 "archived_form_choices",
             )
             .await?,
+            label_ids,
         },
         archived_at: row.archived_at,
         archived_by_name: row.archived_by_name,
@@ -257,6 +263,27 @@ async fn fetch_archived_form_row(
     .await?;
 
     row.map(archived_form_row_from_db_row).transpose()
+}
+
+async fn fetch_label_ids_txn_with_table(
+    txn: &mut DatabaseTransaction,
+    form_id: FormId,
+    table: &str,
+) -> Result<Vec<domain::form::models::FormLabelId>, InfraError> {
+    let form_id = form_id.into_inner().to_string();
+    let sql = format!("SELECT label_id FROM {table} WHERE form_id = ? ORDER BY id ASC");
+
+    sqlx::query(&sql)
+        .bind(form_id)
+        .fetch_all(&mut **txn)
+        .await?
+        .into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>(domain::form::models::FormLabelId::from(Uuid::parse_str(
+                &row.try_get::<String, _>("label_id")?,
+            )?))
+        })
+        .collect()
 }
 
 async fn insert_form_root(

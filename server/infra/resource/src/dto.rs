@@ -6,7 +6,8 @@ use domain::{
         answer::models::AnswerTitle,
         comment::models::CommentContent,
         models::{
-            ActiveForm, ArchivedForm, FormDescription, FormId, FormMeta, FormSettings, FormTitle,
+            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabelId, FormLabelIdSet,
+            FormMeta, FormSettings, FormTitle,
         },
         question::models::{Choice, Question, QuestionType},
     },
@@ -105,6 +106,7 @@ pub struct ActiveFormDto {
     pub visibility: String,
     pub answer_visibility: String,
     pub questions: Vec<QuestionDto>,
+    pub label_ids: Vec<FormLabelId>,
 }
 
 pub type FormDto = ActiveFormDto;
@@ -126,6 +128,7 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
             visibility,
             answer_visibility,
             questions,
+            label_ids,
         }: ActiveFormDto,
     ) -> Result<Self, Self::Error> {
         let questions = questions
@@ -153,6 +156,7 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
                 answer_visibility.try_into()?,
             ),
             domain::form::models::QuestionSet::try_new(questions).map_err(errors::Error::from)?,
+            FormLabelIdSet::try_new(label_ids)?,
         ))
     }
 }

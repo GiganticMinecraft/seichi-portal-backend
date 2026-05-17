@@ -86,6 +86,7 @@ pub async fn create_label_for_forms(
 ) -> Result<CreateFormLabelResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Json(label) = json.map_err_to_error().map_err(handle_error)?;
@@ -118,6 +119,7 @@ pub async fn get_labels_for_forms(
 ) -> Result<GetFormLabelsResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let labels = form_label_use_case
@@ -154,6 +156,7 @@ pub async fn delete_label_for_forms(
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -194,6 +197,7 @@ pub async fn edit_label_for_forms(
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -233,6 +237,7 @@ pub async fn replace_form_labels(
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
+        active_form_repository: repository.active_form_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;

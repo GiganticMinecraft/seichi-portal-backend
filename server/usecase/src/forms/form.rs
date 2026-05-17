@@ -490,7 +490,7 @@ mod tests {
     use super::*;
     use domain::{
         form::{
-            models::{ArchivedForm, FormDescription, FormMeta, FormSettings, FormTitle},
+            models::{FormDescription, FormMeta, FormSettings, FormTitle},
             question::models::{QuestionId, QuestionSet, QuestionType},
         },
         repository::{
@@ -532,6 +532,7 @@ mod tests {
             FormMeta::new(),
             FormSettings::new(),
             questions,
+            domain::form::models::FormLabelIdSet::empty(),
         )
     }
 
