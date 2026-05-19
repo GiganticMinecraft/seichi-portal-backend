@@ -190,7 +190,8 @@ impl FormMeta {
     }
 }
 
-#[derive(Serialize, Clone, Default, Debug, PartialEq)]
+#[derive(Serialize, Clone, DerivingVia, Default, Debug, PartialEq)]
+#[deriving(IntoInner)]
 pub struct FormLabelIdSet(Vec<FormLabelId>);
 
 impl FormLabelIdSet {
@@ -214,10 +215,6 @@ impl FormLabelIdSet {
 
     pub fn as_slice(&self) -> &[FormLabelId] {
         &self.0
-    }
-
-    pub fn into_inner(self) -> Vec<FormLabelId> {
-        self.0
     }
 }
 
