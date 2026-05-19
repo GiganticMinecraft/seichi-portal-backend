@@ -490,7 +490,9 @@ mod tests {
     use super::*;
     use domain::{
         form::{
-            models::{FormDescription, FormMeta, FormSettings, FormTitle},
+            models::{
+                ActiveForm, FormDescription, FormLabelIdSet, FormMeta, FormSettings, FormTitle,
+            },
             question::models::{QuestionId, QuestionSet, QuestionType},
         },
         repository::{
@@ -515,7 +517,7 @@ mod tests {
         }
     }
 
-    fn sample_form(form_id: FormId) -> domain::form::models::ActiveForm {
+    fn sample_form(form_id: FormId) -> ActiveForm {
         let questions = QuestionSet::try_new(
             NonEmptyVec::try_new(vec![text_question(
                 QuestionId::from(Uuid::new_v4()),
@@ -525,14 +527,14 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        domain::form::models::ActiveForm::from_raw_parts(
+        ActiveForm::from_raw_parts(
             form_id,
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             FormMeta::new(),
             FormSettings::new(),
             questions,
-            domain::form::models::FormLabelIdSet::empty(),
+            FormLabelIdSet::empty(),
         )
     }
 

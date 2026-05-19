@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::form::{
-    models::WebhookUrl,
-    question::models::{Question, QuestionId, QuestionType},
+    models::{FormLabelId, WebhookUrl},
+    question::models::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
     form::models::{ActiveForm, ArchivedForm, FormId},
@@ -269,7 +269,7 @@ async fn fetch_label_ids_txn_with_table(
     txn: &mut DatabaseTransaction,
     form_id: FormId,
     table: &str,
-) -> Result<Vec<domain::form::models::FormLabelId>, InfraError> {
+) -> Result<Vec<FormLabelId>, InfraError> {
     let form_id = form_id.into_inner().to_string();
     let sql = format!("SELECT label_id FROM {table} WHERE form_id = ? ORDER BY id ASC");
 
@@ -279,7 +279,7 @@ async fn fetch_label_ids_txn_with_table(
         .await?
         .into_iter()
         .map(|row| {
-            Ok::<_, InfraError>(domain::form::models::FormLabelId::from(Uuid::parse_str(
+            Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(
                 &row.try_get::<String, _>("label_id")?,
             )?))
         })
@@ -1092,22 +1092,21 @@ async fn sync_choices(
         return Ok(());
     }
 
-    let desired_choices: Vec<(QuestionId, &domain::form::question::models::Choice)> =
-        assigned_questions
-            .iter()
-            .flat_map(|(question_id, question)| {
-                let accepts_new_choices = question.question_type() != QuestionType::Text;
-                question.choices().into_iter().flat_map(move |choices| {
-                    choices.iter().filter_map(move |choice| {
-                        if choice.id.is_some() || accepts_new_choices {
-                            Some((*question_id, choice))
-                        } else {
-                            None
-                        }
-                    })
+    let desired_choices: Vec<(QuestionId, &Choice)> = assigned_questions
+        .iter()
+        .flat_map(|(question_id, question)| {
+            let accepts_new_choices = question.question_type() != QuestionType::Text;
+            question.choices().into_iter().flat_map(move |choices| {
+                choices.iter().filter_map(move |choice| {
+                    if choice.id.is_some() || accepts_new_choices {
+                        Some((*question_id, choice))
+                    } else {
+                        None
+                    }
                 })
             })
-            .collect();
+        })
+        .collect();
 
     let existing_choice_owners = fetch_existing_choices(txn, &question_ids).await?;
     let existing_ids: BTreeSet<i32> = existing_choice_owners.keys().copied().collect();

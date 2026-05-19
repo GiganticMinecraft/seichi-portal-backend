@@ -9,7 +9,7 @@ use proptest::{collection::SizeRange, prelude::*, strategy::BoxedStrategy};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
@@ -219,9 +219,9 @@ impl FormLabelIdSet {
 }
 
 impl<'de> Deserialize<'de> for FormLabelIdSet {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Vec::<FormLabelId>::deserialize(deserializer)
-            .and_then(|value| FormLabelIdSet::try_new(value).map_err(serde::de::Error::custom))
+            .and_then(|value| FormLabelIdSet::try_new(value).map_err(de::Error::custom))
     }
 }
 
@@ -380,7 +380,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormTitle};
     /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
-    /// use domain::form::models::{Visibility, WebhookUrl};
+    /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
@@ -412,7 +412,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     domain::form::models::FormLabelIdSet::empty(),
+    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -438,7 +438,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
     /// use domain::form::models::{
     ///     FormDescription, FormId, FormMeta,
-    ///     FormTitle, Visibility, WebhookUrl
+    ///     FormLabelIdSet, FormTitle, Visibility, WebhookUrl
     /// };
     ///
     /// let administrator = User {
@@ -479,7 +479,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),
-    ///     domain::form::models::FormLabelIdSet::empty(),
+    ///     FormLabelIdSet::empty(),
     /// );
     ///
     ///  let public_form = ActiveForm::from_raw_parts(
@@ -495,7 +495,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),
-    ///     domain::form::models::FormLabelIdSet::empty(),
+    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(private_form.can_read(&administrator));
@@ -519,7 +519,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::{FormDescription, FormTitle};
+    /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
@@ -551,7 +551,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     domain::form::models::FormLabelIdSet::empty(),
+    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -573,7 +573,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::{FormDescription, FormTitle};
+    /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
@@ -605,7 +605,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     domain::form::models::FormLabelIdSet::empty(),
+    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(!form.can_delete(&administrator));
