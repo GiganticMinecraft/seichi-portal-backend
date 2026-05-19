@@ -375,7 +375,7 @@ pub async fn archive_form_handler(
     put,
     path = "/forms/{id}",
     summary = "フォームの更新",
-    description = "questions を含めた場合、その form 配下の question 定義全体を指定内容で置換します。questions を省略した場合は既存 question を保持します。",
+    description = "questions または labels を含めた場合、その form 配下の値全体を指定内容で置換します。省略した場合は既存値を保持します。",
     params(
         ("id" = String, Path, description = "Form ID"),
     ),
@@ -431,6 +431,7 @@ pub async fn update_form_handler(
         .map(into_upsert_question_dtos)
         .transpose()
         .map_err(handle_error)?;
+    let labels = targets.labels;
 
     let (updated_form, labels) = form_use_case
         .update_form(
@@ -444,6 +445,7 @@ pub async fn update_form_handler(
             visibility,
             answer_visibility,
             questions,
+            labels,
         )
         .await
         .map_err(handle_error)?;

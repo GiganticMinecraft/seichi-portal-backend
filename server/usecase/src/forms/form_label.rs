@@ -1,19 +1,15 @@
 use domain::{
-    form::models::{FormId, FormLabel, FormLabelId, FormLabelIdSet, FormLabelName},
-    repository::form::{
-        active_form_repository::ActiveFormRepository, form_label_repository::FormLabelRepository,
-    },
+    form::models::{FormLabel, FormLabelId, FormLabelName},
+    repository::form::form_label_repository::FormLabelRepository,
     user::models::User,
 };
-use errors::{Error, usecase::UseCaseError, usecase::UseCaseError::FormNotFound};
+use errors::{Error, usecase::UseCaseError};
 
-pub struct FormLabelUseCase<'a, FormLabelRepo: FormLabelRepository, FormRepo: ActiveFormRepository>
-{
+pub struct FormLabelUseCase<'a, FormLabelRepo: FormLabelRepository> {
     pub form_label_repository: &'a FormLabelRepo,
-    pub active_form_repository: &'a FormRepo,
 }
 
-impl<R1: FormLabelRepository, R2: ActiveFormRepository> FormLabelUseCase<'_, R1, R2> {
+impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
     pub async fn create_label_for_forms(
         &self,
         actor: &User,
@@ -82,37 +78,5 @@ impl<R1: FormLabelRepository, R2: ActiveFormRepository> FormLabelUseCase<'_, R1,
         }
 
         Ok(())
-    }
-
-    pub async fn replace_form_labels(
-        &self,
-        actor: &User,
-        form_id: FormId,
-        label_ids: Vec<FormLabelId>,
-    ) -> Result<(), Error> {
-        let label_ids = FormLabelIdSet::try_new(label_ids)?;
-        let updated_form = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?
-            .into_update()
-            .map(|form| form.replace_label_ids(label_ids.clone()));
-        updated_form.try_update(actor, |_| ())?;
-
-        let labels = self
-            .form_label_repository
-            .fetch_labels_by_ids(label_ids.as_slice().to_vec())
-            .await?
-            .into_iter()
-            .map(|label| label.into_update())
-            .collect::<Vec<_>>();
-        if labels.len() != label_ids.as_slice().len() {
-            return Err(Error::from(UseCaseError::LabelNotFound));
-        }
-
-        self.form_label_repository
-            .replace_form_labels(actor, form_id, labels)
-            .await
     }
 }

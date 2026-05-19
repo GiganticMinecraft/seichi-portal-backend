@@ -2,8 +2,8 @@ use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
         models::{
-            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormTitle, Question,
-            QuestionSet, Visibility, WebhookUrl,
+            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
+            FormLabelIdSet, FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
         },
     },
     repository::{
@@ -16,7 +16,11 @@ use domain::{
     },
     user::models::User,
 };
-use errors::{Error, domain::DomainError, usecase::UseCaseError::FormNotFound};
+use errors::{
+    Error,
+    domain::DomainError,
+    usecase::UseCaseError::{FormNotFound, LabelNotFound},
+};
 use std::collections::{BTreeSet, HashMap};
 use types::non_empty_vec::NonEmptyVec;
 
@@ -224,6 +228,7 @@ impl<
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
         questions: Option<Vec<UpsertQuestionDto>>,
+        label_ids: Option<Vec<FormLabelId>>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
         let current_form = self
             .active_form_repository
@@ -266,6 +271,21 @@ impl<
             }
         }
 
+        let label_ids = match label_ids {
+            Some(label_ids) => {
+                let label_ids = FormLabelIdSet::try_new(label_ids)?;
+                let labels = self
+                    .form_label_repository
+                    .fetch_labels_by_ids(label_ids.as_slice().to_vec())
+                    .await?;
+                if labels.len() != label_ids.as_slice().len() {
+                    return Err(Error::from(LabelNotFound));
+                }
+                Some(label_ids)
+            }
+            None => None,
+        };
+
         let updated_form = current_form.into_update().map(|form| {
             let current_answer_settings = form.settings().answer_settings().to_owned();
             let updated_answer_settings = match answer_visibility {
@@ -306,6 +326,11 @@ impl<
             };
             updated_form.change_settings(updated_settings)
         });
+
+        let updated_form = match label_ids {
+            Some(label_ids) => updated_form.map(|form| form.replace_label_ids(label_ids)),
+            None => updated_form,
+        };
 
         let updated_form = match questions {
             Some(questions) => {
@@ -640,6 +665,7 @@ mod tests {
             .update_form(
                 &user,
                 form.id().to_owned(),
+                None,
                 None,
                 None,
                 None,

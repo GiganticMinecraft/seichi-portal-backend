@@ -669,6 +669,7 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 insert_form_root(txn, &form, &user).await?;
                 sync_questions(txn, &form).await?;
+                sync_label_ids(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -854,6 +855,7 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 update_form_root(txn, &form, &updated_by).await?;
                 sync_questions(txn, &form).await?;
+                sync_label_ids(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -873,6 +875,43 @@ impl FormDatabase for ConnectionPool {
         })
         .await
     }
+}
+
+async fn sync_label_ids(
+    txn: &mut DatabaseTransaction,
+    form: &ActiveForm,
+) -> Result<(), InfraError> {
+    let form_id = form.id().into_inner().to_string();
+
+    sqlx::query!(
+        "DELETE FROM label_settings_for_forms WHERE form_id = ?",
+        form_id.clone(),
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    if form.label_ids().as_slice().is_empty() {
+        return Ok(());
+    }
+
+    let label_ids = form
+        .label_ids()
+        .as_slice()
+        .iter()
+        .map(|label_id| label_id.into_inner().to_string())
+        .collect_vec();
+    let sql = format!(
+        "INSERT INTO label_settings_for_forms (form_id, label_id) VALUES {}",
+        std::iter::repeat_n("(?, ?)", label_ids.len()).join(", ")
+    );
+    label_ids
+        .into_iter()
+        .flat_map(|label_id| [form_id.clone(), label_id])
+        .fold(query(&sql), |query, value| query.bind(value))
+        .execute(&mut **txn)
+        .await?;
+
+    Ok(())
 }
 
 async fn sync_questions(

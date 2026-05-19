@@ -8,7 +8,7 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
-    form::models::{FormId, FormLabelId, FormLabelName},
+    form::models::{FormLabelId, FormLabelName},
     repository::Repositories,
     user::models::User,
 };
@@ -21,7 +21,7 @@ use crate::schemas::form::form_request_schemas::FormLabelCreateSchema;
 use crate::schemas::form::form_response_schemas::FormLabelResponseSchema;
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::form::form_request_schemas::{FormLabelUpdateSchema, ReplaceFormLabelSchema},
+    schemas::form::form_request_schemas::FormLabelUpdateSchema,
 };
 
 #[derive(utoipa::IntoResponses)]
@@ -86,7 +86,6 @@ pub async fn create_label_for_forms(
 ) -> Result<CreateFormLabelResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
-        active_form_repository: repository.active_form_repository(),
     };
 
     let Json(label) = json.map_err_to_error().map_err(handle_error)?;
@@ -119,7 +118,6 @@ pub async fn get_labels_for_forms(
 ) -> Result<GetFormLabelsResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
-        active_form_repository: repository.active_form_repository(),
     };
 
     let labels = form_label_use_case
@@ -156,7 +154,6 @@ pub async fn delete_label_for_forms(
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
-        active_form_repository: repository.active_form_repository(),
     };
 
     let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -197,7 +194,6 @@ pub async fn edit_label_for_forms(
 ) -> Result<impl IntoResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
-        active_form_repository: repository.active_form_repository(),
     };
 
     let Path(label_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -205,46 +201,6 @@ pub async fn edit_label_for_forms(
 
     form_label_use_case
         .edit_label_for_forms(label_id, label.name.map(FormLabelName::new), &user)
-        .await
-        .map_err(handle_error)?;
-
-    Ok(StatusCode::OK.into_response())
-}
-
-#[utoipa::path(
-    put,
-    path = "/forms/{form_id}/labels",
-    params(
-        ("form_id" = String, Path, description = "Form ID"),
-    ),
-    request_body = ReplaceFormLabelSchema,
-    responses(
-        (status = 200, description = "The request has succeeded."),
-        BadRequest,
-        Unauthorized,
-        Forbidden,
-        NotFound,
-        InternalServerError,
-    ),
-    security(("bearer" = [])),
-    tag = "Labels"
-)]
-pub async fn replace_form_labels(
-    Extension(user): Extension<User>,
-    State(repository): State<RealInfrastructureRepository>,
-    path: Result<Path<FormId>, PathRejection>,
-    json: Result<Json<ReplaceFormLabelSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
-    let form_label_use_case = FormLabelUseCase {
-        form_label_repository: repository.form_label_repository(),
-        active_form_repository: repository.active_form_repository(),
-    };
-
-    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
-    let Json(label_ids) = json.map_err_to_error().map_err(handle_error)?;
-
-    form_label_use_case
-        .replace_form_labels(&user, form_id, label_ids.labels)
         .await
         .map_err(handle_error)?;
 

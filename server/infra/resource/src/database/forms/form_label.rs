@@ -190,46 +190,6 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn replace_form_labels(
-        &self,
-        form_id: FormId,
-        label_ids: Vec<FormLabelId>,
-    ) -> Result<(), InfraError> {
-        let form_id = form_id.into_inner().to_string();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                sqlx::query!(
-                    "DELETE FROM label_settings_for_forms WHERE form_id = ?",
-                    form_id.clone(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                if !label_ids.is_empty() {
-                    let label_ids = label_ids
-                        .into_iter()
-                        .map(|label_id| label_id.into_inner().to_string())
-                        .collect_vec();
-                    let sql = format!(
-                        "INSERT INTO label_settings_for_forms (form_id, label_id) VALUES {}",
-                        std::iter::repeat_n("(?, ?)", label_ids.len()).join(", ")
-                    );
-                    label_ids
-                        .into_iter()
-                        .flat_map(|label_id| [form_id.clone(), label_id])
-                        .fold(query(&sql), |query, value| query.bind(value))
-                        .execute(&mut **txn)
-                        .await?;
-                }
-
-                Ok::<_, InfraError>(())
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
