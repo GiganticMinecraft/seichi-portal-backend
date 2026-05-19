@@ -123,8 +123,16 @@ async fn active_form_dto_from_row(
     row: FormRowDto,
 ) -> Result<FormDto, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.id)?);
-    let label_ids =
-        fetch_label_ids_txn_with_table(txn, form_id, "label_settings_for_forms").await?;
+    let form_id_string = form_id.into_inner().to_string();
+    let label_ids = sqlx::query!(
+        "SELECT label_id FROM label_settings_for_forms WHERE form_id = ? ORDER BY id ASC",
+        form_id_string,
+    )
+    .fetch_all(&mut **txn)
+    .await?
+    .into_iter()
+    .map(|row| Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(&row.label_id)?)))
+    .collect::<Result<Vec<_>, _>>()?;
 
     Ok(FormDto {
         id: row.id,
@@ -149,8 +157,16 @@ async fn archived_form_dto_from_row(
     row: ArchivedFormRowDto,
 ) -> Result<ArchivedFormDto, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.form.id)?);
-    let label_ids =
-        fetch_label_ids_txn_with_table(txn, form_id, "archived_label_settings_for_forms").await?;
+    let form_id_string = form_id.into_inner().to_string();
+    let label_ids = sqlx::query!(
+        "SELECT label_id FROM archived_label_settings_for_forms WHERE form_id = ? ORDER BY id ASC",
+        form_id_string,
+    )
+    .fetch_all(&mut **txn)
+    .await?
+    .into_iter()
+    .map(|row| Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(&row.label_id)?)))
+    .collect::<Result<Vec<_>, _>>()?;
 
     Ok(ArchivedFormDto {
         form: FormDto {
@@ -263,27 +279,6 @@ async fn fetch_archived_form_row(
     .await?;
 
     row.map(archived_form_row_from_db_row).transpose()
-}
-
-async fn fetch_label_ids_txn_with_table(
-    txn: &mut DatabaseTransaction,
-    form_id: FormId,
-    table: &str,
-) -> Result<Vec<FormLabelId>, InfraError> {
-    let form_id = form_id.into_inner().to_string();
-    let sql = format!("SELECT label_id FROM {table} WHERE form_id = ? ORDER BY id ASC");
-
-    sqlx::query(&sql)
-        .bind(form_id)
-        .fetch_all(&mut **txn)
-        .await?
-        .into_iter()
-        .map(|row| {
-            Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(
-                &row.try_get::<String, _>("label_id")?,
-            )?))
-        })
-        .collect()
 }
 
 async fn insert_form_root(
