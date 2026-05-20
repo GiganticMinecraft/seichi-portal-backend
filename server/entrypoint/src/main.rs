@@ -214,7 +214,6 @@ async fn main() -> anyhow::Result<()> {
             answer_handler::update_answer_handler
         ))
         .routes(routes!(answer_label_handler::replace_answer_labels))
-        .routes(routes!(form_label_handler::replace_form_labels))
         .routes(routes!(
             comment_handler::get_form_comment,
             comment_handler::post_form_comment

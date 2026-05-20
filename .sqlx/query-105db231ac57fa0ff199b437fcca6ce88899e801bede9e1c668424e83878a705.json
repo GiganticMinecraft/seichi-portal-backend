@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT label_id FROM label_settings_for_forms WHERE form_id = ? ORDER BY id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 144
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "105db231ac57fa0ff199b437fcca6ce88899e801bede9e1c668424e83878a705"
+}

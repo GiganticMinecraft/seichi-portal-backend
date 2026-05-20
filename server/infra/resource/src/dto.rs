@@ -3,10 +3,15 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use domain::{
     form::{
-        answer::models::AnswerTitle,
+        answer::{
+            models::{AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
+            settings::models::{DefaultAnswerTitle, ResponsePeriod},
+        },
         comment::models::CommentContent,
         models::{
-            ActiveForm, ArchivedForm, FormDescription, FormId, FormMeta, FormSettings, FormTitle,
+            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
+            FormLabelIdSet, FormLabelName, FormMeta, FormSettings, FormTitle, QuestionSet,
+            WebhookUrl,
         },
         question::models::{Choice, Question, QuestionType},
     },
@@ -51,7 +56,7 @@ pub struct QuestionDto {
     pub is_required: bool,
 }
 
-impl TryFrom<QuestionDto> for domain::form::question::models::Question {
+impl TryFrom<QuestionDto> for Question {
     type Error = errors::Error;
 
     fn try_from(
@@ -105,6 +110,7 @@ pub struct ActiveFormDto {
     pub visibility: String,
     pub answer_visibility: String,
     pub questions: Vec<QuestionDto>,
+    pub label_ids: Vec<FormLabelId>,
 }
 
 pub type FormDto = ActiveFormDto;
@@ -126,6 +132,7 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
             visibility,
             answer_visibility,
             questions,
+            label_ids,
         }: ActiveFormDto,
     ) -> Result<Self, Self::Error> {
         let questions = questions
@@ -140,11 +147,9 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
             FormDescription::new(description),
             FormMeta::from_raw_parts(created_at, updated_at),
             FormSettings::from_raw_parts(
-                domain::form::answer::settings::models::ResponsePeriod::try_new(start_at, end_at)?,
-                domain::form::models::WebhookUrl::try_new(
-                    webhook_url.map(NonEmptyString::try_new).transpose()?,
-                )?,
-                domain::form::answer::settings::models::DefaultAnswerTitle::new(
+                ResponsePeriod::try_new(start_at, end_at)?,
+                WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
+                DefaultAnswerTitle::new(
                     default_answer_title
                         .map(NonEmptyString::try_new)
                         .transpose()?,
@@ -152,7 +157,8 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
                 visibility.try_into()?,
                 answer_visibility.try_into()?,
             ),
-            domain::form::models::QuestionSet::try_new(questions).map_err(errors::Error::from)?,
+            QuestionSet::try_new(questions)?,
+            FormLabelIdSet::try_new(label_ids)?,
         ))
     }
 }
@@ -189,7 +195,7 @@ pub struct FormAnswerContentDto {
     pub answer: String,
 }
 
-impl TryFrom<FormAnswerContentDto> for domain::form::answer::models::FormAnswerContent {
+impl TryFrom<FormAnswerContentDto> for FormAnswerContent {
     type Error = InfraError;
 
     fn try_from(
@@ -199,7 +205,7 @@ impl TryFrom<FormAnswerContentDto> for domain::form::answer::models::FormAnswerC
             answer,
         }: FormAnswerContentDto,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::answer::models::FormAnswerContent {
+        Ok(FormAnswerContent {
             id: Uuid::parse_str(&id)?.into(),
             question_id: Uuid::parse_str(&question_id)?.into(),
             answer,
@@ -274,7 +280,7 @@ mod tests {
 
     #[test]
     fn question_dto_rejects_text_question_with_choices() {
-        let result: Result<domain::form::question::models::Question, _> = QuestionDto {
+        let result: Result<Question, _> = QuestionDto {
             id: Uuid::nil().to_string(),
             form_id: Uuid::nil().to_string(),
             template_key: "template".to_string(),
@@ -306,7 +312,7 @@ pub struct FormAnswerDto {
     pub contents: Vec<FormAnswerContentDto>,
 }
 
-impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
+impl TryFrom<FormAnswerDto> for AnswerEntry {
     type Error = errors::Error;
 
     fn try_from(
@@ -322,7 +328,7 @@ impl TryFrom<FormAnswerDto> for domain::form::answer::models::AnswerEntry {
         }: FormAnswerDto,
     ) -> Result<Self, Self::Error> {
         unsafe {
-            Ok(domain::form::answer::models::AnswerEntry::from_raw_parts(
+            Ok(AnswerEntry::from_raw_parts(
                 Uuid::from_str(&id)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
@@ -348,11 +354,11 @@ pub struct AnswerLabelDto {
     pub name: String,
 }
 
-impl TryFrom<AnswerLabelDto> for domain::form::answer::models::AnswerLabel {
+impl TryFrom<AnswerLabelDto> for AnswerLabel {
     type Error = errors::Error;
 
     fn try_from(AnswerLabelDto { id, name }: AnswerLabelDto) -> Result<Self, Self::Error> {
-        Ok(domain::form::answer::models::AnswerLabel::from_raw_parts(
+        Ok(AnswerLabel::from_raw_parts(
             Uuid::from_str(&id)
                 .map_err(Into::<InfraError>::into)?
                 .into(),
@@ -366,15 +372,15 @@ pub struct FormLabelDto {
     pub name: String,
 }
 
-impl TryFrom<FormLabelDto> for domain::form::models::FormLabel {
+impl TryFrom<FormLabelDto> for FormLabel {
     type Error = errors::Error;
 
     fn try_from(FormLabelDto { id, name }: FormLabelDto) -> Result<Self, Self::Error> {
-        Ok(domain::form::models::FormLabel::from_raw_parts(
+        Ok(FormLabel::from_raw_parts(
             Uuid::from_str(&id)
                 .map_err(Into::<InfraError>::into)?
                 .into(),
-            domain::form::models::FormLabelName::new(name.try_into()?),
+            FormLabelName::new(name.try_into()?),
         ))
     }
 }

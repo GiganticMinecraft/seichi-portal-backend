@@ -1,5 +1,5 @@
 use domain::{
-    form::models::{FormId, FormLabel, FormLabelId, FormLabelName},
+    form::models::{FormLabel, FormLabelId, FormLabelName},
     repository::form::form_label_repository::FormLabelRepository,
     user::models::User,
 };
@@ -9,7 +9,7 @@ pub struct FormLabelUseCase<'a, FormLabelRepo: FormLabelRepository> {
     pub form_label_repository: &'a FormLabelRepo,
 }
 
-impl<R1: FormLabelRepository> FormLabelUseCase<'_, R1> {
+impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
     pub async fn create_label_for_forms(
         &self,
         actor: &User,
@@ -78,24 +78,5 @@ impl<R1: FormLabelRepository> FormLabelUseCase<'_, R1> {
         }
 
         Ok(())
-    }
-
-    pub async fn replace_form_labels(
-        &self,
-        actor: &User,
-        form_id: FormId,
-        label_ids: Vec<FormLabelId>,
-    ) -> Result<(), Error> {
-        let labels = self
-            .form_label_repository
-            .fetch_labels_by_ids(label_ids)
-            .await?
-            .into_iter()
-            .map(|label| label.into_update())
-            .collect::<Vec<_>>();
-
-        self.form_label_repository
-            .replace_form_labels(actor, form_id, labels)
-            .await
     }
 }

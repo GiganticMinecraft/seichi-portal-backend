@@ -169,11 +169,6 @@ pub trait FormLabelDatabase: Send + Sync {
         &self,
         form_id: FormId,
     ) -> Result<Vec<FormLabelDto>, InfraError>;
-    async fn replace_form_labels(
-        &self,
-        form_id: FormId,
-        label_ids: Vec<FormLabelId>,
-    ) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
 

@@ -43,11 +43,5 @@ pub trait FormLabelRepository: Send + Sync + 'static {
         &self,
         form_id: FormId,
     ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error>;
-    async fn replace_form_labels(
-        &self,
-        actor: &User,
-        form_id: FormId,
-        labels: Vec<AuthorizationGuard<FormLabel, Update>>,
-    ) -> Result<(), Error>;
     async fn size(&self) -> Result<u32, Error>;
 }

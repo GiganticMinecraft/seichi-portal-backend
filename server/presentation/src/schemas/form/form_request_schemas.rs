@@ -92,6 +92,11 @@ pub struct FormUpdateSchema {
     /// Omit this field to leave existing questions unchanged.
     #[serde(default)]
     pub questions: Option<Vec<QuestionSchema>>,
+    /// When provided, replaces the full set of labels attached to the form.
+    /// Omit this field to leave existing labels unchanged.
+    #[serde(default)]
+    #[schema(value_type = Option<Vec<String>>)]
+    pub labels: Option<Vec<FormLabelId>>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
@@ -248,12 +253,6 @@ pub struct AnswerLabelUpdateSchema {
 pub struct ReplaceAnswerLabelSchema {
     #[schema(value_type = Vec<String>)]
     pub labels: Vec<AnswerLabelId>,
-}
-
-#[derive(Deserialize, Debug, utoipa::ToSchema)]
-pub struct ReplaceFormLabelSchema {
-    #[schema(value_type = Vec<String>)]
-    pub labels: Vec<FormLabelId>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
