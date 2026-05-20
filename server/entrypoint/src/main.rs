@@ -8,7 +8,7 @@ use axum::{
     },
     middleware,
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
 };
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
@@ -175,7 +175,7 @@ async fn main() -> anyhow::Result<()> {
         health_check_handler, notification_handler, search_handler, user_handler,
     };
 
-    let (router, openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    let api_router = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(
             form_handler::create_form_handler,
             form_handler::form_list_handler
@@ -239,7 +239,6 @@ async fn main() -> anyhow::Result<()> {
             notification_handler::get_my_notification_settings,
             notification_handler::update_notification_settings
         ))
-        .routes(routes!(health_check_handler::health_check))
         .routes(routes!(
             user_handler::start_session,
             user_handler::end_session
@@ -248,7 +247,10 @@ async fn main() -> anyhow::Result<()> {
             user_handler::link_discord,
             user_handler::unlink_discord
         ))
-        .with_state(shared_repository.to_owned())
+        .with_state(shared_repository.to_owned());
+
+    let (versioned_api_router, openapi) = OpenApiRouter::new()
+        .nest("/api/v1", api_router)
         .split_for_parts();
 
     // post_message_handler uses a different State type, so register it separately
@@ -266,8 +268,9 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
-        .merge(router)
-        .merge(message_post_router)
+        .route("/health", get(health_check_handler::health_check))
+        .merge(versioned_api_router)
+        .nest("/api/v1", message_post_router)
         .fallback(not_found_handler)
         .layer(layer)
         .route_layer(middleware::from_fn_with_state(
@@ -286,7 +289,8 @@ async fn main() -> anyhow::Result<()> {
                 .allow_origin(Any) // todo: allow_originを制限する
                 .allow_headers([CONTENT_TYPE, AUTHORIZATION])
                 .expose_headers([LOCATION, SET_COOKIE]),
-        );
+        )
+        .with_state(shared_repository.to_owned());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], HTTP.port.parse().unwrap()));
 

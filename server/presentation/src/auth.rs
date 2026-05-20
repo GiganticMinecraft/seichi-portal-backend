@@ -21,7 +21,7 @@ pub async fn auth(
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, Response> {
-    let ignore_auth_paths = ["/session", "/health"];
+    let ignore_auth_paths = ["/api/v1/session", "/health"];
     let ignore_auth_path_prefixes = ["/swagger-ui", "/api-docs"];
     if ignore_auth_paths.contains(&request.uri().path())
         || ignore_auth_path_prefixes
