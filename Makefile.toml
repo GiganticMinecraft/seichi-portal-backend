@@ -14,6 +14,19 @@ args = [
 command = "cargo"
 args = ["run", "--package", "entrypoint"]
 
+[tasks.generate-openapi]
+command = "cargo"
+args = ["run", "--package", "entrypoint", "--bin", "generate-openapi"]
+
+[tasks.check-openapi-tracked]
+command = "git"
+args = ["ls-files", "--error-unmatch", "docs/openapi.json"]
+
+[tasks.check-openapi]
+dependencies = ["generate-openapi", "check-openapi-tracked"]
+command = "git"
+args = ["diff", "--exit-code", "--", "docs/openapi.json"]
+
 [tasks.up]
 dependencies = ["up-db", "run-server"]
 
