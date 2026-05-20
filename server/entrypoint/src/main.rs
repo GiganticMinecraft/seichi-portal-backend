@@ -12,6 +12,7 @@ use axum::{
 };
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
+use entrypoint::openapi;
 use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
@@ -35,82 +36,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use usecase::notification::discord_dm_notificator_impl::DiscordDMNotificatorImpl;
-use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
-use utoipa::{Modify, OpenApi};
-use utoipa_axum::router::OpenApiRouter;
-use utoipa_axum::routes;
 use utoipa_swagger_ui::SwaggerUi;
-
-#[derive(OpenApi)]
-#[openapi(
-    paths(
-        presentation::handlers::form::message_handler::post_message_handler,
-    ),
-    info(title = "Seichi Portal API", version = "1.0.0"),
-    components(schemas(
-        presentation::schemas::error_response::ErrorResponse,
-        presentation::schemas::user::UserInfoResponse,
-        presentation::schemas::user::UserSchema,
-        presentation::schemas::form::form_response_schemas::AnswerComment,
-        presentation::schemas::form::form_response_schemas::AnswerContent,
-        presentation::schemas::form::form_response_schemas::AnswerLabels,
-        presentation::schemas::form::form_response_schemas::AnswerLabelResponseSchema,
-        presentation::schemas::form::form_response_schemas::AnswerSettingsSchema,
-        presentation::schemas::form::form_response_schemas::AnswerVisibility,
-        presentation::schemas::form::form_response_schemas::ArchivedFormSchema,
-        presentation::schemas::form::form_response_schemas::FormAnswer,
-        presentation::schemas::form::form_response_schemas::FormLabelResponseSchema,
-        presentation::schemas::form::form_response_schemas::FormMetaSchema,
-        presentation::schemas::form::form_response_schemas::FormSchema,
-        presentation::schemas::form::form_response_schemas::FormSettingsSchema,
-        presentation::schemas::form::form_response_schemas::MessageContentSchema,
-        presentation::schemas::form::form_response_schemas::ChoiceResponseSchema,
-        presentation::schemas::form::form_response_schemas::QuestionDefinitionResponseSchema,
-        presentation::schemas::form::form_response_schemas::QuestionResponseSchema,
-        presentation::schemas::form::form_response_schemas::SelectQuestionResponseSchema,
-        presentation::schemas::form::form_response_schemas::TextQuestionResponseSchema,
-        presentation::schemas::form::form_request_schemas::ChoiceSchema,
-        presentation::schemas::form::form_request_schemas::QuestionDefinitionSchema,
-        presentation::schemas::form::form_request_schemas::QuestionSchema,
-        presentation::schemas::form::form_request_schemas::SelectQuestionSchema,
-        presentation::schemas::form::form_request_schemas::TextQuestionSchema,
-        presentation::schemas::form::form_response_schemas::ResponsePeriodSchema,
-        presentation::schemas::form::form_response_schemas::Role,
-        presentation::schemas::form::form_response_schemas::SenderSchema,
-        presentation::schemas::form::form_response_schemas::User,
-        presentation::schemas::notification::notification_response_schemas::NotificationSettingsResponse,
-        presentation::schemas::search_schemas::CommentSchema,
-        presentation::schemas::search_schemas::CrossSearchResult,
-    )),
-    modifiers(&SecurityAddon),
-    tags(
-        (name = "Forms"),
-        (name = "Archived Forms"),
-        (name = "Answers"),
-        (name = "Comments"),
-        (name = "Labels"),
-        (name = "Messages"),
-        (name = "Users"),
-        (name = "Search"),
-        (name = "Notifications"),
-        (name = "Session"),
-        (name = "Health"),
-    )
-)]
-struct ApiDoc;
-
-struct SecurityAddon;
-
-impl Modify for SecurityAddon {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        if let Some(components) = openapi.components.as_mut() {
-            components.add_security_scheme(
-                "bearer",
-                SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).build()),
-            );
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -167,90 +93,10 @@ async fn main() -> anyhow::Result<()> {
     let notificator_impl = DiscordDMNotificatorImpl::new();
     let notification_api = NotificationAPIImpl::new(discord_sender, notificator_impl);
 
-    use presentation::handlers::form::{
-        answer_handler, answer_label_handler, comment_handler, form_handler, form_label_handler,
-        message_handler,
-    };
-    use presentation::handlers::{
-        health_check_handler, notification_handler, search_handler, user_handler,
-    };
+    use presentation::handlers::health_check_handler;
 
-    let api_router = OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .routes(routes!(
-            form_handler::create_form_handler,
-            form_handler::form_list_handler
-        ))
-        .routes(routes!(
-            form_handler::get_form_handler,
-            form_handler::update_form_handler
-        ))
-        .routes(routes!(form_handler::archive_form_handler))
-        .routes(routes!(form_handler::archived_form_list_handler))
-        .routes(routes!(form_handler::get_archived_form_handler))
-        .routes(routes!(form_handler::restore_archived_form_handler))
-        .routes(routes!(
-            answer_handler::get_answer_by_form_id_handler,
-            answer_handler::post_answer_handler
-        ))
-        .routes(routes!(answer_handler::get_all_answers))
-        .routes(routes!(
-            answer_label_handler::get_labels_for_answers,
-            answer_label_handler::create_label_for_answers
-        ))
-        .routes(routes!(
-            answer_label_handler::delete_label_for_answers,
-            answer_label_handler::edit_label_for_answers
-        ))
-        .routes(routes!(
-            form_label_handler::get_labels_for_forms,
-            form_label_handler::create_label_for_forms
-        ))
-        .routes(routes!(
-            form_label_handler::delete_label_for_forms,
-            form_label_handler::edit_label_for_forms
-        ))
-        .routes(routes!(
-            answer_handler::get_answer_handler,
-            answer_handler::update_answer_handler
-        ))
-        .routes(routes!(answer_label_handler::replace_answer_labels))
-        .routes(routes!(
-            comment_handler::get_form_comment,
-            comment_handler::post_form_comment
-        ))
-        .routes(routes!(
-            comment_handler::update_form_comment,
-            comment_handler::delete_form_comment_handler
-        ))
-        .routes(routes!(
-            user_handler::get_user_info,
-            user_handler::patch_user_role
-        ))
-        .routes(routes!(user_handler::get_my_user_info))
-        .routes(routes!(user_handler::user_list))
-        .routes(routes!(search_handler::cross_search))
-        .routes(routes!(message_handler::get_messages_handler))
-        .routes(routes!(
-            message_handler::update_message_handler,
-            message_handler::delete_message_handler
-        ))
-        .routes(routes!(notification_handler::get_notification_settings))
-        .routes(routes!(
-            notification_handler::get_my_notification_settings,
-            notification_handler::update_notification_settings
-        ))
-        .routes(routes!(
-            user_handler::start_session,
-            user_handler::end_session
-        ))
-        .routes(routes!(
-            user_handler::link_discord,
-            user_handler::unlink_discord
-        ))
-        .with_state(shared_repository.to_owned());
-
-    let (versioned_api_router, openapi) = OpenApiRouter::new()
-        .nest("/api/v1", api_router)
+    let (versioned_api_router, openapi) = openapi::versioned_api_router()
+        .with_state(shared_repository.to_owned())
         .split_for_parts();
 
     // post_message_handler uses a different State type, so register it separately

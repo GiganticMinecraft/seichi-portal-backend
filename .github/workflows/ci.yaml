@@ -66,6 +66,12 @@ jobs:
       - name: Cargo build
         run: cargo build
 
+      - name: Check OpenAPI document
+        run: |
+          cargo run --package entrypoint --bin generate-openapi
+          git ls-files --error-unmatch docs/openapi.json
+          git diff --exit-code -- docs/openapi.json
+
       - uses: LoliGothick/clippy-check@v0.3.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
