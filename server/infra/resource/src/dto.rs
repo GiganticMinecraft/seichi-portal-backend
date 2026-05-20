@@ -157,7 +157,7 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
                 visibility.try_into()?,
                 answer_visibility.try_into()?,
             ),
-            QuestionSet::try_new(questions).map_err(errors::Error::from)?,
+            QuestionSet::try_new(questions)?,
             FormLabelIdSet::try_new(label_ids)?,
         ))
     }
