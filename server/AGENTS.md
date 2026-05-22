@@ -19,8 +19,10 @@ OK 例:
 
 ```rust
 use axum::{extract::State, response::IntoResponse};
-use domain::form::models::FormId;
 use uuid::Uuid;
+
+use crate::server::AppState;
+use domain::form::models::FormId;
 
 async fn handle(state: State<AppState>) -> impl IntoResponse {
     let id = FormId::new(Uuid::new_v4());
@@ -99,7 +101,7 @@ pub fn change_title(self, title: Title) -> Self {
 // OK
 items
     .into_iter()
-    .map(|guard| guard.try_into_read(actor))
+    .map(|item| item.try_into_read(&actor))
     .collect::<Result<Vec<_>, _>>()
     .map_err(Into::into)
 ```
