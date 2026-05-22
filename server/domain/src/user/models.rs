@@ -27,18 +27,6 @@ pub struct UserId(
     Uuid,
 );
 
-impl UserId {
-    pub fn new_v4() -> Self {
-        Self(Uuid::new_v4())
-    }
-}
-
-impl Default for UserId {
-    fn default() -> Self {
-        Self(Uuid::nil())
-    }
-}
-
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {

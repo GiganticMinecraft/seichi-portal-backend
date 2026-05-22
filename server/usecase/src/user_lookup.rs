@@ -29,15 +29,15 @@ pub(crate) async fn find_users<R: UserRepository + ?Sized>(
 
     let uuids = user_ids
         .into_iter()
-        .map(|id| id.into_inner())
+        .map(UserId::into_inner)
         .collect::<Vec<_>>();
 
-    let guards = repo.find_by_ids(uuids).await?;
-
-    let mut map = HashMap::with_capacity(guards.len());
-    for guard in guards {
-        let user = guard.try_into_read(actor)?;
-        map.insert(user.id, user);
-    }
-    Ok(map)
+    repo.find_by_ids(uuids)
+        .await?
+        .into_iter()
+        .map(|guard| {
+            let user = guard.try_into_read(actor)?;
+            Ok((user.id, user))
+        })
+        .collect()
 }
