@@ -24,6 +24,20 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         Ok(self.client.user().find_by(uuid).await?.map(Into::into))
     }
 
+    async fn find_by_ids(
+        &self,
+        uuids: Vec<Uuid>,
+    ) -> Result<Vec<AuthorizationGuard<User, Read>>, Error> {
+        Ok(self
+            .client
+            .user()
+            .find_by_ids(uuids)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
+    }
+
     async fn upsert_user(
         &self,
         actor: &User,

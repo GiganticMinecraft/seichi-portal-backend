@@ -28,14 +28,14 @@ pub struct UserId(
 );
 
 impl UserId {
-    pub fn new() -> Self {
+    pub fn new_v4() -> Self {
         Self(Uuid::new_v4())
     }
 }
 
 impl Default for UserId {
     fn default() -> Self {
-        Self::new()
+        Self(Uuid::nil())
     }
 }
 

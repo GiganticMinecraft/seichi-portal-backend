@@ -23,7 +23,10 @@ use errors::{
 };
 use futures::{StreamExt, stream, try_join};
 
-use crate::dto::{AnswerDto, CommentDto};
+use crate::{
+    dto::{AnswerDto, CommentDto},
+    user_lookup::find_users,
+};
 
 pub struct AnswerUseCase<
     'a,
@@ -48,19 +51,6 @@ impl<
     R5: UserRepository,
 > AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
-    async fn find_user(
-        &self,
-        actor: &User,
-        user_id: domain::user::models::UserId,
-    ) -> Result<User, Error> {
-        self.user_repository
-            .find_by(user_id.into_inner())
-            .await?
-            .ok_or(Error::from(UserNotFound))?
-            .try_into_read(actor)
-            .map_err(Into::into)
-    }
-
     async fn build_answer_dto(
         &self,
         actor: &User,
@@ -68,18 +58,31 @@ impl<
         labels: Vec<domain::form::answer::models::AnswerLabel>,
         comments: Vec<domain::form::comment::models::Comment>,
     ) -> Result<AnswerDto, Error> {
-        let user = self.find_user(actor, *form_answer.user_id()).await?;
-        let comments = stream::iter(comments)
-            .then(|comment| async move {
-                let commented_by = self.find_user(actor, *comment.commented_by()).await?;
+        let mut user_ids = Vec::with_capacity(1 + comments.len());
+        user_ids.push(*form_answer.user_id());
+        for comment in &comments {
+            user_ids.push(*comment.commented_by());
+        }
+
+        let users = find_users(self.user_repository, actor, user_ids).await?;
+
+        let user = users
+            .get(form_answer.user_id())
+            .cloned()
+            .ok_or(Error::from(UserNotFound))?;
+
+        let comments = comments
+            .into_iter()
+            .map(|comment| {
+                let commented_by = users
+                    .get(comment.commented_by())
+                    .cloned()
+                    .ok_or(Error::from(UserNotFound))?;
                 Ok::<_, Error>(CommentDto {
                     comment,
                     commented_by,
                 })
             })
-            .collect::<Vec<Result<CommentDto, Error>>>()
-            .await
-            .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(AnswerDto {

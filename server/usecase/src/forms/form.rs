@@ -20,12 +20,15 @@ use domain::{
 use errors::{
     Error,
     domain::DomainError,
-    usecase::UseCaseError::{FormNotFound, LabelNotFound, UserNotFound},
+    usecase::UseCaseError::{FormNotFound, LabelNotFound},
 };
 use std::collections::{BTreeSet, HashMap};
 use types::non_empty_vec::NonEmptyVec;
 
-use crate::dto::{ActiveFormDto, ArchivedFormDto, UpsertQuestionDto};
+use crate::{
+    dto::{ActiveFormDto, ArchivedFormDto, UpsertQuestionDto},
+    user_lookup::find_user,
+};
 
 pub struct FormUseCase<
     'a,
@@ -53,19 +56,6 @@ impl<
     R6: UserRepository,
 > FormUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
-    async fn find_user(
-        &self,
-        actor: &User,
-        user_id: domain::user::models::UserId,
-    ) -> Result<User, Error> {
-        self.user_repository
-            .find_by(user_id.into_inner())
-            .await?
-            .ok_or(Error::from(UserNotFound))?
-            .try_into_read(actor)
-            .map_err(Into::into)
-    }
-
     pub async fn create_form(
         &self,
         title: FormTitle,
@@ -172,7 +162,8 @@ impl<
             .into_iter()
             .zip(form_labels)
             .map(|(form, labels)| async move {
-                let archived_by = self.find_user(actor, *form.archived_by()).await?;
+                let archived_by =
+                    find_user(self.user_repository, actor, *form.archived_by()).await?;
                 Ok::<_, Error>(ArchivedFormDto {
                     archived_by,
                     form,
@@ -206,7 +197,7 @@ impl<
             .map(|label| label.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let archived_by = self.find_user(actor, *form.archived_by()).await?;
+        let archived_by = find_user(self.user_repository, actor, *form.archived_by()).await?;
 
         Ok(ArchivedFormDto {
             form,

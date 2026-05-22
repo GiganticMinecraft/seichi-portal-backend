@@ -21,7 +21,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound, UserNotFound},
 };
 
-use crate::dto::CommentDto;
+use crate::{dto::CommentDto, user_lookup::find_users};
 
 pub struct CommentUseCase<
     'a,
@@ -39,19 +39,27 @@ pub struct CommentUseCase<
 impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: UserRepository>
     CommentUseCase<'_, R1, R2, R3, R4>
 {
-    async fn build_comment_dto(&self, actor: &User, comment: Comment) -> Result<CommentDto, Error> {
-        let commented_by = self
-            .user_repository
-            .find_by(comment.commented_by().into_inner())
-            .await?
-            .ok_or(Error::from(UserNotFound))?
-            .try_into_read(actor)?
-            .to_owned();
+    async fn build_comment_dtos(
+        &self,
+        actor: &User,
+        comments: Vec<Comment>,
+    ) -> Result<Vec<CommentDto>, Error> {
+        let user_ids = comments.iter().map(|c| *c.commented_by()).collect();
+        let users = find_users(self.user_repository, actor, user_ids).await?;
 
-        Ok(CommentDto {
-            comment,
-            commented_by,
-        })
+        comments
+            .into_iter()
+            .map(|comment| {
+                let commented_by = users
+                    .get(comment.commented_by())
+                    .cloned()
+                    .ok_or(Error::from(UserNotFound))?;
+                Ok(CommentDto {
+                    comment,
+                    commented_by,
+                })
+            })
+            .collect()
     }
 
     pub async fn get_comments(
@@ -94,12 +102,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             .collect::<Result<Vec<_>, _>>()
             .map_err(Error::from)?;
 
-        futures::future::try_join_all(
-            comments
-                .into_iter()
-                .map(|comment| self.build_comment_dto(actor, comment)),
-        )
-        .await
+        self.build_comment_dtos(actor, comments).await
     }
 
     pub async fn post_comment(

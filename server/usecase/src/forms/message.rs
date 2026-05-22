@@ -32,7 +32,10 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound, UserNotFound},
 };
 
-use crate::dto::MessageDto;
+use crate::{
+    dto::MessageDto,
+    user_lookup::{find_user, find_users},
+};
 
 pub struct MessageUseCase<
     'a,
@@ -93,13 +96,8 @@ impl<
         match Message::try_new(answer_id, actor.id, message_body) {
             Ok(message) => {
                 let notification_recipient_id = *form_answer.user_id();
-                let notification_recipient = self
-                    .user_repository
-                    .find_by(notification_recipient_id.into_inner())
-                    .await?
-                    .ok_or(Error::from(UserNotFound))?
-                    .try_into_read(actor)?
-                    .to_owned();
+                let notification_recipient =
+                    find_user(self.user_repository, actor, notification_recipient_id).await?;
 
                 let message_sender_id = *message.sender_id();
                 let message_context = MessageAuthorizationContext {
@@ -212,18 +210,19 @@ impl<
             .collect::<Result<Vec<_>, _>>()
             .map_err(Error::from)?;
 
-        futures::future::try_join_all(messages.into_iter().map(|message| async move {
-            let sender = self
-                .user_repository
-                .find_by(message.sender_id().into_inner())
-                .await?
-                .ok_or(Error::from(UserNotFound))?
-                .try_into_read(actor)?
-                .to_owned();
+        let sender_ids = messages.iter().map(|m| *m.sender_id()).collect();
+        let senders = find_users(self.user_repository, actor, sender_ids).await?;
 
-            Ok::<_, Error>(MessageDto { message, sender })
-        }))
-        .await
+        messages
+            .into_iter()
+            .map(|message| {
+                let sender = senders
+                    .get(message.sender_id())
+                    .cloned()
+                    .ok_or(Error::from(UserNotFound))?;
+                Ok(MessageDto { message, sender })
+            })
+            .collect()
     }
 
     pub async fn update_message_body(

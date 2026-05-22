@@ -15,6 +15,10 @@ use crate::{
 #[async_trait]
 pub trait UserRepository: Send + Sync + 'static {
     async fn find_by(&self, uuid: Uuid) -> Result<Option<AuthorizationGuard<User, Read>>, Error>;
+    async fn find_by_ids(
+        &self,
+        uuids: Vec<Uuid>,
+    ) -> Result<Vec<AuthorizationGuard<User, Read>>, Error>;
     async fn upsert_user(
         &self,
         actor: &User,

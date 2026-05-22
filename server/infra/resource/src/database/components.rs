@@ -176,6 +176,7 @@ pub trait FormLabelDatabase: Send + Sync {
 #[async_trait]
 pub trait UserDatabase: Send + Sync {
     async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, InfraError>;
+    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<User>, InfraError>;
     async fn upsert_user(&self, user: &User) -> Result<(), InfraError>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
     async fn fetch_all_users(&self) -> Result<Vec<User>, InfraError>;
