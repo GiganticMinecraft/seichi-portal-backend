@@ -27,6 +27,10 @@ dependencies = ["generate-openapi", "check-openapi-tracked"]
 command = "git"
 args = ["diff", "--exit-code", "--", "docs/openapi.json"]
 
+[tasks.db]
+command = "docker"
+args = ["exec", "-it", "mariadb", "mariadb", "-uuser", "-ppassword", "seichi_portal"]
+
 [tasks.up]
 dependencies = ["up-db", "run-server"]
 
