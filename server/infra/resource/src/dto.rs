@@ -178,12 +178,9 @@ impl TryFrom<ArchivedFormDto> for ArchivedForm {
         Ok(ArchivedForm::from_persisted(
             value.form.try_into()?,
             value.archived_at,
-            UserDto {
-                name: value.archived_by_name,
-                id: value.archived_by_id,
-                role: value.archived_by_role,
-            }
-            .try_into()?,
+            Uuid::from_str(&value.archived_by_id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
         ))
     }
 }
@@ -225,7 +222,7 @@ impl TryFrom<UserDto> for User {
     fn try_from(UserDto { name, id, role }: UserDto) -> Result<Self, Self::Error> {
         Ok(User {
             name,
-            id: Uuid::from_str(&id)?,
+            id: Uuid::from_str(&id)?.into(),
             role,
         })
     }
@@ -250,9 +247,9 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
             comment_id,
             content,
             timestamp,
-            commented_by_name,
+            commented_by_name: _,
             commented_by_id,
-            commented_by_role,
+            commented_by_role: _,
         }: CommentDto,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::comment::models::Comment::from_raw_parts(
@@ -264,12 +261,9 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
                 .into(),
             CommentContent::new(content.try_into()?),
             timestamp,
-            UserDto {
-                name: commented_by_name,
-                id: commented_by_id,
-                role: Role::from_str(&commented_by_role).map_err(Into::<InfraError>::into)?,
-            }
-            .try_into()?,
+            Uuid::from_str(&commented_by_id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
         ))
     }
 }
@@ -318,9 +312,9 @@ impl TryFrom<FormAnswerDto> for AnswerEntry {
     fn try_from(
         FormAnswerDto {
             id,
-            user_name,
+            user_name: _,
             uuid,
-            user_role,
+            user_role: _,
             timestamp,
             form_id,
             title,
@@ -332,11 +326,9 @@ impl TryFrom<FormAnswerDto> for AnswerEntry {
                 Uuid::from_str(&id)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
-                User {
-                    name: user_name,
-                    id: Uuid::from_str(&uuid).map_err(Into::<InfraError>::into)?,
-                    role: user_role,
-                },
+                Uuid::from_str(&uuid)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
                 timestamp,
                 FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
@@ -402,9 +394,9 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
         MessageDto {
             id,
             related_answer,
-            sender_name,
+            sender_name: _,
             sender_id,
-            sender_role,
+            sender_role: _,
             body,
             timestamp,
         }: MessageDto,
@@ -417,12 +409,9 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
                 Uuid::from_str(&related_answer)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
-                UserDto {
-                    name: sender_name,
-                    id: sender_id,
-                    role: Role::from_str(&sender_role).map_err(Into::<InfraError>::into)?,
-                }
-                .try_into()?,
+                Uuid::from_str(&sender_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
                 body,
                 timestamp,
             ))
@@ -446,7 +435,9 @@ impl TryFrom<NotificationSettingsDto> for domain::notification::models::Notifica
     ) -> Result<Self, Self::Error> {
         Ok(
             domain::notification::models::NotificationPreference::from_raw_parts(
-                recipient.try_into()?,
+                Uuid::from_str(&recipient.id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
                 is_send_message_notification,
             ),
         )

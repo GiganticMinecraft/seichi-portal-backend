@@ -368,7 +368,7 @@ impl<
                                 (
                                     domain::search::models::SearchableFields::Users(
                                         domain::search::models::Users {
-                                            id: user.id,
+                                            id: user.id.into_inner(),
                                             name: user.name,
                                         },
                                     ),

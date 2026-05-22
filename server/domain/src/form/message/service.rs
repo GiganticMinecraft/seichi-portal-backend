@@ -33,12 +33,12 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let respondent = User {
     ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -46,20 +46,20 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let unrelated_standard_user = User {
     ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -79,8 +79,8 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
         }
 
         actor.role == Administrator
-            || (actor.id == self.sender().id
-                && context.related_answer_entry.user().id == self.sender().id)
+            || (actor.id == *self.sender_id()
+                && context.related_answer_entry.user_id() == self.sender_id())
     }
 
     /// [`Message`] の読み取り権限があるかどうかを判定します。
@@ -106,12 +106,12 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let respondent = User {
     ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -119,20 +119,20 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let unrelated_standard_user = User {
     ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -151,7 +151,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
             return false;
         }
 
-        actor.role == Administrator || context.related_answer_entry.user().id == actor.id
+        actor.role == Administrator || context.related_answer_entry.user_id() == &actor.id
     }
 
     /// [`Message`] の更新権限があるかどうかを判定します。
@@ -179,12 +179,12 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let respondent = User {
     ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -192,20 +192,20 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let unrelated_standard_user = User {
     ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -218,7 +218,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(!message.can_update(&unrelated_standard_user, &context));
     /// ```
     fn can_update(&self, actor: &User, _context: &MessageAuthorizationContext) -> bool {
-        self.sender().id == actor.id
+        self.sender_id() == &actor.id
     }
 
     /// [`Message`] の削除権限があるかどうかを判定します。
@@ -246,12 +246,12 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let respondent = User {
     ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -259,20 +259,20 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.to_owned(),
+    ///     respondent.id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let unrelated_standard_user = User {
     ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -285,6 +285,6 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(!message.can_delete(&unrelated_standard_user, &context));
     /// ```
     fn can_delete(&self, actor: &User, _context: &MessageAuthorizationContext) -> bool {
-        self.sender().id == actor.id
+        self.sender_id() == &actor.id
     }
 }

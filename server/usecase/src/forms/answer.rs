@@ -13,16 +13,17 @@ use domain::{
         answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
         comment_repository::CommentRepository,
     },
+    repository::user_repository::UserRepository,
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
     user::models::User,
 };
 use errors::{
     Error,
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound, UserNotFound},
 };
 use futures::{StreamExt, stream, try_join};
 
-use crate::dto::AnswerDto;
+use crate::dto::{AnswerDto, CommentDto};
 
 pub struct AnswerUseCase<
     'a,
@@ -30,11 +31,13 @@ pub struct AnswerUseCase<
     FormRepo: ActiveFormRepository,
     CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
+    UserRepo: UserRepository,
 > {
     pub answer_repository: &'a AnswerRepo,
     pub active_form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
+    pub user_repository: &'a UserRepo,
 }
 
 impl<
@@ -42,8 +45,51 @@ impl<
     R2: ActiveFormRepository,
     R3: CommentRepository,
     R4: AnswerLabelRepository,
-> AnswerUseCase<'_, R1, R2, R3, R4>
+    R5: UserRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
+    async fn find_user(
+        &self,
+        actor: &User,
+        user_id: domain::user::models::UserId,
+    ) -> Result<User, Error> {
+        self.user_repository
+            .find_by(user_id.into_inner())
+            .await?
+            .ok_or(Error::from(UserNotFound))?
+            .try_into_read(actor)
+            .map_err(Into::into)
+    }
+
+    async fn build_answer_dto(
+        &self,
+        actor: &User,
+        form_answer: AnswerEntry,
+        labels: Vec<domain::form::answer::models::AnswerLabel>,
+        comments: Vec<domain::form::comment::models::Comment>,
+    ) -> Result<AnswerDto, Error> {
+        let user = self.find_user(actor, *form_answer.user_id()).await?;
+        let comments = stream::iter(comments)
+            .then(|comment| async move {
+                let commented_by = self.find_user(actor, *comment.commented_by()).await?;
+                Ok::<_, Error>(CommentDto {
+                    comment,
+                    commented_by,
+                })
+            })
+            .collect::<Vec<Result<CommentDto, Error>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(AnswerDto {
+            form_answer,
+            user,
+            labels,
+            comments,
+        })
+    }
+
     pub async fn post_answers(
         &self,
         user: User,
@@ -69,7 +115,7 @@ impl<
 
         let form_settings = form.settings();
 
-        let answer_entry = AnswerEntry::new(user.to_owned(), form_id, title, posted_answers);
+        let answer_entry = AnswerEntry::new(user.id, form_id, title, posted_answers);
         let context = AnswerEntryAuthorizationContext {
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
@@ -134,11 +180,8 @@ impl<
                 .map(|label| label.try_into_read(user))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Ok(AnswerDto {
-                form_answer,
-                labels,
-                comments,
-            })
+            self.build_answer_dto(user, form_answer, labels, comments)
+                .await
         } else {
             Err(Error::from(AnswerNotFound))
         }
@@ -204,11 +247,8 @@ impl<
                 .map(|label| label.try_into_read(actor))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Ok(AnswerDto {
-                form_answer,
-                labels,
-                comments,
-            })
+            self.build_answer_dto(actor, form_answer, labels, comments)
+                .await
         })
         .collect::<Vec<Result<AnswerDto, Error>>>()
         .await
@@ -278,11 +318,8 @@ impl<
                     .map(|label| label.try_into_read(user))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                Ok(AnswerDto {
-                    form_answer,
-                    labels,
-                    comments,
-                })
+                self.build_answer_dto(user, form_answer, labels, comments)
+                    .await
             })
             .collect::<Vec<Result<AnswerDto, Error>>>()
             .await
@@ -354,15 +391,14 @@ impl<
             .map(|comment| comment.try_into_read(actor, &comment_authorization_context))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(AnswerDto {
-            form_answer: comment_authorization_context
-                .related_answer_entry_guard
-                .try_into_read(
-                    actor,
-                    &comment_authorization_context.related_answer_entry_guard_context,
-                )?,
-            labels,
-            comments,
-        })
+        let form_answer = comment_authorization_context
+            .related_answer_entry_guard
+            .try_into_read(
+                actor,
+                &comment_authorization_context.related_answer_entry_guard_context,
+            )?;
+
+        self.build_answer_dto(actor, form_answer, labels, comments)
+            .await
     }
 }

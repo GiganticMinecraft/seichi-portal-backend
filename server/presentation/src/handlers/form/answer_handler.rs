@@ -106,6 +106,7 @@ pub async fn get_all_answers(
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        user_repository: repository.user_repository(),
     };
 
     let answers = form_answer_use_case
@@ -119,6 +120,7 @@ pub async fn get_all_answers(
             .map(|answer_dto| {
                 FormAnswer::new(
                     answer_dto.form_answer,
+                    answer_dto.user,
                     answer_dto.comments,
                     answer_dto.labels,
                 )
@@ -157,6 +159,7 @@ pub async fn get_answer_handler(
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        user_repository: repository.user_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -168,6 +171,7 @@ pub async fn get_answer_handler(
 
     Ok(GetAnswerResponse::Ok(FormAnswer::new(
         answer_dto.form_answer,
+        answer_dto.user,
         answer_dto.comments,
         answer_dto.labels,
     )))
@@ -202,6 +206,7 @@ pub async fn get_answer_by_form_id_handler(
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        user_repository: repository.user_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -217,6 +222,7 @@ pub async fn get_answer_by_form_id_handler(
             .map(|answer_dto| {
                 FormAnswer::new(
                     answer_dto.form_answer,
+                    answer_dto.user,
                     answer_dto.comments,
                     answer_dto.labels,
                 )
@@ -256,6 +262,7 @@ pub async fn post_answer_handler(
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        user_repository: repository.user_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -311,6 +318,7 @@ pub async fn update_answer_handler(
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
+        user_repository: repository.user_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -323,6 +331,7 @@ pub async fn update_answer_handler(
 
     Ok(UpdateAnswerResponse::Ok(FormAnswer::new(
         answer_dto.form_answer,
+        answer_dto.user,
         answer_dto.comments,
         answer_dto.labels,
     )))

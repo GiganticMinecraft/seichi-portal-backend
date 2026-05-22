@@ -91,7 +91,7 @@ pub async fn get_my_user_info(
     };
 
     let user_dto = user_use_case
-        .fetch_user_information(&user, user.id)
+        .fetch_user_information(&user, user.id.into_inner())
         .await
         .map_err(handle_error)?;
     let discord_user_id_with_name = user_dto.discord_user.map(|user| {

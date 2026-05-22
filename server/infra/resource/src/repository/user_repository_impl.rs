@@ -42,7 +42,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         user.try_update(actor, |user| {
             self.client
                 .user()
-                .patch_user_role(user.id, user.role.to_owned())
+                .patch_user_role(user.id.into_inner(), user.role.to_owned())
         })?
         .await
         .map_err(Into::into)

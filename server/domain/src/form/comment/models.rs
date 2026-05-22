@@ -4,7 +4,7 @@ use deriving_via::DerivingVia;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
-use crate::{form::answer::models::AnswerId, user::models::User};
+use crate::{form::answer::models::AnswerId, user::models::UserId};
 
 pub type CommentId = types::Id<Comment>;
 
@@ -24,11 +24,11 @@ pub struct Comment {
     comment_id: CommentId,
     content: CommentContent,
     timestamp: DateTime<Utc>,
-    commented_by: User,
+    commented_by: UserId,
 }
 
 impl Comment {
-    pub fn new(answer_id: AnswerId, content: CommentContent, commented_by: User) -> Self {
+    pub fn new(answer_id: AnswerId, content: CommentContent, commented_by: UserId) -> Self {
         Self {
             answer_id,
             comment_id: CommentId::new(),
@@ -47,7 +47,7 @@ impl Comment {
         comment_id: CommentId,
         content: CommentContent,
         timestamp: DateTime<Utc>,
-        commented_by: User,
+        commented_by: UserId,
     ) -> Self {
         Self {
             answer_id,

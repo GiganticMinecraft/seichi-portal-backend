@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use errors::domain::DomainError;
 
-use crate::{form::answer::models::AnswerId, user::models::User};
+use crate::{form::answer::models::AnswerId, user::models::UserId};
 
 pub type MessageId = types::Id<Message>;
 
@@ -10,7 +10,7 @@ pub type MessageId = types::Id<Message>;
 pub struct Message {
     id: MessageId,
     related_answer_id: AnswerId,
-    sender: User,
+    sender_id: UserId,
     body: String,
     timestamp: DateTime<Utc>,
 }
@@ -34,12 +34,12 @@ impl Message {
     ///
     /// let user = User {
     ///     name: "user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     user.to_owned(),
+    ///     user.id,
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -47,24 +47,24 @@ impl Message {
     ///
     /// let success_message = Message::try_new(
     ///     *related_answer.id(),
-    ///     user.to_owned(),
+    ///     user.id,
     ///     "test message".to_string(),
     /// );
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     user.to_owned(),
+    ///     user.id,
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
-    /// let message_with_empty_body = Message::try_new(*related_answer.id(), user, "".to_string());
+    /// let message_with_empty_body = Message::try_new(*related_answer.id(), user.id, "".to_string());
     ///
     /// assert!(success_message.is_ok());
     /// assert!(message_with_empty_body.is_err());
     /// ```
     pub fn try_new(
         related_answer_id: AnswerId,
-        sender: User,
+        sender_id: UserId,
         body: String,
     ) -> Result<Self, DomainError> {
         if body.is_empty() {
@@ -74,7 +74,7 @@ impl Message {
         Ok(Self {
             id: MessageId::new(),
             related_answer_id,
-            sender,
+            sender_id,
             body,
             timestamp: Utc::now(),
         })
@@ -96,12 +96,12 @@ impl Message {
     ///
     /// let user = User {
     ///     name: "user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     user.to_owned(),
+    ///     user.id,
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -111,7 +111,7 @@ impl Message {
     ///     let message = Message::from_raw_parts(
     ///         MessageId::new(),
     ///         *related_answer.id(),
-    ///         user,
+    ///         user.id,
     ///         "test message".to_string(),
     ///         Utc::now(),
     ///     );
@@ -125,14 +125,14 @@ impl Message {
     pub unsafe fn from_raw_parts(
         id: MessageId,
         related_answer_id: AnswerId,
-        sender: User,
+        sender_id: UserId,
         body: String,
         timestamp: DateTime<Utc>,
     ) -> Self {
         Self {
             id,
             related_answer_id,
-            sender,
+            sender_id,
             body,
             timestamp,
         }

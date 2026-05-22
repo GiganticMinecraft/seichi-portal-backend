@@ -199,15 +199,15 @@ pub async fn get_messages_handler(
     Ok(GetMessagesResponse::Ok(
         messages
             .into_iter()
-            .map(|message| MessageContentSchema {
-                id: message.id().into_inner(),
-                body: message.body().to_owned(),
+            .map(|message_dto| MessageContentSchema {
+                id: message_dto.message.id().into_inner(),
+                body: message_dto.message.body().to_owned(),
                 sender: SenderSchema {
-                    uuid: message.sender().id.to_string(),
-                    name: message.sender().name.to_owned(),
-                    role: message.sender().role.to_string(),
+                    uuid: message_dto.sender.id.to_string(),
+                    name: message_dto.sender.name,
+                    role: message_dto.sender.role.to_string(),
                 },
-                timestamp: message.timestamp().to_owned(),
+                timestamp: message_dto.message.timestamp().to_owned(),
             })
             .collect_vec(),
     ))

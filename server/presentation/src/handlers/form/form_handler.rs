@@ -137,6 +137,7 @@ type ResourceFormUseCase<'a> = FormUseCase<
     ResourceRepository,
     ResourceRepository,
     ResourceRepository,
+    ResourceRepository,
 >;
 
 fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFormUseCase<'_> {
@@ -146,12 +147,14 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
         notification_repository: repository.notification_repository(),
         form_label_repository: repository.form_label_repository(),
         answer_repository: repository.form_answer_repository(),
+        user_repository: repository.user_repository(),
     }
 }
 
 fn archived_form_schema_from_parts(
     user: &User,
     form: domain::form::models::ArchivedForm,
+    archived_by: User,
     labels: Vec<domain::form::models::FormLabel>,
 ) -> ArchivedFormSchema {
     ArchivedFormSchema {
@@ -161,7 +164,7 @@ fn archived_form_schema_from_parts(
         settings: FormSettingsSchema::from_settings_ref(user, form.form().settings()),
         metadata: FormMetaSchema::from_meta_ref(form.form().metadata()),
         archived_at: *form.archived_at(),
-        archived_by: form.archived_by().clone(),
+        archived_by,
         questions: form
             .form()
             .questions()
@@ -365,6 +368,7 @@ pub async fn archive_form_handler(
         Json(archived_form_schema_from_parts(
             &user,
             archived_form,
+            user.clone(),
             vec![],
         )),
     )
@@ -514,7 +518,9 @@ pub async fn archived_form_list_handler(
     Ok(ArchivedFormListResponse::Ok(
         forms
             .into_iter()
-            .map(|(form, labels)| archived_form_schema_from_parts(&user, form, labels))
+            .map(|dto| {
+                archived_form_schema_from_parts(&user, dto.form, dto.archived_by, dto.labels)
+            })
             .collect(),
     ))
 }
@@ -545,13 +551,20 @@ pub async fn get_archived_form_handler(
     let form_use_case = build_form_use_case(&repository);
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    let ArchivedFormDto { form, labels } = form_use_case
+    let ArchivedFormDto {
+        form,
+        archived_by,
+        labels,
+    } = form_use_case
         .get_archived_form(&user, form_id)
         .await
         .map_err(handle_error)?;
 
     Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
-        &user, form, labels,
+        &user,
+        form,
+        archived_by,
+        labels,
     )))
 }
 

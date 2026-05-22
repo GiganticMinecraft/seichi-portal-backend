@@ -20,7 +20,7 @@ use crate::{
         AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Role::Administrator, User},
+    user::models::{Role::Administrator, User, UserId},
 };
 
 pub type FormId = types::Id<ActiveForm>;
@@ -312,7 +312,7 @@ impl ActiveForm {
         }
     }
 
-    pub fn archive(self, archived_at: DateTime<Utc>, archived_by: User) -> ArchivedForm {
+    pub fn archive(self, archived_at: DateTime<Utc>, archived_by: UserId) -> ArchivedForm {
         ArchivedForm::new(self, archived_at, archived_by)
     }
 }
@@ -321,11 +321,11 @@ impl ActiveForm {
 pub struct ArchivedForm {
     form: ActiveForm,
     archived_at: DateTime<Utc>,
-    archived_by: User,
+    archived_by: UserId,
 }
 
 impl ArchivedForm {
-    pub fn new(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+    pub fn new(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: UserId) -> Self {
         Self {
             form,
             archived_at,
@@ -337,7 +337,11 @@ impl ArchivedForm {
     ///
     /// データベースから復元したデータなど、通常のアーカイブ操作を経ずに
     /// [`ArchivedForm`] を組み立てる場合に使用します。
-    pub fn from_persisted(form: ActiveForm, archived_at: DateTime<Utc>, archived_by: User) -> Self {
+    pub fn from_persisted(
+        form: ActiveForm,
+        archived_at: DateTime<Utc>,
+        archived_by: UserId,
+    ) -> Self {
         Self::new(form, archived_at, archived_by)
     }
 
@@ -384,13 +388,13 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -443,13 +447,13 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -523,13 +527,13 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -577,13 +581,13 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -667,13 +671,13 @@ impl AuthorizationGuardDefinitions for FormLabel {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -703,13 +707,13 @@ impl AuthorizationGuardDefinitions for FormLabel {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -741,13 +745,13 @@ impl AuthorizationGuardDefinitions for FormLabel {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///
@@ -779,13 +783,13 @@ impl AuthorizationGuardDefinitions for FormLabel {
     ///
     /// let administrator = User {
     ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::Administrator,
     /// };
     ///
     /// let standard_user = User {
     ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4(),
+    ///     id: Uuid::new_v4().into(),
     ///     role: Role::StandardUser,
     /// };
     ///

@@ -40,8 +40,9 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                     .await?
                     .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
+                let target_user = target_user.try_into_read(&actor)?;
                 let notification_settings: AuthorizationGuard<NotificationPreference, Create> =
-                    NotificationPreference::new(target_user.try_into_read(&actor)?).into();
+                    NotificationPreference::new(target_user.id).into();
 
                 Ok(notification_settings.into_read().try_into_read(&actor)?)
             }
@@ -56,7 +57,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         // NOTE: Discord への通知設定は、Discord への連携がすでに行われていなければならない
         let user = self
             .user_repository
-            .find_by(actor.id)
+            .find_by(actor.id.into_inner())
             .await?
             .ok_or(UseCaseError::UserNotFound)?;
 
@@ -71,13 +72,13 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
 
         let current_settings = self
             .repository
-            .fetch_notification_settings(actor.id)
+            .fetch_notification_settings(actor.id.into_inner())
             .await?;
 
         let current_settings = match current_settings {
             Some(settings) => settings,
             None => {
-                let notification_settings = NotificationPreference::new(actor.to_owned()).into();
+                let notification_settings = NotificationPreference::new(actor.id).into();
 
                 self.repository
                     .create_notification_settings(actor, &notification_settings)

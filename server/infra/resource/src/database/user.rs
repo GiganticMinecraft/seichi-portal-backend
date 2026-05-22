@@ -34,7 +34,7 @@ impl UserDatabase for ConnectionPool {
                         .map(|row| {
                             Ok::<User, InfraError>(User {
                                 name: row.name,
-                                id: uuid,
+                                id: uuid.into(),
                                 role: Role::from_str(&row.role)?,
                             })
                         })
@@ -99,7 +99,7 @@ impl UserDatabase for ConnectionPool {
                     .map(|row| {
                         Ok::<User, InfraError>(User {
                             name: row.name,
-                            id: Uuid::parse_str(&row.id)?,
+                            id: Uuid::parse_str(&row.id)?.into(),
                             role: Role::from_str(&row.role)?,
                         })
                     })
