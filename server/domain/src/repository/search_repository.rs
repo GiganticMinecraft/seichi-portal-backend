@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::form::answer::models::AnswerEntry;
-use crate::form::answer::service::AnswerEntryAuthorizationContext;
+use crate::form::answer::service::{AnswerEntryActor, AnswerEntryAuthorizationContext};
 use crate::search::models::NumberOfRecordsPerAggregate;
 use crate::{
     form::{
@@ -40,7 +40,14 @@ pub trait SearchRepository: Send + Sync + 'static {
         &self,
         query: &str,
     ) -> Result<
-        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Vec<
+            AuthorizationGuardWithContext<
+                AnswerEntry,
+                Read,
+                AnswerEntryAuthorizationContext,
+                AnswerEntryActor,
+            >,
+        >,
         Error,
     >;
     async fn search_comments(

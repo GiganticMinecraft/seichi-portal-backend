@@ -5,7 +5,7 @@ use domain::{
                 AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent,
                 PostedAnswerContents,
             },
-            service::AnswerEntryAuthorizationContext,
+            service::{AnswerEntryActor, AnswerEntryAuthorizationContext},
         },
         comment::service::CommentAuthorizationContext,
         models::FormId,
@@ -139,12 +139,14 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
 
         let guard = AuthorizationGuardWithContext::new(answer_entry);
+        let actor = AnswerEntryActor::AuthenticatedUser(user);
 
         self.answer_repository
-            .post_answer(&context, guard, &user)
+            .post_answer(&context, guard, &actor)
             .await
     }
 
@@ -175,11 +177,8 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-
-        if !form_settings.allow_temporary_answers() || !context.can_create_temporary() {
-            return Err(errors::domain::DomainError::Forbidden.into());
-        }
 
         let answer_entry = AnswerEntry::new(
             AnswerAuthor::TemporaryUser(temporary_user),
@@ -187,9 +186,11 @@ impl<
             title,
             posted_answers,
         );
+        let guard = AuthorizationGuardWithContext::new(answer_entry);
+        let actor = AnswerEntryActor::TemporaryUser;
 
         self.answer_repository
-            .post_answer_without_actor(answer_entry)
+            .post_answer(&context, guard, &actor)
             .await
     }
 
@@ -213,7 +214,9 @@ impl<
                 form_visibility: form_settings.visibility().to_owned(),
                 response_period: form_settings.answer_settings().response_period().to_owned(),
                 answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+                allow_temporary_answers: form_settings.allow_temporary_answers(),
             };
+            let answer_actor = AnswerEntryActor::from(user);
 
             let fetch_labels = self
                 .answer_label_repository
@@ -235,7 +238,7 @@ impl<
             let form_answer = comment_authorization_context
                 .related_answer_entry_guard
                 .try_into_read(
-                    user,
+                    &answer_actor,
                     &comment_authorization_context.related_answer_entry_guard_context,
                 )?;
 
@@ -268,7 +271,9 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
+        let answer_actor = AnswerEntryActor::from(actor);
 
         stream::iter(
             self.answer_repository
@@ -276,7 +281,7 @@ impl<
                 .await?,
         )
         .then(|form_answer_guard| async {
-            let form_answer = form_answer_guard.try_read(actor, &context)?;
+            let form_answer = form_answer_guard.try_read(&answer_actor, &context)?;
 
             let fetch_labels = self
                 .answer_label_repository
@@ -291,6 +296,7 @@ impl<
                     form_visibility: form_settings.visibility().to_owned(),
                     response_period: form_settings.answer_settings().response_period().to_owned(),
                     answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+                    allow_temporary_answers: form_settings.allow_temporary_answers(),
                 },
             };
 
@@ -302,7 +308,7 @@ impl<
             let form_answer = comment_authorization_context
                 .related_answer_entry_guard
                 .try_into_read(
-                    actor,
+                    &answer_actor,
                     &comment_authorization_context.related_answer_entry_guard_context,
                 )?;
 
@@ -347,12 +353,14 @@ impl<
                                     .answer_settings()
                                     .visibility()
                                     .to_owned(),
+                                allow_temporary_answers: form_settings.allow_temporary_answers(),
                             })
                         }
                     })
                     .await?;
 
-                let form_answer = form_answer_guard.try_read(user, &context)?;
+                let answer_actor = AnswerEntryActor::from(user);
+                let form_answer = form_answer_guard.try_read(&answer_actor, &context)?;
                 let fetch_labels = self
                     .answer_label_repository
                     .get_labels_for_answers_by_answer_id(*form_answer.id());
@@ -373,7 +381,7 @@ impl<
                 let form_answer = comment_authorization_context
                     .related_answer_entry_guard
                     .try_into_read(
-                        user,
+                        &answer_actor,
                         &comment_authorization_context.related_answer_entry_guard_context,
                     )?;
 
@@ -411,7 +419,9 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
+        let answer_actor = AnswerEntryActor::from(actor);
 
         if let Some(title) = title {
             let answer_entry = self
@@ -423,7 +433,7 @@ impl<
                 .map(|entry| entry.with_title(title));
 
             self.answer_repository
-                .update_answer_entry(actor, &context, answer_entry)
+                .update_answer_entry(&answer_actor, &context, answer_entry)
                 .await?;
         }
 
@@ -458,7 +468,7 @@ impl<
         let form_answer = comment_authorization_context
             .related_answer_entry_guard
             .try_into_read(
-                actor,
+                &answer_actor,
                 &comment_authorization_context.related_answer_entry_guard_context,
             )?;
 

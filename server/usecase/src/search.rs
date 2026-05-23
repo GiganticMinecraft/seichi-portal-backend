@@ -7,7 +7,7 @@ use domain::search::models::NumberOfRecords;
 use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
     form::{
-        answer::service::AnswerEntryAuthorizationContext,
+        answer::service::{AnswerEntryActor, AnswerEntryAuthorizationContext},
         comment::service::CommentAuthorizationContext,
     },
     repository::{
@@ -117,13 +117,14 @@ impl<
                                     .answer_settings()
                                     .visibility()
                                     .to_owned(),
+                                allow_temporary_answers: form_settings.allow_temporary_answers(),
                             })
                         }
                     })
                     .await?;
 
                 guard
-                    .try_into_read(actor, &context)
+                    .try_into_read(&AnswerEntryActor::from(actor), &context)
                     .map_err(Into::<Error>::into)
             })
             .collect::<Vec<_>>();
@@ -168,6 +169,8 @@ impl<
                                                 .answer_settings()
                                                 .visibility()
                                                 .to_owned(),
+                                            allow_temporary_answers: form_settings
+                                                .allow_temporary_answers(),
                                         })
                                     }
                                 })

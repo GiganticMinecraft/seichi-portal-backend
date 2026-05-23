@@ -87,6 +87,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
 
         let comment_context = CommentAuthorizationContext {
@@ -131,6 +132,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
 
         let comment_context = CommentAuthorizationContext {
@@ -172,6 +174,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
 
         let comment_context = CommentAuthorizationContext {
@@ -225,6 +228,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
 
         let answer_guard = self

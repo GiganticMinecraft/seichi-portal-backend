@@ -5,7 +5,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use domain::form::answer::models::AnswerEntry;
-use domain::form::answer::service::AnswerEntryAuthorizationContext;
+use domain::form::answer::service::{AnswerEntryActor, AnswerEntryAuthorizationContext};
 use domain::search::models::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
@@ -86,7 +86,14 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
         &self,
         query: &str,
     ) -> Result<
-        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
+        Vec<
+            AuthorizationGuardWithContext<
+                AnswerEntry,
+                Read,
+                AnswerEntryAuthorizationContext,
+                AnswerEntryActor,
+            >,
+        >,
         Error,
     > {
         let real_answers = self.client.search().search_answers(query).await?;

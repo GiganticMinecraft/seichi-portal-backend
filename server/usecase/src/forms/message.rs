@@ -6,7 +6,10 @@ use domain::notification::discord_dm_notificator::{
 use domain::notification::notification_api::NotificationAPI;
 use domain::{
     form::{
-        answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
+        answer::{
+            models::AnswerId,
+            service::{AnswerEntryActor, AnswerEntryAuthorizationContext},
+        },
         message::{
             models::{Message, MessageId},
             service::MessageAuthorizationContext,
@@ -78,14 +81,16 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
+        let answer_actor = AnswerEntryActor::from(actor);
 
         let form_answer = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
 
         let form_id = form_answer.form_id().to_owned();
         let answer_id = form_answer.id().to_owned();
@@ -192,14 +197,16 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
+        let answer_actor = AnswerEntryActor::from(actor);
 
         let answers = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answers,
@@ -255,14 +262,16 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
+        let answer_actor = AnswerEntryActor::from(actor);
 
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,
@@ -310,14 +319,16 @@ impl<
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+            allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
+        let answer_actor = AnswerEntryActor::from(actor);
 
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,
