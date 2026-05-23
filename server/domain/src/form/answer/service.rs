@@ -28,7 +28,7 @@ impl AuthorizationGuardWithContextDefinitions<AnswerEntryAuthorizationContext> f
     }
 
     fn can_read(&self, actor: &User, context: &AnswerEntryAuthorizationContext) -> bool {
-        self.user().id == actor.id
+        self.user_id() == &actor.id
             || context.answer_visibility == AnswerVisibility::PUBLIC
             || actor.role == Role::Administrator
     }

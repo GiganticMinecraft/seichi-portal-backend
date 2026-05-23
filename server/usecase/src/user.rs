@@ -78,7 +78,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
                 // NOTE: リクエスト時点では token しかわからないので
                 //  token で検索したユーザーが操作者であるとする
                 self.repository
-                    .find_by(user.id)
+                    .find_by(user.id.into_inner())
                     .await?
                     .map(|guard| guard.try_into_read(&user))
                     .transpose()

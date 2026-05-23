@@ -4,8 +4,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use domain::user::models::{DiscordUser, Role, User};
 use errors::infra::InfraError;
+use itertools::Itertools;
 use redis::Commands;
 use sha256::digest;
+use sqlx::{Row, query};
 use uuid::Uuid;
 
 use crate::{
@@ -34,7 +36,7 @@ impl UserDatabase for ConnectionPool {
                         .map(|row| {
                             Ok::<User, InfraError>(User {
                                 name: row.name,
-                                id: uuid,
+                                id: uuid.into(),
                                 role: Role::from_str(&row.role)?,
                             })
                         })
@@ -44,6 +46,43 @@ impl UserDatabase for ConnectionPool {
                 })
             })
             .await?)
+    }
+
+    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<User>, InfraError> {
+        if uuids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let uuid_strings = uuids.into_iter().map(|id| id.to_string()).collect_vec();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let sql = format!(
+                    "SELECT id, name, role FROM users WHERE id IN ({})",
+                    std::iter::repeat_n("?", uuid_strings.len()).join(", ")
+                );
+
+                let rows = uuid_strings
+                    .iter()
+                    .fold(query(&sql), |query, uuid| query.bind(uuid))
+                    .fetch_all(&mut **txn)
+                    .await?;
+
+                rows.into_iter()
+                    .map(|row| {
+                        let id: String = row.try_get("id")?;
+                        let name: String = row.try_get("name")?;
+                        let role: String = row.try_get("role")?;
+                        Ok::<User, InfraError>(User {
+                            name,
+                            id: Uuid::parse_str(&id)?.into(),
+                            role: Role::from_str(&role)?,
+                        })
+                    })
+                    .collect::<Result<Vec<User>, _>>()
+            })
+        })
+        .await
     }
 
     async fn upsert_user(&self, user: &User) -> Result<(), InfraError> {
@@ -99,7 +138,7 @@ impl UserDatabase for ConnectionPool {
                     .map(|row| {
                         Ok::<User, InfraError>(User {
                             name: row.name,
-                            id: Uuid::parse_str(&row.id)?,
+                            id: Uuid::parse_str(&row.id)?.into(),
                             role: Role::from_str(&row.role)?,
                         })
                     })

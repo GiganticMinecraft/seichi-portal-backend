@@ -177,7 +177,7 @@ mod tests {
 
         let actor = User {
             name: "respondent_name".to_string(),
-            id: Default::default(),
+            id: Uuid::nil().into(),
             role: Default::default(),
         };
 

@@ -101,7 +101,7 @@ pub async fn get_my_notification_settings(
         user_repository: repository.user_repository(),
     };
 
-    let user_id = user.id.to_owned();
+    let user_id = user.id.into_inner();
 
     let settings = notification_usecase
         .fetch_notification_settings(user, user_id)

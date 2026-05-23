@@ -13,13 +13,14 @@ use domain::{
             form_label_repository::FormLabelRepository,
         },
         notification_repository::NotificationRepository,
+        user_repository::UserRepository,
     },
     user::models::User,
 };
 use errors::{
     Error,
     domain::DomainError,
-    usecase::UseCaseError::{FormNotFound, LabelNotFound},
+    usecase::UseCaseError::{FormNotFound, LabelNotFound, UserNotFound},
 };
 use std::collections::{BTreeSet, HashMap};
 use types::non_empty_vec::NonEmptyVec;
@@ -33,12 +34,14 @@ pub struct FormUseCase<
     NotificationRepo: NotificationRepository,
     FormLabelRepo: FormLabelRepository,
     AnswerRepo: AnswerRepository,
+    UserRepo: UserRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub archived_form_repository: &'a ArchivedFormRepo,
     pub notification_repository: &'a NotificationRepo,
     pub form_label_repository: &'a FormLabelRepo,
     pub answer_repository: &'a AnswerRepo,
+    pub user_repository: &'a UserRepo,
 }
 
 impl<
@@ -47,7 +50,8 @@ impl<
     R3: NotificationRepository,
     R4: FormLabelRepository,
     R5: AnswerRepository,
-> FormUseCase<'_, R1, R2, R3, R4, R5>
+    R6: UserRepository,
+> FormUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
     pub async fn create_form(
         &self,
@@ -136,7 +140,7 @@ impl<
         offset: Option<u32>,
         limit: Option<u32>,
         query: Option<String>,
-    ) -> Result<Vec<(ArchivedForm, Vec<FormLabel>)>, Error> {
+    ) -> Result<Vec<ArchivedFormDto>, Error> {
         let forms = self
             .archived_form_repository
             .list(offset, limit, query)
@@ -154,18 +158,25 @@ impl<
         let forms_with_labels = forms
             .into_iter()
             .zip(form_labels)
-            .map(|(form, labels)| {
-                Ok::<_, Error>((
+            .map(|(form, labels)| async move {
+                let archived_by = self
+                    .user_repository
+                    .find_by(form.archived_by().into_inner())
+                    .await?
+                    .ok_or(Error::from(UserNotFound))?
+                    .try_into_read(actor)?;
+                Ok::<_, Error>(ArchivedFormDto {
+                    archived_by,
                     form,
-                    labels
+                    labels: labels
                         .into_iter()
                         .map(|label| label.try_into_read(actor))
                         .collect::<Result<Vec<_>, _>>()?,
-                ))
+                })
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Vec<_>>();
 
-        Ok(forms_with_labels)
+        futures::future::try_join_all(forms_with_labels).await
     }
 
     pub async fn get_archived_form(
@@ -187,7 +198,18 @@ impl<
             .map(|label| label.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(ArchivedFormDto { form, labels })
+        let archived_by = self
+            .user_repository
+            .find_by(form.archived_by().into_inner())
+            .await?
+            .ok_or(Error::from(UserNotFound))?
+            .try_into_read(actor)?;
+
+        Ok(ArchivedFormDto {
+            form,
+            archived_by,
+            labels,
+        })
     }
 
     pub async fn archive_form(&self, actor: &User, form_id: FormId) -> Result<ArchivedForm, Error> {
@@ -528,6 +550,7 @@ mod tests {
                 form_label_repository::MockFormLabelRepository,
             },
             notification_repository::MockNotificationRepository,
+            user_repository::MockUserRepository,
         },
         user::models::{Role, User},
     };
@@ -537,7 +560,7 @@ mod tests {
     fn admin_user() -> User {
         User {
             name: "admin".to_string(),
-            id: Uuid::nil(),
+            id: Uuid::nil().into(),
             role: Role::Administrator,
         }
     }
@@ -606,6 +629,7 @@ mod tests {
         let answer_repository = MockAnswerRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
+        let user_repository = MockUserRepository::new();
 
         let usecase = FormUseCase {
             active_form_repository: &active_form_repository,
@@ -613,6 +637,7 @@ mod tests {
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
             answer_repository: &answer_repository,
+            user_repository: &user_repository,
         };
 
         let created_form = usecase
@@ -652,6 +677,7 @@ mod tests {
         let answer_repository = MockAnswerRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
+        let user_repository = MockUserRepository::new();
 
         let usecase = FormUseCase {
             active_form_repository: &active_form_repository,
@@ -659,6 +685,7 @@ mod tests {
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
             answer_repository: &answer_repository,
+            user_repository: &user_repository,
         };
 
         let (updated_form, _) = usecase

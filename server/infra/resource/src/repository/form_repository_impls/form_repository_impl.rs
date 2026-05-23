@@ -134,7 +134,7 @@ where
     ) -> Result<AuthorizationGuard<ArchivedForm, Read>, Error> {
         let form = form.try_into_update(actor, |form| form)?;
         let form_id = *form.id();
-        let _ = form.archive(Utc::now(), actor.clone());
+        let _ = form.archive(Utc::now(), actor.id);
         let archived_form = self.client.form().archive(form_id, actor).await?;
         Ok(AuthorizationGuard::<ArchivedForm, Create>::from(archived_form).into_read())
     }

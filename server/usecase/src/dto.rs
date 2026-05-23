@@ -10,8 +10,9 @@ use domain::{
 
 pub struct AnswerDto {
     pub form_answer: AnswerEntry,
+    pub user: User,
     pub labels: Vec<AnswerLabel>,
-    pub comments: Vec<Comment>,
+    pub comments: Vec<CommentDto>,
 }
 
 pub struct ActiveFormDto {
@@ -23,7 +24,18 @@ pub type FormDto = ActiveFormDto;
 
 pub struct ArchivedFormDto {
     pub form: ArchivedForm,
+    pub archived_by: User,
     pub labels: Vec<FormLabel>,
+}
+
+pub struct CommentDto {
+    pub comment: Comment,
+    pub commented_by: User,
+}
+
+pub struct MessageDto {
+    pub message: domain::form::message::models::Message,
+    pub sender: User,
 }
 
 pub struct UpsertQuestionDto {

@@ -313,12 +313,12 @@ pub struct AnswerComment {
     commented_by: User,
 }
 
-impl From<domain::form::comment::models::Comment> for AnswerComment {
-    fn from(val: domain::form::comment::models::Comment) -> Self {
+impl From<usecase::dto::CommentDto> for AnswerComment {
+    fn from(val: usecase::dto::CommentDto) -> Self {
         AnswerComment {
-            content: val.content().to_string(),
-            timestamp: val.timestamp().to_owned(),
-            commented_by: val.commented_by().to_owned().into(),
+            content: val.comment.content().to_string(),
+            timestamp: val.comment.timestamp().to_owned(),
+            commented_by: val.commented_by.into(),
         }
     }
 }
@@ -353,12 +353,13 @@ pub struct FormAnswer {
 impl FormAnswer {
     pub fn new(
         answer: domain::form::answer::models::AnswerEntry,
-        comments: Vec<domain::form::comment::models::Comment>,
+        user: domain::user::models::User,
+        comments: Vec<usecase::dto::CommentDto>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
         FormAnswer {
             id: answer.id().to_owned().into(),
-            user: answer.user().to_owned().into(),
+            user: user.into(),
             form_id: answer.form_id().into_inner(),
             timestamp: answer.timestamp().to_owned(),
             title: answer

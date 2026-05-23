@@ -17,7 +17,7 @@ impl NotificationDatabase for ConnectionPool {
         &self,
         notification_settings: &NotificationPreference,
     ) -> Result<(), InfraError> {
-        let recipient_id = notification_settings.recipient().id.to_string();
+        let recipient_id = notification_settings.recipient_id().to_string();
         let is_send_message_notification = *notification_settings.is_send_message_notification();
 
         self.read_write_transaction(|txn| {

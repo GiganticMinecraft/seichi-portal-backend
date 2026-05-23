@@ -80,7 +80,7 @@ impl FormCommentDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         let comment_id = comment.comment_id().into_inner().to_string();
         let answer_id = answer_id.into_inner().to_string();
-        let commented_by = comment.commented_by().id.to_string();
+        let commented_by = comment.commented_by().to_string();
         let content = comment.content().to_owned().into_inner().into_inner();
 
         self.read_write_transaction(|txn| {

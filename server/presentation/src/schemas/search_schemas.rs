@@ -35,7 +35,7 @@ impl From<Comment> for CommentSchema {
             answer_id: value.answer_id().to_owned(),
             id: value.comment_id().to_owned(),
             content: value.content().to_owned().into_inner().into_inner(),
-            commented_by: value.commented_by().id,
+            commented_by: value.commented_by().into_inner(),
         }
     }
 }

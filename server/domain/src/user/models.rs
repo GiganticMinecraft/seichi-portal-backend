@@ -10,12 +10,28 @@ use uuid::Uuid;
 
 use crate::types::authorization_guard::AuthorizationGuardDefinitions;
 
+#[derive(DerivingVia, Debug, PartialOrd, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(Arbitrary))]
+#[deriving(
+    From,
+    Into,
+    Copy,
+    IntoInner(via: Uuid),
+    Display(via: Uuid),
+    Serialize(via: Uuid),
+    Deserialize(via: Uuid)
+)]
+pub struct UserId(
+    #[cfg_attr(test, proptest(strategy = "arbitrary_uuid_v4()"))]
+    #[underlying]
+    Uuid,
+);
+
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
     pub name: String,
-    #[cfg_attr(test, proptest(strategy = "arbitrary_uuid_v4()"))]
-    pub id: Uuid,
+    pub id: UserId,
     #[serde(default)]
     pub role: Role,
 }

@@ -29,8 +29,10 @@ use domain::{
 };
 use errors::{
     Error,
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound},
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound, UserNotFound},
 };
+
+use crate::{dto::MessageDto, user_reference_resolver::resolve_user_references};
 
 pub struct MessageUseCase<
     'a,
@@ -88,11 +90,17 @@ impl<
         let form_id = form_answer.form_id().to_owned();
         let answer_id = form_answer.id().to_owned();
 
-        match Message::try_new(answer_id, actor.to_owned(), message_body) {
+        match Message::try_new(answer_id, actor.id, message_body) {
             Ok(message) => {
-                let notification_recipient = form_answer.user().to_owned();
+                let notification_recipient_id = *form_answer.user_id();
+                let notification_recipient = self
+                    .user_repository
+                    .find_by(notification_recipient_id.into_inner())
+                    .await?
+                    .ok_or(Error::from(UserNotFound))?
+                    .try_into_read(actor)?;
 
-                let message_sender = message.sender().to_owned();
+                let message_sender_id = *message.sender_id();
                 let message_context = MessageAuthorizationContext {
                     related_answer_entry: form_answer,
                 };
@@ -107,7 +115,7 @@ impl<
                     .await;
 
                 match post_message_result {
-                    Ok(_) if message_sender.id != notification_recipient.id => {
+                    Ok(_) if message_sender_id != notification_recipient.id => {
                         if let Some(discord_user) = self
                             .user_repository
                             .fetch_discord_user(actor, &notification_recipient.to_owned().into())
@@ -115,17 +123,15 @@ impl<
                         {
                             let fetched_notification_preference = self
                                 .notification_repository
-                                .fetch_notification_settings(notification_recipient.id)
+                                .fetch_notification_settings(notification_recipient.id.into_inner())
                                 .await?;
 
                             let notification_preference = match fetched_notification_preference {
                                 Some(settings) => settings.try_into_read(actor)?,
                                 None => {
                                     let settings: AuthorizationGuard<_, Create> =
-                                        NotificationPreference::new(
-                                            notification_recipient.to_owned(),
-                                        )
-                                        .into();
+                                        NotificationPreference::new(notification_recipient.id)
+                                            .into();
 
                                     self.notification_repository
                                         .create_notification_settings(
@@ -170,7 +176,7 @@ impl<
         actor: &User,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<Vec<Message>, Error> {
+    ) -> Result<Vec<MessageDto>, Error> {
         let form_guard = self
             .active_form_repository
             .get(form_id)
@@ -196,13 +202,28 @@ impl<
             related_answer_entry: answers,
         };
 
-        self.message_repository
+        let messages = self
+            .message_repository
             .fetch_messages_by_answer(&message_context.related_answer_entry)
             .await?
             .into_iter()
             .map(|guard| guard.try_into_read(actor, &message_context))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+            .map_err(Error::from)?;
+
+        let sender_ids = messages.iter().map(|m| *m.sender_id()).collect();
+        let senders = resolve_user_references(self.user_repository, actor, sender_ids).await?;
+
+        messages
+            .into_iter()
+            .map(|message| {
+                let sender = senders
+                    .get(message.sender_id())
+                    .cloned()
+                    .ok_or(Error::from(UserNotFound))?;
+                Ok(MessageDto { message, sender })
+            })
+            .collect()
     }
 
     pub async fn update_message_body(

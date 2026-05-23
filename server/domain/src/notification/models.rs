@@ -2,19 +2,19 @@ use derive_getters::Getters;
 
 use crate::{
     types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Role, User},
+    user::models::{Role, User, UserId},
 };
 
 #[derive(Getters, Debug)]
 pub struct NotificationPreference {
-    recipient: User,
+    recipient_id: UserId,
     is_send_message_notification: bool,
 }
 
 impl NotificationPreference {
-    pub fn new(recipient: User) -> Self {
+    pub fn new(recipient_id: UserId) -> Self {
         Self {
-            recipient,
+            recipient_id,
             is_send_message_notification: false,
         }
     }
@@ -26,9 +26,9 @@ impl NotificationPreference {
         }
     }
 
-    pub fn from_raw_parts(recipient: User, is_send_message_notification: bool) -> Self {
+    pub fn from_raw_parts(recipient_id: UserId, is_send_message_notification: bool) -> Self {
         Self {
-            recipient,
+            recipient_id,
             is_send_message_notification,
         }
     }
@@ -36,15 +36,15 @@ impl NotificationPreference {
 
 impl AuthorizationGuardDefinitions for NotificationPreference {
     fn can_create(&self, actor: &User) -> bool {
-        self.recipient() == actor || self.recipient().role == Role::Administrator
+        self.recipient_id() == &actor.id || actor.role == Role::Administrator
     }
 
     fn can_read(&self, actor: &User) -> bool {
-        self.recipient() == actor || self.recipient().role == Role::Administrator
+        self.recipient_id() == &actor.id || actor.role == Role::Administrator
     }
 
     fn can_update(&self, actor: &User) -> bool {
-        self.recipient() == actor
+        self.recipient_id() == &actor.id || actor.role == Role::Administrator
     }
 
     fn can_delete(&self, _actor: &User) -> bool {

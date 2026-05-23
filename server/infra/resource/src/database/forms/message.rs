@@ -16,7 +16,7 @@ impl FormMessageDatabase for ConnectionPool {
     async fn post_message(&self, message: &Message) -> Result<(), InfraError> {
         let id = message.id().to_string().to_owned();
         let related_answer_id = message.related_answer_id().to_string();
-        let sender = message.sender().id.to_string().to_owned();
+        let sender = message.sender_id().to_string();
         let body = message.body().to_owned();
         let timestamp = message.timestamp().to_owned();
 

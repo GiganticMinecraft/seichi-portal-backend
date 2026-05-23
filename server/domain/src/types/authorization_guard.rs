@@ -296,13 +296,13 @@ mod test {
     fn authorization_guard_test() {
         let admin = User {
             name: "admin".to_string(),
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             role: Role::Administrator,
         };
 
         let standard_user = User {
             name: "standard_user".to_string(),
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             role: Role::StandardUser,
         };
 
@@ -330,7 +330,7 @@ mod test {
     fn verify_same_data_for_try_read_and_try_into_read() {
         let user = User {
             name: "user".to_string(),
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             role: Role::Administrator,
         };
 

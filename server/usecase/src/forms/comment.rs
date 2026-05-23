@@ -12,34 +12,62 @@ use domain::{
         active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository,
         comment_repository::CommentRepository,
     },
+    repository::user_repository::UserRepository,
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
     user::models::User,
 };
 use errors::{
     Error,
-    usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound},
+    usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound, UserNotFound},
 };
+
+use crate::{dto::CommentDto, user_reference_resolver::resolve_user_references};
 
 pub struct CommentUseCase<
     'a,
     CommentRepo: CommentRepository,
     AnswerRepo: AnswerRepository,
     FormRepo: ActiveFormRepository,
+    UserRepo: UserRepository,
 > {
     pub comment_repository: &'a CommentRepo,
     pub answer_repository: &'a AnswerRepo,
     pub active_form_repository: &'a FormRepo,
+    pub user_repository: &'a UserRepo,
 }
 
-impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository>
-    CommentUseCase<'_, R1, R2, R3>
+impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: UserRepository>
+    CommentUseCase<'_, R1, R2, R3, R4>
 {
+    async fn build_comment_dtos(
+        &self,
+        actor: &User,
+        comments: Vec<Comment>,
+    ) -> Result<Vec<CommentDto>, Error> {
+        let user_ids = comments.iter().map(|c| *c.commented_by()).collect();
+        let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
+
+        comments
+            .into_iter()
+            .map(|comment| {
+                let commented_by = users
+                    .get(comment.commented_by())
+                    .cloned()
+                    .ok_or(Error::from(UserNotFound))?;
+                Ok(CommentDto {
+                    comment,
+                    commented_by,
+                })
+            })
+            .collect()
+    }
+
     pub async fn get_comments(
         &self,
         actor: &User,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<Vec<Comment>, Error> {
+    ) -> Result<Vec<CommentDto>, Error> {
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -68,11 +96,13 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository>
 
         let comments = self.comment_repository.get_comments(answer_id).await?;
 
-        comments
+        let comments = comments
             .into_iter()
             .map(|guard| guard.try_into_read(actor, &comment_context))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+            .map_err(Error::from)?;
+
+        self.build_comment_dtos(actor, comments).await
     }
 
     pub async fn post_comment(
