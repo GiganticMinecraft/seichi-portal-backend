@@ -26,17 +26,6 @@ pub enum AnswerAuthor {
 }
 
 impl AnswerAuthor {
-    pub fn name_for_default_title(
-        &self,
-        authenticated_user_name: Option<&str>,
-        temporary_user_name: Option<&str>,
-    ) -> String {
-        match self {
-            Self::AuthenticatedUser(_) => authenticated_user_name.unwrap_or_default().to_string(),
-            Self::TemporaryUser(_) => temporary_user_name.unwrap_or_default().to_string(),
-        }
-    }
-
     pub fn authenticated_user_id(&self) -> Option<UserId> {
         match self {
             Self::AuthenticatedUser(user_id) => Some(*user_id),

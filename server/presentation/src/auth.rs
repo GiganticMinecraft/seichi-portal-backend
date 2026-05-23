@@ -16,6 +16,20 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::user::UserUseCase;
 
+fn is_temporary_answer_path(path: &str) -> bool {
+    let segments = path.trim_start_matches('/').split('/').collect::<Vec<_>>();
+    matches!(
+        segments.as_slice(),
+        [
+            "api",
+            "v1",
+            "forms",
+            _,
+            "temporary-answers" | "temporary-answer-form"
+        ]
+    )
+}
+
 pub async fn auth(
     State(repository): State<RealInfrastructureRepository>,
     mut request: Request<Body>,
@@ -28,8 +42,7 @@ pub async fn auth(
         || ignore_auth_path_prefixes
             .iter()
             .any(|prefix| path.starts_with(prefix))
-        || (path.starts_with("/api/v1/forms/")
-            && (path.ends_with("/temporary-answers") || path.ends_with("/temporary-answer-form")))
+        || is_temporary_answer_path(path)
     {
         return Ok(next.run(request).await);
     }

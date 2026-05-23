@@ -150,29 +150,29 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_write_transaction(move |txn| {
             Box::pin(async move {
                 if let Some(temporary_user) = temporary_user {
-                    sqlx::query(
+                    sqlx::query!(
                         r"INSERT INTO temporary_users (id, name, contact_text)
                         VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE name = VALUES(name), contact_text = VALUES(contact_text)",
+                        temporary_user.id.to_string(),
+                        temporary_user.name,
+                        temporary_user.contact_text,
                     )
-                    .bind(temporary_user.id.to_string())
-                    .bind(&temporary_user.name)
-                    .bind(&temporary_user.contact_text)
                     .execute(&mut **txn)
                     .await?;
                 }
 
-                sqlx::query(
+                sqlx::query!(
                     r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    answer_id,
+                    form_id,
+                    author_type,
+                    user_id,
+                    temporary_user_id,
+                    title,
+                    timestamp,
                 )
-                .bind(answer_id)
-                .bind(form_id)
-                .bind(author_type)
-                .bind(user_id)
-                .bind(temporary_user_id)
-                .bind(title)
-                .bind(timestamp)
                 .execute(&mut **txn)
                 .await?;
 
@@ -420,30 +420,30 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 if let Some(temporary_user) = temporary_user {
-                    sqlx::query(
+                    sqlx::query!(
                         r"INSERT INTO temporary_users (id, name, contact_text)
                         VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE name = VALUES(name), contact_text = VALUES(contact_text)",
+                        temporary_user.id.to_string(),
+                        temporary_user.name,
+                        temporary_user.contact_text,
                     )
-                    .bind(temporary_user.id.to_string())
-                    .bind(temporary_user.name)
-                    .bind(temporary_user.contact_text)
                     .execute(&mut **txn)
                     .await?;
                 }
 
-                sqlx::query(
+                sqlx::query!(
                     r#"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title)
                     VALUES (?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                     title = VALUES(title)"#,
+                    answer_id,
+                    form_id,
+                    author_type,
+                    user,
+                    temporary_user_id,
+                    title,
                 )
-                .bind(answer_id)
-                .bind(form_id)
-                .bind(author_type)
-                .bind(user)
-                .bind(temporary_user_id)
-                .bind(title)
                 .execute(&mut **txn)
                 .await?;
                 Ok::<_, InfraError>(())
