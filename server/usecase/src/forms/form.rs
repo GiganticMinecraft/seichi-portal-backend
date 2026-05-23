@@ -219,9 +219,7 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
-        let form = form
-            .into_update()
-            .try_into_update(actor, |form| form.archive(Utc::now(), actor.id))?;
+        let form = form.try_into_read(actor)?.archive(Utc::now(), actor.id);
         let archived_form = self
             .archived_form_repository
             .archive(actor, form.into())
