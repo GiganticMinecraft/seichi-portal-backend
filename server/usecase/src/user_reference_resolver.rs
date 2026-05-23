@@ -4,21 +4,9 @@ use domain::{
     repository::user_repository::UserRepository,
     user::models::{User, UserId},
 };
-use errors::{Error, usecase::UseCaseError::UserNotFound};
+use errors::Error;
 
-pub(crate) async fn find_user<R: UserRepository + ?Sized>(
-    repo: &R,
-    actor: &User,
-    user_id: UserId,
-) -> Result<User, Error> {
-    repo.find_by(user_id.into_inner())
-        .await?
-        .ok_or(Error::from(UserNotFound))?
-        .try_into_read(actor)
-        .map_err(Into::into)
-}
-
-pub(crate) async fn find_users<R: UserRepository + ?Sized>(
+pub(crate) async fn resolve_user_references<R: UserRepository + ?Sized>(
     repo: &R,
     actor: &User,
     user_ids: Vec<UserId>,

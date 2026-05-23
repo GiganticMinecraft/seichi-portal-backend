@@ -4,4 +4,4 @@ pub mod health_check;
 pub mod notification;
 pub mod search;
 pub mod user;
-mod user_lookup;
+mod user_reference_resolver;

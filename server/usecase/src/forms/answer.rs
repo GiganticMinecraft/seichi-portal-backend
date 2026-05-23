@@ -25,7 +25,7 @@ use futures::{StreamExt, stream, try_join};
 
 use crate::{
     dto::{AnswerDto, CommentDto},
-    user_lookup::find_users,
+    user_reference_resolver::resolve_user_references,
 };
 
 pub struct AnswerUseCase<
@@ -62,7 +62,7 @@ impl<
             .chain(comments.iter().map(|comment| *comment.commented_by()))
             .collect();
 
-        let users = find_users(self.user_repository, actor, user_ids).await?;
+        let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
 
         let user = users
             .get(form_answer.user_id())

@@ -32,10 +32,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound, UserNotFound},
 };
 
-use crate::{
-    dto::MessageDto,
-    user_lookup::{find_user, find_users},
-};
+use crate::{dto::MessageDto, user_reference_resolver::resolve_user_references};
 
 pub struct MessageUseCase<
     'a,
@@ -96,8 +93,12 @@ impl<
         match Message::try_new(answer_id, actor.id, message_body) {
             Ok(message) => {
                 let notification_recipient_id = *form_answer.user_id();
-                let notification_recipient =
-                    find_user(self.user_repository, actor, notification_recipient_id).await?;
+                let notification_recipient = self
+                    .user_repository
+                    .find_by(notification_recipient_id.into_inner())
+                    .await?
+                    .ok_or(Error::from(UserNotFound))?
+                    .try_into_read(actor)?;
 
                 let message_sender_id = *message.sender_id();
                 let message_context = MessageAuthorizationContext {
@@ -211,7 +212,7 @@ impl<
             .map_err(Error::from)?;
 
         let sender_ids = messages.iter().map(|m| *m.sender_id()).collect();
-        let senders = find_users(self.user_repository, actor, sender_ids).await?;
+        let senders = resolve_user_references(self.user_repository, actor, sender_ids).await?;
 
         messages
             .into_iter()

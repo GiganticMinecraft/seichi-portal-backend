@@ -21,7 +21,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound, UserNotFound},
 };
 
-use crate::{dto::CommentDto, user_lookup::find_users};
+use crate::{dto::CommentDto, user_reference_resolver::resolve_user_references};
 
 pub struct CommentUseCase<
     'a,
@@ -45,7 +45,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         comments: Vec<Comment>,
     ) -> Result<Vec<CommentDto>, Error> {
         let user_ids = comments.iter().map(|c| *c.commented_by()).collect();
-        let users = find_users(self.user_repository, actor, user_ids).await?;
+        let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
 
         comments
             .into_iter()
