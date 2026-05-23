@@ -53,6 +53,16 @@ impl PartialEq for User {
 )]
 pub struct TemporaryUserId(#[underlying] Uuid);
 
+/// 一時回答が許可されたフォームで、ログインせずに回答した人の著者情報。
+///
+/// `TemporaryUser` は永続的な認証主体ではなく、回答作成時に入力された情報を
+/// 回答の著者として保持するためのスナップショットである。`id` は通常の
+/// `UserId` やログインセッションとは別の、回答著者を一時ユーザーとして識別する
+/// ローカルな UUID として扱う。
+///
+/// `name` と `contact_text` は、管理者や回答閲覧者が回答者を識別し、必要に応じて
+/// 連絡するための入力値である。権限判定上は回答の作成主体としてだけ使われ、
+/// 通常の `User` と同じ閲覧・更新権限は持たない。
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct TemporaryUser {
     pub id: TemporaryUserId,
