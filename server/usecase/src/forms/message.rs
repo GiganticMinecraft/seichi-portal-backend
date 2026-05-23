@@ -83,7 +83,7 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
 
         let form_answer = self
             .answer_repository
@@ -199,7 +199,7 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
 
         let answers = self
             .answer_repository
@@ -264,7 +264,7 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
 
         let answer_entry = self
             .answer_repository
@@ -321,7 +321,7 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
 
         let answer_entry = self
             .answer_repository

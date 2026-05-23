@@ -216,7 +216,7 @@ impl<
                 answer_visibility: form_settings.answer_settings().visibility().to_owned(),
                 allow_temporary_answers: form_settings.allow_temporary_answers(),
             };
-            let answer_actor = AnswerEntryActor::from(user);
+            let answer_actor = AnswerEntryActor::from(user.clone());
 
             let fetch_labels = self
                 .answer_label_repository
@@ -273,7 +273,7 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
 
         stream::iter(
             self.answer_repository
@@ -359,7 +359,7 @@ impl<
                     })
                     .await?;
 
-                let answer_actor = AnswerEntryActor::from(user);
+                let answer_actor = AnswerEntryActor::from(user.clone());
                 let form_answer = form_answer_guard.try_read(&answer_actor, &context)?;
                 let fetch_labels = self
                     .answer_label_repository
@@ -421,7 +421,7 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
 
         if let Some(title) = title {
             let answer_entry = self

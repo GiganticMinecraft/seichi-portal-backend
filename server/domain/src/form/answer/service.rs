@@ -26,9 +26,9 @@ pub enum AnswerEntryActor {
     TemporaryUser,
 }
 
-impl From<&User> for AnswerEntryActor {
-    fn from(user: &User) -> Self {
-        Self::AuthenticatedUser(user.clone())
+impl From<User> for AnswerEntryActor {
+    fn from(user: User) -> Self {
+        Self::AuthenticatedUser(user)
     }
 }
 

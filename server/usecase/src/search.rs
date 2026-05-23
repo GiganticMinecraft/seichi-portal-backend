@@ -124,7 +124,7 @@ impl<
                     .await?;
 
                 guard
-                    .try_into_read(&AnswerEntryActor::from(actor), &context)
+                    .try_into_read(&AnswerEntryActor::from(actor.clone()), &context)
                     .map_err(Into::<Error>::into)
             })
             .collect::<Vec<_>>();

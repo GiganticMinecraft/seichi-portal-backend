@@ -27,21 +27,21 @@ impl<Action: Actions> AuthorizationGuardWithContextDefinitions<CommentAuthorizat
     for Comment
 {
     fn can_create(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
         context
             .related_answer_entry_guard
             .can_read(&answer_actor, &context.related_answer_entry_guard_context)
     }
 
     fn can_read(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
         context
             .related_answer_entry_guard
             .can_read(&answer_actor, &context.related_answer_entry_guard_context)
     }
 
     fn can_update(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
         (context
             .related_answer_entry_guard
             .can_read(&answer_actor, &context.related_answer_entry_guard_context)
@@ -50,7 +50,7 @@ impl<Action: Actions> AuthorizationGuardWithContextDefinitions<CommentAuthorizat
     }
 
     fn can_delete(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
-        let answer_actor = AnswerEntryActor::from(actor);
+        let answer_actor = AnswerEntryActor::from(actor.clone());
         // NOTE: コメントの削除に関しては、コメント自体が全体公開されうるものなので、
         // 適さないメッセージを Administrator が削除できる必要がある
         (context
