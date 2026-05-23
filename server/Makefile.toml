@@ -33,7 +33,7 @@ args = ["clippy", "--", "-D", "warnings"]
 
 [tasks.format]
 command = "cargo"
-args = ["fmt", "--", "--config-path=${REPOSITORY_ROOT}/.cargo-husky/hooks/rustfmt.toml", "--emit=files"]
+args = ["fmt", "--all", "--", "--config-path=${REPOSITORY_ROOT}/.cargo-husky/hooks/rustfmt.toml", "--emit=files"]
 
 [tasks.pretty]
 dependencies = ["fix", "test", "lint", "format"]
