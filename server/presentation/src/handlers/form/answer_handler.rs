@@ -10,7 +10,7 @@ use domain::form::answer::models::{FormAnswerContent, FormAnswerContentId};
 use domain::{
     form::{answer::models::AnswerId, models::FormId},
     repository::Repositories,
-    user::models::User,
+    user::models::{TemporaryUser, User},
 };
 use errors::ErrorExtra;
 use itertools::Itertools;
@@ -22,7 +22,9 @@ use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
-        form_request_schemas::{AnswerCreateSchema, AnswerUpdateSchema},
+        form_request_schemas::{
+            AnswerCreateSchema, AnswerUpdateSchema, TemporaryAnswerCreateSchema,
+        },
         form_response_schemas::FormAnswer,
     },
 };
@@ -120,7 +122,7 @@ pub async fn get_all_answers(
             .map(|answer_details| {
                 FormAnswer::new(
                     answer_details.form_answer,
-                    answer_details.user,
+                    answer_details.author,
                     answer_details.comments,
                     answer_details.labels,
                 )
@@ -171,7 +173,7 @@ pub async fn get_answer_handler(
 
     Ok(GetAnswerResponse::Ok(FormAnswer::new(
         answer_details.form_answer,
-        answer_details.user,
+        answer_details.author,
         answer_details.comments,
         answer_details.labels,
     )))
@@ -222,7 +224,7 @@ pub async fn get_answer_by_form_id_handler(
             .map(|answer_details| {
                 FormAnswer::new(
                     answer_details.form_answer,
-                    answer_details.user,
+                    answer_details.author,
                     answer_details.comments,
                     answer_details.labels,
                 )
@@ -287,6 +289,62 @@ pub async fn post_answer_handler(
 }
 
 #[utoipa::path(
+    post,
+    path = "/forms/{id}/temporary-answers",
+    summary = "未ログイン回答の作成",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    request_body = TemporaryAnswerCreateSchema,
+    responses(
+        (status = 200, description = "The request has succeeded."),
+        BadRequest,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    tag = "Answers"
+)]
+pub async fn post_temporary_answer_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<FormId>, PathRejection>,
+    json: Result<Json<TemporaryAnswerCreateSchema>, JsonRejection>,
+) -> Result<impl IntoResponse, Response> {
+    let form_answer_use_case = AnswerUseCase {
+        answer_repository: repository.form_answer_repository(),
+        active_form_repository: repository.active_form_repository(),
+        comment_repository: repository.form_comment_repository(),
+        answer_label_repository: repository.answer_label_repository(),
+        user_repository: repository.user_repository(),
+    };
+
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
+
+    let temporary_user = TemporaryUser::new(
+        schema.temporary_user.name.into_inner(),
+        schema.temporary_user.contact_text.into_inner(),
+    );
+    let answer_contents = schema
+        .contents
+        .into_iter()
+        .map(|schema| FormAnswerContent {
+            id: FormAnswerContentId::new(),
+            question_id: schema.question_id,
+            answer: schema.answer,
+        })
+        .collect_vec();
+
+    form_answer_use_case
+        .post_temporary_answers(temporary_user, form_id, answer_contents)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::OK.into_response())
+}
+
+#[utoipa::path(
     patch,
     path = "/forms/{form_id}/answers/{answer_id}",
     summary = "回答の更新",
@@ -331,7 +389,7 @@ pub async fn update_answer_handler(
 
     Ok(UpdateAnswerResponse::Ok(FormAnswer::new(
         answer_details.form_answer,
-        answer_details.user,
+        answer_details.author,
         answer_details.comments,
         answer_details.labels,
     )))

@@ -64,6 +64,7 @@ pub struct FormSettingsSchema {
     pub webhook_url: Option<Option<String>>,
     #[schema(value_type = String)]
     pub visibility: Visibility,
+    pub allow_temporary_answers: bool,
     pub answer_settings: AnswerSettingsSchema,
 }
 
@@ -75,6 +76,7 @@ impl FormSettingsSchema {
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),
+            allow_temporary_answers: settings.allow_temporary_answers(),
             answer_settings: AnswerSettingsSchema::from_answer_settings_ref(
                 settings.answer_settings(),
             ),
@@ -110,6 +112,19 @@ pub struct FormSchema {
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct TemporaryAnswerFormSchema {
+    #[schema(value_type = String, format = "uuid")]
+    pub id: FormId,
+    #[schema(value_type = String)]
+    pub title: FormTitle,
+    #[schema(value_type = String)]
+    pub description: FormDescription,
+    pub metadata: FormMetaSchema,
+    pub answer_settings: AnswerSettingsSchema,
+    pub questions: Vec<QuestionResponseSchema>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -280,6 +295,47 @@ pub struct User {
     role: Role,
 }
 
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct TemporaryUser {
+    id: String,
+    name: String,
+    contact_text: String,
+}
+
+impl From<domain::user::models::TemporaryUser> for TemporaryUser {
+    fn from(val: domain::user::models::TemporaryUser) -> Self {
+        TemporaryUser {
+            id: val.id.to_string(),
+            name: val.name,
+            contact_text: val.contact_text,
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[serde(tag = "type")]
+pub enum AnswerAuthor {
+    #[serde(rename = "AUTHENTICATED_USER")]
+    AuthenticatedUser { user: User },
+    #[serde(rename = "TEMPORARY_USER")]
+    TemporaryUser { temporary_user: TemporaryUser },
+}
+
+impl From<usecase::models::AnswerAuthorDetails> for AnswerAuthor {
+    fn from(val: usecase::models::AnswerAuthorDetails) -> Self {
+        match val {
+            usecase::models::AnswerAuthorDetails::AuthenticatedUser(user) => {
+                AnswerAuthor::AuthenticatedUser { user: user.into() }
+            }
+            usecase::models::AnswerAuthorDetails::TemporaryUser(temporary_user) => {
+                AnswerAuthor::TemporaryUser {
+                    temporary_user: temporary_user.into(),
+                }
+            }
+        }
+    }
+}
+
 impl From<domain::user::models::User> for User {
     fn from(val: domain::user::models::User) -> Self {
         User {
@@ -341,7 +397,7 @@ impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct FormAnswer {
     id: Uuid,
-    user: User,
+    author: AnswerAuthor,
     form_id: Uuid,
     timestamp: DateTime<Utc>,
     title: Option<String>,
@@ -353,13 +409,13 @@ pub struct FormAnswer {
 impl FormAnswer {
     pub fn new(
         answer: domain::form::answer::models::AnswerEntry,
-        user: domain::user::models::User,
+        author: usecase::models::AnswerAuthorDetails,
         comments: Vec<usecase::models::CommentWithAuthor>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
         FormAnswer {
             id: answer.id().to_owned().into(),
-            user: user.into(),
+            author: author.into(),
             form_id: answer.form_id().into_inner(),
             timestamp: answer.timestamp().to_owned(),
             title: answer

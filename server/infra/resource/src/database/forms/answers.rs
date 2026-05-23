@@ -3,10 +3,10 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerId},
+        answer::models::{AnswerAuthor, AnswerEntry, AnswerId},
         models::FormId,
     },
-    user::models::Role,
+    user::models::{Role, TemporaryUser, User},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -20,8 +20,42 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    records::{FormAnswerContentRecord, FormAnswerRecord},
+    records::{AnswerAuthorRecord, FormAnswerContentRecord, FormAnswerRecord},
 };
+
+fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Option<String>) {
+    match answer.author() {
+        AnswerAuthor::AuthenticatedUser(user_id) => (
+            "AUTHENTICATED_USER".to_string(),
+            Some(user_id.to_string()),
+            None,
+        ),
+        AnswerAuthor::TemporaryUser(temporary_user) => (
+            "TEMPORARY_USER".to_string(),
+            None,
+            Some(temporary_user.id.to_string()),
+        ),
+    }
+}
+
+fn author_from_row(row: &sqlx::mysql::MySqlRow) -> Result<AnswerAuthorRecord, InfraError> {
+    let author_type: String = row.try_get("author_type")?;
+    match author_type.as_str() {
+        "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(User {
+            id: Uuid::from_str(&row.try_get::<String, _>("user")?)?.into(),
+            name: row.try_get("user_name")?,
+            role: Role::from_str(&row.try_get::<String, _>("user_role")?)?,
+        })),
+        "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryUser(TemporaryUser {
+            id: Uuid::from_str(&row.try_get::<String, _>("temporary_user_id")?)?.into(),
+            name: row.try_get("temporary_user_name")?,
+            contact_text: row.try_get("temporary_user_contact_text")?,
+        })),
+        value => Err(InfraError::Unexpected {
+            cause: format!("unknown answer author_type: {value}"),
+        }),
+    }
+}
 
 async fn fetch_real_answers_by_answer_ids<T>(
     txn: &mut DatabaseTransaction,
@@ -94,7 +128,8 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), InfraError> {
         let answer_id = answer.id().to_owned().into_inner().to_string();
         let form_id = answer.form_id().to_owned().into_inner().to_string();
-        let user_id = answer.user_id().to_string();
+        let (author_type, user_id, temporary_user_id) = answer_author_columns(answer);
+        let temporary_user = answer.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
             .map(|title| title.into_inner());
         let timestamp = answer.timestamp().to_owned();
@@ -114,14 +149,30 @@ impl FormAnswerDatabase for ConnectionPool {
 
         self.read_write_transaction(move |txn| {
             Box::pin(async move {
-                sqlx::query!(
-                    r"INSERT INTO answers (id, form_id, user, title, timestamp) VALUES (?, ?, ?, ?, ?)",
-                    answer_id,
-                    form_id,
-                    user_id,
-                    title,
-                    timestamp,
+                if let Some(temporary_user) = temporary_user {
+                    sqlx::query(
+                        r"INSERT INTO temporary_users (id, name, contact_text)
+                        VALUES (?, ?, ?)
+                        ON DUPLICATE KEY UPDATE name = VALUES(name), contact_text = VALUES(contact_text)",
+                    )
+                    .bind(temporary_user.id.to_string())
+                    .bind(&temporary_user.name)
+                    .bind(&temporary_user.contact_text)
+                    .execute(&mut **txn)
+                    .await?;
+                }
+
+                sqlx::query(
+                    r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)",
                 )
+                .bind(answer_id)
+                .bind(form_id)
+                .bind(author_type)
+                .bind(user_id)
+                .bind(temporary_user_id)
+                .bind(title)
+                .bind(timestamp)
                 .execute(&mut **txn)
                 .await?;
 
@@ -153,8 +204,13 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answer_query_result_opt = sqlx::query(
-                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
-                        INNER JOIN users ON answers.user = users.id
+                    r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
+                        users.name AS user_name, users.role AS user_role,
+                        temporary_user_id, temporary_users.name AS temporary_user_name,
+                        temporary_users.contact_text AS temporary_user_contact_text,
+                        timestamp FROM answers
+                        LEFT JOIN users ON answers.user = users.id
+                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
                         WHERE answers.id = ?",
                 )
                 .bind(answer_id.into_inner().to_string())
@@ -183,19 +239,17 @@ impl FormAnswerDatabase for ConnectionPool {
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerRecord {
                             id: rs.try_get("answer_id")?,
-                            uuid: rs.try_get("user")?,
-                            user_name: rs.try_get("name")?,
-                            user_role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
+                            author: author_from_row(&rs)?,
                             timestamp: rs.try_get("timestamp")?,
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
-                            contents
+                            contents,
                         })
                     })
                     .transpose()
             })
         })
-            .await
+        .await
     }
 
     #[tracing::instrument]
@@ -206,8 +260,13 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = sqlx::query(
-                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
-                        INNER JOIN users ON answers.user = users.id
+                    r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
+                        users.name AS user_name, users.role AS user_role,
+                        temporary_user_id, temporary_users.name AS temporary_user_name,
+                        temporary_users.contact_text AS temporary_user_contact_text,
+                        timestamp FROM answers
+                        LEFT JOIN users ON answers.user = users.id
+                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
                         WHERE form_id = ?
                         ORDER BY answers.timestamp",
                 )
@@ -222,22 +281,25 @@ impl FormAnswerDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(FormAnswerRecord {
                             id: answer_id.to_string(),
-                            uuid: rs.try_get("user")?,
-                            user_name: rs.try_get("name")?,
-                            user_role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
+                            author: author_from_row(&rs)?,
                             timestamp: rs.try_get("timestamp")?,
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
-                            contents: Vec::new()
+                            contents: Vec::new(),
                         })
-                    }).collect::<Result<Vec<_>, _>>()?;
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                let answer_ids = form_answer_records.iter().map(|record| record.id.to_owned()).collect_vec();
+                let answer_ids = form_answer_records
+                    .iter()
+                    .map(|record| record.id.to_owned())
+                    .collect_vec();
 
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
                 attach_contents(form_answer_records, contents)
             })
-        }).await
+        })
+        .await
     }
 
     #[tracing::instrument]
@@ -245,8 +307,13 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = sqlx::query(
-                    r"SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
-                        INNER JOIN users ON answers.user = users.id
+                    r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
+                        users.name AS user_name, users.role AS user_role,
+                        temporary_user_id, temporary_users.name AS temporary_user_name,
+                        temporary_users.contact_text AS temporary_user_contact_text,
+                        timestamp FROM answers
+                        LEFT JOIN users ON answers.user = users.id
+                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
                         ORDER BY answers.timestamp",
                 )
                 .fetch_all(&mut **txn)
@@ -259,22 +326,24 @@ impl FormAnswerDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(FormAnswerRecord {
                             id: answer_id.to_string(),
-                            uuid: rs.try_get("user")?,
-                            user_name: rs.try_get("name")?,
-                            user_role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
+                            author: author_from_row(&rs)?,
                             timestamp: rs.try_get("timestamp")?,
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
-                            contents: Vec::new()
+                            contents: Vec::new(),
                         })
-                    }).collect::<Result<Vec<_>, _>>()?;
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                let answer_ids = form_answer_records.iter().map(|record| record.id.to_owned()).collect_vec();
+                let answer_ids = form_answer_records
+                    .iter()
+                    .map(|record| record.id.to_owned())
+                    .collect_vec();
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
                 attach_contents(form_answer_records, contents)
             })
         })
-            .await
+        .await
     }
 
     #[tracing::instrument]
@@ -294,8 +363,13 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let sql = format!(
-                    "SELECT form_id, answers.id AS answer_id, title, user, name, role, timestamp FROM answers
-                        INNER JOIN users ON answers.user = users.id
+                    "SELECT form_id, answers.id AS answer_id, title, author_type, user,
+                        users.name AS user_name, users.role AS user_role,
+                        temporary_user_id, temporary_users.name AS temporary_user_name,
+                        temporary_users.contact_text AS temporary_user_contact_text,
+                        timestamp FROM answers
+                        LEFT JOIN users ON answers.user = users.id
+                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
                         WHERE answers.id IN ({})
                         ORDER BY answers.timestamp",
                     std::iter::repeat_n("?", ids.len()).join(", ")
@@ -313,44 +387,63 @@ impl FormAnswerDatabase for ConnectionPool {
 
                         Ok::<_, InfraError>(FormAnswerRecord {
                             id: answer_id.to_string(),
-                            uuid: rs.try_get("user")?,
-                            user_name: rs.try_get("name")?,
-                            user_role: Role::from_str(&rs.try_get::<String, _>("role")?)?,
+                            author: author_from_row(&rs)?,
                             timestamp: rs.try_get("timestamp")?,
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
-                            contents: Vec::new()
+                            contents: Vec::new(),
                         })
-                    }).collect::<Result<Vec<_>, _>>()?;
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                let answer_ids = form_answer_records.iter().map(|record| record.id.to_owned()).collect_vec();
+                let answer_ids = form_answer_records
+                    .iter()
+                    .map(|record| record.id.to_owned())
+                    .collect_vec();
 
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
                 attach_contents(form_answer_records, contents)
             })
-        }).await
+        })
+        .await
     }
 
     #[tracing::instrument]
     async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError> {
         let answer_id = answer_entry.id().to_owned().into_inner().to_string();
         let form_id = answer_entry.form_id().to_owned().to_string();
-        let user = answer_entry.user_id().to_string();
+        let (author_type, user, temporary_user_id) = answer_author_columns(answer_entry);
+        let temporary_user = answer_entry.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer_entry.title().to_owned())
             .map(|title| title.into_inner());
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                sqlx::query!(
-                    r#"INSERT INTO answers (id, form_id, user, title)
-                    VALUES (?, ?, ?, ?)
+                if let Some(temporary_user) = temporary_user {
+                    sqlx::query(
+                        r"INSERT INTO temporary_users (id, name, contact_text)
+                        VALUES (?, ?, ?)
+                        ON DUPLICATE KEY UPDATE name = VALUES(name), contact_text = VALUES(contact_text)",
+                    )
+                    .bind(temporary_user.id.to_string())
+                    .bind(temporary_user.name)
+                    .bind(temporary_user.contact_text)
+                    .execute(&mut **txn)
+                    .await?;
+                }
+
+                sqlx::query(
+                    r#"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                     title = VALUES(title)"#,
-                    answer_id,
-                    form_id,
-                    user,
-                    title,
                 )
+                .bind(answer_id)
+                .bind(form_id)
+                .bind(author_type)
+                .bind(user)
+                .bind(temporary_user_id)
+                .bind(title)
                 .execute(&mut **txn)
                 .await?;
                 Ok::<_, InfraError>(())

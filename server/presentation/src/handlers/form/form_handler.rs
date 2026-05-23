@@ -8,7 +8,7 @@ use axum::{
 };
 use domain::{
     form::{models::FormId, question::models::QuestionSet},
-    repository::Repositories,
+    repository::{Repositories, form::active_form_repository::ActiveFormRepository},
     user::models::User,
 };
 use itertools::Itertools;
@@ -25,6 +25,7 @@ use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit, QuestionSchema},
     form_response_schemas::{
         ArchivedFormSchema, FormMetaSchema, FormSchema, FormSettingsSchema, QuestionResponseSchema,
+        TemporaryAnswerFormSchema,
     },
 };
 use axum::extract::rejection::PathRejection;
@@ -82,6 +83,20 @@ impl IntoResponse for GetFormResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetTemporaryAnswerFormResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(TemporaryAnswerFormSchema),
+}
+
+impl IntoResponse for GetTemporaryAnswerFormResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
         }
     }
 }
@@ -203,6 +218,7 @@ pub async fn create_form_handler(
     let FormCreateSchema {
         title,
         description,
+        settings,
         questions,
     } = form;
 
@@ -212,7 +228,13 @@ pub async fn create_form_handler(
         .map_err(handle_error)?;
 
     let form = form_use_case
-        .create_form(title, form_description, questions, &user)
+        .create_form(
+            title,
+            form_description,
+            questions,
+            settings.and_then(|settings| settings.allow_temporary_answers),
+            &user,
+        )
         .await
         .map_err(handle_error)?;
 
@@ -332,6 +354,59 @@ pub async fn get_form_handler(
 }
 
 #[utoipa::path(
+    get,
+    path = "/forms/{id}/temporary-answer-form",
+    summary = "未ログイン回答用フォームの取得",
+    params(
+        ("id" = String, Path, description = "Form ID"),
+    ),
+    responses(
+        GetTemporaryAnswerFormResponse,
+        BadRequest,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    tag = "Answers"
+)]
+pub async fn get_temporary_answer_form_handler(
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<FormId>, PathRejection>,
+) -> Result<GetTemporaryAnswerFormResponse, Response> {
+    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let form_guard = repository
+        .active_form_repository()
+        .get(form_id)
+        .await
+        .map_err(handle_error)?
+        .ok_or(errors::Error::from(
+            errors::usecase::UseCaseError::FormNotFound,
+        ))
+        .map_err(handle_error)?;
+    let form = unsafe { form_guard.into_read_unchecked() };
+
+    if !form.settings().allow_temporary_answers() {
+        return Err(handle_error(errors::domain::DomainError::Forbidden.into()));
+    }
+
+    Ok(GetTemporaryAnswerFormResponse::Ok(TemporaryAnswerFormSchema {
+        id: form.id().to_owned(),
+        title: form.title().to_owned(),
+        description: form.description().to_owned(),
+        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+        answer_settings: crate::schemas::form::form_response_schemas::AnswerSettingsSchema::from_answer_settings_ref(
+            form.settings().answer_settings(),
+        ),
+        questions: form
+            .questions()
+            .iter()
+            .cloned()
+            .map(QuestionResponseSchema::from)
+            .collect(),
+    }))
+}
+
+#[utoipa::path(
     post,
     path = "/forms/{id}/archive",
     summary = "フォームのアーカイブ",
@@ -409,27 +484,34 @@ pub async fn update_form_handler(
 
     let title = targets.title;
     let description = targets.description.map(FormDescription::new);
-    let (response_period, webhook_url, default_answer_title, visibility, answer_visibility) =
-        if let Some(settings) = &targets.settings {
-            (
-                settings
-                    .answer_settings
-                    .as_ref()
-                    .and_then(|answer_settings| answer_settings.response_period.to_owned()),
-                settings.webhook_url.to_owned().and_then(|url| url.0),
-                settings
-                    .answer_settings
-                    .as_ref()
-                    .and_then(|answer_settings| answer_settings.default_answer_title.to_owned()),
-                settings.visibility,
-                settings
-                    .answer_settings
-                    .as_ref()
-                    .and_then(|answer_settings| answer_settings.visibility.to_owned()),
-            )
-        } else {
-            (None, None, None, None, None)
-        };
+    let (
+        response_period,
+        webhook_url,
+        default_answer_title,
+        visibility,
+        allow_temporary_answers,
+        answer_visibility,
+    ) = if let Some(settings) = &targets.settings {
+        (
+            settings
+                .answer_settings
+                .as_ref()
+                .and_then(|answer_settings| answer_settings.response_period.to_owned()),
+            settings.webhook_url.to_owned().and_then(|url| url.0),
+            settings
+                .answer_settings
+                .as_ref()
+                .and_then(|answer_settings| answer_settings.default_answer_title.to_owned()),
+            settings.visibility,
+            settings.allow_temporary_answers,
+            settings
+                .answer_settings
+                .as_ref()
+                .and_then(|answer_settings| answer_settings.visibility.to_owned()),
+        )
+    } else {
+        (None, None, None, None, None, None)
+    };
     let questions = targets
         .questions
         .map(into_upsert_question_inputs)
@@ -447,6 +529,7 @@ pub async fn update_form_handler(
             webhook_url,
             default_answer_title,
             visibility,
+            allow_temporary_answers,
             answer_visibility,
             questions,
             labels,

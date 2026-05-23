@@ -92,7 +92,10 @@ impl<
 
         match Message::try_new(answer_id, actor.id, message_body) {
             Ok(message) => {
-                let notification_recipient_id = *form_answer.user_id();
+                let notification_recipient_id = form_answer
+                    .author()
+                    .authenticated_user_id()
+                    .ok_or(Error::from(UserNotFound))?;
                 let notification_recipient = self
                     .user_repository
                     .find_by(notification_recipient_id.into_inner())

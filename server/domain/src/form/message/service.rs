@@ -20,7 +20,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -38,7 +38,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent.id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -80,7 +80,11 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
 
         actor.role == Administrator
             || (actor.id == *self.sender_id()
-                && context.related_answer_entry.user_id() == self.sender_id())
+                && context
+                    .related_answer_entry
+                    .author()
+                    .authenticated_user_id()
+                    == Some(*self.sender_id()))
     }
 
     /// [`Message`] の読み取り権限があるかどうかを判定します。
@@ -93,7 +97,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -111,7 +115,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent.id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -151,7 +155,12 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
             return false;
         }
 
-        actor.role == Administrator || context.related_answer_entry.user_id() == &actor.id
+        actor.role == Administrator
+            || context
+                .related_answer_entry
+                .author()
+                .authenticated_user_id()
+                == Some(actor.id)
     }
 
     /// [`Message`] の更新権限があるかどうかを判定します。
@@ -166,7 +175,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -184,7 +193,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent.id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -233,7 +242,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
@@ -251,7 +260,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent.id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),

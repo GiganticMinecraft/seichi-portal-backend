@@ -5,12 +5,17 @@ use domain::{
         models::{ActiveForm, ArchivedForm, FormLabel},
         question::models::{Question, QuestionId},
     },
-    user::models::{DiscordUser, User},
+    user::models::{DiscordUser, TemporaryUser, User},
 };
+
+pub enum AnswerAuthorDetails {
+    AuthenticatedUser(User),
+    TemporaryUser(TemporaryUser),
+}
 
 pub struct AnswerDetails {
     pub form_answer: AnswerEntry,
-    pub user: User,
+    pub author: AnswerAuthorDetails,
     pub labels: Vec<AnswerLabel>,
     pub comments: Vec<CommentWithAuthor>,
 }

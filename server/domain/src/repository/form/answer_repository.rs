@@ -25,6 +25,7 @@ pub trait AnswerRepository: Send + Sync + 'static {
         answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
         actor: &User,
     ) -> Result<(), Error>;
+    async fn post_answer_without_actor(&self, answer: AnswerEntry) -> Result<(), Error>;
     async fn get_answer(
         &self,
         answer_id: AnswerId,

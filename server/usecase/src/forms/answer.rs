@@ -1,7 +1,10 @@
 use domain::{
     form::{
         answer::{
-            models::{AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent, PostedAnswerContents},
+            models::{
+                AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent,
+                PostedAnswerContents,
+            },
             service::AnswerEntryAuthorizationContext,
         },
         comment::service::CommentAuthorizationContext,
@@ -15,7 +18,7 @@ use domain::{
     },
     repository::user_repository::UserRepository,
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
-    user::models::User,
+    user::models::{TemporaryUser, User},
 };
 use errors::{
     Error,
@@ -24,7 +27,7 @@ use errors::{
 use futures::{StreamExt, stream, try_join};
 
 use crate::{
-    models::{AnswerDetails, CommentWithAuthor},
+    models::{AnswerAuthorDetails, AnswerDetails, CommentWithAuthor},
     user_reference_resolver::resolve_user_references,
 };
 
@@ -58,16 +61,26 @@ impl<
         labels: Vec<domain::form::answer::models::AnswerLabel>,
         comments: Vec<domain::form::comment::models::Comment>,
     ) -> Result<AnswerDetails, Error> {
-        let user_ids = std::iter::once(*form_answer.user_id())
+        let user_ids = form_answer
+            .author()
+            .authenticated_user_id()
+            .into_iter()
             .chain(comments.iter().map(|comment| *comment.commented_by()))
             .collect();
 
         let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
 
-        let user = users
-            .get(form_answer.user_id())
-            .cloned()
-            .ok_or(Error::from(UserNotFound))?;
+        let author = match form_answer.author() {
+            AnswerAuthor::AuthenticatedUser(user_id) => AnswerAuthorDetails::AuthenticatedUser(
+                users
+                    .get(user_id)
+                    .cloned()
+                    .ok_or(Error::from(UserNotFound))?,
+            ),
+            AnswerAuthor::TemporaryUser(temporary_user) => {
+                AnswerAuthorDetails::TemporaryUser(temporary_user.clone())
+            }
+        };
 
         let comments = comments
             .into_iter()
@@ -85,7 +98,7 @@ impl<
 
         Ok(AnswerDetails {
             form_answer,
-            user,
+            author,
             labels,
             comments,
         })
@@ -111,12 +124,17 @@ impl<
                 .to_owned(),
             &questions,
             &posted_answers,
-            &user,
+            user.name.as_str(),
         )?;
 
         let form_settings = form.settings();
 
-        let answer_entry = AnswerEntry::new(user.id, form_id, title, posted_answers);
+        let answer_entry = AnswerEntry::new(
+            AnswerAuthor::AuthenticatedUser(user.id),
+            form_id,
+            title,
+            posted_answers,
+        );
         let context = AnswerEntryAuthorizationContext {
             form_visibility: form_settings.visibility().to_owned(),
             response_period: form_settings.answer_settings().response_period().to_owned(),
@@ -127,6 +145,51 @@ impl<
 
         self.answer_repository
             .post_answer(&context, guard, &user)
+            .await
+    }
+
+    pub async fn post_temporary_answers(
+        &self,
+        temporary_user: TemporaryUser,
+        form_id: FormId,
+        answers: Vec<FormAnswerContent>,
+    ) -> Result<(), Error> {
+        let form = self.active_form_repository.get(form_id).await?;
+
+        let form_guard = form.ok_or(Error::from(FormNotFound))?;
+        let form = unsafe { form_guard.into_read_unchecked() };
+        let questions = form.questions().as_slice().to_vec();
+        let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
+        let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
+            form.settings()
+                .answer_settings()
+                .default_answer_title()
+                .to_owned(),
+            &questions,
+            &posted_answers,
+            temporary_user.name.as_str(),
+        )?;
+
+        let form_settings = form.settings();
+        let context = AnswerEntryAuthorizationContext {
+            form_visibility: form_settings.visibility().to_owned(),
+            response_period: form_settings.answer_settings().response_period().to_owned(),
+            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
+        };
+
+        if !form_settings.allow_temporary_answers() || !context.can_create_temporary() {
+            return Err(errors::domain::DomainError::Forbidden.into());
+        }
+
+        let answer_entry = AnswerEntry::new(
+            AnswerAuthor::TemporaryUser(temporary_user),
+            form_id,
+            title,
+            posted_answers,
+        );
+
+        self.answer_repository
+            .post_answer_without_actor(answer_entry)
             .await
     }
 

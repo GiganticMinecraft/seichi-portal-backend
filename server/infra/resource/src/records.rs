@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::{
         answer::{
-            models::{AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
+            models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
             settings::models::{DefaultAnswerTitle, ResponsePeriod},
         },
         comment::models::CommentContent,
@@ -15,7 +15,7 @@ use domain::{
         },
         question::models::{Choice, Question, QuestionType},
     },
-    user::models::{Role, User},
+    user::models::{Role, TemporaryUser, User},
 };
 use errors::infra::InfraError;
 use types::non_empty_string::NonEmptyString;
@@ -108,6 +108,7 @@ pub struct ActiveFormRecord {
     pub webhook_url: Option<String>,
     pub default_answer_title: Option<String>,
     pub visibility: String,
+    pub allow_temporary_answers: bool,
     pub answer_visibility: String,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
@@ -128,6 +129,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             webhook_url,
             default_answer_title,
             visibility,
+            allow_temporary_answers,
             answer_visibility,
             questions,
             label_ids,
@@ -153,6 +155,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
                         .transpose()?,
                 ),
                 visibility.try_into()?,
+                allow_temporary_answers,
                 answer_visibility.try_into()?,
             ),
             QuestionSet::try_new(questions)?,
@@ -266,42 +269,18 @@ impl TryFrom<CommentRecord> for domain::form::comment::models::Comment {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn question_record_rejects_text_question_with_choices() {
-        let result: Result<Question, _> = QuestionRecord {
-            id: Uuid::nil().to_string(),
-            form_id: Uuid::nil().to_string(),
-            template_key: "template".to_string(),
-            position: 0,
-            title: "Question".to_string(),
-            description: None,
-            question_type: "Text".to_string(),
-            choices: vec![ChoiceRecord {
-                id: Some(1),
-                position: 0,
-                label: "A".to_string(),
-            }],
-            is_required: true,
-        }
-        .try_into();
-
-        assert!(result.is_err());
-    }
-}
-
 pub struct FormAnswerRecord {
     pub id: String,
-    pub user_name: String,
-    pub uuid: String,
-    pub user_role: Role,
+    pub author: AnswerAuthorRecord,
     pub timestamp: DateTime<Utc>,
     pub form_id: String,
     pub title: Option<String>,
     pub contents: Vec<FormAnswerContentRecord>,
+}
+
+pub enum AnswerAuthorRecord {
+    AuthenticatedUser(User),
+    TemporaryUser(TemporaryUser),
 }
 
 impl TryFrom<FormAnswerRecord> for AnswerEntry {
@@ -310,23 +289,23 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
     fn try_from(
         FormAnswerRecord {
             id,
-            user_name: _,
-            uuid,
-            user_role: _,
+            author,
             timestamp,
             form_id,
             title,
             contents,
         }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
+        let author = match author {
+            AnswerAuthorRecord::AuthenticatedUser(user) => AnswerAuthor::AuthenticatedUser(user.id),
+            AnswerAuthorRecord::TemporaryUser(user) => AnswerAuthor::TemporaryUser(user),
+        };
         unsafe {
             Ok(AnswerEntry::from_raw_parts(
                 Uuid::from_str(&id)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
-                Uuid::from_str(&uuid)
-                    .map_err(Into::<InfraError>::into)?
-                    .into(),
+                author,
                 timestamp,
                 FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
@@ -453,5 +432,32 @@ impl From<DiscordUserRecord> for domain::user::models::DiscordUser {
             domain::user::models::DiscordUserId::new(user_id),
             domain::user::models::DiscordUserName::new(username),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn question_record_rejects_text_question_with_choices() {
+        let result: Result<Question, _> = QuestionRecord {
+            id: Uuid::nil().to_string(),
+            form_id: Uuid::nil().to_string(),
+            template_key: "template".to_string(),
+            position: 0,
+            title: "Question".to_string(),
+            description: None,
+            question_type: "Text".to_string(),
+            choices: vec![ChoiceRecord {
+                id: Some(1),
+                position: 0,
+                label: "A".to_string(),
+            }],
+            is_required: true,
+        }
+        .try_into();
+
+        assert!(result.is_err());
     }
 }

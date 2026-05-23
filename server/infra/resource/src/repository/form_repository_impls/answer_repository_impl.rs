@@ -41,6 +41,15 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     }
 
     #[tracing::instrument(skip(self))]
+    async fn post_answer_without_actor(&self, answer: AnswerEntry) -> Result<(), Error> {
+        self.client
+            .form_answer()
+            .post_answer(&answer)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn get_answer(
         &self,
         answer_id: AnswerId,

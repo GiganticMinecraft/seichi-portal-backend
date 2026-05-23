@@ -14,10 +14,43 @@ use crate::{
         question::models::{Question, QuestionId},
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Role, User, UserId},
+    user::models::{Role, TemporaryUser, User, UserId},
 };
 
 pub type AnswerId = types::Id<AnswerEntry>;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum AnswerAuthor {
+    AuthenticatedUser(UserId),
+    TemporaryUser(TemporaryUser),
+}
+
+impl AnswerAuthor {
+    pub fn name_for_default_title(
+        &self,
+        authenticated_user_name: Option<&str>,
+        temporary_user_name: Option<&str>,
+    ) -> String {
+        match self {
+            Self::AuthenticatedUser(_) => authenticated_user_name.unwrap_or_default().to_string(),
+            Self::TemporaryUser(_) => temporary_user_name.unwrap_or_default().to_string(),
+        }
+    }
+
+    pub fn authenticated_user_id(&self) -> Option<UserId> {
+        match self {
+            Self::AuthenticatedUser(user_id) => Some(*user_id),
+            Self::TemporaryUser(_) => None,
+        }
+    }
+
+    pub fn temporary_user(&self) -> Option<&TemporaryUser> {
+        match self {
+            Self::AuthenticatedUser(_) => None,
+            Self::TemporaryUser(user) => Some(user),
+        }
+    }
+}
 
 #[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
@@ -139,7 +172,7 @@ impl PostedAnswerContents {
 #[derive(Serialize, Deserialize, Getters, PartialEq, Debug)]
 pub struct AnswerEntry {
     id: AnswerId,
-    user_id: UserId,
+    author: AnswerAuthor,
     timestamp: DateTime<Utc>,
     form_id: FormId,
     title: AnswerTitle,
@@ -149,14 +182,14 @@ pub struct AnswerEntry {
 impl AnswerEntry {
     /// [`AnswerEntry`] を新しく作成します。
     pub fn new(
-        user_id: UserId,
+        author: AnswerAuthor,
         form_id: FormId,
         title: AnswerTitle,
         contents: PostedAnswerContents,
     ) -> Self {
         Self {
             id: AnswerId::new(),
-            user_id,
+            author,
             timestamp: Utc::now(),
             form_id,
             title,
@@ -171,7 +204,7 @@ impl AnswerEntry {
     /// (例えば、データベースから取得した場合)にのみ使用してください。
     pub unsafe fn from_raw_parts(
         id: AnswerId,
-        user_id: UserId,
+        author: AnswerAuthor,
         timestamp: DateTime<Utc>,
         form_id: FormId,
         title: AnswerTitle,
@@ -179,7 +212,7 @@ impl AnswerEntry {
     ) -> Self {
         Self {
             id,
-            user_id,
+            author,
             timestamp,
             form_id,
             title,

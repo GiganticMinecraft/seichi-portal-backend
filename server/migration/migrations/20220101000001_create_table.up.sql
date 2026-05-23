@@ -4,6 +4,13 @@ CREATE TABLE IF NOT EXISTS users(
     role ENUM('ADMINISTRATOR', 'STANDARD_USER') NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS temporary_users(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    contact_text TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS discord_linked_users(
     user_id CHAR(36) NOT NULL PRIMARY KEY,
     discord_id VARCHAR(18) NOT NULL UNIQUE,
@@ -22,6 +29,7 @@ CREATE TABLE IF NOT EXISTS form_meta_data(
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    allow_temporary_answers BOOL NOT NULL DEFAULT FALSE,
     answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by CHAR(36) NOT NULL,
@@ -74,11 +82,18 @@ CREATE TABLE IF NOT EXISTS form_webhooks(
 CREATE TABLE IF NOT EXISTS answers(
     id CHAR(36) NOT NULL PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
-    user CHAR(36) NOT NULL,
+    author_type ENUM('AUTHENTICATED_USER', 'TEMPORARY_USER') NOT NULL,
+    user CHAR(36),
+    temporary_user_id CHAR(36),
     title TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY fk_answers_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
-    FOREIGN KEY fk_answers_user(user) REFERENCES users(id)
+    FOREIGN KEY fk_answers_user(user) REFERENCES users(id),
+    FOREIGN KEY fk_answers_temporary_user_id(temporary_user_id) REFERENCES temporary_users(id),
+    CHECK (
+        (author_type = 'AUTHENTICATED_USER' AND user IS NOT NULL AND temporary_user_id IS NULL)
+        OR (author_type = 'TEMPORARY_USER' AND user IS NULL AND temporary_user_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE IF NOT EXISTS real_answers(
@@ -149,6 +164,7 @@ CREATE TABLE IF NOT EXISTS archived_form_meta_data(
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    allow_temporary_answers BOOL NOT NULL DEFAULT FALSE,
     answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
     created_at DATETIME NOT NULL,
     created_by CHAR(36) NOT NULL,
@@ -212,11 +228,18 @@ CREATE TABLE IF NOT EXISTS archived_default_answer_titles(
 CREATE TABLE IF NOT EXISTS archived_answers(
     id CHAR(36) NOT NULL PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
-    user CHAR(36) NOT NULL,
+    author_type ENUM('AUTHENTICATED_USER', 'TEMPORARY_USER') NOT NULL,
+    user CHAR(36),
+    temporary_user_id CHAR(36),
     title TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY fk_archived_answers_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE,
-    FOREIGN KEY fk_archived_answers_user(user) REFERENCES users(id)
+    FOREIGN KEY fk_archived_answers_user(user) REFERENCES users(id),
+    FOREIGN KEY fk_archived_answers_temporary_user_id(temporary_user_id) REFERENCES temporary_users(id),
+    CHECK (
+        (author_type = 'AUTHENTICATED_USER' AND user IS NOT NULL AND temporary_user_id IS NULL)
+        OR (author_type = 'TEMPORARY_USER' AND user IS NULL AND temporary_user_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE IF NOT EXISTS archived_real_answers(

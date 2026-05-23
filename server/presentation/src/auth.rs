@@ -23,10 +23,13 @@ pub async fn auth(
 ) -> Result<Response, Response> {
     let ignore_auth_paths = ["/api/v1/session", "/health"];
     let ignore_auth_path_prefixes = ["/swagger-ui", "/api-docs"];
+    let path = request.uri().path();
     if ignore_auth_paths.contains(&request.uri().path())
         || ignore_auth_path_prefixes
             .iter()
-            .any(|prefix| request.uri().path().starts_with(prefix))
+            .any(|prefix| path.starts_with(prefix))
+        || (path.starts_with("/api/v1/forms/")
+            && (path.ends_with("/temporary-answers") || path.ends_with("/temporary-answer-form")))
     {
         return Ok(next.run(request).await);
     }

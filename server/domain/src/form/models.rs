@@ -56,6 +56,8 @@ pub struct FormSettings {
     webhook_url: WebhookUrl,
     #[serde(default)]
     visibility: Visibility,
+    #[serde(default)]
+    allow_temporary_answers: bool,
     answer_settings: AnswerSettings,
 }
 
@@ -64,6 +66,7 @@ impl FormSettings {
         Self {
             webhook_url: WebhookUrl::try_new(None).unwrap(),
             visibility: Visibility::PUBLIC,
+            allow_temporary_answers: false,
             answer_settings: AnswerSettings::new(
                 DefaultAnswerTitle::new(None),
                 AnswerVisibility::PRIVATE,
@@ -88,6 +91,10 @@ impl FormSettings {
         &self.answer_settings
     }
 
+    pub fn allow_temporary_answers(&self) -> bool {
+        self.allow_temporary_answers
+    }
+
     pub fn change_webhook_url(self, webhook_url: WebhookUrl) -> Self {
         Self {
             webhook_url,
@@ -97,6 +104,13 @@ impl FormSettings {
 
     pub fn change_visibility(self, visibility: Visibility) -> Self {
         Self { visibility, ..self }
+    }
+
+    pub fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
+        Self {
+            allow_temporary_answers,
+            ..self
+        }
     }
 
     pub fn change_answer_settings(self, answer_settings: AnswerSettings) -> Self {
@@ -111,11 +125,13 @@ impl FormSettings {
         webhook_url: WebhookUrl,
         default_answer_title: DefaultAnswerTitle,
         visibility: Visibility,
+        allow_temporary_answers: bool,
         answer_visibility: AnswerVisibility,
     ) -> Self {
         Self {
             webhook_url,
             visibility,
+            allow_temporary_answers,
             answer_settings: AnswerSettings::new(
                 default_answer_title,
                 answer_visibility,
@@ -480,6 +496,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PRIVATE,
+    ///         false,
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),
@@ -496,6 +513,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PUBLIC,
+    ///         false,
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),

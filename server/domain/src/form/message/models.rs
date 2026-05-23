@@ -25,7 +25,7 @@ impl Message {
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::models::Message,
     ///     },
     ///     user::models::{Role, User},
@@ -39,7 +39,7 @@ impl Message {
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     user.id,
+    ///     AnswerAuthor::AuthenticatedUser(user.id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -52,7 +52,7 @@ impl Message {
     /// );
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     user.id,
+    ///     AnswerAuthor::AuthenticatedUser(user.id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -87,7 +87,7 @@ impl Message {
     /// use chrono::{DateTime, Utc};
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::models::{Message, MessageId},
     ///     },
     ///     user::models::{Role, User},
@@ -101,7 +101,7 @@ impl Message {
     /// };
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     user.id,
+    ///     AnswerAuthor::AuthenticatedUser(user.id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),

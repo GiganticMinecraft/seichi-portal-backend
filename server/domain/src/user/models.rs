@@ -42,6 +42,34 @@ impl PartialEq for User {
     }
 }
 
+#[derive(DerivingVia, Debug, PartialOrd, PartialEq, Eq, Hash, Clone, Copy)]
+#[deriving(
+    From,
+    Into,
+    IntoInner(via: Uuid),
+    Display(via: Uuid),
+    Serialize(via: Uuid),
+    Deserialize(via: Uuid)
+)]
+pub struct TemporaryUserId(#[underlying] Uuid);
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct TemporaryUser {
+    pub id: TemporaryUserId,
+    pub name: String,
+    pub contact_text: String,
+}
+
+impl TemporaryUser {
+    pub fn new(name: String, contact_text: String) -> Self {
+        Self {
+            id: TemporaryUserId::from(Uuid::new_v4()),
+            name,
+            contact_text,
+        }
+    }
+}
+
 impl AuthorizationGuardDefinitions for User {
     fn can_create(&self, actor: &User) -> bool {
         actor == self

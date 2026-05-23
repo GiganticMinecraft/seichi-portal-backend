@@ -59,13 +59,21 @@ impl<
         title: FormTitle,
         description: FormDescription,
         questions: NonEmptyVec<Question>,
+        allow_temporary_answers: Option<bool>,
         user: &User,
     ) -> Result<ActiveForm, Error> {
-        let form = ActiveForm::new(
+        let mut form = ActiveForm::new(
             title,
             description,
             QuestionSet::try_new(questions).map_err(Error::from)?,
         );
+        if let Some(allow_temporary_answers) = allow_temporary_answers {
+            let settings = form
+                .settings()
+                .to_owned()
+                .change_allow_temporary_answers(allow_temporary_answers);
+            form = form.change_settings(settings);
+        }
         let form_id = *form.id();
 
         self.active_form_repository
@@ -254,6 +262,7 @@ impl<
         webhook: Option<WebhookUrl>,
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
+        allow_temporary_answers: Option<bool>,
         answer_visibility: Option<AnswerVisibility>,
         questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
@@ -337,6 +346,12 @@ impl<
             let updated_settings = match visibility {
                 None => current_settings,
                 Some(visibility) => current_settings.change_visibility(visibility),
+            };
+            let updated_settings = match allow_temporary_answers {
+                None => updated_settings,
+                Some(allow_temporary_answers) => {
+                    updated_settings.change_allow_temporary_answers(allow_temporary_answers)
+                }
             };
             let updated_settings = match webhook {
                 None => updated_settings,
@@ -651,6 +666,7 @@ mod tests {
                 FormTitle::new("Form".to_string().try_into().unwrap()),
                 FormDescription::new("description".to_string()),
                 input_questions,
+                None,
                 &user,
             )
             .await
@@ -698,6 +714,7 @@ mod tests {
             .update_form(
                 &user,
                 form.id().to_owned(),
+                None,
                 None,
                 None,
                 None,
