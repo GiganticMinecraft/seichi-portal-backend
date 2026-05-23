@@ -20,13 +20,13 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    dto::{FormAnswerContentDto, FormAnswerDto},
+    records::{FormAnswerContentRecord, FormAnswerRecord},
 };
 
 async fn fetch_real_answers_by_answer_ids<T>(
     txn: &mut DatabaseTransaction,
     answer_ids: &[T],
-) -> Result<Vec<(Uuid, FormAnswerContentDto)>, InfraError>
+) -> Result<Vec<(Uuid, FormAnswerContentRecord)>, InfraError>
 where
     T: AsRef<str>,
 {
@@ -50,7 +50,7 @@ where
         .map(|row| {
             Ok::<_, InfraError>((
                 Uuid::from_str(&row.try_get::<String, _>("answer_id")?)?,
-                FormAnswerContentDto {
+                FormAnswerContentRecord {
                     id: row.try_get("id")?,
                     question_id: row.try_get("question_id")?,
                     answer: row.try_get("answer")?,
@@ -61,28 +61,28 @@ where
 }
 
 fn attach_contents(
-    form_answer_dtos: Vec<FormAnswerDto>,
-    answer_id_with_content_dto: Vec<(Uuid, FormAnswerContentDto)>,
-) -> Result<Vec<FormAnswerDto>, InfraError> {
-    let grouped_answer_contents = answer_id_with_content_dto
+    form_answer_records: Vec<FormAnswerRecord>,
+    answer_id_with_content_record: Vec<(Uuid, FormAnswerContentRecord)>,
+) -> Result<Vec<FormAnswerRecord>, InfraError> {
+    let grouped_answer_contents = answer_id_with_content_record
         .into_iter()
         .into_group_map_by(|(answer_id, _)| *answer_id);
 
-    form_answer_dtos
+    form_answer_records
         .into_iter()
-        .map(|dto| {
-            Ok::<_, InfraError>(FormAnswerDto {
+        .map(|record| {
+            Ok::<_, InfraError>(FormAnswerRecord {
                 contents: grouped_answer_contents
-                    .get(&Uuid::from_str(&dto.id)?)
+                    .get(&Uuid::from_str(&record.id)?)
                     .cloned()
                     .map(|contents| {
                         contents
                             .into_iter()
-                            .map(|(_, content_dto)| content_dto)
+                            .map(|(_, content_record)| content_record)
                             .collect_vec()
                     })
                     .unwrap_or_default(),
-                ..dto
+                ..record
             })
         })
         .collect()
@@ -146,7 +146,10 @@ impl FormAnswerDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError> {
+    async fn get_answers(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Option<FormAnswerRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answer_query_result_opt = sqlx::query(
@@ -168,7 +171,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 let contents = contents
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(FormAnswerContentDto {
+                        Ok::<_, InfraError>(FormAnswerContentRecord {
                             id: rs.try_get("id")?,
                             question_id: rs.try_get("question_id")?,
                             answer: rs.try_get("answer")?,
@@ -178,7 +181,7 @@ impl FormAnswerDatabase for ConnectionPool {
 
                 answer_query_result_opt
                     .map(|rs| {
-                        Ok::<_, InfraError>(FormAnswerDto {
+                        Ok::<_, InfraError>(FormAnswerRecord {
                             id: rs.try_get("answer_id")?,
                             uuid: rs.try_get("user")?,
                             user_name: rs.try_get("name")?,
@@ -199,7 +202,7 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,
-    ) -> Result<Vec<FormAnswerDto>, InfraError> {
+    ) -> Result<Vec<FormAnswerRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = sqlx::query(
@@ -212,12 +215,12 @@ impl FormAnswerDatabase for ConnectionPool {
                 .fetch_all(&mut **txn)
                 .await?;
 
-                let form_answer_dtos = answers
+                let form_answer_records = answers
                     .into_iter()
                     .map(|rs| {
                         let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
 
-                        Ok::<_, InfraError>(FormAnswerDto {
+                        Ok::<_, InfraError>(FormAnswerRecord {
                             id: answer_id.to_string(),
                             uuid: rs.try_get("user")?,
                             user_name: rs.try_get("name")?,
@@ -229,16 +232,16 @@ impl FormAnswerDatabase for ConnectionPool {
                         })
                     }).collect::<Result<Vec<_>, _>>()?;
 
-                let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
+                let answer_ids = form_answer_records.iter().map(|record| record.id.to_owned()).collect_vec();
 
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-                attach_contents(form_answer_dtos, contents)
+                attach_contents(form_answer_records, contents)
             })
         }).await
     }
 
     #[tracing::instrument]
-    async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError> {
+    async fn get_all_answers(&self) -> Result<Vec<FormAnswerRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answers = sqlx::query(
@@ -249,12 +252,12 @@ impl FormAnswerDatabase for ConnectionPool {
                 .fetch_all(&mut **txn)
                 .await?;
 
-                let form_answer_dtos = answers
+                let form_answer_records = answers
                     .into_iter()
                     .map(|rs| {
                         let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
 
-                        Ok::<_, InfraError>(FormAnswerDto {
+                        Ok::<_, InfraError>(FormAnswerRecord {
                             id: answer_id.to_string(),
                             uuid: rs.try_get("user")?,
                             user_name: rs.try_get("name")?,
@@ -266,9 +269,9 @@ impl FormAnswerDatabase for ConnectionPool {
                         })
                     }).collect::<Result<Vec<_>, _>>()?;
 
-                let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
+                let answer_ids = form_answer_records.iter().map(|record| record.id.to_owned()).collect_vec();
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-                attach_contents(form_answer_dtos, contents)
+                attach_contents(form_answer_records, contents)
             })
         })
             .await
@@ -278,7 +281,7 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn get_answers_by_answer_ids(
         &self,
         answer_ids: Vec<AnswerId>,
-    ) -> Result<Vec<FormAnswerDto>, InfraError> {
+    ) -> Result<Vec<FormAnswerRecord>, InfraError> {
         if answer_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -303,12 +306,12 @@ impl FormAnswerDatabase for ConnectionPool {
                     .fetch_all(&mut **txn)
                     .await?;
 
-                let form_answer_dtos = answers
+                let form_answer_records = answers
                     .into_iter()
                     .map(|rs| {
                         let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
 
-                        Ok::<_, InfraError>(FormAnswerDto {
+                        Ok::<_, InfraError>(FormAnswerRecord {
                             id: answer_id.to_string(),
                             uuid: rs.try_get("user")?,
                             user_name: rs.try_get("name")?,
@@ -320,10 +323,10 @@ impl FormAnswerDatabase for ConnectionPool {
                         })
                     }).collect::<Result<Vec<_>, _>>()?;
 
-                let answer_ids = form_answer_dtos.iter().map(|dto| dto.id.to_owned()).collect_vec();
+                let answer_ids = form_answer_records.iter().map(|record| record.id.to_owned()).collect_vec();
 
                 let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-                attach_contents(form_answer_dtos, contents)
+                attach_contents(form_answer_records, contents)
             })
         }).await
     }

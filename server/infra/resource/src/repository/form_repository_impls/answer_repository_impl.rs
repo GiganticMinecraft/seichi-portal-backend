@@ -74,7 +74,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
             .map(|answers| {
                 answers
                     .into_iter()
-                    .map(|posted_answers_dto| posted_answers_dto.try_into())
+                    .map(|posted_answers_record| posted_answers_record.try_into())
                     .collect::<Result<Vec<AnswerEntry>, _>>()
             })??
             .into_iter()

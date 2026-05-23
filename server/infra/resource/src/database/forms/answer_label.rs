@@ -8,7 +8,7 @@ use crate::{
     database::{
         components::FormAnswerLabelDatabase, connection::ConnectionPool, count::count_as_u32,
     },
-    dto::AnswerLabelDto,
+    records::AnswerLabelRecord,
 };
 
 #[async_trait]
@@ -35,7 +35,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError> {
+    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let labels_rs = sqlx::query("SELECT id, name FROM label_for_form_answers")
@@ -45,7 +45,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelDto {
+                        Ok::<_, InfraError>(AnswerLabelRecord {
                             id: rs.try_get("id")?,
                             name: rs.try_get("name")?,
                         })
@@ -60,7 +60,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     async fn get_label_for_answers(
         &self,
         label_id: AnswerLabelId,
-    ) -> Result<Option<AnswerLabelDto>, InfraError> {
+    ) -> Result<Option<AnswerLabelRecord>, InfraError> {
         let label_id = label_id.into_inner();
 
         self.read_only_transaction(|txn| {
@@ -74,7 +74,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                 label_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelDto {
+                        Ok::<_, InfraError>(AnswerLabelRecord {
                             id: rs.try_get("id")?,
                             name: rs.try_get("name")?,
                         })
@@ -90,7 +90,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     async fn get_labels_for_answers_by_label_ids(
         &self,
         label_ids: Vec<AnswerLabelId>,
-    ) -> Result<Vec<AnswerLabelDto>, InfraError> {
+    ) -> Result<Vec<AnswerLabelRecord>, InfraError> {
         if label_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -115,12 +115,12 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelDto {
+                        Ok::<_, InfraError>(AnswerLabelRecord {
                             id: rs.try_get("id")?,
                             name: rs.try_get("name")?,
                         })
                     })
-                    .collect::<Result<Vec<AnswerLabelDto>, _>>()
+                    .collect::<Result<Vec<AnswerLabelRecord>, _>>()
             })
         })
         .await
@@ -130,7 +130,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
-    ) -> Result<Vec<AnswerLabelDto>, InfraError> {
+    ) -> Result<Vec<AnswerLabelRecord>, InfraError> {
         let answer_id = answer_id.into_inner().to_string();
 
         self.read_only_transaction(|txn| {
@@ -147,12 +147,12 @@ impl FormAnswerLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelDto {
+                        Ok::<_, InfraError>(AnswerLabelRecord {
                             id: rs.try_get("label_id")?,
                             name: rs.try_get("name")?,
                         })
                     })
-                    .collect::<Result<Vec<AnswerLabelDto>, _>>()
+                    .collect::<Result<Vec<AnswerLabelRecord>, _>>()
             })
         })
             .await

@@ -7,7 +7,7 @@ use errors::infra::InfraError;
 
 use crate::{
     database::{components::FormMessageDatabase, connection::ConnectionPool},
-    dto::MessageDto,
+    records::MessageRecord,
 };
 
 #[async_trait]
@@ -64,13 +64,13 @@ impl FormMessageDatabase for ConnectionPool {
     async fn fetch_messages_by_form_answer(
         &self,
         answers: &AnswerEntry,
-    ) -> Result<Vec<MessageDto>, InfraError> {
+    ) -> Result<Vec<MessageRecord>, InfraError> {
         let answer_id = answers.id().into_inner().to_owned();
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = sqlx::query_as!(
-                    MessageDto,
+                    MessageRecord,
                     r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
@@ -90,13 +90,13 @@ impl FormMessageDatabase for ConnectionPool {
     async fn fetch_message(
         &self,
         message_id: &MessageId,
-    ) -> Result<Option<MessageDto>, InfraError> {
+    ) -> Result<Option<MessageRecord>, InfraError> {
         let message_id = message_id.into_inner().to_string();
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let row = sqlx::query_as!(
-                    MessageDto,
+                    MessageRecord,
                     r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender

@@ -22,7 +22,7 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    dto::{ActiveFormRecord, ArchivedFormRecord, ChoiceDto, QuestionDto},
+    records::{ActiveFormRecord, ArchivedFormRecord, ChoiceRecord, QuestionRecord},
 };
 
 struct FormRow {
@@ -52,7 +52,7 @@ async fn get_questions_txn_with_tables(
     form_id: FormId,
     questions_table: &str,
     choices_table: &str,
-) -> Result<Vec<QuestionDto>, InfraError> {
+) -> Result<Vec<QuestionRecord>, InfraError> {
     let form_id = form_id.into_inner().to_string();
     let questions_sql = format!(
         "SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
@@ -82,7 +82,7 @@ async fn get_questions_txn_with_tables(
             let question_id = Uuid::parse_str(&choice_rs.try_get::<String, _>("question_id")?)?;
             Ok::<_, InfraError>((
                 question_id,
-                ChoiceDto {
+                ChoiceRecord {
                     id: Some(choice_rs.try_get("id")?),
                     position: choice_rs.try_get::<u16, _>("position")?,
                     label: choice_rs.try_get("label")?,
@@ -98,7 +98,7 @@ async fn get_questions_txn_with_tables(
         .map(|question_rs| {
             let question_id = Uuid::parse_str(&question_rs.try_get::<String, _>("question_id")?)?;
 
-            Ok::<_, InfraError>(QuestionDto {
+            Ok::<_, InfraError>(QuestionRecord {
                 id: question_id.to_string(),
                 form_id: question_rs.try_get("form_id")?,
                 template_key: question_rs.try_get("template_key")?,
@@ -115,7 +115,7 @@ async fn get_questions_txn_with_tables(
                     .unwrap_or(false),
             })
         })
-        .collect::<Result<Vec<QuestionDto>, _>>()
+        .collect::<Result<Vec<QuestionRecord>, _>>()
 }
 
 async fn active_form_record_from_row(
