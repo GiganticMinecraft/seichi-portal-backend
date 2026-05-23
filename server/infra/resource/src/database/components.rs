@@ -66,7 +66,7 @@ pub trait FormDatabase: Send + Sync {
         query: Option<String>,
     ) -> Result<Vec<ArchivedFormDto>, InfraError>;
     async fn get_archived(&self, form_id: FormId) -> Result<Option<ArchivedFormDto>, InfraError>;
-    async fn archive(&self, form_id: FormId, actor: &User) -> Result<ArchivedForm, InfraError>;
+    async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError>;
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;

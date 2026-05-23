@@ -400,20 +400,21 @@ async fn update_form_root(
 
 async fn copy_active_form_to_archive(
     txn: &mut DatabaseTransaction,
-    form_id: FormId,
-    actor: &User,
+    form: &ArchivedForm,
 ) -> Result<(), InfraError> {
-    let form_id = form_id.into_inner().to_string();
-    let actor_id = actor.id.to_string();
+    let form_id = form.form().id().into_inner().to_string();
+    let archived_at = *form.archived_at();
+    let archived_by = form.archived_by().to_string();
 
     sqlx::query(
         r"INSERT INTO archived_form_meta_data
         (id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
-        SELECT id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by, CURRENT_TIMESTAMP, ?
+        SELECT id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by, ?, ?
         FROM form_meta_data
         WHERE id = ?",
     )
-    .bind(actor_id)
+    .bind(archived_at)
+    .bind(archived_by)
     .bind(&form_id)
     .execute(&mut **txn)
     .await?;
@@ -801,17 +802,18 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn archive(&self, form_id: FormId, actor: &User) -> Result<ArchivedForm, InfraError> {
-        let actor = actor.clone();
+    async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError> {
+        let form = form.clone();
         self.read_write_transaction(move |txn| {
             Box::pin(async move {
+                let form_id = *form.form().id();
                 if fetch_form_row(txn, form_id).await?.is_none() {
                     return Err(InfraError::FormNotFound {
                         id: form_id.into_inner(),
                     });
                 }
 
-                copy_active_form_to_archive(txn, form_id, &actor).await?;
+                copy_active_form_to_archive(txn, &form).await?;
 
                 let row = fetch_archived_form_row(txn, form_id)
                     .await?
