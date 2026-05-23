@@ -3,10 +3,10 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::models::{ActiveForm, ArchivedForm, FormId},
+    form::models::{ArchivedForm, FormId},
     types::{
         authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Read, Update},
+        authorization_guard_with_context::{Create, Read, Update},
     },
     user::models::User,
 };
@@ -27,7 +27,7 @@ pub trait ArchivedFormRepository: Send + Sync + 'static {
     async fn archive(
         &self,
         actor: &User,
-        form: AuthorizationGuard<ActiveForm, Update>,
+        form: AuthorizationGuard<ArchivedForm, Create>,
     ) -> Result<AuthorizationGuard<ArchivedForm, Read>, Error>;
     async fn restore(
         &self,

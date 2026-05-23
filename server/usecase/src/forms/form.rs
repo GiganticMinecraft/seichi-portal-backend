@@ -1,3 +1,4 @@
+use chrono::Utc;
 use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
@@ -218,9 +219,10 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
+        let form = form.try_into_read(actor)?.archive(Utc::now(), actor.id);
         let archived_form = self
             .archived_form_repository
-            .archive(actor, form.into_update())
+            .archive(actor, form.into())
             .await?;
         archived_form.try_into_read(actor).map_err(Into::into)
     }

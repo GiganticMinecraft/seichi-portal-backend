@@ -14,3 +14,4 @@ tokio = { workspace = true }
 common = { path = "../common" }
 async-trait = { workspace = true }
 serde_json = { workspace = true }
+chrono = { workspace = true }
