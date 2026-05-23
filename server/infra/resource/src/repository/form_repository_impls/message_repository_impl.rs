@@ -49,8 +49,8 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
             .fetch_messages_by_form_answer(answers)
             .await?
             .into_iter()
-            .map(|dto| {
-                Ok::<Message, Error>(dto.try_into()?).map(|message| {
+            .map(|record| {
+                Ok::<Message, Error>(record.try_into()?).map(|message| {
                     let guard = AuthorizationGuardWithContext::new(message);
 
                     guard.into_read()
@@ -95,8 +95,8 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
             .form_message()
             .fetch_message(message_id)
             .await?
-            .map(|dto| {
-                Ok::<Message, Error>(dto.try_into()?).map(|message| {
+            .map(|record| {
+                Ok::<Message, Error>(record.try_into()?).map(|message| {
                     let guard = AuthorizationGuardWithContext::new(message);
 
                     guard.into_read()

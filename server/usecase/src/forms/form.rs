@@ -26,7 +26,7 @@ use errors::{
 use std::collections::{BTreeSet, HashMap};
 use types::non_empty_vec::NonEmptyVec;
 
-use crate::dto::{ActiveFormDto, ArchivedFormDto, UpsertQuestionDto};
+use crate::models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput};
 
 pub struct FormUseCase<
     'a,
@@ -117,7 +117,11 @@ impl<
         Ok(forms_with_labels)
     }
 
-    pub async fn get_form(&self, actor: &User, form_id: FormId) -> Result<ActiveFormDto, Error> {
+    pub async fn get_form(
+        &self,
+        actor: &User,
+        form_id: FormId,
+    ) -> Result<ActiveFormWithLabels, Error> {
         let form = self
             .active_form_repository
             .get(form_id)
@@ -132,7 +136,7 @@ impl<
             .map(|label| label.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(ActiveFormDto { form, labels })
+        Ok(ActiveFormWithLabels { form, labels })
     }
 
     pub async fn archived_form_list(
@@ -141,7 +145,7 @@ impl<
         offset: Option<u32>,
         limit: Option<u32>,
         query: Option<String>,
-    ) -> Result<Vec<ArchivedFormDto>, Error> {
+    ) -> Result<Vec<ArchivedFormDetails>, Error> {
         let forms = self
             .archived_form_repository
             .list(offset, limit, query)
@@ -166,7 +170,7 @@ impl<
                     .await?
                     .ok_or(Error::from(UserNotFound))?
                     .try_into_read(actor)?;
-                Ok::<_, Error>(ArchivedFormDto {
+                Ok::<_, Error>(ArchivedFormDetails {
                     archived_by,
                     form,
                     labels: labels
@@ -184,7 +188,7 @@ impl<
         &self,
         actor: &User,
         form_id: FormId,
-    ) -> Result<ArchivedFormDto, Error> {
+    ) -> Result<ArchivedFormDetails, Error> {
         let form = self
             .archived_form_repository
             .get(form_id)
@@ -206,7 +210,7 @@ impl<
             .ok_or(Error::from(UserNotFound))?
             .try_into_read(actor)?;
 
-        Ok(ArchivedFormDto {
+        Ok(ArchivedFormDetails {
             form,
             archived_by,
             labels,
@@ -251,7 +255,7 @@ impl<
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
         answer_visibility: Option<AnswerVisibility>,
-        questions: Option<Vec<UpsertQuestionDto>>,
+        questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
         let current_form = self
@@ -399,7 +403,7 @@ impl<
 
 fn validate_answered_form_question_update(
     current_questions: &[Question],
-    updated_questions: &[UpsertQuestionDto],
+    updated_questions: &[UpsertQuestionInput],
 ) -> Result<(), Error> {
     let current_by_id = current_questions
         .iter()

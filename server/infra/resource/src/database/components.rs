@@ -1,9 +1,9 @@
 use crate::{
-    dto::{
-        ActiveFormDto, AnswerLabelDto, ArchivedFormDto, CommentDto, DiscordUserDto, FormAnswerDto,
-        FormLabelDto, MessageDto, NotificationSettingsDto,
-    },
     external::discord_api::DiscordAPI,
+    records::{
+        ActiveFormRecord, AnswerLabelRecord, ArchivedFormRecord, CommentRecord, DiscordUserRecord,
+        FormAnswerRecord, FormLabelRecord, MessageRecord, NotificationSettingsRecord,
+    },
 };
 use async_trait::async_trait;
 use domain::search::models::{NumberOfRecordsPerAggregate, RealAnswers};
@@ -57,15 +57,16 @@ pub trait FormDatabase: Send + Sync {
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<ActiveFormDto>, InfraError>;
-    async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormDto>, InfraError>;
+    ) -> Result<Vec<ActiveFormRecord>, InfraError>;
+    async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormRecord>, InfraError>;
     async fn list_archived(
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
         query: Option<String>,
-    ) -> Result<Vec<ArchivedFormDto>, InfraError>;
-    async fn get_archived(&self, form_id: FormId) -> Result<Option<ArchivedFormDto>, InfraError>;
+    ) -> Result<Vec<ArchivedFormRecord>, InfraError>;
+    async fn get_archived(&self, form_id: FormId)
+    -> Result<Option<ArchivedFormRecord>, InfraError>;
     async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError>;
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError>;
@@ -76,16 +77,19 @@ pub trait FormDatabase: Send + Sync {
 #[async_trait]
 pub trait FormAnswerDatabase: Send + Sync {
     async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), InfraError>;
-    async fn get_answers(&self, answer_id: AnswerId) -> Result<Option<FormAnswerDto>, InfraError>;
+    async fn get_answers(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Option<FormAnswerRecord>, InfraError>;
     async fn get_answers_by_form_id(
         &self,
         form_id: FormId,
-    ) -> Result<Vec<FormAnswerDto>, InfraError>;
-    async fn get_all_answers(&self) -> Result<Vec<FormAnswerDto>, InfraError>;
+    ) -> Result<Vec<FormAnswerRecord>, InfraError>;
+    async fn get_all_answers(&self) -> Result<Vec<FormAnswerRecord>, InfraError>;
     async fn get_answers_by_answer_ids(
         &self,
         answer_ids: Vec<AnswerId>,
-    ) -> Result<Vec<FormAnswerDto>, InfraError>;
+    ) -> Result<Vec<FormAnswerRecord>, InfraError>;
     async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
@@ -94,19 +98,19 @@ pub trait FormAnswerDatabase: Send + Sync {
 #[async_trait]
 pub trait FormAnswerLabelDatabase: Send + Sync {
     async fn create_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
-    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelDto>, InfraError>;
+    async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelRecord>, InfraError>;
     async fn get_label_for_answers(
         &self,
         label_id: AnswerLabelId,
-    ) -> Result<Option<AnswerLabelDto>, InfraError>;
+    ) -> Result<Option<AnswerLabelRecord>, InfraError>;
     async fn get_labels_for_answers_by_label_ids(
         &self,
         label_ids: Vec<AnswerLabelId>,
-    ) -> Result<Vec<AnswerLabelDto>, InfraError>;
+    ) -> Result<Vec<AnswerLabelRecord>, InfraError>;
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
-    ) -> Result<Vec<AnswerLabelDto>, InfraError>;
+    ) -> Result<Vec<AnswerLabelRecord>, InfraError>;
     async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), InfraError>;
     async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
     async fn replace_answer_labels(
@@ -128,18 +132,21 @@ pub trait FormMessageDatabase: Send + Sync {
     async fn fetch_messages_by_form_answer(
         &self,
         answers: &AnswerEntry,
-    ) -> Result<Vec<MessageDto>, InfraError>;
-    async fn fetch_message(&self, message_id: &MessageId)
-    -> Result<Option<MessageDto>, InfraError>;
+    ) -> Result<Vec<MessageRecord>, InfraError>;
+    async fn fetch_message(
+        &self,
+        message_id: &MessageId,
+    ) -> Result<Option<MessageRecord>, InfraError>;
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError>;
 }
 
 #[automock]
 #[async_trait]
 pub trait FormCommentDatabase: Send + Sync {
-    async fn get_comment(&self, comment_id: CommentId) -> Result<Option<CommentDto>, InfraError>;
-    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError>;
-    async fn get_all_comments(&self) -> Result<Vec<CommentDto>, InfraError>;
+    async fn get_comment(&self, comment_id: CommentId)
+    -> Result<Option<CommentRecord>, InfraError>;
+    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentRecord>, InfraError>;
+    async fn get_all_comments(&self) -> Result<Vec<CommentRecord>, InfraError>;
     async fn upsert_comment(
         &self,
         answer_id: AnswerId,
@@ -153,13 +160,13 @@ pub trait FormCommentDatabase: Send + Sync {
 #[async_trait]
 pub trait FormLabelDatabase: Send + Sync {
     async fn create_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError>;
-    async fn fetch_labels(&self) -> Result<Vec<FormLabelDto>, InfraError>;
+    async fn fetch_labels(&self) -> Result<Vec<FormLabelRecord>, InfraError>;
     async fn fetch_labels_by_ids(
         &self,
         ids: Vec<FormLabelId>,
-    ) -> Result<Vec<FormLabelDto>, InfraError>;
+    ) -> Result<Vec<FormLabelRecord>, InfraError>;
     async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError>;
-    async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelDto>, InfraError>;
+    async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelRecord>, InfraError>;
     async fn edit_label_for_forms(
         &self,
         id: FormLabelId,
@@ -168,7 +175,7 @@ pub trait FormLabelDatabase: Send + Sync {
     async fn fetch_labels_by_form_id(
         &self,
         form_id: FormId,
-    ) -> Result<Vec<FormLabelDto>, InfraError>;
+    ) -> Result<Vec<FormLabelRecord>, InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
 
@@ -197,7 +204,10 @@ pub trait UserDatabase: Send + Sync {
         user: &User,
     ) -> Result<(), InfraError>;
     async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError>;
-    async fn fetch_discord_user(&self, user: &User) -> Result<Option<DiscordUserDto>, InfraError>;
+    async fn fetch_discord_user(
+        &self,
+        user: &User,
+    ) -> Result<Option<DiscordUserRecord>, InfraError>;
     async fn fetch_size(&self) -> Result<u32, InfraError>;
 }
 
@@ -228,5 +238,5 @@ pub trait NotificationDatabase: Send + Sync {
     async fn fetch_notification_settings(
         &self,
         recipient_id: Uuid,
-    ) -> Result<Option<NotificationSettingsDto>, InfraError>;
+    ) -> Result<Option<NotificationSettingsRecord>, InfraError>;
 }

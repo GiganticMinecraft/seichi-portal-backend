@@ -1,4 +1,4 @@
-use crate::dto::CrossSearchDto;
+use crate::models::CrossSearchOutput;
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
@@ -56,7 +56,11 @@ impl<
     R7: UserRepository,
 > SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
 {
-    pub async fn cross_search(&self, actor: &User, query: String) -> Result<CrossSearchDto, Error> {
+    pub async fn cross_search(
+        &self,
+        actor: &User,
+        query: String,
+    ) -> Result<CrossSearchOutput, Error> {
         let (forms, users, label_for_forms, label_for_answers, answers, comments) = try_join!(
             self.search_repository.search_forms(&query),
             self.search_repository.search_users(&query),
@@ -185,7 +189,7 @@ impl<
 
         let comments = try_join_all(comment_futs).await?;
 
-        Ok(CrossSearchDto {
+        Ok(CrossSearchOutput {
             forms,
             users,
             label_for_forms,

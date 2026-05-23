@@ -1,6 +1,6 @@
 use crate::{
     database::{components::FormCommentDatabase, connection::ConnectionPool, count::count_as_u32},
-    dto::CommentDto,
+    records::CommentRecord,
 };
 use async_trait::async_trait;
 use domain::form::{
@@ -12,11 +12,14 @@ use errors::infra::InfraError;
 #[async_trait]
 impl FormCommentDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn get_comment(&self, comment_id: CommentId) -> Result<Option<CommentDto>, InfraError> {
+    async fn get_comment(
+        &self,
+        comment_id: CommentId,
+    ) -> Result<Option<CommentRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let comment = sqlx::query_as!(
-                    CommentDto,
+                    CommentRecord,
                     r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
@@ -33,11 +36,11 @@ impl FormCommentDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentDto>, InfraError> {
+    async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let comments = sqlx::query_as!(
-                    CommentDto,
+                    CommentRecord,
                     r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
@@ -54,11 +57,11 @@ impl FormCommentDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_all_comments(&self) -> Result<Vec<CommentDto>, InfraError> {
+    async fn get_all_comments(&self) -> Result<Vec<CommentRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let comments = sqlx::query_as!(
-                    CommentDto,
+                    CommentRecord,
                     r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id"

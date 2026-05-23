@@ -23,28 +23,28 @@ use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct ChoiceDto {
+pub struct ChoiceRecord {
     pub id: Option<i32>,
     pub position: u16,
     pub label: String,
 }
 
-impl TryFrom<ChoiceDto> for Choice {
+impl TryFrom<ChoiceRecord> for Choice {
     type Error = errors::Error;
 
     fn try_from(
-        ChoiceDto {
+        ChoiceRecord {
             id,
             position,
             label,
-        }: ChoiceDto,
+        }: ChoiceRecord,
     ) -> Result<Self, Self::Error> {
         Choice::from_raw_parts(id.map(Into::into), position, label.try_into()?).map_err(Into::into)
     }
 }
 
 #[derive(Clone)]
-pub struct QuestionDto {
+pub struct QuestionRecord {
     pub id: String,
     pub form_id: String,
     pub template_key: String,
@@ -52,15 +52,15 @@ pub struct QuestionDto {
     pub title: String,
     pub description: Option<String>,
     pub question_type: String,
-    pub choices: Vec<ChoiceDto>,
+    pub choices: Vec<ChoiceRecord>,
     pub is_required: bool,
 }
 
-impl TryFrom<QuestionDto> for Question {
+impl TryFrom<QuestionRecord> for Question {
     type Error = errors::Error;
 
     fn try_from(
-        QuestionDto {
+        QuestionRecord {
             id,
             form_id: _,
             template_key,
@@ -70,7 +70,7 @@ impl TryFrom<QuestionDto> for Question {
             question_type,
             choices,
             is_required,
-        }: QuestionDto,
+        }: QuestionRecord,
     ) -> Result<Self, Self::Error> {
         let choices = choices
             .into_iter()
@@ -97,7 +97,7 @@ impl TryFrom<QuestionDto> for Question {
     }
 }
 
-pub struct ActiveFormDto {
+pub struct ActiveFormRecord {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -109,17 +109,15 @@ pub struct ActiveFormDto {
     pub default_answer_title: Option<String>,
     pub visibility: String,
     pub answer_visibility: String,
-    pub questions: Vec<QuestionDto>,
+    pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
 }
 
-pub type FormDto = ActiveFormDto;
-
-impl TryFrom<ActiveFormDto> for ActiveForm {
+impl TryFrom<ActiveFormRecord> for ActiveForm {
     type Error = errors::Error;
 
     fn try_from(
-        ActiveFormDto {
+        ActiveFormRecord {
             id,
             title,
             description,
@@ -133,7 +131,7 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
             answer_visibility,
             questions,
             label_ids,
-        }: ActiveFormDto,
+        }: ActiveFormRecord,
     ) -> Result<Self, Self::Error> {
         let questions = questions
             .into_iter()
@@ -163,18 +161,18 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
     }
 }
 
-pub struct ArchivedFormDto {
-    pub form: ActiveFormDto,
+pub struct ArchivedFormRecord {
+    pub form: ActiveFormRecord,
     pub archived_at: DateTime<Utc>,
     pub archived_by_name: String,
     pub archived_by_id: String,
     pub archived_by_role: Role,
 }
 
-impl TryFrom<ArchivedFormDto> for ArchivedForm {
+impl TryFrom<ArchivedFormRecord> for ArchivedForm {
     type Error = errors::Error;
 
-    fn try_from(value: ArchivedFormDto) -> Result<Self, Self::Error> {
+    fn try_from(value: ArchivedFormRecord) -> Result<Self, Self::Error> {
         Ok(ArchivedForm::from_persisted(
             value.form.try_into()?,
             value.archived_at,
@@ -186,21 +184,21 @@ impl TryFrom<ArchivedFormDto> for ArchivedForm {
 }
 
 #[derive(Clone)]
-pub struct FormAnswerContentDto {
+pub struct FormAnswerContentRecord {
     pub id: String,
     pub question_id: String,
     pub answer: String,
 }
 
-impl TryFrom<FormAnswerContentDto> for FormAnswerContent {
+impl TryFrom<FormAnswerContentRecord> for FormAnswerContent {
     type Error = InfraError;
 
     fn try_from(
-        FormAnswerContentDto {
+        FormAnswerContentRecord {
             id,
             question_id,
             answer,
-        }: FormAnswerContentDto,
+        }: FormAnswerContentRecord,
     ) -> Result<Self, Self::Error> {
         Ok(FormAnswerContent {
             id: Uuid::parse_str(&id)?.into(),
@@ -210,16 +208,16 @@ impl TryFrom<FormAnswerContentDto> for FormAnswerContent {
     }
 }
 
-pub struct UserDto {
+pub struct UserRecord {
     pub name: String,
     pub id: String,
     pub role: Role,
 }
 
-impl TryFrom<UserDto> for User {
+impl TryFrom<UserRecord> for User {
     type Error = errors::infra::InfraError;
 
-    fn try_from(UserDto { name, id, role }: UserDto) -> Result<Self, Self::Error> {
+    fn try_from(UserRecord { name, id, role }: UserRecord) -> Result<Self, Self::Error> {
         Ok(User {
             name,
             id: Uuid::from_str(&id)?.into(),
@@ -228,7 +226,7 @@ impl TryFrom<UserDto> for User {
     }
 }
 
-pub struct CommentDto {
+pub struct CommentRecord {
     pub answer_id: String,
     pub comment_id: String,
     pub content: String,
@@ -238,11 +236,11 @@ pub struct CommentDto {
     pub commented_by_role: String,
 }
 
-impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
+impl TryFrom<CommentRecord> for domain::form::comment::models::Comment {
     type Error = errors::Error;
 
     fn try_from(
-        CommentDto {
+        CommentRecord {
             answer_id,
             comment_id,
             content,
@@ -250,7 +248,7 @@ impl TryFrom<CommentDto> for domain::form::comment::models::Comment {
             commented_by_name: _,
             commented_by_id,
             commented_by_role: _,
-        }: CommentDto,
+        }: CommentRecord,
     ) -> Result<Self, Self::Error> {
         Ok(domain::form::comment::models::Comment::from_raw_parts(
             Uuid::from_str(&answer_id)
@@ -273,8 +271,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn question_dto_rejects_text_question_with_choices() {
-        let result: Result<Question, _> = QuestionDto {
+    fn question_record_rejects_text_question_with_choices() {
+        let result: Result<Question, _> = QuestionRecord {
             id: Uuid::nil().to_string(),
             form_id: Uuid::nil().to_string(),
             template_key: "template".to_string(),
@@ -282,7 +280,7 @@ mod tests {
             title: "Question".to_string(),
             description: None,
             question_type: "Text".to_string(),
-            choices: vec![ChoiceDto {
+            choices: vec![ChoiceRecord {
                 id: Some(1),
                 position: 0,
                 label: "A".to_string(),
@@ -295,7 +293,7 @@ mod tests {
     }
 }
 
-pub struct FormAnswerDto {
+pub struct FormAnswerRecord {
     pub id: String,
     pub user_name: String,
     pub uuid: String,
@@ -303,14 +301,14 @@ pub struct FormAnswerDto {
     pub timestamp: DateTime<Utc>,
     pub form_id: String,
     pub title: Option<String>,
-    pub contents: Vec<FormAnswerContentDto>,
+    pub contents: Vec<FormAnswerContentRecord>,
 }
 
-impl TryFrom<FormAnswerDto> for AnswerEntry {
+impl TryFrom<FormAnswerRecord> for AnswerEntry {
     type Error = errors::Error;
 
     fn try_from(
-        FormAnswerDto {
+        FormAnswerRecord {
             id,
             user_name: _,
             uuid,
@@ -319,7 +317,7 @@ impl TryFrom<FormAnswerDto> for AnswerEntry {
             form_id,
             title,
             contents,
-        }: FormAnswerDto,
+        }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
         unsafe {
             Ok(AnswerEntry::from_raw_parts(
@@ -341,15 +339,15 @@ impl TryFrom<FormAnswerDto> for AnswerEntry {
     }
 }
 
-pub struct AnswerLabelDto {
+pub struct AnswerLabelRecord {
     pub id: String,
     pub name: String,
 }
 
-impl TryFrom<AnswerLabelDto> for AnswerLabel {
+impl TryFrom<AnswerLabelRecord> for AnswerLabel {
     type Error = errors::Error;
 
-    fn try_from(AnswerLabelDto { id, name }: AnswerLabelDto) -> Result<Self, Self::Error> {
+    fn try_from(AnswerLabelRecord { id, name }: AnswerLabelRecord) -> Result<Self, Self::Error> {
         Ok(AnswerLabel::from_raw_parts(
             Uuid::from_str(&id)
                 .map_err(Into::<InfraError>::into)?
@@ -359,15 +357,15 @@ impl TryFrom<AnswerLabelDto> for AnswerLabel {
     }
 }
 
-pub struct FormLabelDto {
+pub struct FormLabelRecord {
     pub id: String,
     pub name: String,
 }
 
-impl TryFrom<FormLabelDto> for FormLabel {
+impl TryFrom<FormLabelRecord> for FormLabel {
     type Error = errors::Error;
 
-    fn try_from(FormLabelDto { id, name }: FormLabelDto) -> Result<Self, Self::Error> {
+    fn try_from(FormLabelRecord { id, name }: FormLabelRecord) -> Result<Self, Self::Error> {
         Ok(FormLabel::from_raw_parts(
             Uuid::from_str(&id)
                 .map_err(Into::<InfraError>::into)?
@@ -377,7 +375,7 @@ impl TryFrom<FormLabelDto> for FormLabel {
     }
 }
 
-pub struct MessageDto {
+pub struct MessageRecord {
     pub id: String,
     pub related_answer: String,
     pub sender_name: String,
@@ -387,11 +385,11 @@ pub struct MessageDto {
     pub timestamp: DateTime<Utc>,
 }
 
-impl TryFrom<MessageDto> for domain::form::message::models::Message {
+impl TryFrom<MessageRecord> for domain::form::message::models::Message {
     type Error = errors::Error;
 
     fn try_from(
-        MessageDto {
+        MessageRecord {
             id,
             related_answer,
             sender_name: _,
@@ -399,7 +397,7 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
             sender_role: _,
             body,
             timestamp,
-        }: MessageDto,
+        }: MessageRecord,
     ) -> Result<Self, Self::Error> {
         unsafe {
             Ok(domain::form::message::models::Message::from_raw_parts(
@@ -419,19 +417,19 @@ impl TryFrom<MessageDto> for domain::form::message::models::Message {
     }
 }
 
-pub struct NotificationSettingsDto {
-    pub recipient: UserDto,
+pub struct NotificationSettingsRecord {
+    pub recipient: UserRecord,
     pub is_send_message_notification: bool,
 }
 
-impl TryFrom<NotificationSettingsDto> for domain::notification::models::NotificationPreference {
+impl TryFrom<NotificationSettingsRecord> for domain::notification::models::NotificationPreference {
     type Error = errors::Error;
 
     fn try_from(
-        NotificationSettingsDto {
+        NotificationSettingsRecord {
             recipient,
             is_send_message_notification,
-        }: NotificationSettingsDto,
+        }: NotificationSettingsRecord,
     ) -> Result<Self, Self::Error> {
         Ok(
             domain::notification::models::NotificationPreference::from_raw_parts(
@@ -444,13 +442,13 @@ impl TryFrom<NotificationSettingsDto> for domain::notification::models::Notifica
     }
 }
 
-pub struct DiscordUserDto {
+pub struct DiscordUserRecord {
     pub user_id: String,
     pub username: String,
 }
 
-impl From<DiscordUserDto> for domain::user::models::DiscordUser {
-    fn from(DiscordUserDto { user_id, username }: DiscordUserDto) -> Self {
+impl From<DiscordUserRecord> for domain::user::models::DiscordUser {
+    fn from(DiscordUserRecord { user_id, username }: DiscordUserRecord) -> Self {
         domain::user::models::DiscordUser::new(
             domain::user::models::DiscordUserId::new(user_id),
             domain::user::models::DiscordUserName::new(username),

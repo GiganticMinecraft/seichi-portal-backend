@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{components::NotificationDatabase, connection::ConnectionPool},
-    dto::{NotificationSettingsDto, UserDto},
+    records::{NotificationSettingsRecord, UserRecord},
 };
 
 #[async_trait]
@@ -44,7 +44,7 @@ impl NotificationDatabase for ConnectionPool {
     async fn fetch_notification_settings(
         &self,
         recipient_id: Uuid,
-    ) -> Result<Option<NotificationSettingsDto>, InfraError> {
+    ) -> Result<Option<NotificationSettingsRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rs = sqlx::query!(
@@ -59,8 +59,8 @@ impl NotificationDatabase for ConnectionPool {
                 .await?;
 
                 rs.map(|row| {
-                    Ok::<_, InfraError>(NotificationSettingsDto {
-                        recipient: UserDto {
+                    Ok::<_, InfraError>(NotificationSettingsRecord {
+                        recipient: UserRecord {
                             name: row.name,
                             id: recipient_id.to_string(),
                             role: Role::from_str(&row.role)?,

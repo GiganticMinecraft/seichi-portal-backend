@@ -6,7 +6,7 @@ use sqlx::{Row, query};
 
 use crate::{
     database::{components::FormLabelDatabase, connection::ConnectionPool, count::count_as_u32},
-    dto::FormLabelDto,
+    records::FormLabelRecord,
 };
 
 #[async_trait]
@@ -33,7 +33,7 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn fetch_labels(&self) -> Result<Vec<FormLabelDto>, InfraError> {
+    async fn fetch_labels(&self) -> Result<Vec<FormLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let labels_rs = sqlx::query("SELECT id, name FROM label_for_forms")
@@ -43,12 +43,12 @@ impl FormLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(FormLabelDto {
+                        Ok::<_, InfraError>(FormLabelRecord {
                             id: rs.try_get("id")?,
                             name: rs.try_get("name")?,
                         })
                     })
-                    .collect::<Result<Vec<FormLabelDto>, _>>()
+                    .collect::<Result<Vec<FormLabelRecord>, _>>()
             })
         })
         .await
@@ -58,7 +58,7 @@ impl FormLabelDatabase for ConnectionPool {
     async fn fetch_labels_by_ids(
         &self,
         ids: Vec<FormLabelId>,
-    ) -> Result<Vec<FormLabelDto>, InfraError> {
+    ) -> Result<Vec<FormLabelRecord>, InfraError> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -83,12 +83,12 @@ impl FormLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(FormLabelDto {
+                        Ok::<_, InfraError>(FormLabelRecord {
                             id: rs.try_get("id")?,
                             name: rs.try_get("name")?,
                         })
                     })
-                    .collect::<Result<Vec<FormLabelDto>, _>>()
+                    .collect::<Result<Vec<FormLabelRecord>, _>>()
             })
         })
         .await
@@ -112,7 +112,7 @@ impl FormLabelDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelDto>, InfraError> {
+    async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let label_rs = sqlx::query("SELECT id, name FROM label_for_forms WHERE id = ?")
@@ -122,7 +122,7 @@ impl FormLabelDatabase for ConnectionPool {
 
                 label_rs
                     .map(|rs| {
-                        Ok::<_, InfraError>(FormLabelDto {
+                        Ok::<_, InfraError>(FormLabelRecord {
                             id: rs.try_get("id")?,
                             name: rs.try_get("name")?,
                         })
@@ -159,7 +159,7 @@ impl FormLabelDatabase for ConnectionPool {
     async fn fetch_labels_by_form_id(
         &self,
         form_id: FormId,
-    ) -> Result<Vec<FormLabelDto>, InfraError> {
+    ) -> Result<Vec<FormLabelRecord>, InfraError> {
         let form_id = form_id.into_inner().to_string();
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -178,12 +178,12 @@ impl FormLabelDatabase for ConnectionPool {
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(FormLabelDto {
+                        Ok::<_, InfraError>(FormLabelRecord {
                             id: rs.try_get("id")?,
                             name: rs.try_get("name")?,
                         })
                     })
-                    .collect::<Result<Vec<FormLabelDto>, _>>()
+                    .collect::<Result<Vec<FormLabelRecord>, _>>()
             })
         })
         .await

@@ -16,7 +16,7 @@ use crate::{
         connection::{ConnectionPool, redis_connection},
         count::count_as_u32,
     },
-    dto::DiscordUserDto,
+    records::DiscordUserRecord,
 };
 
 #[async_trait]
@@ -236,7 +236,10 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
-    async fn fetch_discord_user(&self, user: &User) -> Result<Option<DiscordUserDto>, InfraError> {
+    async fn fetch_discord_user(
+        &self,
+        user: &User,
+    ) -> Result<Option<DiscordUserRecord>, InfraError> {
         let user_id = user.id.to_string();
 
         Ok(self
@@ -252,7 +255,7 @@ impl UserDatabase for ConnectionPool {
 
                     query
                         .map(|row| {
-                            Ok::<_, InfraError>(DiscordUserDto {
+                            Ok::<_, InfraError>(DiscordUserRecord {
                                 user_id: row.discord_id,
                                 username: row.discord_username,
                             })
