@@ -32,7 +32,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound, UserNotFound},
 };
 
-use crate::{dto::MessageDto, user_reference_resolver::resolve_user_references};
+use crate::{models::MessageWithSender, user_reference_resolver::resolve_user_references};
 
 pub struct MessageUseCase<
     'a,
@@ -176,7 +176,7 @@ impl<
         actor: &User,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<Vec<MessageDto>, Error> {
+    ) -> Result<Vec<MessageWithSender>, Error> {
         let form_guard = self
             .active_form_repository
             .get(form_id)
@@ -221,7 +221,7 @@ impl<
                     .get(message.sender_id())
                     .cloned()
                     .ok_or(Error::from(UserNotFound))?;
-                Ok(MessageDto { message, sender })
+                Ok(MessageWithSender { message, sender })
             })
             .collect()
     }

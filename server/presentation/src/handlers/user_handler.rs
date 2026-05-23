@@ -90,20 +90,20 @@ pub async fn get_my_user_info(
         repository: repository.user_repository(),
     };
 
-    let user_dto = user_use_case
+    let user_profile = user_use_case
         .fetch_user_information(&user, user.id.into_inner())
         .await
         .map_err(handle_error)?;
-    let discord_user_id_with_name = user_dto.discord_user.map(|user| {
+    let discord_user_id_with_name = user_profile.discord_user.map(|user| {
         (
             user.id().to_owned().into_inner(),
             user.name().to_owned().into_inner(),
         )
     });
     Ok(GetUserInfoResponse::Ok(UserInfoResponse {
-        id: user_dto.user.id.to_string(),
-        name: user_dto.user.name,
-        role: user_dto.user.role.to_string(),
+        id: user_profile.user.id.to_string(),
+        name: user_profile.user.name,
+        role: user_profile.user.role.to_string(),
         discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
         discord_username: discord_user_id_with_name.map(|(_, name)| name),
     }))
@@ -138,20 +138,20 @@ pub async fn get_user_info(
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
 
-    let user_dto = user_use_case
+    let user_profile = user_use_case
         .fetch_user_information(&actor, uuid)
         .await
         .map_err(handle_error)?;
-    let discord_user_id_with_name = user_dto.discord_user.map(|user| {
+    let discord_user_id_with_name = user_profile.discord_user.map(|user| {
         (
             user.id().to_owned().into_inner(),
             user.name().to_owned().into_inner(),
         )
     });
     Ok(GetUserInfoResponse::Ok(UserInfoResponse {
-        id: user_dto.user.id.to_string(),
-        name: user_dto.user.name,
-        role: user_dto.user.role.to_string(),
+        id: user_profile.user.id.to_string(),
+        name: user_profile.user.name,
+        role: user_profile.user.role.to_string(),
         discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
         discord_username: discord_user_id_with_name.map(|(_, name)| name),
     }))

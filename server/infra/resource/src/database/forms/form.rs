@@ -22,10 +22,10 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    dto::{ArchivedFormDto, ChoiceDto, FormDto, QuestionDto},
+    dto::{ActiveFormRecord, ArchivedFormRecord, ChoiceDto, QuestionDto},
 };
 
-struct FormRowDto {
+struct FormRow {
     id: String,
     title: String,
     description: String,
@@ -39,8 +39,8 @@ struct FormRowDto {
     answer_visibility: String,
 }
 
-struct ArchivedFormRowDto {
-    form: FormRowDto,
+struct ArchivedFormRow {
+    form: FormRow,
     archived_at: DateTime<Utc>,
     archived_by_name: String,
     archived_by_id: String,
@@ -118,10 +118,10 @@ async fn get_questions_txn_with_tables(
         .collect::<Result<Vec<QuestionDto>, _>>()
 }
 
-async fn active_form_dto_from_row(
+async fn active_form_record_from_row(
     txn: &mut DatabaseTransaction,
-    row: FormRowDto,
-) -> Result<FormDto, InfraError> {
+    row: FormRow,
+) -> Result<ActiveFormRecord, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.id)?);
     let form_id_string = form_id.into_inner().to_string();
     let label_ids = sqlx::query!(
@@ -134,7 +134,7 @@ async fn active_form_dto_from_row(
     .map(|row| Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(&row.label_id)?)))
     .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(FormDto {
+    Ok(ActiveFormRecord {
         id: row.id,
         title: row.title,
         description: row.description,
@@ -152,10 +152,10 @@ async fn active_form_dto_from_row(
     })
 }
 
-async fn archived_form_dto_from_row(
+async fn archived_form_record_from_row(
     txn: &mut DatabaseTransaction,
-    row: ArchivedFormRowDto,
-) -> Result<ArchivedFormDto, InfraError> {
+    row: ArchivedFormRow,
+) -> Result<ArchivedFormRecord, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.form.id)?);
     let form_id_string = form_id.into_inner().to_string();
     let label_ids = sqlx::query!(
@@ -168,8 +168,8 @@ async fn archived_form_dto_from_row(
     .map(|row| Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(&row.label_id)?)))
     .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(ArchivedFormDto {
-        form: FormDto {
+    Ok(ArchivedFormRecord {
+        form: ActiveFormRecord {
             id: row.form.id,
             title: row.form.title,
             description: row.form.description,
@@ -197,8 +197,8 @@ async fn archived_form_dto_from_row(
     })
 }
 
-fn form_row_from_db_row(row: sqlx::mysql::MySqlRow) -> Result<FormRowDto, InfraError> {
-    Ok(FormRowDto {
+fn form_row_from_db_row(row: sqlx::mysql::MySqlRow) -> Result<FormRow, InfraError> {
+    Ok(FormRow {
         id: row.try_get("id")?,
         title: row.try_get("title")?,
         description: row.try_get("description")?,
@@ -215,9 +215,9 @@ fn form_row_from_db_row(row: sqlx::mysql::MySqlRow) -> Result<FormRowDto, InfraE
 
 fn archived_form_row_from_db_row(
     row: sqlx::mysql::MySqlRow,
-) -> Result<ArchivedFormRowDto, InfraError> {
-    Ok(ArchivedFormRowDto {
-        form: FormRowDto {
+) -> Result<ArchivedFormRow, InfraError> {
+    Ok(ArchivedFormRow {
+        form: FormRow {
             id: row.try_get("id")?,
             title: row.try_get("title")?,
             description: row.try_get("description")?,
@@ -240,7 +240,7 @@ fn archived_form_row_from_db_row(
 async fn fetch_form_row(
     txn: &mut DatabaseTransaction,
     form_id: FormId,
-) -> Result<Option<FormRowDto>, InfraError> {
+) -> Result<Option<FormRow>, InfraError> {
     let row = sqlx::query(
         r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
             f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
@@ -261,7 +261,7 @@ async fn fetch_form_row(
 async fn fetch_archived_form_row(
     txn: &mut DatabaseTransaction,
     form_id: FormId,
-) -> Result<Option<ArchivedFormRowDto>, InfraError> {
+) -> Result<Option<ArchivedFormRow>, InfraError> {
     let row = sqlx::query(
         r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
             f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
@@ -682,7 +682,7 @@ impl FormDatabase for ConnectionPool {
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<FormDto>, InfraError> {
+    ) -> Result<Vec<ActiveFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = sqlx::query(
@@ -703,7 +703,7 @@ impl FormDatabase for ConnectionPool {
 
                 let mut forms = Vec::with_capacity(rows.len());
                 for row in rows {
-                    forms.push(active_form_dto_from_row(txn, form_row_from_db_row(row)?).await?);
+                    forms.push(active_form_record_from_row(txn, form_row_from_db_row(row)?).await?);
                 }
                 Ok::<_, InfraError>(forms)
             })
@@ -712,11 +712,11 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get(&self, form_id: FormId) -> Result<Option<FormDto>, InfraError> {
+    async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 match fetch_form_row(txn, form_id).await? {
-                    Some(row) => active_form_dto_from_row(txn, row).await.map(Some),
+                    Some(row) => active_form_record_from_row(txn, row).await.map(Some),
                     None => Ok(None),
                 }
             })
@@ -730,7 +730,7 @@ impl FormDatabase for ConnectionPool {
         offset: Option<u32>,
         limit: Option<u32>,
         query_text: Option<String>,
-    ) -> Result<Vec<ArchivedFormDto>, InfraError> {
+    ) -> Result<Vec<ArchivedFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = if let Some(query_text) = query_text {
@@ -778,7 +778,7 @@ impl FormDatabase for ConnectionPool {
                 let mut forms = Vec::with_capacity(rows.len());
                 for row in rows {
                     forms.push(
-                        archived_form_dto_from_row(txn, archived_form_row_from_db_row(row)?)
+                        archived_form_record_from_row(txn, archived_form_row_from_db_row(row)?)
                             .await?,
                     );
                 }
@@ -789,11 +789,14 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_archived(&self, form_id: FormId) -> Result<Option<ArchivedFormDto>, InfraError> {
+    async fn get_archived(
+        &self,
+        form_id: FormId,
+    ) -> Result<Option<ArchivedFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 match fetch_archived_form_row(txn, form_id).await? {
-                    Some(row) => archived_form_dto_from_row(txn, row).await.map(Some),
+                    Some(row) => archived_form_record_from_row(txn, row).await.map(Some),
                     None => Ok(None),
                 }
             })
@@ -821,7 +824,7 @@ impl FormDatabase for ConnectionPool {
                         id: form_id.into_inner(),
                     })?;
 
-                archived_form_dto_from_row(txn, row)
+                archived_form_record_from_row(txn, row)
                     .await?
                     .try_into()
                     .map_err(|error: errors::Error| InfraError::Unexpected {

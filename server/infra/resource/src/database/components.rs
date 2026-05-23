@@ -1,7 +1,7 @@
 use crate::{
     dto::{
-        ActiveFormDto, AnswerLabelDto, ArchivedFormDto, CommentDto, DiscordUserDto, FormAnswerDto,
-        FormLabelDto, MessageDto, NotificationSettingsDto,
+        ActiveFormRecord, AnswerLabelDto, ArchivedFormRecord, CommentDto, DiscordUserDto,
+        FormAnswerDto, FormLabelDto, MessageDto, NotificationSettingsDto,
     },
     external::discord_api::DiscordAPI,
 };
@@ -57,15 +57,16 @@ pub trait FormDatabase: Send + Sync {
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Result<Vec<ActiveFormDto>, InfraError>;
-    async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormDto>, InfraError>;
+    ) -> Result<Vec<ActiveFormRecord>, InfraError>;
+    async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormRecord>, InfraError>;
     async fn list_archived(
         &self,
         offset: Option<u32>,
         limit: Option<u32>,
         query: Option<String>,
-    ) -> Result<Vec<ArchivedFormDto>, InfraError>;
-    async fn get_archived(&self, form_id: FormId) -> Result<Option<ArchivedFormDto>, InfraError>;
+    ) -> Result<Vec<ArchivedFormRecord>, InfraError>;
+    async fn get_archived(&self, form_id: FormId)
+    -> Result<Option<ArchivedFormRecord>, InfraError>;
     async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError>;
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError>;

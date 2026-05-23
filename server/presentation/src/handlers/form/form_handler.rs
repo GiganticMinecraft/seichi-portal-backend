@@ -15,8 +15,8 @@ use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{
-    dto::{ActiveFormDto, ArchivedFormDto, UpsertQuestionDto},
     forms::form::FormUseCase,
+    models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput},
 };
 
 use crate::handlers::error_handler::handle_error;
@@ -310,7 +310,7 @@ pub async fn get_form_handler(
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    let ActiveFormDto { form, labels } = form_use_case
+    let ActiveFormWithLabels { form, labels } = form_use_case
         .get_form(&user, form_id)
         .await
         .map_err(handle_error)?;
@@ -432,7 +432,7 @@ pub async fn update_form_handler(
         };
     let questions = targets
         .questions
-        .map(into_upsert_question_dtos)
+        .map(into_upsert_question_inputs)
         .transpose()
         .map_err(handle_error)?;
     let labels = targets.labels;
@@ -518,8 +518,13 @@ pub async fn archived_form_list_handler(
     Ok(ArchivedFormListResponse::Ok(
         forms
             .into_iter()
-            .map(|dto| {
-                archived_form_schema_from_parts(&user, dto.form, dto.archived_by, dto.labels)
+            .map(|details| {
+                archived_form_schema_from_parts(
+                    &user,
+                    details.form,
+                    details.archived_by,
+                    details.labels,
+                )
             })
             .collect(),
     ))
@@ -551,7 +556,7 @@ pub async fn get_archived_form_handler(
     let form_use_case = build_form_use_case(&repository);
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
-    let ArchivedFormDto {
+    let ArchivedFormDetails {
         form,
         archived_by,
         labels,
@@ -602,12 +607,12 @@ pub async fn restore_archived_form_handler(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-fn into_upsert_question_dtos(
+fn into_upsert_question_inputs(
     questions: Vec<QuestionSchema>,
-) -> Result<Vec<UpsertQuestionDto>, errors::Error> {
+) -> Result<Vec<UpsertQuestionInput>, errors::Error> {
     let questions = questions
         .into_iter()
-        .map(into_upsert_question_dto)
+        .map(into_upsert_question_input)
         .collect::<Result<Vec<_>, _>>()?;
 
     if questions.is_empty() {
@@ -677,9 +682,9 @@ fn into_create_question(
     }
 }
 
-fn into_upsert_question_dto(
+fn into_upsert_question_input(
     question: QuestionSchema,
-) -> Result<UpsertQuestionDto, errors::domain::DomainError> {
+) -> Result<UpsertQuestionInput, errors::domain::DomainError> {
     let (question_type, definition, choices) = question.into_parts();
     let original_id = definition.id;
     let choices = into_domain_choices(choices);
@@ -727,7 +732,7 @@ fn into_upsert_question_dto(
         },
     };
 
-    Ok(UpsertQuestionDto {
+    Ok(UpsertQuestionInput {
         original_id,
         question,
     })
@@ -782,7 +787,7 @@ mod tests {
         }))
         .unwrap();
 
-        let result = into_upsert_question_dto(question);
+        let result = into_upsert_question_input(question);
 
         assert!(matches!(
             result,
@@ -864,7 +869,7 @@ mod tests {
         ]))
         .unwrap();
 
-        let result = into_upsert_question_dtos(questions);
+        let result = into_upsert_question_inputs(questions);
 
         assert!(matches!(
             result,

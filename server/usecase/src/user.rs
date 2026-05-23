@@ -5,7 +5,7 @@ use domain::{
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
 
-use crate::dto::UserDto;
+use crate::models::UserProfile;
 
 pub struct UserUseCase<'a, UserRepo: UserRepository> {
     pub repository: &'a UserRepo,
@@ -136,7 +136,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         actor: &User,
         target_user_id: Uuid,
-    ) -> Result<UserDto, Error> {
+    ) -> Result<UserProfile, Error> {
         let guard = self
             .repository
             .find_by(target_user_id)
@@ -147,6 +147,6 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
         let user = guard.try_into_read(actor)?;
 
-        Ok(UserDto { user, discord_user })
+        Ok(UserProfile { user, discord_user })
     }
 }

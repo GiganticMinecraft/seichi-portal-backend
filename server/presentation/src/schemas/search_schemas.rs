@@ -10,7 +10,7 @@ use domain::{
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
-use usecase::dto::CrossSearchDto;
+use usecase::models::CrossSearchOutput;
 use uuid::Uuid;
 
 #[derive(Deserialize, Debug, PartialEq, utoipa::ToSchema)]
@@ -55,15 +55,15 @@ pub struct CrossSearchResult {
     pub comments: Vec<CommentSchema>,
 }
 
-impl From<CrossSearchDto> for CrossSearchResult {
-    fn from(dto: CrossSearchDto) -> Self {
+impl From<CrossSearchOutput> for CrossSearchResult {
+    fn from(output: CrossSearchOutput) -> Self {
         Self {
-            forms: dto.forms,
-            users: dto.users,
-            answers: dto.answers,
-            label_for_forms: dto.label_for_forms,
-            label_for_answers: dto.label_for_answers,
-            comments: dto.comments.into_iter().map(Into::into).collect_vec(),
+            forms: output.forms,
+            users: output.users,
+            answers: output.answers,
+            label_for_forms: output.label_for_forms,
+            label_for_answers: output.label_for_answers,
+            comments: output.comments.into_iter().map(Into::into).collect_vec(),
         }
     }
 }

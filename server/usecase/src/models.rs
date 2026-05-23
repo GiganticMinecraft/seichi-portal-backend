@@ -8,47 +8,45 @@ use domain::{
     user::models::{DiscordUser, User},
 };
 
-pub struct AnswerDto {
+pub struct AnswerDetails {
     pub form_answer: AnswerEntry,
     pub user: User,
     pub labels: Vec<AnswerLabel>,
-    pub comments: Vec<CommentDto>,
+    pub comments: Vec<CommentWithAuthor>,
 }
 
-pub struct ActiveFormDto {
+pub struct ActiveFormWithLabels {
     pub form: ActiveForm,
     pub labels: Vec<FormLabel>,
 }
 
-pub type FormDto = ActiveFormDto;
-
-pub struct ArchivedFormDto {
+pub struct ArchivedFormDetails {
     pub form: ArchivedForm,
     pub archived_by: User,
     pub labels: Vec<FormLabel>,
 }
 
-pub struct CommentDto {
+pub struct CommentWithAuthor {
     pub comment: Comment,
     pub commented_by: User,
 }
 
-pub struct MessageDto {
+pub struct MessageWithSender {
     pub message: domain::form::message::models::Message,
     pub sender: User,
 }
 
-pub struct UpsertQuestionDto {
+pub struct UpsertQuestionInput {
     pub original_id: Option<QuestionId>,
     pub question: Question,
 }
 
-pub struct UserDto {
+pub struct UserProfile {
     pub user: User,
     pub discord_user: Option<DiscordUser>,
 }
 
-pub struct CrossSearchDto {
+pub struct CrossSearchOutput {
     pub forms: Vec<ActiveForm>,
     pub users: Vec<User>,
     pub answers: Vec<AnswerEntry>,

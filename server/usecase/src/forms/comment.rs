@@ -21,7 +21,7 @@ use errors::{
     usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound, UserNotFound},
 };
 
-use crate::{dto::CommentDto, user_reference_resolver::resolve_user_references};
+use crate::{models::CommentWithAuthor, user_reference_resolver::resolve_user_references};
 
 pub struct CommentUseCase<
     'a,
@@ -39,11 +39,11 @@ pub struct CommentUseCase<
 impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: UserRepository>
     CommentUseCase<'_, R1, R2, R3, R4>
 {
-    async fn build_comment_dtos(
+    async fn build_comments_with_authors(
         &self,
         actor: &User,
         comments: Vec<Comment>,
-    ) -> Result<Vec<CommentDto>, Error> {
+    ) -> Result<Vec<CommentWithAuthor>, Error> {
         let user_ids = comments.iter().map(|c| *c.commented_by()).collect();
         let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
 
@@ -54,7 +54,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
                     .get(comment.commented_by())
                     .cloned()
                     .ok_or(Error::from(UserNotFound))?;
-                Ok(CommentDto {
+                Ok(CommentWithAuthor {
                     comment,
                     commented_by,
                 })
@@ -67,7 +67,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         actor: &User,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<Vec<CommentDto>, Error> {
+    ) -> Result<Vec<CommentWithAuthor>, Error> {
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -102,7 +102,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             .collect::<Result<Vec<_>, _>>()
             .map_err(Error::from)?;
 
-        self.build_comment_dtos(actor, comments).await
+        self.build_comments_with_authors(actor, comments).await
     }
 
     pub async fn post_comment(

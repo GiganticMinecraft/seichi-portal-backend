@@ -313,8 +313,8 @@ pub struct AnswerComment {
     commented_by: User,
 }
 
-impl From<usecase::dto::CommentDto> for AnswerComment {
-    fn from(val: usecase::dto::CommentDto) -> Self {
+impl From<usecase::models::CommentWithAuthor> for AnswerComment {
+    fn from(val: usecase::models::CommentWithAuthor) -> Self {
         AnswerComment {
             content: val.comment.content().to_string(),
             timestamp: val.comment.timestamp().to_owned(),
@@ -354,7 +354,7 @@ impl FormAnswer {
     pub fn new(
         answer: domain::form::answer::models::AnswerEntry,
         user: domain::user::models::User,
-        comments: Vec<usecase::dto::CommentDto>,
+        comments: Vec<usecase::models::CommentWithAuthor>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
         FormAnswer {

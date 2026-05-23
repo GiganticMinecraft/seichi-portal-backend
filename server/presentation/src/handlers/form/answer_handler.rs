@@ -117,12 +117,12 @@ pub async fn get_all_answers(
     Ok(GetAllAnswersResponse::Ok(
         answers
             .into_iter()
-            .map(|answer_dto| {
+            .map(|answer_details| {
                 FormAnswer::new(
-                    answer_dto.form_answer,
-                    answer_dto.user,
-                    answer_dto.comments,
-                    answer_dto.labels,
+                    answer_details.form_answer,
+                    answer_details.user,
+                    answer_details.comments,
+                    answer_details.labels,
                 )
             })
             .collect_vec(),
@@ -164,16 +164,16 @@ pub async fn get_answer_handler(
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
 
-    let answer_dto = form_answer_use_case
+    let answer_details = form_answer_use_case
         .get_answers(form_id, answer_id, &user)
         .await
         .map_err(handle_error)?;
 
     Ok(GetAnswerResponse::Ok(FormAnswer::new(
-        answer_dto.form_answer,
-        answer_dto.user,
-        answer_dto.comments,
-        answer_dto.labels,
+        answer_details.form_answer,
+        answer_details.user,
+        answer_details.comments,
+        answer_details.labels,
     )))
 }
 
@@ -219,12 +219,12 @@ pub async fn get_answer_by_form_id_handler(
     Ok(GetAnswersByFormResponse::Ok(
         answers
             .into_iter()
-            .map(|answer_dto| {
+            .map(|answer_details| {
                 FormAnswer::new(
-                    answer_dto.form_answer,
-                    answer_dto.user,
-                    answer_dto.comments,
-                    answer_dto.labels,
+                    answer_details.form_answer,
+                    answer_details.user,
+                    answer_details.comments,
+                    answer_details.labels,
                 )
             })
             .collect_vec(),
@@ -324,15 +324,15 @@ pub async fn update_answer_handler(
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
-    let answer_dto = form_answer_use_case
+    let answer_details = form_answer_use_case
         .update_answer_meta(form_id, answer_id, &user, schema.title)
         .await
         .map_err(handle_error)?;
 
     Ok(UpdateAnswerResponse::Ok(FormAnswer::new(
-        answer_dto.form_answer,
-        answer_dto.user,
-        answer_dto.comments,
-        answer_dto.labels,
+        answer_details.form_answer,
+        answer_details.user,
+        answer_details.comments,
+        answer_details.labels,
     )))
 }

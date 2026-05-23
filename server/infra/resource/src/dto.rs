@@ -97,7 +97,7 @@ impl TryFrom<QuestionDto> for Question {
     }
 }
 
-pub struct ActiveFormDto {
+pub struct ActiveFormRecord {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -113,13 +113,11 @@ pub struct ActiveFormDto {
     pub label_ids: Vec<FormLabelId>,
 }
 
-pub type FormDto = ActiveFormDto;
-
-impl TryFrom<ActiveFormDto> for ActiveForm {
+impl TryFrom<ActiveFormRecord> for ActiveForm {
     type Error = errors::Error;
 
     fn try_from(
-        ActiveFormDto {
+        ActiveFormRecord {
             id,
             title,
             description,
@@ -133,7 +131,7 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
             answer_visibility,
             questions,
             label_ids,
-        }: ActiveFormDto,
+        }: ActiveFormRecord,
     ) -> Result<Self, Self::Error> {
         let questions = questions
             .into_iter()
@@ -163,18 +161,18 @@ impl TryFrom<ActiveFormDto> for ActiveForm {
     }
 }
 
-pub struct ArchivedFormDto {
-    pub form: ActiveFormDto,
+pub struct ArchivedFormRecord {
+    pub form: ActiveFormRecord,
     pub archived_at: DateTime<Utc>,
     pub archived_by_name: String,
     pub archived_by_id: String,
     pub archived_by_role: Role,
 }
 
-impl TryFrom<ArchivedFormDto> for ArchivedForm {
+impl TryFrom<ArchivedFormRecord> for ArchivedForm {
     type Error = errors::Error;
 
-    fn try_from(value: ArchivedFormDto) -> Result<Self, Self::Error> {
+    fn try_from(value: ArchivedFormRecord) -> Result<Self, Self::Error> {
         Ok(ArchivedForm::from_persisted(
             value.form.try_into()?,
             value.archived_at,

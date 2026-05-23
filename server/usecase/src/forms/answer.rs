@@ -24,7 +24,7 @@ use errors::{
 use futures::{StreamExt, stream, try_join};
 
 use crate::{
-    dto::{AnswerDto, CommentDto},
+    models::{AnswerDetails, CommentWithAuthor},
     user_reference_resolver::resolve_user_references,
 };
 
@@ -51,13 +51,13 @@ impl<
     R5: UserRepository,
 > AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
-    async fn build_answer_dto(
+    async fn build_answer_details(
         &self,
         actor: &User,
         form_answer: AnswerEntry,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
         comments: Vec<domain::form::comment::models::Comment>,
-    ) -> Result<AnswerDto, Error> {
+    ) -> Result<AnswerDetails, Error> {
         let user_ids = std::iter::once(*form_answer.user_id())
             .chain(comments.iter().map(|comment| *comment.commented_by()))
             .collect();
@@ -76,14 +76,14 @@ impl<
                     .get(comment.commented_by())
                     .cloned()
                     .ok_or(Error::from(UserNotFound))?;
-                Ok::<_, Error>(CommentDto {
+                Ok::<_, Error>(CommentWithAuthor {
                     comment,
                     commented_by,
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(AnswerDto {
+        Ok(AnswerDetails {
             form_answer,
             user,
             labels,
@@ -135,7 +135,7 @@ impl<
         form_id: FormId,
         answer_id: AnswerId,
         user: &User,
-    ) -> Result<AnswerDto, Error> {
+    ) -> Result<AnswerDetails, Error> {
         if let Some(form_answer_guard) = self.answer_repository.get_answer(answer_id).await? {
             let form_guard = self
                 .active_form_repository
@@ -181,7 +181,7 @@ impl<
                 .map(|label| label.try_into_read(user))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            self.build_answer_dto(user, form_answer, labels, comments)
+            self.build_answer_details(user, form_answer, labels, comments)
                 .await
         } else {
             Err(Error::from(AnswerNotFound))
@@ -192,7 +192,7 @@ impl<
         &self,
         form_id: FormId,
         actor: &User,
-    ) -> Result<Vec<AnswerDto>, Error> {
+    ) -> Result<Vec<AnswerDetails>, Error> {
         let form = self
             .active_form_repository
             .get(form_id)
@@ -248,16 +248,16 @@ impl<
                 .map(|label| label.try_into_read(actor))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            self.build_answer_dto(actor, form_answer, labels, comments)
+            self.build_answer_details(actor, form_answer, labels, comments)
                 .await
         })
-        .collect::<Vec<Result<AnswerDto, Error>>>()
+        .collect::<Vec<Result<AnswerDetails, Error>>>()
         .await
         .into_iter()
         .collect::<Result<Vec<_>, _>>()
     }
 
-    pub async fn get_all_answers(&self, user: &User) -> Result<Vec<AnswerDto>, Error> {
+    pub async fn get_all_answers(&self, user: &User) -> Result<Vec<AnswerDetails>, Error> {
         stream::iter(self.answer_repository.get_all_answers().await?)
             .then(|form_answer_guard| async move {
                 let context = form_answer_guard
@@ -319,10 +319,10 @@ impl<
                     .map(|label| label.try_into_read(user))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                self.build_answer_dto(user, form_answer, labels, comments)
+                self.build_answer_details(user, form_answer, labels, comments)
                     .await
             })
-            .collect::<Vec<Result<AnswerDto, Error>>>()
+            .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
@@ -334,7 +334,7 @@ impl<
         answer_id: AnswerId,
         actor: &User,
         title: Option<AnswerTitle>,
-    ) -> Result<AnswerDto, Error> {
+    ) -> Result<AnswerDetails, Error> {
         let form_guard = self
             .active_form_repository
             .get(form_id)
@@ -399,7 +399,7 @@ impl<
                 &comment_authorization_context.related_answer_entry_guard_context,
             )?;
 
-        self.build_answer_dto(actor, form_answer, labels, comments)
+        self.build_answer_details(actor, form_answer, labels, comments)
             .await
     }
 }
