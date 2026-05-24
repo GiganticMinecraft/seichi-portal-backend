@@ -129,8 +129,12 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .route("/health", get(health_check_handler::health_check))
-        .nest("/api/v1", public_api.merge(authenticated_api))
-        .nest("/api/v1", message_post_router)
+        .nest(
+            "/api/v1",
+            public_api
+                .merge(authenticated_api)
+                .merge(message_post_router),
+        )
         .fallback(not_found_handler)
         .layer(layer)
         .layer(
