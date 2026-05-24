@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::user::models::{DiscordUser, Role, User};
+use domain::user::models::{ActiveUser, DiscordUser, Role};
 use errors::infra::InfraError;
 use itertools::Itertools;
 use redis::Commands;
@@ -21,7 +21,7 @@ use crate::{
 
 #[async_trait]
 impl UserDatabase for ConnectionPool {
-    async fn find_by(&self, uuid: Uuid) -> Result<Option<User>, InfraError> {
+    async fn find_by(&self, uuid: Uuid) -> Result<Option<ActiveUser>, InfraError> {
         Ok(self
             .read_only_transaction(|txn| {
                 Box::pin(async move {
@@ -34,11 +34,11 @@ impl UserDatabase for ConnectionPool {
 
                     let user = query
                         .map(|row| {
-                            Ok::<User, InfraError>(User {
-                                name: row.name,
-                                id: uuid.into(),
-                                role: Role::from_str(&row.role)?,
-                            })
+                            Ok::<ActiveUser, InfraError>(ActiveUser::new(
+                                row.name,
+                                uuid.into(),
+                                Role::from_str(&row.role)?,
+                            ))
                         })
                         .transpose()?;
 
@@ -48,7 +48,7 @@ impl UserDatabase for ConnectionPool {
             .await?)
     }
 
-    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<User>, InfraError> {
+    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<ActiveUser>, InfraError> {
         if uuids.is_empty() {
             return Ok(Vec::new());
         }
@@ -73,22 +73,22 @@ impl UserDatabase for ConnectionPool {
                         let id: String = row.try_get("id")?;
                         let name: String = row.try_get("name")?;
                         let role: String = row.try_get("role")?;
-                        Ok::<User, InfraError>(User {
+                        Ok::<ActiveUser, InfraError>(ActiveUser::new(
                             name,
-                            id: Uuid::parse_str(&id)?.into(),
-                            role: Role::from_str(&role)?,
-                        })
+                            Uuid::parse_str(&id)?.into(),
+                            Role::from_str(&role)?,
+                        ))
                     })
-                    .collect::<Result<Vec<User>, _>>()
+                    .collect::<Result<Vec<ActiveUser>, _>>()
             })
         })
         .await
     }
 
-    async fn upsert_user(&self, user: &User) -> Result<(), InfraError> {
-        let user_id = user.id.to_string();
-        let user_name = user.name.to_owned();
-        let user_role = user.role.to_string();
+    async fn upsert_user(&self, user: &ActiveUser) -> Result<(), InfraError> {
+        let user_id = user.id().to_string();
+        let user_name = user.name().to_owned();
+        let user_role = user.role().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -126,7 +126,7 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
-    async fn fetch_all_users(&self) -> Result<Vec<User>, InfraError> {
+    async fn fetch_all_users(&self) -> Result<Vec<ActiveUser>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let query = sqlx::query!("SELECT id, name, role FROM users")
@@ -136,13 +136,13 @@ impl UserDatabase for ConnectionPool {
                 let users = query
                     .into_iter()
                     .map(|row| {
-                        Ok::<User, InfraError>(User {
-                            name: row.name,
-                            id: Uuid::parse_str(&row.id)?.into(),
-                            role: Role::from_str(&row.role)?,
-                        })
+                        Ok::<ActiveUser, InfraError>(ActiveUser::new(
+                            row.name,
+                            Uuid::parse_str(&row.id)?.into(),
+                            Role::from_str(&row.role)?,
+                        ))
                     })
-                    .collect::<Result<Vec<User>, InfraError>>()?;
+                    .collect::<Result<Vec<ActiveUser>, InfraError>>()?;
 
                 Ok::<_, InfraError>(users)
             })
@@ -153,7 +153,7 @@ impl UserDatabase for ConnectionPool {
     async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &User,
+        user: &ActiveUser,
         expires: u32,
     ) -> Result<String, InfraError> {
         let now = Utc::now().timestamp_millis();
@@ -170,11 +170,11 @@ impl UserDatabase for ConnectionPool {
     async fn fetch_user_by_session_id(
         &self,
         session_id: String,
-    ) -> Result<Option<User>, InfraError> {
+    ) -> Result<Option<ActiveUser>, InfraError> {
         let mut redis_connection = redis_connection().await;
 
         let result: Option<String> = redis_connection.get(&session_id)?;
-        let user = result.and_then(|s| serde_json::from_str::<User>(&s).ok());
+        let user = result.and_then(|s| serde_json::from_str::<ActiveUser>(&s).ok());
 
         Ok(user)
     }
@@ -190,9 +190,9 @@ impl UserDatabase for ConnectionPool {
     async fn link_discord_user(
         &self,
         discord_user: &DiscordUser,
-        user: &User,
+        user: &ActiveUser,
     ) -> Result<(), InfraError> {
-        let user_id = user.id.to_string();
+        let user_id = user.id().to_string();
         let discord_user_id = discord_user.id().to_owned().into_inner();
         let discord_username = discord_user.name().to_owned().into_inner().to_owned();
 
@@ -218,8 +218,8 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
-    async fn unlink_discord_user(&self, user: &User) -> Result<(), InfraError> {
-        let user_id = user.id.to_string();
+    async fn unlink_discord_user(&self, user: &ActiveUser) -> Result<(), InfraError> {
+        let user_id = user.id().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -238,9 +238,9 @@ impl UserDatabase for ConnectionPool {
 
     async fn fetch_discord_user(
         &self,
-        user: &User,
+        user: &ActiveUser,
     ) -> Result<Option<DiscordUserRecord>, InfraError> {
-        let user_id = user.id.to_string();
+        let user_id = user.id().to_string();
 
         Ok(self
             .read_only_transaction(|txn| {

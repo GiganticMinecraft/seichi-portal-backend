@@ -9,7 +9,8 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
-    repository::Repositories, search::models::SearchableFieldsWithOperation, user::models::User,
+    repository::Repositories, search::models::SearchableFieldsWithOperation,
+    user::models::ActiveUser,
 };
 use errors::{Error, ErrorExtra};
 use resource::repository::RealInfrastructureRepository;
@@ -55,7 +56,7 @@ impl IntoResponse for CrossSearchResponse {
     tag = "Search"
 )]
 pub async fn cross_search(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<SearchQuery>, QueryRejection>,
 ) -> Result<CrossSearchResponse, Response> {

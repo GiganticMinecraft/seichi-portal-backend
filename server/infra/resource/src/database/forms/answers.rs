@@ -6,7 +6,7 @@ use domain::{
         answer::models::{AnswerAuthor, AnswerEntry, AnswerId},
         models::FormId,
     },
-    user::models::{Role, TemporaryUser, User},
+    user::models::{ActiveUser, Role, TemporaryUser},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -33,7 +33,7 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
         AnswerAuthor::TemporaryUser(temporary_user) => (
             "TEMPORARY_USER".to_string(),
             None,
-            Some(temporary_user.id.to_string()),
+            Some(temporary_user.id().to_string()),
         ),
     }
 }
@@ -41,16 +41,18 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
 fn author_from_row(row: &sqlx::mysql::MySqlRow) -> Result<AnswerAuthorRecord, InfraError> {
     let author_type: String = row.try_get("author_type")?;
     match author_type.as_str() {
-        "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(User {
-            id: Uuid::from_str(&row.try_get::<String, _>("user")?)?.into(),
-            name: row.try_get("user_name")?,
-            role: Role::from_str(&row.try_get::<String, _>("user_role")?)?,
-        })),
-        "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryUser(TemporaryUser {
-            id: Uuid::from_str(&row.try_get::<String, _>("temporary_user_id")?)?.into(),
-            name: row.try_get("temporary_user_name")?,
-            contact_text: row.try_get("temporary_user_contact_text")?,
-        })),
+        "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(ActiveUser::new(
+            row.try_get("user_name")?,
+            Uuid::from_str(&row.try_get::<String, _>("user")?)?.into(),
+            Role::from_str(&row.try_get::<String, _>("user_role")?)?,
+        ))),
+        "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryUser(
+            TemporaryUser::from_raw_parts(
+                Uuid::from_str(&row.try_get::<String, _>("temporary_user_id")?)?.into(),
+                row.try_get("temporary_user_name")?,
+                row.try_get("temporary_user_contact_text")?,
+            ),
+        )),
         value => Err(InfraError::Unexpected {
             cause: format!("unknown answer author_type: {value}"),
         }),
@@ -154,9 +156,9 @@ impl FormAnswerDatabase for ConnectionPool {
                         r"INSERT INTO temporary_users (id, name, contact_text)
                         VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE name = VALUES(name), contact_text = VALUES(contact_text)",
-                        temporary_user.id.to_string(),
-                        temporary_user.name,
-                        temporary_user.contact_text,
+                        temporary_user.id().to_string(),
+                        temporary_user.name(),
+                        temporary_user.contact_text(),
                     )
                     .execute(&mut **txn)
                     .await?;
@@ -424,9 +426,9 @@ impl FormAnswerDatabase for ConnectionPool {
                         r"INSERT INTO temporary_users (id, name, contact_text)
                         VALUES (?, ?, ?)
                         ON DUPLICATE KEY UPDATE name = VALUES(name), contact_text = VALUES(contact_text)",
-                        temporary_user.id.to_string(),
-                        temporary_user.name,
-                        temporary_user.contact_text,
+                        temporary_user.id().to_string(),
+                        temporary_user.name(),
+                        temporary_user.contact_text(),
                     )
                     .execute(&mut **txn)
                     .await?;

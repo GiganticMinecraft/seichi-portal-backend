@@ -11,7 +11,7 @@ use domain::{
     },
     user::models::User,
 };
-use errors::Error;
+use errors::{Error, domain::DomainError};
 
 use crate::{
     database::{
@@ -33,6 +33,9 @@ where
         form: AuthorizationGuard<ActiveForm, Create>,
     ) -> Result<(), Error> {
         let form = form.try_into_create(actor, |form| form)?;
+        let User::ActiveUser(actor) = actor else {
+            return Err(DomainError::Forbidden.into());
+        };
         self.client.form().create(&form, actor).await?;
         Ok(())
     }
@@ -75,6 +78,9 @@ where
         updated_form: AuthorizationGuard<ActiveForm, Update>,
     ) -> Result<(), Error> {
         let updated_form = updated_form.try_into_update(actor, |form| form)?;
+        let User::ActiveUser(actor) = actor else {
+            return Err(DomainError::Forbidden.into());
+        };
         self.client.form().update(&updated_form, actor).await?;
         Ok(())
     }

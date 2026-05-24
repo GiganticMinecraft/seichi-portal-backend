@@ -3,7 +3,7 @@ use domain::{
     form::{
         answer::{
             models::{AnswerEntry, AnswerId},
-            service::{AnswerEntryActor, AnswerEntryAuthorizationContext},
+            service::AnswerEntryAuthorizationContext,
         },
         models::FormId,
     },
@@ -11,6 +11,7 @@ use domain::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Read, Update,
     },
+    user::models::User,
 };
 use errors::Error;
 use itertools::Itertools;
@@ -26,13 +27,8 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     async fn post_answer(
         &self,
         context: &AnswerEntryAuthorizationContext,
-        answer: AuthorizationGuardWithContext<
-            AnswerEntry,
-            Create,
-            AnswerEntryAuthorizationContext,
-            AnswerEntryActor,
-        >,
-        actor: &AnswerEntryActor,
+        answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
+        actor: &User,
     ) -> Result<(), Error> {
         answer
             .try_create(
@@ -49,14 +45,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
         &self,
         answer_id: AnswerId,
     ) -> Result<
-        Option<
-            AuthorizationGuardWithContext<
-                AnswerEntry,
-                Read,
-                AnswerEntryAuthorizationContext,
-                AnswerEntryActor,
-            >,
-        >,
+        Option<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
         Error,
     > {
         Ok(self
@@ -74,14 +63,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
         &self,
         form_id: FormId,
     ) -> Result<
-        Vec<
-            AuthorizationGuardWithContext<
-                AnswerEntry,
-                Read,
-                AnswerEntryAuthorizationContext,
-                AnswerEntryActor,
-            >,
-        >,
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
         Error,
     > {
         Ok(self
@@ -104,14 +86,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     async fn get_all_answers(
         &self,
     ) -> Result<
-        Vec<
-            AuthorizationGuardWithContext<
-                AnswerEntry,
-                Read,
-                AnswerEntryAuthorizationContext,
-                AnswerEntryActor,
-            >,
-        >,
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
         Error,
     > {
         self.client
@@ -127,13 +102,12 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
     #[tracing::instrument(skip(self))]
     async fn update_answer_entry(
         &self,
-        actor: &AnswerEntryActor,
+        actor: &User,
         context: &AnswerEntryAuthorizationContext,
         answer_entry: AuthorizationGuardWithContext<
             AnswerEntry,
             Update,
             AnswerEntryAuthorizationContext,
-            AnswerEntryActor,
         >,
     ) -> Result<(), Error> {
         answer_entry

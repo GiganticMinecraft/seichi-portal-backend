@@ -231,7 +231,12 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
-        let form = form.try_into_read(actor)?.archive(Utc::now(), actor.id);
+        let User::ActiveUser(active_actor) = actor else {
+            return Err(errors::domain::DomainError::Forbidden.into());
+        };
+        let form = form
+            .try_into_read(actor)?
+            .archive(Utc::now(), *active_actor.id());
         let archived_form = self
             .archived_form_repository
             .archive(actor, form.into())
@@ -573,17 +578,17 @@ mod tests {
             notification_repository::MockNotificationRepository,
             user_repository::MockUserRepository,
         },
-        user::models::{Role, User},
+        user::models::{ActiveUser, Role, User},
     };
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
     fn admin_user() -> User {
-        User {
-            name: "admin".to_string(),
-            id: Uuid::nil().into(),
-            role: Role::Administrator,
-        }
+        User::ActiveUser(ActiveUser::new(
+            "admin".to_string(),
+            Uuid::nil().into(),
+            Role::Administrator,
+        ))
     }
 
     fn sample_form(form_id: FormId) -> ActiveForm {

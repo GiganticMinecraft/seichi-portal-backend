@@ -28,18 +28,14 @@ impl Message {
     ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::models::Message,
     ///     },
-    ///     user::models::{Role, User},
+    ///     user::models::UserId,
     /// };
     /// use uuid::Uuid;
     ///
-    /// let user = User {
-    ///     name: "user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let user_id: UserId = Uuid::new_v4().into();
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     AnswerAuthor::AuthenticatedUser(user.id),
+    ///     AnswerAuthor::AuthenticatedUser(user_id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -47,17 +43,17 @@ impl Message {
     ///
     /// let success_message = Message::try_new(
     ///     *related_answer.id(),
-    ///     user.id,
+    ///     user_id,
     ///     "test message".to_string(),
     /// );
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     AnswerAuthor::AuthenticatedUser(user.id),
+    ///     AnswerAuthor::AuthenticatedUser(user_id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
-    /// let message_with_empty_body = Message::try_new(*related_answer.id(), user.id, "".to_string());
+    /// let message_with_empty_body = Message::try_new(*related_answer.id(), user_id, "".to_string());
     ///
     /// assert!(success_message.is_ok());
     /// assert!(message_with_empty_body.is_err());
@@ -84,24 +80,20 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use chrono::{DateTime, Utc};
+    /// use chrono::Utc;
     /// use domain::{
     ///     form::{
     ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::models::{Message, MessageId},
     ///     },
-    ///     user::models::{Role, User},
+    ///     user::models::UserId,
     /// };
     /// use uuid::Uuid;
     ///
-    /// let user = User {
-    ///     name: "user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let user_id: UserId = Uuid::new_v4().into();
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     AnswerAuthor::AuthenticatedUser(user.id),
+    ///     AnswerAuthor::AuthenticatedUser(user_id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -111,7 +103,7 @@ impl Message {
     ///     let message = Message::from_raw_parts(
     ///         MessageId::new(),
     ///         *related_answer.id(),
-    ///         user.id,
+    ///         user_id,
     ///         "test message".to_string(),
     ///         Utc::now(),
     ///     );

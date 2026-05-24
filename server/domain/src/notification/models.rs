@@ -36,15 +36,27 @@ impl NotificationPreference {
 
 impl AuthorizationGuardDefinitions for NotificationPreference {
     fn can_create(&self, actor: &User) -> bool {
-        self.recipient_id() == &actor.id || actor.role == Role::Administrator
+        matches!(
+            actor,
+            User::ActiveUser(actor)
+                if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
+        )
     }
 
     fn can_read(&self, actor: &User) -> bool {
-        self.recipient_id() == &actor.id || actor.role == Role::Administrator
+        matches!(
+            actor,
+            User::ActiveUser(actor)
+                if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
+        )
     }
 
     fn can_update(&self, actor: &User) -> bool {
-        self.recipient_id() == &actor.id || actor.role == Role::Administrator
+        matches!(
+            actor,
+            User::ActiveUser(actor)
+                if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
+        )
     }
 
     fn can_delete(&self, _actor: &User) -> bool {

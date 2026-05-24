@@ -84,7 +84,10 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
             default_answer_title,
             &questions,
             answers,
-            actor.name.as_str(),
+            match actor {
+                User::ActiveUser(actor) => actor.name(),
+                User::TemporaryUser(actor) => actor.name(),
+            },
         )
     }
 }
@@ -180,11 +183,11 @@ mod tests {
         )
         .unwrap();
 
-        let actor = User {
-            name: "respondent_name".to_string(),
-            id: Uuid::nil().into(),
-            role: Default::default(),
-        };
+        let actor = User::ActiveUser(crate::user::models::ActiveUser::new(
+            "respondent_name".to_string(),
+            Uuid::nil().into(),
+            Default::default(),
+        ));
 
         let result = DefaultAnswerTitleDomainService::<
             crate::repository::form::active_form_repository::MockActiveFormRepository,
@@ -192,7 +195,10 @@ mod tests {
             default_answer_title,
             questions.as_slice(),
             &answers,
-            actor.name.as_str(),
+            match &actor {
+                User::ActiveUser(actor) => actor.name(),
+                User::TemporaryUser(actor) => actor.name(),
+            },
         )
         .unwrap();
 

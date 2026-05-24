@@ -242,7 +242,7 @@ impl AnswerLabel {
 
 impl AuthorizationGuardDefinitions for AnswerLabel {
     fn can_create(&self, actor: &User) -> bool {
-        actor.role == Role::Administrator
+        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
     }
 
     fn can_read(&self, _actor: &User) -> bool {
@@ -250,11 +250,11 @@ impl AuthorizationGuardDefinitions for AnswerLabel {
     }
 
     fn can_update(&self, actor: &User) -> bool {
-        actor.role == Role::Administrator
+        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
     }
 
     fn can_delete(&self, actor: &User) -> bool {
-        actor.role == Role::Administrator
+        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
     }
 }
 

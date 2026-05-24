@@ -8,52 +8,58 @@ use crate::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{DiscordUser, User},
+    user::models::{ActiveUser, DiscordUser, User},
 };
 
 #[automock]
 #[async_trait]
 pub trait UserRepository: Send + Sync + 'static {
-    async fn find_by(&self, uuid: Uuid) -> Result<Option<AuthorizationGuard<User, Read>>, Error>;
+    async fn find_by(
+        &self,
+        uuid: Uuid,
+    ) -> Result<Option<AuthorizationGuard<ActiveUser, Read>>, Error>;
     async fn find_by_ids(
         &self,
         uuids: Vec<Uuid>,
-    ) -> Result<Vec<AuthorizationGuard<User, Read>>, Error>;
+    ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error>;
     async fn upsert_user(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Create>,
+        user: AuthorizationGuard<ActiveUser, Create>,
     ) -> Result<(), Error>;
     async fn patch_user_role(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Update>,
+        user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error>;
-    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error>;
-    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<User, Read>>, Error>;
+    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<ActiveUser>, Error>;
+    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error>;
     async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &User,
+        user: &ActiveUser,
         expires: u32,
     ) -> Result<String, Error>;
-    async fn fetch_user_by_session_id(&self, session_id: String) -> Result<Option<User>, Error>;
+    async fn fetch_user_by_session_id(
+        &self,
+        session_id: String,
+    ) -> Result<Option<ActiveUser>, Error>;
     async fn end_user_session(&self, session_id: String) -> Result<(), Error>;
     async fn link_discord_user(
         &self,
         actor: &User,
         discord_user: &DiscordUser,
-        user: AuthorizationGuard<User, Update>,
+        user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error>;
     async fn unlink_discord_user(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Update>,
+        user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error>;
     async fn fetch_discord_user(
         &self,
         actor: &User,
-        user: &AuthorizationGuard<User, Read>,
+        user: &AuthorizationGuard<ActiveUser, Read>,
     ) -> Result<Option<DiscordUser>, Error>;
     async fn fetch_discord_user_by_token(
         &self,

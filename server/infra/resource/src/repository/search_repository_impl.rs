@@ -5,7 +5,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use domain::form::answer::models::AnswerEntry;
-use domain::form::answer::service::{AnswerEntryActor, AnswerEntryAuthorizationContext};
+use domain::form::answer::service::AnswerEntryAuthorizationContext;
 use domain::search::models::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
@@ -19,7 +19,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 use errors::Error;
 use itertools::Itertools;
@@ -29,7 +29,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
     async fn search_users(
         &self,
         query: &str,
-    ) -> Result<Vec<AuthorizationGuard<User, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
         Ok(self
             .client
             .search()
@@ -86,14 +86,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
         &self,
         query: &str,
     ) -> Result<
-        Vec<
-            AuthorizationGuardWithContext<
-                AnswerEntry,
-                Read,
-                AnswerEntryAuthorizationContext,
-                AnswerEntryActor,
-            >,
-        >,
+        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
         Error,
     > {
         let real_answers = self.client.search().search_answers(query).await?;

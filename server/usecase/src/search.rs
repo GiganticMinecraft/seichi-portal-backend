@@ -7,7 +7,7 @@ use domain::search::models::NumberOfRecords;
 use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
     form::{
-        answer::service::{AnswerEntryActor, AnswerEntryAuthorizationContext},
+        answer::service::AnswerEntryAuthorizationContext,
         comment::service::CommentAuthorizationContext,
     },
     repository::{
@@ -15,7 +15,7 @@ use domain::{
         search_repository::SearchRepository,
     },
     search::models::SearchableFieldsWithOperation,
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::{
     Error,
@@ -58,9 +58,10 @@ impl<
 {
     pub async fn cross_search(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         query: String,
     ) -> Result<CrossSearchOutput, Error> {
+        let actor = User::ActiveUser(actor.clone());
         let (forms, users, label_for_forms, label_for_answers, answers, comments) = try_join!(
             self.search_repository.search_forms(&query),
             self.search_repository.search_users(&query),
@@ -72,60 +73,65 @@ impl<
 
         let forms = forms
             .into_iter()
-            .flat_map(|guard| guard.try_into_read(actor))
+            .flat_map(|guard| guard.try_into_read(&actor))
             .collect::<Vec<_>>();
 
         let users = users
             .into_iter()
-            .flat_map(|guard| guard.try_into_read(actor))
+            .flat_map(|guard| guard.try_into_read(&actor))
             .collect::<Vec<_>>();
 
         let label_for_forms = label_for_forms
             .into_iter()
-            .flat_map(|guard| guard.try_into_read(actor))
+            .flat_map(|guard| guard.try_into_read(&actor))
             .collect::<Vec<_>>();
 
         let label_for_answers = label_for_answers
             .into_iter()
-            .flat_map(|guard| guard.try_into_read(actor))
+            .flat_map(|guard| guard.try_into_read(&actor))
             .collect::<Vec<_>>();
 
         let answers_futs = answers
             .into_iter()
-            .map(|guard| async {
-                let context = guard
-                    .create_context(|entry| {
-                        let form_id = entry.form_id().to_owned();
+            .map(|guard| {
+                let actor = actor.clone();
+                async move {
+                    let context = guard
+                        .create_context(|entry| {
+                            let form_id = entry.form_id().to_owned();
+                            let actor = actor.clone();
 
-                        async move {
-                            let form_guard = self
-                                .active_form_repository
-                                .get(form_id)
-                                .await?
-                                .ok_or(Error::from(FormNotFound))?;
+                            async move {
+                                let form_guard = self
+                                    .active_form_repository
+                                    .get(form_id)
+                                    .await?
+                                    .ok_or(Error::from(FormNotFound))?;
 
-                            let form = form_guard.try_read(actor)?;
-                            let form_settings = form.settings();
+                                let form = form_guard.try_read(&actor)?;
+                                let form_settings = form.settings();
 
-                            Ok(AnswerEntryAuthorizationContext {
-                                form_visibility: form_settings.visibility().to_owned(),
-                                response_period: form_settings
-                                    .answer_settings()
-                                    .response_period()
-                                    .to_owned(),
-                                answer_visibility: form_settings
-                                    .answer_settings()
-                                    .visibility()
-                                    .to_owned(),
-                                allow_temporary_answers: form_settings.allow_temporary_answers(),
-                            })
-                        }
-                    })
-                    .await?;
+                                Ok(AnswerEntryAuthorizationContext {
+                                    form_visibility: form_settings.visibility().to_owned(),
+                                    response_period: form_settings
+                                        .answer_settings()
+                                        .response_period()
+                                        .to_owned(),
+                                    answer_visibility: form_settings
+                                        .answer_settings()
+                                        .visibility()
+                                        .to_owned(),
+                                    allow_temporary_answers: form_settings
+                                        .allow_temporary_answers(),
+                                })
+                            }
+                        })
+                        .await?;
 
-                guard
-                    .try_into_read(&AnswerEntryActor::from(actor.clone()), &context)
-                    .map_err(Into::<Error>::into)
+                    guard
+                        .try_into_read(&actor, &context)
+                        .map_err(Into::<Error>::into)
+                }
             })
             .collect::<Vec<_>>();
 
@@ -133,60 +139,67 @@ impl<
 
         let comment_futs = comments
             .into_iter()
-            .map(|guard| async {
-                let context = guard
-                    .create_context(|comment| {
-                        let answer_id = comment.answer_id().to_owned();
+            .map(|guard| {
+                let actor = actor.clone();
+                async move {
+                    let context = guard
+                        .create_context(|comment| {
+                            let answer_id = comment.answer_id().to_owned();
+                            let actor = actor.clone();
 
-                        async move {
-                            let answer_entry_guard = self
-                                .answer_repository
-                                .get_answer(answer_id)
-                                .await?
-                                .ok_or(Error::from(AnswerNotFound))?;
+                            async move {
+                                let answer_entry_guard = self
+                                    .answer_repository
+                                    .get_answer(answer_id)
+                                    .await?
+                                    .ok_or(Error::from(AnswerNotFound))?;
 
-                            let answer_entry_context = answer_entry_guard
-                                .create_context(|entry| {
-                                    let form_id = entry.form_id().to_owned();
+                                let answer_entry_context = answer_entry_guard
+                                    .create_context(|entry| {
+                                        let form_id = entry.form_id().to_owned();
+                                        let actor = actor.clone();
 
-                                    async move {
-                                        let form_guard = self
-                                            .active_form_repository
-                                            .get(form_id)
-                                            .await?
-                                            .ok_or(Error::from(FormNotFound))?;
+                                        async move {
+                                            let form_guard = self
+                                                .active_form_repository
+                                                .get(form_id)
+                                                .await?
+                                                .ok_or(Error::from(FormNotFound))?;
 
-                                        let form = form_guard.try_read(actor)?;
-                                        let form_settings = form.settings();
+                                            let form = form_guard.try_read(&actor)?;
+                                            let form_settings = form.settings();
 
-                                        Ok(AnswerEntryAuthorizationContext {
-                                            form_visibility: form_settings.visibility().to_owned(),
-                                            response_period: form_settings
-                                                .answer_settings()
-                                                .response_period()
-                                                .to_owned(),
-                                            answer_visibility: form_settings
-                                                .answer_settings()
-                                                .visibility()
-                                                .to_owned(),
-                                            allow_temporary_answers: form_settings
-                                                .allow_temporary_answers(),
-                                        })
-                                    }
+                                            Ok(AnswerEntryAuthorizationContext {
+                                                form_visibility: form_settings
+                                                    .visibility()
+                                                    .to_owned(),
+                                                response_period: form_settings
+                                                    .answer_settings()
+                                                    .response_period()
+                                                    .to_owned(),
+                                                answer_visibility: form_settings
+                                                    .answer_settings()
+                                                    .visibility()
+                                                    .to_owned(),
+                                                allow_temporary_answers: form_settings
+                                                    .allow_temporary_answers(),
+                                            })
+                                        }
+                                    })
+                                    .await?;
+
+                                Ok(CommentAuthorizationContext {
+                                    related_answer_entry_guard: answer_entry_guard,
+                                    related_answer_entry_guard_context: answer_entry_context,
                                 })
-                                .await?;
+                            }
+                        })
+                        .await?;
 
-                            Ok(CommentAuthorizationContext {
-                                related_answer_entry_guard: answer_entry_guard,
-                                related_answer_entry_guard_context: answer_entry_context,
-                            })
-                        }
-                    })
-                    .await?;
-
-                guard
-                    .try_into_read(actor, &context)
-                    .map_err(Into::<Error>::into)
+                    guard
+                        .try_into_read(&actor, &context)
+                        .map_err(Into::<Error>::into)
+                }
             })
             .collect::<Vec<_>>();
 
@@ -375,8 +388,8 @@ impl<
                                 (
                                     domain::search::models::SearchableFields::Users(
                                         domain::search::models::Users {
-                                            id: user.id.into_inner(),
-                                            name: user.name,
+                                            id: user.id().into_inner(),
+                                            name: user.name().to_owned(),
                                         },
                                     ),
                                     Operation::Update,

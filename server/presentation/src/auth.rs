@@ -106,7 +106,7 @@ pub async fn auth(
     };
 
     let user = user_use_case
-        .find_by(&session_user, session_user.id.into_inner())
+        .find_by(&session_user, session_user.id().into_inner())
         .await
         .map_err(|_| {
             (
@@ -123,6 +123,9 @@ pub async fn auth(
                 .into_response()
         })?;
 
+    request
+        .extensions_mut()
+        .insert(domain::user::models::User::ActiveUser(user.clone()));
     request.extensions_mut().insert(user);
 
     let response = next.run(request).await;

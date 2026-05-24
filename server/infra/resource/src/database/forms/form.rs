@@ -6,7 +6,7 @@ use domain::form::{
 };
 use domain::{
     form::models::{ActiveForm, ArchivedForm, FormId},
-    user::models::{Role, User},
+    user::models::{ActiveUser, Role},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -289,13 +289,13 @@ async fn fetch_archived_form_row(
 async fn insert_form_root(
     txn: &mut DatabaseTransaction,
     form: &ActiveForm,
-    created_by: &User,
+    created_by: &ActiveUser,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
     let title = form.title().to_string();
     let description = form.description().to_owned().into_inner();
     let allow_temporary_answers = form.settings().allow_temporary_answers();
-    let user_id = created_by.id.to_string();
+    let user_id = created_by.id().to_string();
 
     sqlx::query(
         r#"INSERT INTO form_meta_data (id, title, description, allow_temporary_answers, created_by, updated_by)
@@ -331,7 +331,7 @@ async fn insert_form_root(
 async fn update_form_root(
     txn: &mut DatabaseTransaction,
     form: &ActiveForm,
-    updated_by: &User,
+    updated_by: &ActiveUser,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
     let title = form.title().to_owned().into_inner().into_inner();
@@ -347,11 +347,11 @@ async fn update_form_root(
         .into_inner()
         .map(NonEmptyString::into_inner);
     let response_period = form.settings().answer_settings().response_period();
-    let updated_by_id = updated_by.id.to_string();
+    let updated_by_id = updated_by.id().to_string();
 
     let webhook_url = form
         .settings()
-        .webhook_url(updated_by)
+        .webhook_url(&domain::user::models::User::ActiveUser(updated_by.clone()))
         .ok()
         .map(ToOwned::to_owned)
         .and_then(WebhookUrl::into_inner)
@@ -672,7 +672,7 @@ async fn restore_archived_form_to_active(
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn create(&self, form: &ActiveForm, user: &User) -> Result<(), InfraError> {
+    async fn create(&self, form: &ActiveForm, user: &ActiveUser) -> Result<(), InfraError> {
         let form = form.clone();
         let user = user.clone();
 
@@ -862,7 +862,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError> {
+    async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError> {
         let form = form.clone();
         let updated_by = updated_by.clone();
 

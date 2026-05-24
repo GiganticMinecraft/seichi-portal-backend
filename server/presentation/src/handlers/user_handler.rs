@@ -10,7 +10,7 @@ use axum_extra::{
 };
 use domain::{
     repository::Repositories,
-    user::models::{User, UserSessionExpires},
+    user::models::{ActiveUser, UserSessionExpires},
 };
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -83,7 +83,7 @@ impl IntoResponse for UserListResponse {
     tag = "Users"
 )]
 pub async fn get_my_user_info(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetUserInfoResponse, Response> {
     let user_use_case = UserUseCase {
@@ -91,7 +91,7 @@ pub async fn get_my_user_info(
     };
 
     let user_profile = user_use_case
-        .fetch_user_information(&user, user.id.into_inner())
+        .fetch_user_information(&user, user.id().into_inner())
         .await
         .map_err(handle_error)?;
     let discord_user_id_with_name = user_profile.discord_user.map(|user| {
@@ -101,9 +101,9 @@ pub async fn get_my_user_info(
         )
     });
     Ok(GetUserInfoResponse::Ok(UserInfoResponse {
-        id: user_profile.user.id.to_string(),
-        name: user_profile.user.name,
-        role: user_profile.user.role.to_string(),
+        id: user_profile.user.id().to_string(),
+        name: user_profile.user.name().to_owned(),
+        role: user_profile.user.role().to_string(),
         discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
         discord_username: discord_user_id_with_name.map(|(_, name)| name),
     }))
@@ -128,7 +128,7 @@ pub async fn get_my_user_info(
     tag = "Users"
 )]
 pub async fn get_user_info(
-    Extension(actor): Extension<User>,
+    Extension(actor): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<GetUserInfoResponse, Response> {
@@ -149,9 +149,9 @@ pub async fn get_user_info(
         )
     });
     Ok(GetUserInfoResponse::Ok(UserInfoResponse {
-        id: user_profile.user.id.to_string(),
-        name: user_profile.user.name,
-        role: user_profile.user.role.to_string(),
+        id: user_profile.user.id().to_string(),
+        name: user_profile.user.name().to_owned(),
+        role: user_profile.user.role().to_string(),
         discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
         discord_username: discord_user_id_with_name.map(|(_, name)| name),
     }))
@@ -177,7 +177,7 @@ pub async fn get_user_info(
     tag = "Users"
 )]
 pub async fn patch_user_role(
-    Extension(actor): Extension<User>,
+    Extension(actor): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
     json: Result<Json<UserUpdateSchema>, JsonRejection>,
@@ -214,7 +214,7 @@ pub async fn patch_user_role(
     tag = "Users"
 )]
 pub async fn user_list(
-    Extension(actor): Extension<User>,
+    Extension(actor): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<UserListResponse, Response> {
     let user_use_case = UserUseCase {
@@ -354,7 +354,7 @@ pub async fn end_session(
     tag = "Users"
 )]
 pub async fn link_discord(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<DiscordOAuthToken>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -392,7 +392,7 @@ pub async fn link_discord(
     tag = "Users"
 )]
 pub async fn unlink_discord(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {

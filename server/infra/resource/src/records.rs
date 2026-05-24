@@ -15,7 +15,7 @@ use domain::{
         },
         question::models::{Choice, Question, QuestionType},
     },
-    user::models::{Role, TemporaryUser, User},
+    user::models::{ActiveUser, Role, TemporaryUser},
 };
 use errors::infra::InfraError;
 use types::non_empty_string::NonEmptyString;
@@ -217,15 +217,11 @@ pub struct UserRecord {
     pub role: Role,
 }
 
-impl TryFrom<UserRecord> for User {
+impl TryFrom<UserRecord> for ActiveUser {
     type Error = errors::infra::InfraError;
 
     fn try_from(UserRecord { name, id, role }: UserRecord) -> Result<Self, Self::Error> {
-        Ok(User {
-            name,
-            id: Uuid::from_str(&id)?.into(),
-            role,
-        })
+        Ok(ActiveUser::new(name, Uuid::from_str(&id)?.into(), role))
     }
 }
 
@@ -279,7 +275,7 @@ pub struct FormAnswerRecord {
 }
 
 pub enum AnswerAuthorRecord {
-    AuthenticatedUser(User),
+    AuthenticatedUser(ActiveUser),
     TemporaryUser(TemporaryUser),
 }
 
@@ -297,7 +293,9 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
         }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
         let author = match author {
-            AnswerAuthorRecord::AuthenticatedUser(user) => AnswerAuthor::AuthenticatedUser(user.id),
+            AnswerAuthorRecord::AuthenticatedUser(user) => {
+                AnswerAuthor::AuthenticatedUser(*user.id())
+            }
             AnswerAuthorRecord::TemporaryUser(user) => AnswerAuthor::TemporaryUser(user),
         };
         unsafe {

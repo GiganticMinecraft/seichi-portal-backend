@@ -10,7 +10,7 @@ use domain::form::answer::models::{FormAnswerContent, FormAnswerContentId};
 use domain::{
     form::{answer::models::AnswerId, models::FormId},
     repository::Repositories,
-    user::models::{TemporaryUser, User},
+    user::models::{ActiveUser, TemporaryUser},
 };
 use errors::ErrorExtra;
 use itertools::Itertools;
@@ -100,7 +100,7 @@ impl IntoResponse for UpdateAnswerResponse {
     tag = "Answers"
 )]
 pub async fn get_all_answers(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetAllAnswersResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
@@ -152,7 +152,7 @@ pub async fn get_all_answers(
     tag = "Answers"
 )]
 pub async fn get_answer_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetAnswerResponse, Response> {
@@ -199,7 +199,7 @@ pub async fn get_answer_handler(
     tag = "Answers"
 )]
 pub async fn get_answer_by_form_id_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<GetAnswersByFormResponse, Response> {
@@ -254,7 +254,7 @@ pub async fn get_answer_by_form_id_handler(
     tag = "Answers"
 )]
 pub async fn post_answer_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<AnswerCreateSchema>, JsonRejection>,
@@ -366,7 +366,7 @@ pub async fn post_temporary_answer_handler(
     tag = "Answers"
 )]
 pub async fn update_answer_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<AnswerUpdateSchema>, JsonRejection>,

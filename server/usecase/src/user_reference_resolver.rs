@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{User, UserId},
+    user::models::{ActiveUser, User, UserId},
 };
 use errors::Error;
 
@@ -10,7 +10,7 @@ pub(crate) async fn resolve_user_references<R: UserRepository + ?Sized>(
     repo: &R,
     actor: &User,
     user_ids: Vec<UserId>,
-) -> Result<HashMap<UserId, User>, Error> {
+) -> Result<HashMap<UserId, ActiveUser>, Error> {
     if user_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -25,7 +25,7 @@ pub(crate) async fn resolve_user_references<R: UserRepository + ?Sized>(
         .into_iter()
         .map(|guard| {
             let user = guard.try_into_read(actor)?;
-            Ok((user.id, user))
+            Ok((*user.id(), user))
         })
         .collect()
 }

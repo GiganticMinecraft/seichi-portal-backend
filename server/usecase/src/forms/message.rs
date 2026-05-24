@@ -6,10 +6,7 @@ use domain::notification::discord_dm_notificator::{
 use domain::notification::notification_api::NotificationAPI;
 use domain::{
     form::{
-        answer::{
-            models::AnswerId,
-            service::{AnswerEntryActor, AnswerEntryAuthorizationContext},
-        },
+        answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
         message::{
             models::{Message, MessageId},
             service::MessageAuthorizationContext,
@@ -83,19 +80,20 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor.clone());
-
         let form_answer = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let form_id = form_answer.form_id().to_owned();
         let answer_id = form_answer.id().to_owned();
+        let User::ActiveUser(active_actor) = actor else {
+            return Err(errors::domain::DomainError::Forbidden.into());
+        };
 
-        match Message::try_new(answer_id, actor.id, message_body) {
+        match Message::try_new(answer_id, *active_actor.id(), message_body) {
             Ok(message) => {
                 let notification_recipient_id = form_answer
                     .author()
@@ -123,7 +121,7 @@ impl<
                     .await;
 
                 match post_message_result {
-                    Ok(_) if message_sender_id != notification_recipient.id => {
+                    Ok(_) if &message_sender_id != notification_recipient.id() => {
                         if let Some(discord_user) = self
                             .user_repository
                             .fetch_discord_user(actor, &notification_recipient.to_owned().into())
@@ -131,19 +129,21 @@ impl<
                         {
                             let fetched_notification_preference = self
                                 .notification_repository
-                                .fetch_notification_settings(notification_recipient.id.into_inner())
+                                .fetch_notification_settings(
+                                    notification_recipient.id().into_inner(),
+                                )
                                 .await?;
 
                             let notification_preference = match fetched_notification_preference {
                                 Some(settings) => settings.try_into_read(actor)?,
                                 None => {
                                     let settings: AuthorizationGuard<_, Create> =
-                                        NotificationPreference::new(notification_recipient.id)
+                                        NotificationPreference::new(*notification_recipient.id())
                                             .into();
 
                                     self.notification_repository
                                         .create_notification_settings(
-                                            &notification_recipient,
+                                            &User::ActiveUser(notification_recipient.clone()),
                                             &settings,
                                         )
                                         .await?;
@@ -199,14 +199,12 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor.clone());
-
         let answers = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answers,
@@ -264,14 +262,12 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor.clone());
-
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,
@@ -321,14 +317,12 @@ impl<
             answer_visibility: form_settings.answer_settings().visibility().to_owned(),
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
-        let answer_actor = AnswerEntryActor::from(actor.clone());
-
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(&answer_actor, &answer_entry_authorization_context)?;
+            .try_into_read(actor, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,

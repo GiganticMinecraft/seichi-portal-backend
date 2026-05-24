@@ -33,13 +33,12 @@ mod private {
 /// [`guard_target`] に対して CRUD 操作が可能であるかを定義するための抽象です。
 #[derive(Debug)]
 pub struct AuthorizationGuardWithContext<
-    T: AuthorizationGuardWithContextDefinitions<Context, Actor>,
+    T: AuthorizationGuardWithContextDefinitions<Context>,
     A: Actions,
     Context,
-    Actor = User,
 > {
     guard_target: T,
-    _phantom_data: std::marker::PhantomData<(A, Context, Actor)>,
+    _phantom_data: std::marker::PhantomData<(A, Context)>,
 }
 
 // NOTE: 実装時点(2024/10/27)では、AuthorizationGuardWithContext の Action は以下のようにのみ変換することができます
@@ -56,8 +55,8 @@ pub struct AuthorizationGuardWithContext<
 //  AuthorizationGuardWithContext<T, Delete> から誤って `.into_read()` 関数を呼び出すことで
 //  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
 //  このような事故を防ぐために、AuthorizationGuardWithContext の Action の変換は上記のように限定されています。
-impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor>
-    AuthorizationGuardWithContext<T, Create, Context, Actor>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
+    AuthorizationGuardWithContext<T, Create, Context>
 {
     pub fn new(guard_target: T) -> Self {
         Self {
@@ -69,7 +68,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     /// [`AuthorizationGuardWithContextDefinitions::can_create`] の条件で作成操作 `f` を試みます。
     pub fn try_create<'a, R, F>(
         &'a self,
-        actor: &Actor,
+        actor: &User,
         f: F,
         context: &Context,
     ) -> Result<R, DomainError>
@@ -87,7 +86,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
     pub fn try_into_create<R, F>(
         self,
-        actor: &Actor,
+        actor: &User,
         f: F,
         context: &Context,
     ) -> Result<R, DomainError>
@@ -102,14 +101,14 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 
     /// [`AuthorizationGuardWithContext`] の Action を [`Read`] に変換します。
-    pub fn into_read(self) -> AuthorizationGuardWithContext<T, Read, Context, Actor> {
+    pub fn into_read(self) -> AuthorizationGuardWithContext<T, Read, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
             _phantom_data: std::marker::PhantomData,
         }
     }
 
-    pub fn into_update(self) -> AuthorizationGuardWithContext<T, Update, Context, Actor> {
+    pub fn into_update(self) -> AuthorizationGuardWithContext<T, Update, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
             _phantom_data: std::marker::PhantomData,
@@ -117,13 +116,13 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor>
-    AuthorizationGuardWithContext<T, Update, Context, Actor>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
+    AuthorizationGuardWithContext<T, Update, Context>
 {
     /// [`AuthorizationGuardWithContextDefinitions::can_update`] の条件で更新操作 `f` を試みます。
     pub fn try_update<'a, R, F>(
         &'a self,
-        actor: &Actor,
+        actor: &User,
         f: F,
         context: &Context,
     ) -> Result<R, DomainError>
@@ -141,7 +140,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
     pub fn try_into_update<R, F>(
         self,
-        actor: &Actor,
+        actor: &User,
         f: F,
         context: &Context,
     ) -> Result<R, DomainError>
@@ -156,7 +155,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 
     /// [`T`] の値に対して map 相当の操作を行います。
-    pub fn map<F>(self, f: F) -> AuthorizationGuardWithContext<T, Update, Context, Actor>
+    pub fn map<F>(self, f: F) -> AuthorizationGuardWithContext<T, Update, Context>
     where
         F: FnOnce(T) -> T,
     {
@@ -167,7 +166,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 
     /// [`AuthorizationGuardWithContext`] の Action を [`Read`] に変換します。
-    pub fn into_read(self) -> AuthorizationGuardWithContext<T, Read, Context, Actor> {
+    pub fn into_read(self) -> AuthorizationGuardWithContext<T, Read, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
             _phantom_data: std::marker::PhantomData,
@@ -175,7 +174,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 
     /// [`AuthorizationGuardWithContext`] の Action を [`Delete`] に変換します。
-    pub fn into_delete(self) -> AuthorizationGuardWithContext<T, Delete, Context, Actor> {
+    pub fn into_delete(self) -> AuthorizationGuardWithContext<T, Delete, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
             _phantom_data: std::marker::PhantomData,
@@ -183,11 +182,11 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor>
-    AuthorizationGuardWithContext<T, Read, Context, Actor>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
+    AuthorizationGuardWithContext<T, Read, Context>
 {
     /// `actor` が `guard_target` の参照を取得することを試みます。
-    pub fn try_read(&self, actor: &Actor, context: &Context) -> Result<&T, DomainError> {
+    pub fn try_read(&self, actor: &User, context: &Context) -> Result<&T, DomainError> {
         if self.guard_target.can_read(actor, context) {
             Ok(&self.guard_target)
         } else {
@@ -196,7 +195,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 
     /// `actor` が `guard_target` を取得することを試みます。
-    pub fn try_into_read(self, actor: &Actor, context: &Context) -> Result<T, DomainError> {
+    pub fn try_into_read(self, actor: &User, context: &Context) -> Result<T, DomainError> {
         if self.guard_target.can_read(actor, context) {
             Ok(self.guard_target)
         } else {
@@ -206,7 +205,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
 
     pub async fn try_into_read_with_context_fn<Fut>(
         self,
-        actor: &Actor,
+        actor: &User,
         context_fn: impl FnOnce(&T) -> Fut,
     ) -> Result<T, Error>
     where
@@ -223,7 +222,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 
     /// [`AuthorizationGuardWithContext`] の Action を [`Update`] に変換します。
-    pub fn into_update(self) -> AuthorizationGuardWithContext<T, Update, Context, Actor> {
+    pub fn into_update(self) -> AuthorizationGuardWithContext<T, Update, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
             _phantom_data: std::marker::PhantomData,
@@ -231,7 +230,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 
     /// [`AuthorizationGuardWithContext`] の Action を [`Delete`] に変換します。
-    pub fn into_delete(self) -> AuthorizationGuardWithContext<T, Delete, Context, Actor> {
+    pub fn into_delete(self) -> AuthorizationGuardWithContext<T, Delete, Context> {
         AuthorizationGuardWithContext {
             guard_target: self.guard_target,
             _phantom_data: std::marker::PhantomData,
@@ -255,13 +254,13 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor>
-    AuthorizationGuardWithContext<T, Delete, Context, Actor>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Context>
+    AuthorizationGuardWithContext<T, Delete, Context>
 {
     /// [`AuthorizationGuardWithContextDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
     pub fn try_delete<'a, R, F>(
         &'a self,
-        actor: &Actor,
+        actor: &User,
         f: F,
         context: &Context,
     ) -> Result<R, DomainError>
@@ -279,7 +278,7 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
     pub fn try_into_delete<R, F>(
         self,
-        actor: &Actor,
+        actor: &User,
         f: F,
         context: &Context,
     ) -> Result<R, DomainError>
@@ -294,8 +293,8 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Context, Actor
     }
 }
 
-impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Action: Actions, Context, Actor>
-    AuthorizationGuardWithContext<T, Action, Context, Actor>
+impl<T: AuthorizationGuardWithContextDefinitions<Context>, Action: Actions, Context>
+    AuthorizationGuardWithContext<T, Action, Context>
 {
     pub async fn create_context<Fut>(
         &self,
@@ -307,28 +306,28 @@ impl<T: AuthorizationGuardWithContextDefinitions<Context, Actor>, Action: Action
         context_fn(&self.guard_target).await
     }
 
-    pub fn can_create(&self, actor: &Actor, context: &Context) -> bool {
+    pub fn can_create(&self, actor: &User, context: &Context) -> bool {
         self.guard_target.can_create(actor, context)
     }
 
-    pub fn can_read(&self, actor: &Actor, context: &Context) -> bool {
+    pub fn can_read(&self, actor: &User, context: &Context) -> bool {
         self.guard_target.can_read(actor, context)
     }
 
-    pub fn can_update(&self, actor: &Actor, context: &Context) -> bool {
+    pub fn can_update(&self, actor: &User, context: &Context) -> bool {
         self.guard_target.can_update(actor, context)
     }
 
-    pub fn can_delete(&self, actor: &Actor, context: &Context) -> bool {
+    pub fn can_delete(&self, actor: &User, context: &Context) -> bool {
         self.guard_target.can_delete(actor, context)
     }
 }
 
-pub trait AuthorizationGuardWithContextDefinitions<Context, Actor = User> {
-    fn can_create(&self, actor: &Actor, context: &Context) -> bool;
-    fn can_read(&self, actor: &Actor, context: &Context) -> bool;
-    fn can_update(&self, actor: &Actor, context: &Context) -> bool;
-    fn can_delete(&self, actor: &Actor, context: &Context) -> bool;
+pub trait AuthorizationGuardWithContextDefinitions<Context> {
+    fn can_create(&self, actor: &User, context: &Context) -> bool;
+    fn can_read(&self, actor: &User, context: &Context) -> bool;
+    fn can_update(&self, actor: &User, context: &Context) -> bool;
+    fn can_delete(&self, actor: &User, context: &Context) -> bool;
 }
 
 #[cfg(test)]
@@ -339,7 +338,7 @@ mod test {
         types::authorization_guard_with_context::{
             AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
         },
-        user::models::{Role, User},
+        user::models::{ActiveUser, Role, User},
     };
 
     #[derive(Clone, PartialEq, Debug)]
@@ -352,35 +351,40 @@ mod test {
 
     impl AuthorizationGuardWithContextDefinitions<Context> for AuthorizationGuardWithContextTestStruct {
         fn can_create(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_read(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator || actor.role == Role::StandardUser
+            matches!(
+                actor,
+                User::ActiveUser(actor)
+                    if actor.role() == &Role::Administrator
+                        || actor.role() == &Role::StandardUser
+            )
         }
 
         fn can_update(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_delete(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
     }
 
     #[test]
     fn authorization_guard_test() {
-        let admin = User {
-            name: "admin".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::Administrator,
-        };
+        let admin = User::ActiveUser(ActiveUser::new(
+            "admin".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        ));
 
-        let standard_user = User {
-            name: "standard_user".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::StandardUser,
-        };
+        let standard_user = User::ActiveUser(ActiveUser::new(
+            "standard_user".to_string(),
+            Uuid::new_v4().into(),
+            Role::StandardUser,
+        ));
 
         let context = Context {};
 
@@ -406,11 +410,11 @@ mod test {
 
     #[test]
     fn verify_same_data_for_try_read_and_try_into_read() {
-        let user = User {
-            name: "user".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::Administrator,
-        };
+        let user = User::ActiveUser(ActiveUser::new(
+            "user".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        ));
 
         let context = Context {};
 

@@ -203,9 +203,9 @@ pub async fn get_messages_handler(
                 id: message_with_sender.message.id().into_inner(),
                 body: message_with_sender.message.body().to_owned(),
                 sender: SenderSchema {
-                    uuid: message_with_sender.sender.id.to_string(),
-                    name: message_with_sender.sender.name,
-                    role: message_with_sender.sender.role.to_string(),
+                    uuid: message_with_sender.sender.id().to_string(),
+                    name: message_with_sender.sender.name().to_owned(),
+                    role: message_with_sender.sender.role().to_string(),
                 },
                 timestamp: message_with_sender.message.timestamp().to_owned(),
             })

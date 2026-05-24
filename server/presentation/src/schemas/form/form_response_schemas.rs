@@ -139,7 +139,7 @@ pub struct ArchivedFormSchema {
     pub metadata: FormMetaSchema,
     pub archived_at: DateTime<Utc>,
     #[schema(value_type = serde_json::Value)]
-    pub archived_by: domain::user::models::User,
+    pub archived_by: domain::user::models::ActiveUser,
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
@@ -305,9 +305,9 @@ pub struct TemporaryUser {
 impl From<domain::user::models::TemporaryUser> for TemporaryUser {
     fn from(val: domain::user::models::TemporaryUser) -> Self {
         TemporaryUser {
-            id: val.id.to_string(),
-            name: val.name,
-            contact_text: val.contact_text,
+            id: val.id().to_string(),
+            name: val.name().to_owned(),
+            contact_text: val.contact_text().to_owned(),
         }
     }
 }
@@ -321,13 +321,13 @@ pub enum AnswerAuthor {
     TemporaryUser { temporary_user: TemporaryUser },
 }
 
-impl From<usecase::models::AnswerAuthorDetails> for AnswerAuthor {
-    fn from(val: usecase::models::AnswerAuthorDetails) -> Self {
+impl From<domain::user::models::User> for AnswerAuthor {
+    fn from(val: domain::user::models::User) -> Self {
         match val {
-            usecase::models::AnswerAuthorDetails::AuthenticatedUser(user) => {
+            domain::user::models::User::ActiveUser(user) => {
                 AnswerAuthor::AuthenticatedUser { user: user.into() }
             }
-            usecase::models::AnswerAuthorDetails::TemporaryUser(temporary_user) => {
+            domain::user::models::User::TemporaryUser(temporary_user) => {
                 AnswerAuthor::TemporaryUser {
                     temporary_user: temporary_user.into(),
                 }
@@ -336,12 +336,12 @@ impl From<usecase::models::AnswerAuthorDetails> for AnswerAuthor {
     }
 }
 
-impl From<domain::user::models::User> for User {
-    fn from(val: domain::user::models::User) -> Self {
+impl From<domain::user::models::ActiveUser> for User {
+    fn from(val: domain::user::models::ActiveUser) -> Self {
         User {
-            uuid: val.id.to_string(),
-            name: val.name,
-            role: val.role.into(),
+            uuid: val.id().to_string(),
+            name: val.name().to_owned(),
+            role: val.role().to_owned().into(),
         }
     }
 }
@@ -409,7 +409,7 @@ pub struct FormAnswer {
 impl FormAnswer {
     pub fn new(
         answer: domain::form::answer::models::AnswerEntry,
-        author: usecase::models::AnswerAuthorDetails,
+        author: domain::user::models::User,
         comments: Vec<usecase::models::CommentWithAuthor>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {

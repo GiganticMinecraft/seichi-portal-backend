@@ -9,7 +9,7 @@ use axum::{
 use domain::{
     form::{models::FormId, question::models::QuestionSet},
     repository::{Repositories, form::active_form_repository::ActiveFormRepository},
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
@@ -169,7 +169,7 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
 fn archived_form_schema_from_parts(
     user: &User,
     form: domain::form::models::ArchivedForm,
-    archived_by: User,
+    archived_by: ActiveUser,
     labels: Vec<domain::form::models::FormLabel>,
 ) -> ArchivedFormSchema {
     ArchivedFormSchema {
@@ -425,25 +425,26 @@ pub async fn get_temporary_answer_form_handler(
     tag = "Forms"
 )]
 pub async fn archive_form_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_use_case = build_form_use_case(&repository);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let actor = User::from(user.clone());
 
     let archived_form = form_use_case
-        .archive_form(&user, form_id)
+        .archive_form(&actor, form_id)
         .await
         .map_err(handle_error)?;
 
     Ok((
         StatusCode::OK,
         Json(archived_form_schema_from_parts(
-            &user,
+            &actor,
             archived_form,
-            user.clone(),
+            user,
             vec![],
         )),
     )

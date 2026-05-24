@@ -5,7 +5,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{DiscordUser, DiscordUserId, DiscordUserName, User},
+    user::models::{ActiveUser, DiscordUser, DiscordUserId, DiscordUserName, User},
 };
 use errors::{Error, infra::InfraError::Reqwest};
 use itertools::Itertools;
@@ -20,14 +20,17 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client> {
-    async fn find_by(&self, uuid: Uuid) -> Result<Option<AuthorizationGuard<User, Read>>, Error> {
+    async fn find_by(
+        &self,
+        uuid: Uuid,
+    ) -> Result<Option<AuthorizationGuard<ActiveUser, Read>>, Error> {
         Ok(self.client.user().find_by(uuid).await?.map(Into::into))
     }
 
     async fn find_by_ids(
         &self,
         uuids: Vec<Uuid>,
-    ) -> Result<Vec<AuthorizationGuard<User, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
         Ok(self
             .client
             .user()
@@ -41,7 +44,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn upsert_user(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Create>,
+        user: AuthorizationGuard<ActiveUser, Create>,
     ) -> Result<(), Error> {
         user.try_create(actor, |user| self.client.user().upsert_user(user))?
             .await
@@ -51,18 +54,18 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn patch_user_role(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Update>,
+        user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
         user.try_update(actor, |user| {
             self.client
                 .user()
-                .patch_user_role(user.id.into_inner(), user.role.to_owned())
+                .patch_user_role(user.id().into_inner(), user.role().to_owned())
         })?
         .await
         .map_err(Into::into)
     }
 
-    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<User>, Error> {
+    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<ActiveUser>, Error> {
         let client = reqwest::Client::new();
 
         let response = client
@@ -76,7 +79,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
                 cause: err.to_string(),
             })?;
 
-        Ok(serde_json::from_str::<User>(
+        Ok(serde_json::from_str::<ActiveUser>(
             response
                 .text()
                 .await
@@ -88,7 +91,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         .ok())
     }
 
-    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<User, Read>>, Error> {
+    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
         Ok(self
             .client
             .user()
@@ -102,7 +105,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &User,
+        user: &ActiveUser,
         expires: u32,
     ) -> Result<String, Error> {
         self.client
@@ -112,7 +115,10 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn fetch_user_by_session_id(&self, session_id: String) -> Result<Option<User>, Error> {
+    async fn fetch_user_by_session_id(
+        &self,
+        session_id: String,
+    ) -> Result<Option<ActiveUser>, Error> {
         Ok(self
             .client
             .user()
@@ -132,7 +138,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         &self,
         actor: &User,
         discord_user: &DiscordUser,
-        user: AuthorizationGuard<User, Update>,
+        user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
         user.try_update(actor, |user| {
             self.client.user().link_discord_user(discord_user, user)
@@ -144,7 +150,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn unlink_discord_user(
         &self,
         actor: &User,
-        user: AuthorizationGuard<User, Update>,
+        user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
         user.try_update(actor, |user| self.client.user().unlink_discord_user(user))?
             .await
@@ -154,7 +160,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn fetch_discord_user(
         &self,
         actor: &User,
-        user: &AuthorizationGuard<User, Read>,
+        user: &AuthorizationGuard<ActiveUser, Read>,
     ) -> Result<Option<DiscordUser>, Error> {
         let user = user.try_read(actor)?;
 

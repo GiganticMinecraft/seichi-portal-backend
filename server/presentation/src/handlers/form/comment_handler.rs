@@ -11,7 +11,7 @@ use domain::form::models::FormId;
 use domain::{
     form::comment::models::{Comment, CommentContent, CommentId},
     repository::Repositories,
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
@@ -107,7 +107,7 @@ pub async fn get_form_comment(
     tag = "Comments"
 )]
 pub async fn post_form_comment(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<CommentPostSchema>, JsonRejection>,
@@ -125,11 +125,12 @@ pub async fn post_form_comment(
     let comment = Comment::new(
         answer_id,
         CommentContent::new(comment_schema.content),
-        user.id,
+        *user.id(),
     );
+    let actor = User::from(user);
 
     form_comment_use_case
-        .post_comment(&user, form_id, answer_id, comment)
+        .post_comment(&actor, form_id, answer_id, comment)
         .await
         .map_err(handle_error)?;
 
