@@ -16,7 +16,7 @@ use domain::{
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::{
     Error,
@@ -60,7 +60,7 @@ impl<
         description: FormDescription,
         questions: NonEmptyVec<Question>,
         allow_temporary_answers: Option<bool>,
-        user: &User,
+        user: &ActiveUser,
     ) -> Result<ActiveForm, Error> {
         let mut form = ActiveForm::new(
             title,
@@ -75,6 +75,7 @@ impl<
             form = form.change_settings(settings);
         }
         let form_id = *form.id();
+        let user_as_user = User::from(user.clone());
 
         self.active_form_repository
             .create(user, form.into())
@@ -84,23 +85,24 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(user)
+            .try_into_read(&user_as_user)
             .map_err(Error::from)
     }
 
     /// `actor` が参照可能なフォームのリストを取得する
     pub async fn form_list(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         offset: Option<u32>,
         limit: Option<u32>,
     ) -> Result<Vec<(ActiveForm, Vec<FormLabel>)>, Error> {
+        let actor_user = User::from(actor.clone());
         let forms = self
             .active_form_repository
             .list(offset, limit)
             .await?
             .into_iter()
-            .flat_map(|form| form.try_into_read(actor))
+            .flat_map(|form| form.try_into_read(&actor_user))
             .collect::<Vec<_>>();
 
         let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
@@ -116,7 +118,7 @@ impl<
                     form,
                     labels
                         .into_iter()
-                        .map(|guard| guard.try_into_read(actor))
+                        .map(|guard| guard.try_into_read(&actor_user))
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             })
@@ -127,21 +129,22 @@ impl<
 
     pub async fn get_form(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
     ) -> Result<ActiveFormWithLabels, Error> {
+        let actor_user = User::from(actor.clone());
         let form = self
             .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(actor)?;
+            .try_into_read(&actor_user)?;
         let labels = self
             .form_label_repository
             .fetch_labels_by_form_id(form_id)
             .await?
             .into_iter()
-            .map(|label| label.try_into_read(actor))
+            .map(|label| label.try_into_read(&actor_user))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ActiveFormWithLabels { form, labels })
@@ -149,17 +152,18 @@ impl<
 
     pub async fn archived_form_list(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         offset: Option<u32>,
         limit: Option<u32>,
         query: Option<String>,
     ) -> Result<Vec<ArchivedFormDetails>, Error> {
+        let actor_user = User::from(actor.clone());
         let forms = self
             .archived_form_repository
             .list(offset, limit, query)
             .await?
             .into_iter()
-            .flat_map(|form| form.try_into_read(actor))
+            .flat_map(|form| form.try_into_read(&actor_user))
             .collect::<Vec<_>>();
 
         let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
@@ -171,21 +175,24 @@ impl<
         let forms_with_labels = forms
             .into_iter()
             .zip(form_labels)
-            .map(|(form, labels)| async move {
-                let archived_by = self
-                    .user_repository
-                    .find_by(form.archived_by().into_inner())
-                    .await?
-                    .ok_or(Error::from(UserNotFound))?
-                    .try_into_read(actor)?;
-                Ok::<_, Error>(ArchivedFormDetails {
-                    archived_by,
-                    form,
-                    labels: labels
-                        .into_iter()
-                        .map(|label| label.try_into_read(actor))
-                        .collect::<Result<Vec<_>, _>>()?,
-                })
+            .map(|(form, labels)| {
+                let actor_user = actor_user.clone();
+                async move {
+                    let archived_by = self
+                        .user_repository
+                        .find_by(form.archived_by().into_inner())
+                        .await?
+                        .ok_or(Error::from(UserNotFound))?
+                        .try_into_read(&actor_user)?;
+                    Ok::<_, Error>(ArchivedFormDetails {
+                        archived_by,
+                        form,
+                        labels: labels
+                            .into_iter()
+                            .map(|label| label.try_into_read(&actor_user))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    })
+                }
             })
             .collect::<Vec<_>>();
 
@@ -194,21 +201,22 @@ impl<
 
     pub async fn get_archived_form(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
     ) -> Result<ArchivedFormDetails, Error> {
+        let actor_user = User::from(actor.clone());
         let form = self
             .archived_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(actor)?;
+            .try_into_read(&actor_user)?;
         let labels = self
             .form_label_repository
             .fetch_labels_by_form_id(form.form().id().to_owned())
             .await?
             .into_iter()
-            .map(|label| label.try_into_read(actor))
+            .map(|label| label.try_into_read(&actor_user))
             .collect::<Result<Vec<_>, _>>()?;
 
         let archived_by = self
@@ -216,7 +224,7 @@ impl<
             .find_by(form.archived_by().into_inner())
             .await?
             .ok_or(Error::from(UserNotFound))?
-            .try_into_read(actor)?;
+            .try_into_read(&actor_user)?;
 
         Ok(ArchivedFormDetails {
             form,
@@ -225,26 +233,28 @@ impl<
         })
     }
 
-    pub async fn archive_form(&self, actor: &User, form_id: FormId) -> Result<ArchivedForm, Error> {
+    pub async fn archive_form(
+        &self,
+        actor: &ActiveUser,
+        form_id: FormId,
+    ) -> Result<ArchivedForm, Error> {
+        let actor_user = User::from(actor.clone());
         let form = self
             .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
-        let User::ActiveUser(active_actor) = actor else {
-            return Err(errors::domain::DomainError::Forbidden.into());
-        };
         let form = form
-            .try_into_read(actor)?
-            .archive(Utc::now(), *active_actor.id());
+            .try_into_read(&actor_user)?
+            .archive(Utc::now(), *actor.id());
         let archived_form = self
             .archived_form_repository
             .archive(actor, form.into())
             .await?;
-        archived_form.try_into_read(actor).map_err(Into::into)
+        archived_form.try_into_read(&actor_user).map_err(Into::into)
     }
 
-    pub async fn restore_form(&self, actor: &User, form_id: FormId) -> Result<(), Error> {
+    pub async fn restore_form(&self, actor: &ActiveUser, form_id: FormId) -> Result<(), Error> {
         let form = self
             .archived_form_repository
             .get(form_id)
@@ -259,7 +269,7 @@ impl<
     #[allow(clippy::too_many_arguments)]
     pub async fn update_form(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         title: Option<FormTitle>,
         description: Option<FormDescription>,
@@ -272,6 +282,7 @@ impl<
         questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
+        let actor_user = User::from(actor.clone());
         let current_form = self
             .active_form_repository
             .get(form_id)
@@ -282,7 +293,7 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(actor)?
+            .try_into_read(&actor_user)?
             .questions()
             .as_slice()
             .to_vec();
@@ -405,7 +416,7 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(actor)
+            .try_into_read(&actor_user)
             .map_err(|_| Error::from(FormNotFound))?;
 
         let label_guards = self
@@ -414,7 +425,7 @@ impl<
             .await?;
         let labels = label_guards
             .into_iter()
-            .map(|label| label.try_into_read(actor))
+            .map(|label| label.try_into_read(&actor_user))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok((updated_form, labels))
@@ -578,17 +589,13 @@ mod tests {
             notification_repository::MockNotificationRepository,
             user_repository::MockUserRepository,
         },
-        user::models::{ActiveUser, Role, User},
+        user::models::{ActiveUser, Role},
     };
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
-    fn admin_user() -> User {
-        User::ActiveUser(ActiveUser::new(
-            "admin".to_string(),
-            Uuid::nil().into(),
-            Role::Administrator,
-        ))
+    fn admin_user() -> ActiveUser {
+        ActiveUser::new("admin".to_string(), Uuid::nil().into(), Role::Administrator)
     }
 
     fn sample_form(form_id: FormId) -> ActiveForm {

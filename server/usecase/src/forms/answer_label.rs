@@ -1,7 +1,7 @@
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::{Error, usecase::UseCaseError::LabelNotFound};
 use types::non_empty_string::NonEmptyString;
@@ -13,9 +13,10 @@ pub struct AnswerLabelUseCase<'a, AnswerLabelRepo: AnswerLabelRepository> {
 impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
     pub async fn create_label_for_answers(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         label_name: NonEmptyString,
     ) -> Result<AnswerLabel, Error> {
+        let actor_user = User::from(actor.clone());
         let answer_label = AnswerLabel::new(label_name);
         let label_id = answer_label.id().to_owned();
 
@@ -27,23 +28,27 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
             .get_label_for_answers(label_id)
             .await?
             .ok_or(Error::from(LabelNotFound))?
-            .try_into_read(actor)
+            .try_into_read(&actor_user)
             .map_err(Into::into)
     }
 
-    pub async fn get_labels_for_answers(&self, actor: &User) -> Result<Vec<AnswerLabel>, Error> {
+    pub async fn get_labels_for_answers(
+        &self,
+        actor: &ActiveUser,
+    ) -> Result<Vec<AnswerLabel>, Error> {
+        let actor_user = User::from(actor.clone());
         Ok(self
             .answer_label_repository
             .get_labels_for_answers()
             .await?
             .into_iter()
-            .flat_map(|label| label.try_into_read(actor))
+            .flat_map(|label| label.try_into_read(&actor_user))
             .collect::<Vec<_>>())
     }
 
     pub async fn delete_label_for_answers(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         label_id: AnswerLabelId,
     ) -> Result<(), Error> {
         let answer_label = self
@@ -59,10 +64,11 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
 
     pub async fn edit_label_for_answers(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         label_id: AnswerLabelId,
         name: Option<NonEmptyString>,
     ) -> Result<AnswerLabel, Error> {
+        let actor_user = User::from(actor.clone());
         let current_label = self
             .answer_label_repository
             .get_label_for_answers(label_id)
@@ -82,13 +88,13 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
             .get_label_for_answers(label_id)
             .await?
             .ok_or(Error::from(LabelNotFound))?
-            .try_into_read(actor)
+            .try_into_read(&actor_user)
             .map_err(Into::into)
     }
 
     pub async fn replace_answer_labels(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         answer_id: AnswerId,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), Error> {

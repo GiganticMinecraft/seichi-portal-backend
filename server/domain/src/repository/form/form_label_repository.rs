@@ -8,7 +8,7 @@ use crate::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Delete, Read, Update},
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 
 #[automock]
@@ -17,7 +17,7 @@ pub trait FormLabelRepository: Send + Sync + 'static {
     async fn create_label_for_forms(
         &self,
         label: AuthorizationGuard<FormLabel, Create>,
-        actor: &User,
+        actor: &ActiveUser,
     ) -> Result<(), Error>;
     async fn fetch_labels(&self) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error>;
     async fn fetch_labels_by_ids(
@@ -31,13 +31,13 @@ pub trait FormLabelRepository: Send + Sync + 'static {
     async fn delete_label_for_forms(
         &self,
         label: AuthorizationGuard<FormLabel, Delete>,
-        actor: &User,
+        actor: &ActiveUser,
     ) -> Result<(), Error>;
     async fn edit_label_for_forms(
         &self,
         id: FormLabelId,
         label: AuthorizationGuard<FormLabel, Update>,
-        actor: &User,
+        actor: &ActiveUser,
     ) -> Result<(), Error>;
     async fn fetch_labels_by_form_id(
         &self,

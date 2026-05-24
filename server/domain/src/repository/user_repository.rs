@@ -8,7 +8,7 @@ use crate::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{ActiveUser, DiscordUser, User},
+    user::models::{ActiveUser, DiscordUser},
 };
 
 #[automock]
@@ -24,12 +24,12 @@ pub trait UserRepository: Send + Sync + 'static {
     ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error>;
     async fn upsert_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Create>,
     ) -> Result<(), Error>;
     async fn patch_user_role(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error>;
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<ActiveUser>, Error>;
@@ -47,18 +47,18 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn end_user_session(&self, session_id: String) -> Result<(), Error>;
     async fn link_discord_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         discord_user: &DiscordUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error>;
     async fn unlink_discord_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error>;
     async fn fetch_discord_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: &AuthorizationGuard<ActiveUser, Read>,
     ) -> Result<Option<DiscordUser>, Error>;
     async fn fetch_discord_user_by_token(

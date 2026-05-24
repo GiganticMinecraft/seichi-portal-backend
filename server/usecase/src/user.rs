@@ -13,11 +13,11 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 
 impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn find_by(&self, actor: &ActiveUser, uuid: Uuid) -> Result<ActiveUser, Error> {
-        let actor = User::ActiveUser(actor.clone());
+        let actor_ref = User::from(actor.clone());
         self.repository
             .find_by(uuid)
             .await?
-            .map(|guard| guard.try_into_read(&actor))
+            .map(|guard| guard.try_into_read(&actor_ref))
             .transpose()?
             .ok_or(Error::from(UseCaseError::UserNotFound))
     }
@@ -27,9 +27,8 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         actor: &ActiveUser,
         upsert_target: ActiveUser,
     ) -> Result<(), Error> {
-        let actor = User::ActiveUser(actor.clone());
         self.repository
-            .upsert_user(&actor, upsert_target.into())
+            .upsert_user(actor, upsert_target.into())
             .await
     }
 
@@ -39,19 +38,19 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         uuid: Uuid,
         role: Role,
     ) -> Result<ActiveUser, Error> {
-        let actor = User::ActiveUser(actor.clone());
+        let actor_ref = User::from(actor.clone());
         let current_user_guard = self
             .repository
             .find_by(uuid)
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        let current_user = current_user_guard.try_into_read(&actor)?;
+        let current_user = current_user_guard.try_into_read(&actor_ref)?;
         let new_role_user =
             ActiveUser::new(current_user.name().to_owned(), *current_user.id(), role);
 
         self.repository
-            .patch_user_role(&actor, new_role_user.into())
+            .patch_user_role(actor, new_role_user.into())
             .await?;
 
         let updated_user_guard = self
@@ -60,16 +59,18 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        updated_user_guard.try_into_read(&actor).map_err(Into::into)
+        updated_user_guard
+            .try_into_read(&actor_ref)
+            .map_err(Into::into)
     }
 
     pub async fn fetch_all_users(&self, actor: &ActiveUser) -> Result<Vec<ActiveUser>, Error> {
-        let actor = User::ActiveUser(actor.clone());
+        let actor_ref = User::from(actor.clone());
         self.repository
             .fetch_all_users()
             .await?
             .into_iter()
-            .map(|guard| guard.try_into_read(&actor))
+            .map(|guard| guard.try_into_read(&actor_ref))
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
@@ -83,14 +84,14 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         match fetched_user {
             Some(user) => {
                 let guard = user.to_owned().into();
-                let actor = User::ActiveUser(user.clone());
-                self.repository.upsert_user(&actor, guard).await?;
+                let user_ref = User::from(user.clone());
+                self.repository.upsert_user(&user, guard).await?;
                 // NOTE: リクエスト時点では token しかわからないので
                 //  token で検索したユーザーが操作者であるとする
                 self.repository
                     .find_by(user.id().into_inner())
                     .await?
-                    .map(|guard| guard.try_into_read(&actor))
+                    .map(|guard| guard.try_into_read(&user_ref))
                     .transpose()
                     .map_err(Into::into)
             }
@@ -132,13 +133,13 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .ok_or(Error::from(UseCaseError::DiscordLinkFailed))?;
 
         self.repository
-            .link_discord_user(&User::ActiveUser(user.clone()), &discord_user, user.into())
+            .link_discord_user(&user.clone(), &discord_user, user.into())
             .await
     }
 
     pub async fn unlink_discord_user(&self, user: ActiveUser) -> Result<(), Error> {
         self.repository
-            .unlink_discord_user(&User::ActiveUser(user.clone()), user.into())
+            .unlink_discord_user(&user.clone(), user.into())
             .await
     }
 
@@ -153,10 +154,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        let actor = User::ActiveUser(actor.clone());
-        let discord_user = self.repository.fetch_discord_user(&actor, &guard).await?;
+        let actor_ref = User::from(actor.clone());
+        let discord_user = self.repository.fetch_discord_user(actor, &guard).await?;
 
-        let user = guard.try_into_read(&actor)?;
+        let user = guard.try_into_read(&actor_ref)?;
 
         Ok(UserProfile { user, discord_user })
     }

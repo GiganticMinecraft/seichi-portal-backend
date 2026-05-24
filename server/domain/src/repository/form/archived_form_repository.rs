@@ -8,7 +8,7 @@ use crate::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 
 #[automock]
@@ -26,12 +26,12 @@ pub trait ArchivedFormRepository: Send + Sync + 'static {
     ) -> Result<Option<AuthorizationGuard<ArchivedForm, Read>>, Error>;
     async fn archive(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form: AuthorizationGuard<ArchivedForm, Create>,
     ) -> Result<AuthorizationGuard<ArchivedForm, Read>, Error>;
     async fn restore(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form: AuthorizationGuard<ArchivedForm, Update>,
     ) -> Result<(), Error>;
 }

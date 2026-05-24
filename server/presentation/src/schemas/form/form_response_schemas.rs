@@ -69,10 +69,14 @@ pub struct FormSettingsSchema {
 }
 
 impl FormSettingsSchema {
-    pub fn from_settings_ref(actor: &domain::user::models::User, settings: &FormSettings) -> Self {
+    pub fn from_settings_ref(
+        actor: &domain::user::models::ActiveUser,
+        settings: &FormSettings,
+    ) -> Self {
+        let actor_user = domain::user::models::User::from(actor.clone());
         FormSettingsSchema {
             webhook_url: settings
-                .webhook_url(actor)
+                .webhook_url(&actor_user)
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),

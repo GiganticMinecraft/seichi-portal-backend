@@ -8,7 +8,7 @@ use crate::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Delete, Read, Update},
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 
 #[automock]
@@ -16,7 +16,7 @@ use crate::{
 pub trait AnswerLabelRepository: Send + Sync + 'static {
     async fn create_label_for_answers(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         label: AuthorizationGuard<AnswerLabel, Create>,
     ) -> Result<(), Error>;
     async fn get_labels_for_answers(
@@ -36,17 +36,17 @@ pub trait AnswerLabelRepository: Send + Sync + 'static {
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error>;
     async fn delete_label_for_answers(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         label: AuthorizationGuard<AnswerLabel, Delete>,
     ) -> Result<(), Error>;
     async fn edit_label_for_answers(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         label: AuthorizationGuard<AnswerLabel, Update>,
     ) -> Result<(), Error>;
     async fn replace_answer_labels(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         answer_id: AnswerId,
         labels: Vec<AuthorizationGuard<AnswerLabel, Update>>,
     ) -> Result<(), Error>;

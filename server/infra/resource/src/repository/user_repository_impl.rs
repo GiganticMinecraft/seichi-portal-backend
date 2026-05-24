@@ -43,20 +43,22 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
 
     async fn upsert_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Create>,
     ) -> Result<(), Error> {
-        user.try_create(actor, |user| self.client.user().upsert_user(user))?
+        let actor_user = User::from(actor.clone());
+        user.try_create(&actor_user, |user| self.client.user().upsert_user(user))?
             .await
             .map_err(Into::into)
     }
 
     async fn patch_user_role(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
-        user.try_update(actor, |user| {
+        let actor_user = User::from(actor.clone());
+        user.try_update(&actor_user, |user| {
             self.client
                 .user()
                 .patch_user_role(user.id().into_inner(), user.role().to_owned())
@@ -136,11 +138,12 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
 
     async fn link_discord_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         discord_user: &DiscordUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
-        user.try_update(actor, |user| {
+        let actor_user = User::from(actor.clone());
+        user.try_update(&actor_user, |user| {
             self.client.user().link_discord_user(discord_user, user)
         })?
         .await
@@ -149,20 +152,24 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
 
     async fn unlink_discord_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
-        user.try_update(actor, |user| self.client.user().unlink_discord_user(user))?
-            .await
-            .map_err(Into::into)
+        let actor_user = User::from(actor.clone());
+        user.try_update(&actor_user, |user| {
+            self.client.user().unlink_discord_user(user)
+        })?
+        .await
+        .map_err(Into::into)
     }
 
     async fn fetch_discord_user(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         user: &AuthorizationGuard<ActiveUser, Read>,
     ) -> Result<Option<DiscordUser>, Error> {
-        let user = user.try_read(actor)?;
+        let actor_user = User::from(actor.clone());
+        let user = user.try_read(&actor_user)?;
 
         Ok(self
             .client

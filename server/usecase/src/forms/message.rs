@@ -25,7 +25,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Create},
     },
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::{
     Error,
@@ -59,19 +59,20 @@ impl<
 {
     pub async fn post_message<API: NotificationAPI>(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         message_body: String,
         answer_id: AnswerId,
         notification_api: &API,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         let form_guard = self
             .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
 
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
         let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
@@ -85,15 +86,12 @@ impl<
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&actor_user, &answer_entry_authorization_context)?;
 
         let form_id = form_answer.form_id().to_owned();
         let answer_id = form_answer.id().to_owned();
-        let User::ActiveUser(active_actor) = actor else {
-            return Err(errors::domain::DomainError::Forbidden.into());
-        };
 
-        match Message::try_new(answer_id, *active_actor.id(), message_body) {
+        match Message::try_new(answer_id, *actor.id(), message_body) {
             Ok(message) => {
                 let notification_recipient_id = form_answer
                     .author()
@@ -104,7 +102,7 @@ impl<
                     .find_by(notification_recipient_id.into_inner())
                     .await?
                     .ok_or(Error::from(UserNotFound))?
-                    .try_into_read(actor)?;
+                    .try_into_read(&actor_user)?;
 
                 let message_sender_id = *message.sender_id();
                 let message_context = MessageAuthorizationContext {
@@ -135,7 +133,7 @@ impl<
                                 .await?;
 
                             let notification_preference = match fetched_notification_preference {
-                                Some(settings) => settings.try_into_read(actor)?,
+                                Some(settings) => settings.try_into_read(&actor_user)?,
                                 None => {
                                     let settings: AuthorizationGuard<_, Create> =
                                         NotificationPreference::new(*notification_recipient.id())
@@ -143,12 +141,12 @@ impl<
 
                                     self.notification_repository
                                         .create_notification_settings(
-                                            &User::ActiveUser(notification_recipient.clone()),
+                                            &notification_recipient,
                                             &settings,
                                         )
                                         .await?;
 
-                                    settings.into_read().try_into_read(actor)?
+                                    settings.into_read().try_into_read(&actor_user)?
                                 }
                             };
 
@@ -181,17 +179,18 @@ impl<
 
     pub async fn get_messages(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<MessageWithSender>, Error> {
+        let actor_user = User::from(actor.clone());
         let form_guard = self
             .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
 
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
         let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
             form_visibility: form_settings.visibility().to_owned(),
@@ -204,7 +203,7 @@ impl<
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&actor_user, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answers,
@@ -215,7 +214,7 @@ impl<
             .fetch_messages_by_answer(&message_context.related_answer_entry)
             .await?
             .into_iter()
-            .map(|guard| guard.try_into_read(actor, &message_context))
+            .map(|guard| guard.try_into_read(&actor_user, &message_context))
             .collect::<Result<Vec<_>, _>>()
             .map_err(Error::from)?;
 
@@ -236,12 +235,13 @@ impl<
 
     pub async fn update_message_body(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,
         body: Option<String>,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         let message = self
             .message_repository
             .fetch_message(message_id)
@@ -253,7 +253,7 @@ impl<
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
         let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
@@ -267,14 +267,14 @@ impl<
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&actor_user, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,
         };
 
         if *message
-            .try_read(actor, &message_context)?
+            .try_read(&actor_user, &message_context)?
             .related_answer_id()
             != answer_id
         {
@@ -292,11 +292,12 @@ impl<
 
     pub async fn delete_message(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         let message = self
             .message_repository
             .fetch_message(message_id)
@@ -308,7 +309,7 @@ impl<
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
         let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
@@ -322,16 +323,15 @@ impl<
             .get_answer(answer_id)
             .await?
             .ok_or(Error::from(AnswerNotFound))?
-            .try_into_read(actor, &answer_entry_authorization_context)?;
+            .try_into_read(&actor_user, &answer_entry_authorization_context)?;
 
         let message_context = MessageAuthorizationContext {
             related_answer_entry: answer_entry,
         };
 
-        if *(&message
-            .try_read(actor, &message_context)?
-            .related_answer_id())
-            .to_owned()
+        if *message
+            .try_read(&actor_user, &message_context)?
+            .related_answer_id()
             != answer_id
         {
             return Err(Error::from(MessageNotFound));

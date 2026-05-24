@@ -14,7 +14,7 @@ use domain::{
     },
     repository::user_repository::UserRepository,
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::{
     Error,
@@ -41,7 +41,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
 {
     async fn build_comments_with_authors(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         comments: Vec<Comment>,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
         let user_ids = comments.iter().map(|c| *c.commented_by()).collect();
@@ -64,10 +64,11 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
 
     pub async fn get_comments(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
+        let actor_user = User::from(actor.clone());
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -80,7 +81,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             .await?
             .ok_or(Error::from(FormNotFound))?;
 
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
         let answer_entry_context = AnswerEntryAuthorizationContext {
@@ -99,7 +100,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
 
         let comments = comments
             .into_iter()
-            .map(|guard| guard.try_into_read(actor, &comment_context))
+            .map(|guard| guard.try_into_read(&actor_user, &comment_context))
             .collect::<Result<Vec<_>, _>>()
             .map_err(Error::from)?;
 
@@ -108,11 +109,12 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
 
     pub async fn post_comment(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
         comment: Comment,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -125,7 +127,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             .await?
             .ok_or(Error::from(FormNotFound))?;
 
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
         let answer_entry_context = AnswerEntryAuthorizationContext {
@@ -149,12 +151,13 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
 
     pub async fn update_comment(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
         comment_id: CommentId,
         content: Option<CommentContent>,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -167,7 +170,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             .await?
             .ok_or(Error::from(FormNotFound))?;
 
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
         let answer_entry_context = AnswerEntryAuthorizationContext {
@@ -203,11 +206,12 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
 
     pub async fn delete_comment(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
         comment_id: CommentId,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         let comment_guard = self
             .comment_repository
             .get_comment(comment_id)
@@ -221,7 +225,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
             .await?
             .ok_or(Error::from(FormNotFound))?;
 
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
         let answer_entry_context = AnswerEntryAuthorizationContext {

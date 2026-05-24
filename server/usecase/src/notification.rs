@@ -27,12 +27,12 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         actor: ActiveUser,
         target: Uuid,
     ) -> Result<NotificationPreference, Error> {
-        let actor = User::ActiveUser(actor);
+        let actor_user = User::from(actor);
         let notification_settings = self.repository.fetch_notification_settings(target).await?;
 
         match notification_settings {
             Some(notification_settings) => notification_settings
-                .try_into_read(&actor)
+                .try_into_read(&actor_user)
                 .map_err(Into::into),
             None => {
                 let target_user = self
@@ -41,11 +41,13 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                     .await?
                     .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-                let target_user = target_user.try_into_read(&actor)?;
+                let target_user = target_user.try_into_read(&actor_user)?;
                 let notification_settings: AuthorizationGuard<NotificationPreference, Create> =
                     NotificationPreference::new(*target_user.id()).into();
 
-                Ok(notification_settings.into_read().try_into_read(&actor)?)
+                Ok(notification_settings
+                    .into_read()
+                    .try_into_read(&actor_user)?)
             }
         }
     }
@@ -56,7 +58,6 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         is_send_message_notification: Option<bool>,
     ) -> Result<(), Error> {
         // NOTE: Discord への通知設定は、Discord への連携がすでに行われていなければならない
-        let actor_user = User::ActiveUser(actor.clone());
         let user = self
             .user_repository
             .find_by(actor.id().into_inner())
@@ -65,7 +66,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
 
         let discord_user = self
             .user_repository
-            .fetch_discord_user(&actor_user, &user)
+            .fetch_discord_user(actor, &user)
             .await?;
 
         if discord_user.is_none() {
@@ -83,7 +84,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                 let notification_settings = NotificationPreference::new(*actor.id()).into();
 
                 self.repository
-                    .create_notification_settings(&actor_user, &notification_settings)
+                    .create_notification_settings(actor, &notification_settings)
                     .await?;
 
                 notification_settings.into_read()
@@ -98,7 +99,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                     });
 
                 self.repository
-                    .update_notification_settings(&actor_user, updated_notification_settings)
+                    .update_notification_settings(actor, updated_notification_settings)
                     .await
             }
             None => Ok(()),
