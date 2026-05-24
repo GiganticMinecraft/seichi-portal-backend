@@ -31,7 +31,9 @@ impl AuthorizationGuardWithContextDefinitions<AnswerEntryAuthorizationContext> f
                     && ((is_public_form && is_within_period) || user.role() == &Role::Administrator)
             }
             (AnswerAuthor::TemporaryUser(_), User::TemporaryUser(_)) => {
-                context.allow_temporary_answers && is_within_period
+                context.form_visibility == Visibility::PUBLIC
+                    && context.allow_temporary_answers
+                    && is_within_period
             }
             _ => false,
         }
@@ -74,9 +76,35 @@ mod tests {
     use crate::types::authorization_guard_with_context::AuthorizationGuardWithContextDefinitions;
 
     #[test]
-    fn temporary_answer_creation_does_not_depend_on_form_visibility() {
+    fn temporary_answer_creation_requires_public_form() {
         let context = AnswerEntryAuthorizationContext {
             form_visibility: Visibility::PRIVATE,
+            response_period: ResponsePeriod::try_new(None, None).unwrap(),
+            answer_visibility: AnswerVisibility::PRIVATE,
+            allow_temporary_answers: true,
+        };
+        let answer = crate::form::answer::models::AnswerEntry::new(
+            crate::form::answer::models::AnswerAuthor::TemporaryUser(
+                crate::user::models::TemporaryUser::new("guest".to_string(), "contact".to_string()),
+            ),
+            crate::form::models::FormId::new(),
+            crate::form::answer::models::AnswerTitle::default(),
+            crate::form::answer::models::PostedAnswerContents::try_new(&[], vec![]).unwrap(),
+        );
+
+        assert!(!answer.can_create(
+            &crate::user::models::User::TemporaryUser(crate::user::models::TemporaryUser::new(
+                "guest".to_string(),
+                "contact".to_string()
+            )),
+            &context
+        ));
+    }
+
+    #[test]
+    fn temporary_answer_creation_succeeds_on_public_form_within_period() {
+        let context = AnswerEntryAuthorizationContext {
+            form_visibility: Visibility::PUBLIC,
             response_period: ResponsePeriod::try_new(None, None).unwrap(),
             answer_visibility: AnswerVisibility::PRIVATE,
             allow_temporary_answers: true,
