@@ -2174,6 +2174,163 @@
         ]
       }
     },
+    "/api/v1/forms/{id}/temporary-answer-form": {
+      "get": {
+        "tags": [
+          "Answers"
+        ],
+        "summary": "未ログイン回答用フォームの取得",
+        "operationId": "get_temporary_answer_form_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Form ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemporaryAnswerFormSchema"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server could not understand the request due to invalid syntax.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access is forbidden.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The server cannot find the requested resource.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/forms/{id}/temporary-answers": {
+      "post": {
+        "tags": [
+          "Answers"
+        ],
+        "summary": "未ログイン回答の作成",
+        "operationId": "post_temporary_answer_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Form ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemporaryAnswerCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded."
+          },
+          "400": {
+            "description": "The server could not understand the request due to invalid syntax.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access is forbidden.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The server cannot find the requested resource.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Client error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/labels/answers": {
       "get": {
         "tags": [
@@ -3822,6 +3979,46 @@
   },
   "components": {
     "schemas": {
+      "AnswerAuthor": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "user",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "AUTHENTICATED_USER"
+                ]
+              },
+              "user": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "temporary_user",
+              "type"
+            ],
+            "properties": {
+              "temporary_user": {
+                "$ref": "#/components/schemas/TemporaryUser"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "TEMPORARY_USER"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "AnswerComment": {
         "type": "object",
         "required": [
@@ -4216,7 +4413,7 @@
         "type": "object",
         "required": [
           "id",
-          "user",
+          "author",
           "form_id",
           "timestamp",
           "answers",
@@ -4229,6 +4426,9 @@
             "items": {
               "$ref": "#/components/schemas/AnswerContent"
             }
+          },
+          "author": {
+            "$ref": "#/components/schemas/AnswerAuthor"
           },
           "comments": {
             "type": "array",
@@ -4259,9 +4459,6 @@
               "string",
               "null"
             ]
-          },
-          "user": {
-            "$ref": "#/components/schemas/User"
           }
         }
       },
@@ -4282,6 +4479,16 @@
               "$ref": "#/components/schemas/QuestionSchema"
             },
             "minItems": 1
+          },
+          "settings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FormSettingsSchema"
+              }
+            ]
           },
           "title": {
             "type": "string"
@@ -4392,9 +4599,13 @@
         "type": "object",
         "required": [
           "visibility",
+          "allow_temporary_answers",
           "answer_settings"
         ],
         "properties": {
+          "allow_temporary_answers": {
+            "type": "boolean"
+          },
           "answer_settings": {
             "$ref": "#/components/schemas/AnswerSettingsSchema"
           },
@@ -4865,6 +5076,93 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "TemporaryAnswerCreateSchema": {
+        "type": "object",
+        "required": [
+          "temporary_user",
+          "contents"
+        ],
+        "properties": {
+          "contents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnswerContentSchema"
+            }
+          },
+          "temporary_user": {
+            "$ref": "#/components/schemas/TemporaryUserCreateSchema"
+          }
+        }
+      },
+      "TemporaryAnswerFormSchema": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "metadata",
+          "answer_settings",
+          "questions"
+        ],
+        "properties": {
+          "answer_settings": {
+            "$ref": "#/components/schemas/AnswerSettingsSchema"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/FormMetaSchema"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionResponseSchema"
+            }
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "TemporaryUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "contact_text"
+        ],
+        "properties": {
+          "contact_text": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "TemporaryUserCreateSchema": {
+        "type": "object",
+        "required": [
+          "name",
+          "contact_text"
+        ],
+        "properties": {
+          "contact_text": {
+            "$ref": "#/components/schemas/NonEmptyString"
+          },
+          "name": {
+            "$ref": "#/components/schemas/NonEmptyString"
           }
         }
       },

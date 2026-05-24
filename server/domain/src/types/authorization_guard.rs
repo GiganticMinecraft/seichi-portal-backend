@@ -172,29 +172,29 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {
 /// ```
 /// use domain::{
 ///     types::authorization_guard::AuthorizationGuardDefinitions,
-///     user::models::{Role, User},
+///     user::models::{Role, User, UserId},
 /// };
 /// use uuid::Uuid;
 ///
 /// struct GuardTarget {
-///     pub user: User,
+///     pub user_id: UserId,
 /// }
 ///
 /// impl AuthorizationGuardDefinitions for GuardTarget {
 ///     fn can_create(&self, actor: &User) -> bool {
-///         actor.role == Role::Administrator
+///         matches!(actor, User::ActiveUser(u) if u.role() == &Role::Administrator)
 ///     }
 ///
 ///     fn can_read(&self, actor: &User) -> bool {
-///         self.user.id == actor.id
+///         matches!(actor, User::ActiveUser(u) if *u.id() == self.user_id)
 ///     }
 ///
 ///     fn can_update(&self, actor: &User) -> bool {
-///         self.user.id == actor.id
+///         matches!(actor, User::ActiveUser(u) if *u.id() == self.user_id)
 ///     }
 ///
 ///     fn can_delete(&self, actor: &User) -> bool {
-///         self.user.id == actor.id
+///         matches!(actor, User::ActiveUser(u) if *u.id() == self.user_id)
 ///     }
 /// }
 /// ```
@@ -266,7 +266,7 @@ mod test {
 
     use crate::{
         types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions},
-        user::models::{Role, User},
+        user::models::{ActiveUser, Role, User},
     };
 
     #[derive(Clone, PartialEq, Debug)]
@@ -276,35 +276,40 @@ mod test {
 
     impl AuthorizationGuardDefinitions for AuthorizationGuardTestStruct {
         fn can_create(&self, actor: &User) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_read(&self, actor: &User) -> bool {
-            actor.role == Role::Administrator || actor.role == Role::StandardUser
+            matches!(
+                actor,
+                User::ActiveUser(actor)
+                    if actor.role() == &Role::Administrator
+                        || actor.role() == &Role::StandardUser
+            )
         }
 
         fn can_update(&self, actor: &User) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_delete(&self, actor: &User) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
     }
 
     #[test]
     fn authorization_guard_test() {
-        let admin = User {
-            name: "admin".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::Administrator,
-        };
+        let admin = User::ActiveUser(ActiveUser::new(
+            "admin".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        ));
 
-        let standard_user = User {
-            name: "standard_user".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::StandardUser,
-        };
+        let standard_user = User::ActiveUser(ActiveUser::new(
+            "standard_user".to_string(),
+            Uuid::new_v4().into(),
+            Role::StandardUser,
+        ));
 
         let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
             _value: "test".to_string(),
@@ -328,11 +333,11 @@ mod test {
 
     #[test]
     fn verify_same_data_for_try_read_and_try_into_read() {
-        let user = User {
-            name: "user".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::Administrator,
-        };
+        let user = User::ActiveUser(ActiveUser::new(
+            "user".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        ));
 
         let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
             _value: "test".to_string(),

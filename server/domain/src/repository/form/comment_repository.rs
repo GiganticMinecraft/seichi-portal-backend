@@ -14,7 +14,7 @@ use crate::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Delete, Read,
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 
 #[automock]
@@ -44,20 +44,20 @@ pub trait CommentRepository: Send + Sync + 'static {
         &self,
         answer_id: AnswerId,
         context: &CommentAuthorizationContext<Read>,
-        actor: &User,
+        actor: &ActiveUser,
         comment: AuthorizationGuardWithContext<Comment, Create, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error>;
     async fn update_comment(
         &self,
         answer_id: AnswerId,
         context: &CommentAuthorizationContext<Read>,
-        actor: &User,
+        actor: &ActiveUser,
         comment: AuthorizationGuardWithContext<Comment, Update, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error>;
     async fn delete_comment(
         &self,
         context: CommentAuthorizationContext<Read>,
-        actor: &User,
+        actor: &ActiveUser,
         comment: AuthorizationGuardWithContext<Comment, Delete, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error>;
     async fn size(&self) -> Result<u32, Error>;

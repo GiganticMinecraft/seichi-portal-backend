@@ -27,4 +27,5 @@ DROP TABLE IF EXISTS
     form_meta_data,
     discord_notification_settings,
     discord_linked_users,
+    temporary_users,
     users;

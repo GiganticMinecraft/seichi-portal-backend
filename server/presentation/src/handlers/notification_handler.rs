@@ -13,7 +13,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use domain::{repository::Repositories, user::models::User};
+use domain::{repository::Repositories, user::models::ActiveUser};
 use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
 use usecase::notification::NotificationUseCase;
@@ -53,7 +53,7 @@ impl IntoResponse for GetNotificationSettingsResponse {
     tag = "Notifications"
 )]
 pub async fn get_notification_settings(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<GetNotificationSettingsResponse, Response> {
@@ -93,7 +93,7 @@ pub async fn get_notification_settings(
     tag = "Notifications"
 )]
 pub async fn get_my_notification_settings(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetNotificationSettingsResponse, Response> {
     let notification_usecase = NotificationUseCase {
@@ -101,7 +101,7 @@ pub async fn get_my_notification_settings(
         user_repository: repository.user_repository(),
     };
 
-    let user_id = user.id.into_inner();
+    let user_id = user.id().into_inner();
 
     let settings = notification_usecase
         .fetch_notification_settings(user, user_id)
@@ -133,7 +133,7 @@ pub async fn get_my_notification_settings(
     tag = "Notifications"
 )]
 pub async fn update_notification_settings(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<NotificationSettingsUpdateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {

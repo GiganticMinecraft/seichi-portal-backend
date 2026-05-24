@@ -64,17 +64,23 @@ pub struct FormSettingsSchema {
     pub webhook_url: Option<Option<String>>,
     #[schema(value_type = String)]
     pub visibility: Visibility,
+    pub allow_temporary_answers: bool,
     pub answer_settings: AnswerSettingsSchema,
 }
 
 impl FormSettingsSchema {
-    pub fn from_settings_ref(actor: &domain::user::models::User, settings: &FormSettings) -> Self {
+    pub fn from_settings_ref(
+        actor: &domain::user::models::ActiveUser,
+        settings: &FormSettings,
+    ) -> Self {
+        let actor_user = domain::user::models::User::from(actor.clone());
         FormSettingsSchema {
             webhook_url: settings
-                .webhook_url(actor)
+                .webhook_url(&actor_user)
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),
+            allow_temporary_answers: settings.allow_temporary_answers(),
             answer_settings: AnswerSettingsSchema::from_answer_settings_ref(
                 settings.answer_settings(),
             ),
@@ -113,6 +119,19 @@ pub struct FormSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct TemporaryAnswerFormSchema {
+    #[schema(value_type = String, format = "uuid")]
+    pub id: FormId,
+    #[schema(value_type = String)]
+    pub title: FormTitle,
+    #[schema(value_type = String)]
+    pub description: FormDescription,
+    pub metadata: FormMetaSchema,
+    pub answer_settings: AnswerSettingsSchema,
+    pub questions: Vec<QuestionResponseSchema>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct ArchivedFormSchema {
     #[schema(value_type = String, format = "uuid")]
     pub id: FormId,
@@ -124,7 +143,7 @@ pub struct ArchivedFormSchema {
     pub metadata: FormMetaSchema,
     pub archived_at: DateTime<Utc>,
     #[schema(value_type = serde_json::Value)]
-    pub archived_by: domain::user::models::User,
+    pub archived_by: domain::user::models::ActiveUser,
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
@@ -280,12 +299,53 @@ pub struct User {
     role: Role,
 }
 
-impl From<domain::user::models::User> for User {
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct TemporaryUser {
+    id: String,
+    name: String,
+    contact_text: String,
+}
+
+impl From<domain::user::models::TemporaryUser> for TemporaryUser {
+    fn from(val: domain::user::models::TemporaryUser) -> Self {
+        TemporaryUser {
+            id: val.id().to_string(),
+            name: val.name().to_owned(),
+            contact_text: val.contact_text().to_owned(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[serde(tag = "type")]
+pub enum AnswerAuthor {
+    #[serde(rename = "AUTHENTICATED_USER")]
+    AuthenticatedUser { user: User },
+    #[serde(rename = "TEMPORARY_USER")]
+    TemporaryUser { temporary_user: TemporaryUser },
+}
+
+impl From<domain::user::models::User> for AnswerAuthor {
     fn from(val: domain::user::models::User) -> Self {
+        match val {
+            domain::user::models::User::ActiveUser(user) => {
+                AnswerAuthor::AuthenticatedUser { user: user.into() }
+            }
+            domain::user::models::User::TemporaryUser(temporary_user) => {
+                AnswerAuthor::TemporaryUser {
+                    temporary_user: temporary_user.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<domain::user::models::ActiveUser> for User {
+    fn from(val: domain::user::models::ActiveUser) -> Self {
         User {
-            uuid: val.id.to_string(),
-            name: val.name,
-            role: val.role.into(),
+            uuid: val.id().to_string(),
+            name: val.name().to_owned(),
+            role: val.role().to_owned().into(),
         }
     }
 }
@@ -341,7 +401,7 @@ impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct FormAnswer {
     id: Uuid,
-    user: User,
+    author: AnswerAuthor,
     form_id: Uuid,
     timestamp: DateTime<Utc>,
     title: Option<String>,
@@ -353,13 +413,13 @@ pub struct FormAnswer {
 impl FormAnswer {
     pub fn new(
         answer: domain::form::answer::models::AnswerEntry,
-        user: domain::user::models::User,
+        author: domain::user::models::User,
         comments: Vec<usecase::models::CommentWithAuthor>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Self {
         FormAnswer {
             id: answer.id().to_owned().into(),
-            user: user.into(),
+            author: author.into(),
             form_id: answer.form_id().into_inner(),
             timestamp: answer.timestamp().to_owned(),
             title: answer

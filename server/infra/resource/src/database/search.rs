@@ -10,7 +10,7 @@ use domain::{
         models::{ActiveForm, FormLabel},
     },
     search::models::{Operation, SearchableFields, SearchableFieldsWithOperation},
-    user::models::User,
+    user::models::ActiveUser,
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -19,14 +19,14 @@ use meilisearch_sdk::search::Selectors;
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn search_users(&self, query: &str) -> Result<Vec<User>, InfraError> {
+    async fn search_users(&self, query: &str) -> Result<Vec<ActiveUser>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("users")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<User>()
+            .execute::<ActiveUser>()
             .await?
             .hits
             .into_iter()

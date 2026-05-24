@@ -23,6 +23,10 @@ use crate::{
     user::models::{Role::Administrator, User, UserId},
 };
 
+fn is_administrator(actor: &User) -> bool {
+    matches!(actor, User::ActiveUser(user) if user.role() == &Administrator)
+}
+
 pub type FormId = types::Id<ActiveForm>;
 pub type FormLabelId = types::Id<FormLabel>;
 
@@ -56,6 +60,8 @@ pub struct FormSettings {
     webhook_url: WebhookUrl,
     #[serde(default)]
     visibility: Visibility,
+    #[serde(default)]
+    allow_temporary_answers: bool,
     answer_settings: AnswerSettings,
 }
 
@@ -64,6 +70,7 @@ impl FormSettings {
         Self {
             webhook_url: WebhookUrl::try_new(None).unwrap(),
             visibility: Visibility::PUBLIC,
+            allow_temporary_answers: false,
             answer_settings: AnswerSettings::new(
                 DefaultAnswerTitle::new(None),
                 AnswerVisibility::PRIVATE,
@@ -73,7 +80,7 @@ impl FormSettings {
     }
 
     pub fn webhook_url(&self, user: &User) -> Result<&WebhookUrl, DomainError> {
-        if user.role == Administrator {
+        if is_administrator(user) {
             Ok(&self.webhook_url)
         } else {
             Err(DomainError::Forbidden)
@@ -88,6 +95,10 @@ impl FormSettings {
         &self.answer_settings
     }
 
+    pub fn allow_temporary_answers(&self) -> bool {
+        self.allow_temporary_answers
+    }
+
     pub fn change_webhook_url(self, webhook_url: WebhookUrl) -> Self {
         Self {
             webhook_url,
@@ -97,6 +108,13 @@ impl FormSettings {
 
     pub fn change_visibility(self, visibility: Visibility) -> Self {
         Self { visibility, ..self }
+    }
+
+    pub fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
+        Self {
+            allow_temporary_answers,
+            ..self
+        }
     }
 
     pub fn change_answer_settings(self, answer_settings: AnswerSettings) -> Self {
@@ -111,11 +129,13 @@ impl FormSettings {
         webhook_url: WebhookUrl,
         default_answer_title: DefaultAnswerTitle,
         visibility: Visibility,
+        allow_temporary_answers: bool,
         answer_visibility: AnswerVisibility,
     ) -> Self {
         Self {
             webhook_url,
             visibility,
+            allow_temporary_answers,
             answer_settings: AnswerSettings::new(
                 default_answer_title,
                 answer_visibility,
@@ -352,19 +372,19 @@ impl ArchivedForm {
 
 impl AuthorizationGuardDefinitions for ArchivedForm {
     fn can_create(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 
     fn can_read(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 
     fn can_update(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 
     fn can_delete(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 }
 
@@ -379,24 +399,24 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// use domain::{
     ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormTitle};
     /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
     /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     ///
     /// let form = ActiveForm::from_raw_parts(
@@ -421,8 +441,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///
     /// assert!(form.can_create(&administrator));
     /// assert!(!form.can_create(&standard_user));
+    /// ```
     fn can_create(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 
     /// [`ActiveForm`] の読み取り権限があるかどうかを判定します。
@@ -436,7 +457,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// use domain::{
     ///     form::models::{ActiveForm, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use uuid::Uuid;
     /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
@@ -445,17 +466,17 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     FormLabelIdSet, FormTitle, Visibility, WebhookUrl
     /// };
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     ///
     /// let sample_questions = || domain::form::models::QuestionSet::try_new(
@@ -480,6 +501,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PRIVATE,
+    ///         false,
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),
@@ -496,6 +518,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         DefaultAnswerTitle::new(None),
     ///         Visibility::PUBLIC,
+    ///         false,
     ///         AnswerVisibility::PRIVATE
     ///     ),
     ///     sample_questions(),
@@ -506,8 +529,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// assert!(!private_form.can_read(&standard_user));
     /// assert!(public_form.can_read(&administrator));
     /// assert!(public_form.can_read(&standard_user));
+    /// ```
     fn can_read(&self, actor: &User) -> bool {
-        self.settings.visibility == Visibility::PUBLIC || actor.role == Administrator
+        self.settings.visibility == Visibility::PUBLIC || is_administrator(actor)
     }
 
     /// [`ActiveForm`] の更新権限があるかどうかを判定します。
@@ -520,22 +544,22 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// use domain::{
     ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     ///
     /// let form = ActiveForm::from_raw_parts(
@@ -560,8 +584,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///
     /// assert!(form.can_update(&administrator));
     /// assert!(!form.can_update(&standard_user));
+    /// ```
     fn can_update(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 
     /// [`ActiveForm`] の削除権限があるかどうかを判定します。
@@ -574,22 +599,22 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// use domain::{
     ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     ///
     /// let form = ActiveForm::from_raw_parts(
@@ -614,6 +639,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///
     /// assert!(!form.can_delete(&administrator));
     /// assert!(!form.can_delete(&standard_user));
+    /// ```
     fn can_delete(&self, _actor: &User) -> bool {
         false
     }
@@ -664,22 +690,22 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// use domain::{
     ///     form::models::{FormLabel, FormLabelName},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let form_label = FormLabel::new(FormLabelName::new(
     ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
@@ -689,7 +715,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// assert!(!form_label.can_create(&standard_user));
     /// ```
     fn can_create(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 
     /// [`FormLabel`] の読み取り権限があるかどうかを判定します。
@@ -700,22 +726,22 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// use domain::{
     ///     form::models::{FormLabel, FormLabelName},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let form_label = FormLabel::new(FormLabelName::new(
     ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
@@ -738,22 +764,22 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// use domain::{
     ///     form::models::{FormLabel, FormLabelName},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let form_label = FormLabel::new(FormLabelName::new(
     ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
@@ -763,7 +789,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// assert!(!form_label.can_update(&standard_user));
     /// ```
     fn can_update(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 
     /// [`FormLabel`] の削除権限があるかどうかを判定します。
@@ -776,22 +802,22 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// use domain::{
     ///     form::models::{FormLabel, FormLabelName},
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User},
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let standard_user = User {
-    ///     name: "standard_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "standard_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let form_label = FormLabel::new(FormLabelName::new(
     ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
@@ -801,7 +827,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// assert!(!form_label.can_delete(&standard_user));
     /// ```
     fn can_delete(&self, actor: &User) -> bool {
-        actor.role == Administrator
+        is_administrator(actor)
     }
 }
 

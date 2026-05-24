@@ -6,7 +6,7 @@ use domain::form::{
 };
 use domain::{
     form::models::{ActiveForm, ArchivedForm, FormId},
-    user::models::{Role, User},
+    user::models::{ActiveUser, Role},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -36,6 +36,7 @@ struct FormRow {
     webhook_url: Option<String>,
     default_answer_title: Option<String>,
     visibility: String,
+    allow_temporary_answers: bool,
     answer_visibility: String,
 }
 
@@ -145,6 +146,7 @@ async fn active_form_record_from_row(
         webhook_url: row.webhook_url,
         default_answer_title: row.default_answer_title,
         visibility: row.visibility,
+        allow_temporary_answers: row.allow_temporary_answers,
         answer_visibility: row.answer_visibility,
         questions: get_questions_txn_with_tables(txn, form_id, "form_questions", "form_choices")
             .await?,
@@ -180,6 +182,7 @@ async fn archived_form_record_from_row(
             webhook_url: row.form.webhook_url,
             default_answer_title: row.form.default_answer_title,
             visibility: row.form.visibility,
+            allow_temporary_answers: row.form.allow_temporary_answers,
             answer_visibility: row.form.answer_visibility,
             questions: get_questions_txn_with_tables(
                 txn,
@@ -209,6 +212,7 @@ fn form_row_from_db_row(row: sqlx::mysql::MySqlRow) -> Result<FormRow, InfraErro
         webhook_url: row.try_get("webhook_url")?,
         default_answer_title: row.try_get("default_answer_title")?,
         visibility: row.try_get("visibility")?,
+        allow_temporary_answers: row.try_get("allow_temporary_answers")?,
         answer_visibility: row.try_get("answer_visibility")?,
     })
 }
@@ -228,6 +232,7 @@ fn archived_form_row_from_db_row(
             webhook_url: row.try_get("webhook_url")?,
             default_answer_title: row.try_get("default_answer_title")?,
             visibility: row.try_get("visibility")?,
+            allow_temporary_answers: row.try_get("allow_temporary_answers")?,
             answer_visibility: row.try_get("answer_visibility")?,
         },
         archived_at: row.try_get("archived_at")?,
@@ -242,7 +247,7 @@ async fn fetch_form_row(
     form_id: FormId,
 ) -> Result<Option<FormRow>, InfraError> {
     let row = sqlx::query(
-        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+        r"SELECT f.id, f.title, f.description, f.visibility, f.allow_temporary_answers, f.answer_visibility,
             f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
             d.title AS default_answer_title
         FROM form_meta_data f
@@ -263,7 +268,7 @@ async fn fetch_archived_form_row(
     form_id: FormId,
 ) -> Result<Option<ArchivedFormRow>, InfraError> {
     let row = sqlx::query(
-        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+        r"SELECT f.id, f.title, f.description, f.visibility, f.allow_temporary_answers, f.answer_visibility,
             f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
             d.title AS default_answer_title, f.archived_at, u.name AS archived_by_name,
             u.id AS archived_by_id, u.role AS archived_by_role
@@ -284,20 +289,22 @@ async fn fetch_archived_form_row(
 async fn insert_form_root(
     txn: &mut DatabaseTransaction,
     form: &ActiveForm,
-    created_by: &User,
+    created_by: &ActiveUser,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
     let title = form.title().to_string();
     let description = form.description().to_owned().into_inner();
-    let user_id = created_by.id.to_string();
+    let allow_temporary_answers = form.settings().allow_temporary_answers();
+    let user_id = created_by.id().to_string();
 
     sqlx::query(
-        r#"INSERT INTO form_meta_data (id, title, description, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?)"#,
+        r#"INSERT INTO form_meta_data (id, title, description, allow_temporary_answers, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?)"#,
     )
     .bind(form_id.clone())
     .bind(title)
     .bind(description)
+    .bind(allow_temporary_answers)
     .bind(user_id.clone())
     .bind(user_id)
     .execute(&mut **txn)
@@ -324,12 +331,13 @@ async fn insert_form_root(
 async fn update_form_root(
     txn: &mut DatabaseTransaction,
     form: &ActiveForm,
-    updated_by: &User,
+    updated_by: &ActiveUser,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
     let title = form.title().to_owned().into_inner().into_inner();
     let description = form.description().to_owned().into_inner();
     let visibility = form.settings().visibility().to_string();
+    let allow_temporary_answers = form.settings().allow_temporary_answers();
     let answer_visibility = form.settings().answer_settings().visibility().to_string();
     let default_answer_title = form
         .settings()
@@ -339,11 +347,11 @@ async fn update_form_root(
         .into_inner()
         .map(NonEmptyString::into_inner);
     let response_period = form.settings().answer_settings().response_period();
-    let updated_by_id = updated_by.id.to_string();
+    let updated_by_id = updated_by.id().to_string();
 
     let webhook_url = form
         .settings()
-        .webhook_url(updated_by)
+        .webhook_url(&domain::user::models::User::ActiveUser(updated_by.clone()))
         .ok()
         .map(ToOwned::to_owned)
         .and_then(WebhookUrl::into_inner)
@@ -354,6 +362,7 @@ async fn update_form_root(
             title = ?,
             description = ?,
             visibility = ?,
+            allow_temporary_answers = ?,
             answer_visibility = ?,
             updated_by = ?
             WHERE id = ?"#,
@@ -361,6 +370,7 @@ async fn update_form_root(
     .bind(title)
     .bind(description)
     .bind(visibility)
+    .bind(allow_temporary_answers)
     .bind(answer_visibility)
     .bind(updated_by_id)
     .bind(form_id.clone())
@@ -408,8 +418,8 @@ async fn copy_active_form_to_archive(
 
     sqlx::query(
         r"INSERT INTO archived_form_meta_data
-        (id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
-        SELECT id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by, ?, ?
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by, ?, ?
         FROM form_meta_data
         WHERE id = ?",
     )
@@ -465,8 +475,8 @@ async fn copy_active_form_to_archive(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO archived_answers (id, form_id, user, title, timestamp)
-        SELECT id, form_id, user, title, timestamp FROM answers WHERE form_id = ?",
+        r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
+        SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM answers WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
@@ -540,8 +550,8 @@ async fn restore_archived_form_to_active(
 
     sqlx::query(
         r"INSERT INTO form_meta_data
-        (id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by)
-        SELECT id, title, description, visibility, answer_visibility, created_at, created_by, updated_at, updated_by
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by
         FROM archived_form_meta_data
         WHERE id = ?",
     )
@@ -596,8 +606,8 @@ async fn restore_archived_form_to_active(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO answers (id, form_id, user, title, timestamp)
-        SELECT id, form_id, user, title, timestamp FROM archived_answers WHERE form_id = ?",
+        r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
+        SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM archived_answers WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
@@ -662,7 +672,7 @@ async fn restore_archived_form_to_active(
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn create(&self, form: &ActiveForm, user: &User) -> Result<(), InfraError> {
+    async fn create(&self, form: &ActiveForm, user: &ActiveUser) -> Result<(), InfraError> {
         let form = form.clone();
         let user = user.clone();
 
@@ -686,7 +696,7 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = sqlx::query(
-                    r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+                    r"SELECT f.id, f.title, f.description, f.visibility, f.allow_temporary_answers, f.answer_visibility,
                     f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
                     d.title AS default_answer_title
                     FROM form_meta_data f
@@ -736,7 +746,7 @@ impl FormDatabase for ConnectionPool {
                 let rows = if let Some(query_text) = query_text {
                     let like = format!("%{query_text}%");
                     sqlx::query(
-                        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+                        r"SELECT f.id, f.title, f.description, f.visibility, f.allow_temporary_answers, f.answer_visibility,
                         f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
                         d.title AS default_answer_title, f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
@@ -757,7 +767,7 @@ impl FormDatabase for ConnectionPool {
                     .await?
                 } else {
                     sqlx::query(
-                        r"SELECT f.id, f.title, f.description, f.visibility, f.answer_visibility,
+                        r"SELECT f.id, f.title, f.description, f.visibility, f.allow_temporary_answers, f.answer_visibility,
                         f.created_at, f.updated_at, w.url AS webhook_url, p.start_at, p.end_at,
                         d.title AS default_answer_title, f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
@@ -852,7 +862,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn update(&self, form: &ActiveForm, updated_by: &User) -> Result<(), InfraError> {
+    async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError> {
         let form = form.clone();
         let updated_by = updated_by.clone();
 

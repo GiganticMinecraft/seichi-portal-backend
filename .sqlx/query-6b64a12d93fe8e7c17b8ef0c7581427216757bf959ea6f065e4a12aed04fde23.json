@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)\n                    VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "6b64a12d93fe8e7c17b8ef0c7581427216757bf959ea6f065e4a12aed04fde23"
+}

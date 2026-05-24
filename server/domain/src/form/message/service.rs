@@ -20,25 +20,26 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
-    /// let respondent = User {
-    ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let respondent_id: UserId = Uuid::new_v4().into();
+    /// let respondent = User::ActiveUser(ActiveUser::new(
+    ///     "respondent".to_string(),
+    ///     respondent_id,
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent_id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -46,22 +47,22 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.id,
+    ///     respondent_id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let unrelated_standard_user = User {
-    ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "unrelated_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -78,9 +79,17 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
             return false;
         }
 
-        actor.role == Administrator
-            || (actor.id == *self.sender_id()
-                && context.related_answer_entry.user_id() == self.sender_id())
+        matches!(
+            actor,
+            User::ActiveUser(actor)
+                if actor.role() == &Administrator
+                    || (*actor.id() == *self.sender_id()
+                        && context
+                            .related_answer_entry
+                            .author()
+                            .authenticated_user_id()
+                            == Some(*self.sender_id()))
+        )
     }
 
     /// [`Message`] の読み取り権限があるかどうかを判定します。
@@ -93,25 +102,26 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
-    /// let respondent = User {
-    ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let respondent_id: UserId = Uuid::new_v4().into();
+    /// let respondent = User::ActiveUser(ActiveUser::new(
+    ///     "respondent".to_string(),
+    ///     respondent_id,
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent_id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -119,22 +129,22 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.id,
+    ///     respondent_id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let unrelated_standard_user = User {
-    ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "unrelated_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -151,7 +161,16 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
             return false;
         }
 
-        actor.role == Administrator || context.related_answer_entry.user_id() == &actor.id
+        matches!(
+            actor,
+            User::ActiveUser(actor)
+                if actor.role() == &Administrator
+                    || context
+                        .related_answer_entry
+                        .author()
+                        .authenticated_user_id()
+                        == Some(*actor.id())
+        )
     }
 
     /// [`Message`] の更新権限があるかどうかを判定します。
@@ -166,25 +185,26 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
-    /// let respondent = User {
-    ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let respondent_id: UserId = Uuid::new_v4().into();
+    /// let respondent = User::ActiveUser(ActiveUser::new(
+    ///     "respondent".to_string(),
+    ///     respondent_id,
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent_id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -192,22 +212,22 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.id,
+    ///     respondent_id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let unrelated_standard_user = User {
-    ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "unrelated_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -218,7 +238,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(!message.can_update(&unrelated_standard_user, &context));
     /// ```
     fn can_update(&self, actor: &User, _context: &MessageAuthorizationContext) -> bool {
-        self.sender_id() == &actor.id
+        matches!(actor, User::ActiveUser(actor) if self.sender_id() == actor.id())
     }
 
     /// [`Message`] の削除権限があるかどうかを判定します。
@@ -233,25 +253,26 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// ```
     /// use domain::{
     ///     form::{
-    ///         answer::models::{AnswerEntry, PostedAnswerContents},
+    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
     ///         message::{models::Message, service::MessageAuthorizationContext},
     ///     },
     ///     types::{
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{Role, User},
+    ///     user::models::{ActiveUser, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
-    /// let respondent = User {
-    ///     name: "respondent".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let respondent_id: UserId = Uuid::new_v4().into();
+    /// let respondent = User::ActiveUser(ActiveUser::new(
+    ///     "respondent".to_string(),
+    ///     respondent_id,
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let related_answer = AnswerEntry::new(
-    ///     respondent.id,
+    ///     AnswerAuthor::AuthenticatedUser(respondent_id),
     ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
@@ -259,22 +280,22 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///
     /// let message = Message::try_new(
     ///     *related_answer.id(),
-    ///     respondent.id,
+    ///     respondent_id,
     ///     "test message".to_string(),
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User {
-    ///     name: "administrator".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::Administrator,
-    /// };
+    /// let administrator = User::ActiveUser(ActiveUser::new(
+    ///     "administrator".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::Administrator,
+    /// ));
     ///
-    /// let unrelated_standard_user = User {
-    ///     name: "unrelated_user".to_string(),
-    ///     id: Uuid::new_v4().into(),
-    ///     role: Role::StandardUser,
-    /// };
+    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    ///     "unrelated_user".to_string(),
+    ///     Uuid::new_v4().into(),
+    ///     Role::StandardUser,
+    /// ));
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -285,6 +306,6 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(!message.can_delete(&unrelated_standard_user, &context));
     /// ```
     fn can_delete(&self, actor: &User, _context: &MessageAuthorizationContext) -> bool {
-        self.sender_id() == &actor.id
+        matches!(actor, User::ActiveUser(actor) if self.sender_id() == actor.id())
     }
 }

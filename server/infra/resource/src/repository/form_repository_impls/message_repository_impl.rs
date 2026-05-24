@@ -11,7 +11,7 @@ use domain::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Delete, Read, Update,
     },
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::Error;
 
@@ -25,13 +25,14 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     #[tracing::instrument(skip(self))]
     async fn post_message(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Create, MessageAuthorizationContext>,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         Ok(message
             .try_create(
-                actor,
+                &actor_user,
                 |message: &Message| self.client.form_message().post_message(message),
                 context,
             )?
@@ -62,14 +63,15 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     #[tracing::instrument(skip(self))]
     async fn update_message_body(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Update, MessageAuthorizationContext>,
         content: String,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         message
             .try_update(
-                actor,
+                &actor_user,
                 |message: &Message| {
                     let message_id = message.id().to_owned();
 
@@ -108,13 +110,14 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
     #[tracing::instrument(skip(self))]
     async fn delete_message(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Delete, MessageAuthorizationContext>,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         message
             .try_delete(
-                actor,
+                &actor_user,
                 |message: &Message| {
                     let message_id = message.id().to_owned();
 

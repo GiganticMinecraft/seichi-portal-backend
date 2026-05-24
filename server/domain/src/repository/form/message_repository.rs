@@ -13,7 +13,7 @@ use crate::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Delete, Read, Update,
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 
 #[automock]
@@ -21,7 +21,7 @@ use crate::{
 pub trait MessageRepository: Send + Sync + 'static {
     async fn post_message(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Create, MessageAuthorizationContext>,
     ) -> Result<(), Error>;
@@ -31,7 +31,7 @@ pub trait MessageRepository: Send + Sync + 'static {
     ) -> Result<Vec<AuthorizationGuardWithContext<Message, Read, MessageAuthorizationContext>>, Error>;
     async fn update_message_body(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Update, MessageAuthorizationContext>,
         body: String,
@@ -45,7 +45,7 @@ pub trait MessageRepository: Send + Sync + 'static {
     >;
     async fn delete_message(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Delete, MessageAuthorizationContext>,
     ) -> Result<(), Error>;

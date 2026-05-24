@@ -6,7 +6,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::User,
+    user::models::{ActiveUser, User},
 };
 use errors::Error;
 use uuid::Uuid;
@@ -20,11 +20,12 @@ use crate::{
 impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository<Client> {
     async fn create_notification_settings(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         notification_settings: &AuthorizationGuard<NotificationPreference, Create>,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         notification_settings
-            .try_create(actor, |settings| {
+            .try_create(&actor_user, |settings| {
                 self.client
                     .notification()
                     .upsert_notification_settings(settings)
@@ -50,11 +51,12 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
 
     async fn update_notification_settings(
         &self,
-        actor: &User,
+        actor: &ActiveUser,
         notification_settings: AuthorizationGuard<NotificationPreference, Update>,
     ) -> Result<(), Error> {
+        let actor_user = User::from(actor.clone());
         notification_settings
-            .try_update(actor, |settings| {
+            .try_update(&actor_user, |settings| {
                 self.client
                     .notification()
                     .upsert_notification_settings(settings)

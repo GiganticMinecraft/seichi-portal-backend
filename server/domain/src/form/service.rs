@@ -24,7 +24,7 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
         default_answer_title: DefaultAnswerTitle,
         questions: &[Question],
         answers: &PostedAnswerContents,
-        actor: &User,
+        author_name: &str,
     ) -> Result<AnswerTitle, Error> {
         match default_answer_title.into_inner() {
             Some(default_answer_title) => {
@@ -53,7 +53,7 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
                     .into_owned();
 
                 let username_replaced_title =
-                    answer_replaced_title.replace("$username", actor.name.as_str());
+                    answer_replaced_title.replace("$username", author_name);
 
                 Ok(AnswerTitle::new(Some(username_replaced_title.try_into()?)))
             }
@@ -80,7 +80,15 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
             .to_owned();
         let questions = form.questions().as_slice().to_vec();
 
-        Self::to_answer_title_from_questions(default_answer_title, &questions, answers, actor)
+        Self::to_answer_title_from_questions(
+            default_answer_title,
+            &questions,
+            answers,
+            match actor {
+                User::ActiveUser(actor) => actor.name(),
+                User::TemporaryUser(actor) => actor.name(),
+            },
+        )
     }
 }
 
@@ -175,11 +183,11 @@ mod tests {
         )
         .unwrap();
 
-        let actor = User {
-            name: "respondent_name".to_string(),
-            id: Uuid::nil().into(),
-            role: Default::default(),
-        };
+        let actor = User::ActiveUser(crate::user::models::ActiveUser::new(
+            "respondent_name".to_string(),
+            Uuid::nil().into(),
+            Default::default(),
+        ));
 
         let result = DefaultAnswerTitleDomainService::<
             crate::repository::form::active_form_repository::MockActiveFormRepository,
@@ -187,7 +195,10 @@ mod tests {
             default_answer_title,
             questions.as_slice(),
             &answers,
-            &actor,
+            match &actor {
+                User::ActiveUser(actor) => actor.name(),
+                User::TemporaryUser(actor) => actor.name(),
+            },
         )
         .unwrap();
 

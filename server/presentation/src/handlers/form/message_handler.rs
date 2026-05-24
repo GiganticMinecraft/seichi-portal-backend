@@ -7,7 +7,7 @@ use axum::{
 use domain::{
     form::{answer::models::AnswerId, message::models::MessageId},
     repository::Repositories,
-    user::models::User,
+    user::models::ActiveUser,
 };
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
@@ -79,7 +79,7 @@ impl<API: NotificationAPI + Send + Sync> RealInfrastructureRepositoryWithNotific
     tag = "Messages"
 )]
 pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(state): State<Arc<RealInfrastructureRepositoryWithNotificationAPI<API>>>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<PostedMessageSchema>, JsonRejection>,
@@ -132,7 +132,7 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
     tag = "Messages"
 )]
 pub async fn update_message_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
     json: Result<Json<MessageUpdateSchema>, JsonRejection>,
@@ -177,7 +177,7 @@ pub async fn update_message_handler(
     tag = "Messages"
 )]
 pub async fn get_messages_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetMessagesResponse, Response> {
@@ -203,9 +203,9 @@ pub async fn get_messages_handler(
                 id: message_with_sender.message.id().into_inner(),
                 body: message_with_sender.message.body().to_owned(),
                 sender: SenderSchema {
-                    uuid: message_with_sender.sender.id.to_string(),
-                    name: message_with_sender.sender.name,
-                    role: message_with_sender.sender.role.to_string(),
+                    uuid: message_with_sender.sender.id().to_string(),
+                    name: message_with_sender.sender.name().to_owned(),
+                    role: message_with_sender.sender.role().to_string(),
                 },
                 timestamp: message_with_sender.message.timestamp().to_owned(),
             })
@@ -234,7 +234,7 @@ pub async fn get_messages_handler(
     tag = "Messages"
 )]
 pub async fn delete_message_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {

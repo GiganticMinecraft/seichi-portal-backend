@@ -32,20 +32,30 @@ impl<Action: Actions> AuthorizationGuardWithContextDefinitions<CommentAuthorizat
     }
 
     fn can_update(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
-        (context
-            .related_answer_entry_guard
-            .can_read(actor, &context.related_answer_entry_guard_context)
-            && self.commented_by() == &actor.id)
-            || actor.role == Administrator
+        match actor {
+            User::ActiveUser(actor) => {
+                (context.related_answer_entry_guard.can_read(
+                    &User::ActiveUser(actor.clone()),
+                    &context.related_answer_entry_guard_context,
+                ) && self.commented_by() == actor.id())
+                    || actor.role() == &Administrator
+            }
+            User::TemporaryUser(_) => false,
+        }
     }
 
     fn can_delete(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
         // NOTE: コメントの削除に関しては、コメント自体が全体公開されうるものなので、
         // 適さないメッセージを Administrator が削除できる必要がある
-        (context
-            .related_answer_entry_guard
-            .can_read(actor, &context.related_answer_entry_guard_context)
-            && self.commented_by() == &actor.id)
-            || actor.role == Administrator
+        match actor {
+            User::ActiveUser(actor) => {
+                (context.related_answer_entry_guard.can_read(
+                    &User::ActiveUser(actor.clone()),
+                    &context.related_answer_entry_guard_context,
+                ) && self.commented_by() == actor.id())
+                    || actor.role() == &Administrator
+            }
+            User::TemporaryUser(_) => false,
+        }
     }
 }

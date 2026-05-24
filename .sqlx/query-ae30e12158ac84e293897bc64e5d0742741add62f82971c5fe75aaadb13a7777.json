@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title)\n                    VALUES (?, ?, ?, ?, ?, ?)\n                    ON DUPLICATE KEY UPDATE\n                    title = VALUES(title)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "ae30e12158ac84e293897bc64e5d0742741add62f82971c5fe75aaadb13a7777"
+}

@@ -16,14 +16,16 @@ use crate::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 
 #[automock]
 #[async_trait]
 pub trait SearchRepository: Send + Sync + 'static {
-    async fn search_users(&self, query: &str)
-    -> Result<Vec<AuthorizationGuard<User, Read>>, Error>;
+    async fn search_users(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error>;
     async fn search_forms(
         &self,
         query: &str,

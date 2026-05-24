@@ -15,6 +15,7 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::AnswerComment,
         presentation::schemas::form::form_response_schemas::AnswerContent,
         presentation::schemas::form::form_response_schemas::AnswerLabels,
+        presentation::schemas::form::form_response_schemas::AnswerAuthor,
         presentation::schemas::form::form_response_schemas::AnswerLabelResponseSchema,
         presentation::schemas::form::form_response_schemas::AnswerSettingsSchema,
         presentation::schemas::form::form_response_schemas::AnswerVisibility,
@@ -24,6 +25,8 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::FormMetaSchema,
         presentation::schemas::form::form_response_schemas::FormSchema,
         presentation::schemas::form::form_response_schemas::FormSettingsSchema,
+        presentation::schemas::form::form_response_schemas::TemporaryAnswerFormSchema,
+        presentation::schemas::form::form_response_schemas::TemporaryUser,
         presentation::schemas::form::form_response_schemas::MessageContentSchema,
         presentation::schemas::form::form_response_schemas::ChoiceResponseSchema,
         presentation::schemas::form::form_response_schemas::QuestionDefinitionResponseSchema,
@@ -35,6 +38,8 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_request_schemas::QuestionSchema,
         presentation::schemas::form::form_request_schemas::SelectQuestionSchema,
         presentation::schemas::form::form_request_schemas::TextQuestionSchema,
+        presentation::schemas::form::form_request_schemas::TemporaryAnswerCreateSchema,
+        presentation::schemas::form::form_request_schemas::TemporaryUserCreateSchema,
         presentation::schemas::form::form_response_schemas::ResponsePeriodSchema,
         presentation::schemas::form::form_response_schemas::Role,
         presentation::schemas::form::form_response_schemas::SenderSchema,
@@ -92,6 +97,7 @@ pub fn api_router() -> OpenApiRouter<RealInfrastructureRepository> {
             form_handler::get_form_handler,
             form_handler::update_form_handler
         ))
+        .routes(routes!(form_handler::get_temporary_answer_form_handler))
         .routes(routes!(form_handler::archive_form_handler))
         .routes(routes!(form_handler::archived_form_list_handler))
         .routes(routes!(form_handler::get_archived_form_handler))
@@ -100,6 +106,7 @@ pub fn api_router() -> OpenApiRouter<RealInfrastructureRepository> {
             answer_handler::get_answer_by_form_id_handler,
             answer_handler::post_answer_handler
         ))
+        .routes(routes!(answer_handler::post_temporary_answer_handler))
         .routes(routes!(answer_handler::get_all_answers))
         .routes(routes!(
             answer_label_handler::get_labels_for_answers,

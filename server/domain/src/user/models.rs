@@ -28,23 +28,93 @@ pub struct UserId(
 );
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct User {
-    pub name: String,
-    pub id: UserId,
+#[derive(Serialize, Deserialize, Getters, Debug, Clone)]
+pub struct ActiveUser {
+    name: String,
+    id: UserId,
     #[serde(default)]
-    pub role: Role,
+    role: Role,
 }
 
-impl PartialEq for User {
+impl ActiveUser {
+    pub fn new(name: String, id: UserId, role: Role) -> Self {
+        Self { name, id, role }
+    }
+}
+
+impl PartialEq for ActiveUser {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl AuthorizationGuardDefinitions for User {
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum User {
+    ActiveUser(ActiveUser),
+    TemporaryUser(TemporaryUser),
+}
+
+impl From<ActiveUser> for User {
+    fn from(user: ActiveUser) -> Self {
+        Self::ActiveUser(user)
+    }
+}
+
+impl From<TemporaryUser> for User {
+    fn from(user: TemporaryUser) -> Self {
+        Self::TemporaryUser(user)
+    }
+}
+
+#[derive(DerivingVia, Debug, PartialOrd, PartialEq, Eq, Hash, Clone, Copy)]
+#[deriving(
+    From,
+    Into,
+    IntoInner(via: Uuid),
+    Display(via: Uuid),
+    Serialize(via: Uuid),
+    Deserialize(via: Uuid)
+)]
+pub struct TemporaryUserId(#[underlying] Uuid);
+
+/// 一時回答が許可されたフォームで、ログインせずに回答した人の著者情報。
+///
+/// `TemporaryUser` は永続的な認証主体ではなく、回答作成時に入力された情報を
+/// 回答の著者として保持するためのスナップショットである。`id` は通常の
+/// `UserId` やログインセッションとは別の、回答著者を一時ユーザーとして識別する
+/// ローカルな UUID として扱う。
+///
+/// `name` と `contact_text` は、管理者や回答閲覧者が回答者を識別し、必要に応じて
+/// 連絡するための入力値である。権限判定上は回答の作成主体としてだけ使われ、
+/// 通常の `User` と同じ閲覧・更新権限は持たない。
+#[derive(Serialize, Deserialize, Getters, Debug, Clone, PartialEq, Eq)]
+pub struct TemporaryUser {
+    id: TemporaryUserId,
+    name: String,
+    contact_text: String,
+}
+
+impl TemporaryUser {
+    pub fn new(name: String, contact_text: String) -> Self {
+        Self {
+            id: TemporaryUserId::from(Uuid::new_v4()),
+            name,
+            contact_text,
+        }
+    }
+
+    pub fn from_raw_parts(id: TemporaryUserId, name: String, contact_text: String) -> Self {
+        Self {
+            id,
+            name,
+            contact_text,
+        }
+    }
+}
+
+impl AuthorizationGuardDefinitions for ActiveUser {
     fn can_create(&self, actor: &User) -> bool {
-        actor == self
+        matches!(actor, User::ActiveUser(actor) if actor == self)
     }
 
     fn can_read(&self, _actor: &User) -> bool {
@@ -52,11 +122,11 @@ impl AuthorizationGuardDefinitions for User {
     }
 
     fn can_update(&self, actor: &User) -> bool {
-        actor == self
+        matches!(actor, User::ActiveUser(actor) if actor == self)
     }
 
     fn can_delete(&self, actor: &User) -> bool {
-        actor == self
+        matches!(actor, User::ActiveUser(actor) if actor == self)
     }
 }
 

@@ -18,12 +18,12 @@ pub struct UserSchema {
     pub role: String,
 }
 
-impl From<domain::user::models::User> for UserSchema {
-    fn from(val: domain::user::models::User) -> Self {
+impl From<domain::user::models::ActiveUser> for UserSchema {
+    fn from(val: domain::user::models::ActiveUser) -> Self {
         UserSchema {
-            id: val.id.to_string(),
-            name: val.name,
-            role: val.role.to_string(),
+            id: val.id().to_string(),
+            name: val.name().to_owned(),
+            role: val.role().to_string(),
         }
     }
 }

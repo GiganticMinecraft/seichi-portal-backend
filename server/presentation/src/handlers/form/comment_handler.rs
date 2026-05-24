@@ -11,7 +11,7 @@ use domain::form::models::FormId;
 use domain::{
     form::comment::models::{Comment, CommentContent, CommentId},
     repository::Repositories,
-    user::models::User,
+    user::models::ActiveUser,
 };
 use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
@@ -59,7 +59,7 @@ impl IntoResponse for GetFormCommentResponse {
     tag = "Comments"
 )]
 pub async fn get_form_comment(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetFormCommentResponse, Response> {
@@ -107,7 +107,7 @@ pub async fn get_form_comment(
     tag = "Comments"
 )]
 pub async fn post_form_comment(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<CommentPostSchema>, JsonRejection>,
@@ -125,7 +125,7 @@ pub async fn post_form_comment(
     let comment = Comment::new(
         answer_id,
         CommentContent::new(comment_schema.content),
-        user.id,
+        *user.id(),
     );
 
     form_comment_use_case
@@ -159,7 +159,7 @@ pub async fn post_form_comment(
     tag = "Comments"
 )]
 pub async fn update_form_comment(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
     json: Result<Json<CommentUpdateSchema>, JsonRejection>,
@@ -210,7 +210,7 @@ pub async fn update_form_comment(
     tag = "Comments"
 )]
 pub async fn delete_form_comment_handler(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {

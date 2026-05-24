@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO temporary_users (id, name, contact_text)\n                        VALUES (?, ?, ?)\n                        ON DUPLICATE KEY UPDATE name = VALUES(name), contact_text = VALUES(contact_text)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "e18d9f925bbad977d07753f948007875002ff3dd95ff11cb7cd65c55c341f822"
+}

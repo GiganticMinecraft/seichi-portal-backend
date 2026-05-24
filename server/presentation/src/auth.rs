@@ -16,6 +16,20 @@ use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::user::UserUseCase;
 
+fn is_temporary_answer_path(path: &str) -> bool {
+    let segments = path.trim_start_matches('/').split('/').collect::<Vec<_>>();
+    matches!(
+        segments.as_slice(),
+        [
+            "api",
+            "v1",
+            "forms",
+            _,
+            "temporary-answers" | "temporary-answer-form"
+        ]
+    )
+}
+
 pub async fn auth(
     State(repository): State<RealInfrastructureRepository>,
     mut request: Request<Body>,
@@ -23,10 +37,12 @@ pub async fn auth(
 ) -> Result<Response, Response> {
     let ignore_auth_paths = ["/api/v1/session", "/health"];
     let ignore_auth_path_prefixes = ["/swagger-ui", "/api-docs"];
+    let path = request.uri().path();
     if ignore_auth_paths.contains(&request.uri().path())
         || ignore_auth_path_prefixes
             .iter()
-            .any(|prefix| request.uri().path().starts_with(prefix))
+            .any(|prefix| path.starts_with(prefix))
+        || is_temporary_answer_path(path)
     {
         return Ok(next.run(request).await);
     }
@@ -90,7 +106,7 @@ pub async fn auth(
     };
 
     let user = user_use_case
-        .find_by(&session_user, session_user.id.into_inner())
+        .find_by(&session_user, session_user.id().into_inner())
         .await
         .map_err(|_| {
             (
@@ -107,6 +123,9 @@ pub async fn auth(
                 .into_response()
         })?;
 
+    request
+        .extensions_mut()
+        .insert(domain::user::models::User::ActiveUser(user.clone()));
     request.extensions_mut().insert(user);
 
     let response = next.run(request).await;

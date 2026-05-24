@@ -19,7 +19,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
     },
-    user::models::User,
+    user::models::ActiveUser,
 };
 use errors::Error;
 use itertools::Itertools;
@@ -29,7 +29,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
     async fn search_users(
         &self,
         query: &str,
-    ) -> Result<Vec<AuthorizationGuard<User, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
         Ok(self
             .client
             .search()

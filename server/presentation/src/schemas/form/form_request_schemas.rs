@@ -21,6 +21,8 @@ pub struct FormCreateSchema {
     #[schema(value_type = String)]
     pub title: FormTitle,
     pub description: String,
+    #[serde(default)]
+    pub settings: Option<FormSettingsSchema>,
     #[schema(value_type = Vec<QuestionSchema>, min_items = 1)]
     pub questions: NonEmptyVec<QuestionSchema>,
 }
@@ -52,6 +54,8 @@ pub struct FormSettingsSchema {
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub visibility: Option<Visibility>,
+    #[serde(default)]
+    pub allow_temporary_answers: Option<bool>,
     #[serde(default)]
     pub answer_settings: Option<AnswerSettingsSchema>,
 }
@@ -108,6 +112,18 @@ pub struct AnswerContentSchema {
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct AnswerCreateSchema {
+    pub contents: Vec<AnswerContentSchema>,
+}
+
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
+pub struct TemporaryUserCreateSchema {
+    pub name: NonEmptyString,
+    pub contact_text: NonEmptyString,
+}
+
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
+pub struct TemporaryAnswerCreateSchema {
+    pub temporary_user: TemporaryUserCreateSchema,
     pub contents: Vec<AnswerContentSchema>,
 }
 

@@ -29,7 +29,7 @@ mod private {
     impl Sealed for super::Delete {}
 }
 
-/// [`AuthorizationGuardWithContext`] は、[`User`] と [`Context`] を受け取り、
+/// [`AuthorizationGuardWithContext`] は、actor と [`Context`] を受け取り、
 /// [`guard_target`] に対して CRUD 操作が可能であるかを定義するための抽象です。
 #[derive(Debug)]
 pub struct AuthorizationGuardWithContext<
@@ -338,7 +338,7 @@ mod test {
         types::authorization_guard_with_context::{
             AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
         },
-        user::models::{Role, User},
+        user::models::{ActiveUser, Role, User},
     };
 
     #[derive(Clone, PartialEq, Debug)]
@@ -351,35 +351,40 @@ mod test {
 
     impl AuthorizationGuardWithContextDefinitions<Context> for AuthorizationGuardWithContextTestStruct {
         fn can_create(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_read(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator || actor.role == Role::StandardUser
+            matches!(
+                actor,
+                User::ActiveUser(actor)
+                    if actor.role() == &Role::Administrator
+                        || actor.role() == &Role::StandardUser
+            )
         }
 
         fn can_update(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_delete(&self, actor: &User, _context: &Context) -> bool {
-            actor.role == Role::Administrator
+            matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
         }
     }
 
     #[test]
     fn authorization_guard_test() {
-        let admin = User {
-            name: "admin".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::Administrator,
-        };
+        let admin = User::ActiveUser(ActiveUser::new(
+            "admin".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        ));
 
-        let standard_user = User {
-            name: "standard_user".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::StandardUser,
-        };
+        let standard_user = User::ActiveUser(ActiveUser::new(
+            "standard_user".to_string(),
+            Uuid::new_v4().into(),
+            Role::StandardUser,
+        ));
 
         let context = Context {};
 
@@ -405,11 +410,11 @@ mod test {
 
     #[test]
     fn verify_same_data_for_try_read_and_try_into_read() {
-        let user = User {
-            name: "user".to_string(),
-            id: Uuid::new_v4().into(),
-            role: Role::Administrator,
-        };
+        let user = User::ActiveUser(ActiveUser::new(
+            "user".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        ));
 
         let context = Context {};
 
