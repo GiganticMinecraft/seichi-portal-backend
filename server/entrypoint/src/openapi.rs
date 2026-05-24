@@ -82,13 +82,25 @@ impl Modify for SecurityAddon {
     }
 }
 
-pub fn api_router() -> OpenApiRouter<RealInfrastructureRepository> {
+pub fn public_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
+    use presentation::handlers::form::{answer_handler, form_handler};
+
+    OpenApiRouter::new()
+        .routes(routes!(form_handler::get_temporary_answer_form_handler))
+        .routes(routes!(answer_handler::post_temporary_answer_handler))
+        .routes(routes!(
+            user_handler::start_session,
+            user_handler::end_session
+        ))
+}
+
+pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
     use presentation::handlers::form::{
         answer_handler, answer_label_handler, comment_handler, form_handler, form_label_handler,
         message_handler,
     };
 
-    OpenApiRouter::with_openapi(ManuallyRegisteredApiDoc::openapi())
+    OpenApiRouter::new()
         .routes(routes!(
             form_handler::create_form_handler,
             form_handler::form_list_handler
@@ -97,7 +109,6 @@ pub fn api_router() -> OpenApiRouter<RealInfrastructureRepository> {
             form_handler::get_form_handler,
             form_handler::update_form_handler
         ))
-        .routes(routes!(form_handler::get_temporary_answer_form_handler))
         .routes(routes!(form_handler::archive_form_handler))
         .routes(routes!(form_handler::archived_form_list_handler))
         .routes(routes!(form_handler::get_archived_form_handler))
@@ -106,7 +117,6 @@ pub fn api_router() -> OpenApiRouter<RealInfrastructureRepository> {
             answer_handler::get_answer_by_form_id_handler,
             answer_handler::post_answer_handler
         ))
-        .routes(routes!(answer_handler::post_temporary_answer_handler))
         .routes(routes!(answer_handler::get_all_answers))
         .routes(routes!(
             answer_label_handler::get_labels_for_answers,
@@ -155,17 +165,16 @@ pub fn api_router() -> OpenApiRouter<RealInfrastructureRepository> {
             notification_handler::update_notification_settings
         ))
         .routes(routes!(
-            user_handler::start_session,
-            user_handler::end_session
-        ))
-        .routes(routes!(
             user_handler::link_discord,
             user_handler::unlink_discord
         ))
 }
 
 pub fn versioned_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
-    OpenApiRouter::with_openapi(ApiMetadata::openapi()).nest("/api/v1", api_router())
+    let combined = OpenApiRouter::with_openapi(ManuallyRegisteredApiDoc::openapi())
+        .merge(public_api_router())
+        .merge(authenticated_api_router());
+    OpenApiRouter::with_openapi(ApiMetadata::openapi()).nest("/api/v1", combined)
 }
 
 pub fn openapi() -> utoipa::openapi::OpenApi {
