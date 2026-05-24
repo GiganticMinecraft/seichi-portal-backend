@@ -95,9 +95,19 @@ async fn main() -> anyhow::Result<()> {
 
     use presentation::handlers::health_check_handler;
 
-    let (versioned_api_router, openapi) = openapi::versioned_api_router()
+    let openapi = openapi::versioned_api_router().into_openapi();
+
+    let (public_api, _) = openapi::public_api_router()
         .with_state(shared_repository.to_owned())
         .split_for_parts();
+
+    let (authenticated_api, _) = openapi::authenticated_api_router()
+        .with_state(shared_repository.to_owned())
+        .split_for_parts();
+    let authenticated_api = authenticated_api.route_layer(middleware::from_fn_with_state(
+        shared_repository.to_owned(),
+        auth,
+    ));
 
     // post_message_handler uses a different State type, so register it separately
     let message_post_router = Router::new()
@@ -105,6 +115,10 @@ async fn main() -> anyhow::Result<()> {
             "/forms/{form_id}/answers/{answer_id}/messages",
             post(post_message_handler),
         )
+        .route_layer(middleware::from_fn_with_state(
+            shared_repository.to_owned(),
+            auth,
+        ))
         .with_state(Arc::new(
             RealInfrastructureRepositoryWithNotificationAPI::new(
                 shared_repository.to_owned(),
@@ -115,14 +129,10 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .route("/health", get(health_check_handler::health_check))
-        .merge(versioned_api_router)
+        .nest("/api/v1", public_api.merge(authenticated_api))
         .nest("/api/v1", message_post_router)
         .fallback(not_found_handler)
         .layer(layer)
-        .route_layer(middleware::from_fn_with_state(
-            shared_repository.to_owned(),
-            auth,
-        ))
         .layer(
             CorsLayer::new()
                 .allow_methods([
