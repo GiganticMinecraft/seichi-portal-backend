@@ -1,4 +1,5 @@
 #!/bin/sh
 
 cargo fmt --all -- --config-path=.cargo-husky/hooks/rustfmt.toml --check &&
-  cargo clippy --all -- -D warnings
+  cargo clippy --all -- -D warnings &&
+  cargo make check-openapi
