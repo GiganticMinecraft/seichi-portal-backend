@@ -25,7 +25,6 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::FormMetaSchema,
         presentation::schemas::form::form_response_schemas::FormSchema,
         presentation::schemas::form::form_response_schemas::FormSettingsSchema,
-        presentation::schemas::form::form_response_schemas::TemporaryAnswerFormSchema,
         presentation::schemas::form::form_response_schemas::TemporaryUser,
         presentation::schemas::form::form_response_schemas::MessageContentSchema,
         presentation::schemas::form::form_response_schemas::ChoiceResponseSchema,
@@ -83,15 +82,22 @@ impl Modify for SecurityAddon {
 }
 
 pub fn public_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
-    use presentation::handlers::form::{answer_handler, form_handler};
+    use presentation::handlers::form::answer_handler;
 
     OpenApiRouter::new()
-        .routes(routes!(form_handler::get_temporary_answer_form_handler))
         .routes(routes!(answer_handler::post_temporary_answer_handler))
         .routes(routes!(
             user_handler::start_session,
             user_handler::end_session
         ))
+}
+
+pub fn optional_auth_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
+    use presentation::handlers::form::form_handler;
+
+    OpenApiRouter::new()
+        .routes(routes!(form_handler::form_list_handler))
+        .routes(routes!(form_handler::get_form_handler))
 }
 
 pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
@@ -101,14 +107,8 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
     };
 
     OpenApiRouter::new()
-        .routes(routes!(
-            form_handler::create_form_handler,
-            form_handler::form_list_handler
-        ))
-        .routes(routes!(
-            form_handler::get_form_handler,
-            form_handler::update_form_handler
-        ))
+        .routes(routes!(form_handler::create_form_handler))
+        .routes(routes!(form_handler::update_form_handler))
         .routes(routes!(form_handler::archive_form_handler))
         .routes(routes!(form_handler::archived_form_list_handler))
         .routes(routes!(form_handler::get_archived_form_handler))
@@ -173,6 +173,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
 pub fn versioned_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
     let combined = OpenApiRouter::with_openapi(ManuallyRegisteredApiDoc::openapi())
         .merge(public_api_router())
+        .merge(optional_auth_api_router())
         .merge(authenticated_api_router());
     OpenApiRouter::with_openapi(ApiMetadata::openapi()).nest("/api/v1", combined)
 }

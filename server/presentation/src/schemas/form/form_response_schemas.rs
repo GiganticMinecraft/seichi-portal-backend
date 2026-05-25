@@ -69,14 +69,10 @@ pub struct FormSettingsSchema {
 }
 
 impl FormSettingsSchema {
-    pub fn from_settings_ref(
-        actor: &domain::user::models::ActiveUser,
-        settings: &FormSettings,
-    ) -> Self {
-        let actor_user = domain::user::models::User::from(actor.clone());
+    pub fn from_settings_ref(actor: &domain::user::models::User, settings: &FormSettings) -> Self {
         FormSettingsSchema {
             webhook_url: settings
-                .webhook_url(&actor_user)
+                .webhook_url(actor)
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),
@@ -116,19 +112,6 @@ pub struct FormSchema {
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
-}
-
-#[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct TemporaryAnswerFormSchema {
-    #[schema(value_type = String, format = "uuid")]
-    pub id: FormId,
-    #[schema(value_type = String)]
-    pub title: FormTitle,
-    #[schema(value_type = String)]
-    pub description: FormDescription,
-    pub metadata: FormMetaSchema,
-    pub answer_settings: AnswerSettingsSchema,
-    pub questions: Vec<QuestionResponseSchema>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]

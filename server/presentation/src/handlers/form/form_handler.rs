@@ -8,7 +8,7 @@ use axum::{
 };
 use domain::{
     form::{models::FormId, question::models::QuestionSet},
-    repository::{Repositories, form::active_form_repository::ActiveFormRepository},
+    repository::Repositories,
     user::models::{ActiveUser, User},
 };
 use itertools::Itertools;
@@ -25,7 +25,6 @@ use crate::schemas::form::{
     form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit, QuestionSchema},
     form_response_schemas::{
         ArchivedFormSchema, FormMetaSchema, FormSchema, FormSettingsSchema, QuestionResponseSchema,
-        TemporaryAnswerFormSchema,
     },
 };
 use axum::extract::rejection::PathRejection;
@@ -83,20 +82,6 @@ impl IntoResponse for GetFormResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
-        }
-    }
-}
-
-#[derive(utoipa::IntoResponses)]
-pub enum GetTemporaryAnswerFormResponse {
-    #[response(status = 200, description = "The request has succeeded.")]
-    Ok(TemporaryAnswerFormSchema),
-}
-
-impl IntoResponse for GetTemporaryAnswerFormResponse {
-    fn into_response(self) -> Response {
-        match self {
-            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
         }
     }
 }
@@ -167,7 +152,7 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
 }
 
 fn archived_form_schema_from_parts(
-    user: &ActiveUser,
+    user: &User,
     form: domain::form::models::ArchivedForm,
     archived_by: ActiveUser,
     labels: Vec<domain::form::models::FormLabel>,
@@ -242,7 +227,7 @@ pub async fn create_form_handler(
         id: form.id().to_owned(),
         title: form.title().to_owned(),
         description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+        settings: FormSettingsSchema::from_settings_ref(&User::from(user.clone()), form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
         questions: form
             .questions()
@@ -269,11 +254,11 @@ pub async fn create_form_handler(
         Forbidden,
         InternalServerError,
     ),
-    security(("bearer" = [])),
+    security((), ("bearer" = [])),
     tag = "Forms"
 )]
 pub async fn form_list_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> Result<FormListResponse, Response> {
@@ -320,11 +305,11 @@ pub async fn form_list_handler(
         NotFound,
         InternalServerError,
     ),
-    security(("bearer" = [])),
+    security((), ("bearer" = [])),
     tag = "Forms"
 )]
 pub async fn get_form_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<GetFormResponse, Response> {
@@ -350,61 +335,6 @@ pub async fn get_form_handler(
             .map(QuestionResponseSchema::from)
             .collect(),
         labels,
-    }))
-}
-
-#[utoipa::path(
-    get,
-    path = "/forms/{id}/temporary-answer-form",
-    summary = "未ログイン回答用フォームの取得",
-    params(
-        ("id" = String, Path, description = "Form ID"),
-    ),
-    responses(
-        GetTemporaryAnswerFormResponse,
-        BadRequest,
-        Forbidden,
-        NotFound,
-        InternalServerError,
-    ),
-    tag = "Answers"
-)]
-pub async fn get_temporary_answer_form_handler(
-    State(repository): State<RealInfrastructureRepository>,
-    path: Result<Path<FormId>, PathRejection>,
-) -> Result<GetTemporaryAnswerFormResponse, Response> {
-    let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
-    let form_guard = repository
-        .active_form_repository()
-        .get(form_id)
-        .await
-        .map_err(handle_error)?
-        .ok_or(errors::Error::from(
-            errors::usecase::UseCaseError::FormNotFound,
-        ))
-        .map_err(handle_error)?;
-    let form = form_guard
-        .try_into_read(&User::Anonymous)
-        .map_err(|e| handle_error(e.into()))?;
-
-    if !form.settings().allow_temporary_answers() {
-        return Err(handle_error(errors::domain::DomainError::Forbidden.into()));
-    }
-
-    Ok(GetTemporaryAnswerFormResponse::Ok(TemporaryAnswerFormSchema {
-        id: form.id().to_owned(),
-        title: form.title().to_owned(),
-        description: form.description().to_owned(),
-        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        answer_settings: crate::schemas::form::form_response_schemas::AnswerSettingsSchema::from_answer_settings_ref(
-            form.settings().answer_settings(),
-        ),
-        questions: form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
     }))
 }
 
@@ -443,7 +373,7 @@ pub async fn archive_form_handler(
     Ok((
         StatusCode::OK,
         Json(archived_form_schema_from_parts(
-            &user.clone(),
+            &User::from(user.clone()),
             archived_form,
             user,
             vec![],
@@ -543,7 +473,10 @@ pub async fn update_form_handler(
         id: updated_form.id().to_owned(),
         title: updated_form.title().to_owned(),
         description: updated_form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(&user, updated_form.settings()),
+        settings: FormSettingsSchema::from_settings_ref(
+            &User::from(user.clone()),
+            updated_form.settings(),
+        ),
         metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
         questions: updated_form
             .questions()
@@ -605,7 +538,7 @@ pub async fn archived_form_list_handler(
             .into_iter()
             .map(|details| {
                 archived_form_schema_from_parts(
-                    &user,
+                    &User::from(user.clone()),
                     details.form,
                     details.archived_by,
                     details.labels,
@@ -651,7 +584,7 @@ pub async fn get_archived_form_handler(
         .map_err(handle_error)?;
 
     Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
-        &user,
+        &User::from(user.clone()),
         form,
         archived_by,
         labels,

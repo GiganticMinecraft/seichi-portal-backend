@@ -16,7 +16,7 @@ use entrypoint::openapi;
 use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notification_api_impl::NotificationAPIImpl;
-use presentation::auth::auth;
+use presentation::auth::{auth, optional_auth};
 use presentation::handlers::form::message_handler::{
     RealInfrastructureRepositoryWithNotificationAPI, post_message_handler,
 };
@@ -101,6 +101,14 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .split_for_parts();
 
+    let (optional_auth_api, _) = openapi::optional_auth_api_router()
+        .with_state(shared_repository.to_owned())
+        .split_for_parts();
+    let optional_auth_api = optional_auth_api.route_layer(middleware::from_fn_with_state(
+        shared_repository.to_owned(),
+        optional_auth,
+    ));
+
     let (authenticated_api, _) = openapi::authenticated_api_router()
         .with_state(shared_repository.to_owned())
         .split_for_parts();
@@ -132,6 +140,7 @@ async fn main() -> anyhow::Result<()> {
         .nest(
             "/api/v1",
             public_api
+                .merge(optional_auth_api)
                 .merge(authenticated_api)
                 .merge(message_post_router),
         )
