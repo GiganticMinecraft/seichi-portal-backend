@@ -40,7 +40,7 @@ impl<Action: Actions> AuthorizationGuardWithContextDefinitions<CommentAuthorizat
                 ) && self.commented_by() == actor.id())
                     || actor.role() == &Administrator
             }
-            User::TemporaryUser(_) => false,
+            User::TemporaryUser(_) | User::Anonymous => false,
         }
     }
 
@@ -55,7 +55,7 @@ impl<Action: Actions> AuthorizationGuardWithContextDefinitions<CommentAuthorizat
                 ) && self.commented_by() == actor.id())
                     || actor.role() == &Administrator
             }
-            User::TemporaryUser(_) => false,
+            User::TemporaryUser(_) | User::Anonymous => false,
         }
     }
 }

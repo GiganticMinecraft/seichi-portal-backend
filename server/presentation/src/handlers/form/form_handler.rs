@@ -9,7 +9,7 @@ use axum::{
 use domain::{
     form::{models::FormId, question::models::QuestionSet},
     repository::{Repositories, form::active_form_repository::ActiveFormRepository},
-    user::models::ActiveUser,
+    user::models::{ActiveUser, User},
 };
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
@@ -383,7 +383,9 @@ pub async fn get_temporary_answer_form_handler(
             errors::usecase::UseCaseError::FormNotFound,
         ))
         .map_err(handle_error)?;
-    let form = unsafe { form_guard.into_read_unchecked() };
+    let form = form_guard
+        .try_into_read(&User::Anonymous)
+        .map_err(|e| handle_error(e.into()))?;
 
     if !form.settings().allow_temporary_answers() {
         return Err(handle_error(errors::domain::DomainError::Forbidden.into()));

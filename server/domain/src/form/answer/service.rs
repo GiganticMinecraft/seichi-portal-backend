@@ -46,7 +46,7 @@ impl AuthorizationGuardWithContextDefinitions<AnswerEntryAuthorizationContext> f
                     || context.answer_visibility == AnswerVisibility::PUBLIC
                     || user.role() == &Role::Administrator
             }
-            User::TemporaryUser(_) => false,
+            User::TemporaryUser(_) | User::Anonymous => false,
         }
     }
 

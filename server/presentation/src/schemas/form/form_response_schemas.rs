@@ -336,6 +336,9 @@ impl From<domain::user::models::User> for AnswerAuthor {
                     temporary_user: temporary_user.into(),
                 }
             }
+            domain::user::models::User::Anonymous => {
+                unreachable!("Anonymous user cannot be an answer author")
+            }
         }
     }
 }
