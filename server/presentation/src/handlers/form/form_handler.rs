@@ -9,7 +9,7 @@ use axum::{
 use domain::{
     form::{models::FormId, question::models::QuestionSet},
     repository::Repositories,
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor, User},
 };
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
@@ -152,7 +152,7 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
 }
 
 fn archived_form_schema_from_parts(
-    user: &User,
+    actor: &Actor,
     form: domain::form::models::ArchivedForm,
     archived_by: ActiveUser,
     labels: Vec<domain::form::models::FormLabel>,
@@ -161,7 +161,7 @@ fn archived_form_schema_from_parts(
         id: form.form().id().to_owned(),
         title: form.form().title().to_owned(),
         description: form.form().description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(user, form.form().settings()),
+        settings: FormSettingsSchema::from_settings_ref(actor, form.form().settings()),
         metadata: FormMetaSchema::from_meta_ref(form.form().metadata()),
         archived_at: *form.archived_at(),
         archived_by,
@@ -227,7 +227,10 @@ pub async fn create_form_handler(
         id: form.id().to_owned(),
         title: form.title().to_owned(),
         description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(&User::from(user.clone()), form.settings()),
+        settings: FormSettingsSchema::from_settings_ref(
+            &Actor::from(user.clone()),
+            form.settings(),
+        ),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
         questions: form
             .questions()
@@ -265,7 +268,11 @@ pub async fn form_list_handler(
     let form_use_case = build_form_use_case(&repository);
 
     let forms = form_use_case
-        .form_list(&user, offset_and_limit.offset, offset_and_limit.limit)
+        .form_list(
+            &Actor::from(user.clone()),
+            offset_and_limit.offset,
+            offset_and_limit.limit,
+        )
         .await
         .map_err(handle_error)?;
 
@@ -275,7 +282,10 @@ pub async fn form_list_handler(
             id: form.id().to_owned(),
             title: form.title().to_owned(),
             description: form.description().to_owned(),
-            settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+            settings: FormSettingsSchema::from_settings_ref(
+                &Actor::from(user.clone()),
+                form.settings(),
+            ),
             metadata: FormMetaSchema::from_meta_ref(form.metadata()),
             questions: form
                 .questions()
@@ -318,7 +328,7 @@ pub async fn get_form_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let ActiveFormWithLabels { form, labels } = form_use_case
-        .get_form(&user, form_id)
+        .get_form(&Actor::from(user.clone()), form_id)
         .await
         .map_err(handle_error)?;
 
@@ -326,7 +336,10 @@ pub async fn get_form_handler(
         id: form.id().to_owned(),
         title: form.title().to_owned(),
         description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(&user, form.settings()),
+        settings: FormSettingsSchema::from_settings_ref(
+            &Actor::from(user.clone()),
+            form.settings(),
+        ),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
         questions: form
             .questions()
@@ -373,7 +386,7 @@ pub async fn archive_form_handler(
     Ok((
         StatusCode::OK,
         Json(archived_form_schema_from_parts(
-            &User::from(user.clone()),
+            &Actor::from(user.clone()),
             archived_form,
             user,
             vec![],
@@ -474,7 +487,7 @@ pub async fn update_form_handler(
         title: updated_form.title().to_owned(),
         description: updated_form.description().to_owned(),
         settings: FormSettingsSchema::from_settings_ref(
-            &User::from(user.clone()),
+            &Actor::from(user.clone()),
             updated_form.settings(),
         ),
         metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
@@ -533,7 +546,7 @@ pub async fn archived_form_list_handler(
         .await
         .map_err(handle_error)?;
 
-    let actor = User::from(user);
+    let actor = Actor::from(user);
     Ok(ArchivedFormListResponse::Ok(
         forms
             .into_iter()
@@ -585,7 +598,7 @@ pub async fn get_archived_form_handler(
         .map_err(handle_error)?;
 
     Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
-        &User::from(user.clone()),
+        &Actor::from(user.clone()),
         form,
         archived_by,
         labels,

@@ -23,7 +23,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{AuthorizationGuardWithContext, Create},
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
@@ -63,7 +63,7 @@ impl<
         answer_id: AnswerId,
         notificator: &N,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let form_guard = self
             .active_form_repository
             .get(form_id)
@@ -117,10 +117,8 @@ impl<
                             .fetch_notification_settings(notification_recipient_id.into_inner())
                             .await?;
 
-                        // SAFETY: 通知設定の読み取りはシステム的な処理であり、メッセージ送信者が
-                        // 受信者の通知設定を読める必要がある。適切なシステム権限の仕組みは別途対応する。
                         let notification_preference = match fetched_notification_preference {
-                            Some(settings) => unsafe { settings.into_read_unchecked() },
+                            Some(settings) => settings.try_into_read(&Actor::System)?,
                             None => {
                                 let recipient = self
                                     .user_repository
@@ -136,7 +134,7 @@ impl<
                                     .create_notification_settings(&recipient, &settings)
                                     .await?;
 
-                                unsafe { settings.into_read().into_read_unchecked() }
+                                settings.into_read().try_into_read(&Actor::System)?
                             }
                         };
 
@@ -170,7 +168,7 @@ impl<
         form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<MessageWithSender>, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let form_guard = self
             .active_form_repository
             .get(form_id)
@@ -228,7 +226,7 @@ impl<
         message_id: &MessageId,
         body: Option<String>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let message = self
             .message_repository
             .fetch_message(message_id)
@@ -284,7 +282,7 @@ impl<
         answer_id: AnswerId,
         message_id: &MessageId,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let message = self
             .message_repository
             .fetch_message(message_id)

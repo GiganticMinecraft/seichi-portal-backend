@@ -10,6 +10,7 @@ use types::non_empty_vec::NonEmptyVec;
 
 use crate::{
     types::authorization_guard::AuthorizationGuardDefinitions,
+    user::models::Actor,
     user::models::{Role, User},
 };
 
@@ -339,20 +340,20 @@ impl Question {
 }
 
 impl AuthorizationGuardDefinitions for Question {
-    fn can_create(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
     }
 
-    fn can_read(&self, _actor: &User) -> bool {
+    fn can_read(&self, _actor: &Actor) -> bool {
         true
     }
 
-    fn can_update(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
     }
 
-    fn can_delete(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
     }
 }
 

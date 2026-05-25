@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{ActiveUser, User, UserId},
+    user::models::{ActiveUser, Actor, UserId},
 };
 use errors::Error;
 
@@ -15,7 +15,7 @@ pub(crate) async fn resolve_user_references<R: UserRepository + ?Sized>(
         return Ok(HashMap::new());
     }
 
-    let actor_user = User::from(actor.clone());
+    let actor_user = Actor::from(actor.clone());
     let uuids = user_ids
         .into_iter()
         .map(UserId::into_inner)

@@ -2,7 +2,7 @@ use derive_getters::Getters;
 
 use crate::{
     types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Role, User, UserId},
+    user::models::{Actor, Role, User, UserId},
 };
 
 #[derive(Debug)]
@@ -63,31 +63,31 @@ impl NotificationPreference {
 }
 
 impl AuthorizationGuardDefinitions for NotificationPreference {
-    fn can_create(&self, actor: &User) -> bool {
+    fn can_create(&self, actor: &Actor) -> bool {
         matches!(
             actor,
-            User::ActiveUser(actor)
+            Actor::User(User::ActiveUser(actor))
+                if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
+        ) || matches!(actor, Actor::System)
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::User(User::ActiveUser(actor))
+                if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
+        ) || matches!(actor, Actor::System)
+    }
+
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::User(User::ActiveUser(actor))
                 if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
         )
     }
 
-    fn can_read(&self, actor: &User) -> bool {
-        matches!(
-            actor,
-            User::ActiveUser(actor)
-                if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
-        )
-    }
-
-    fn can_update(&self, actor: &User) -> bool {
-        matches!(
-            actor,
-            User::ActiveUser(actor)
-                if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
-        )
-    }
-
-    fn can_delete(&self, _actor: &User) -> bool {
+    fn can_delete(&self, _actor: &Actor) -> bool {
         // NOTE: 明示的に通知設定を削除することはない(削除されるのは User が削除されたときのみ)
         false
     }

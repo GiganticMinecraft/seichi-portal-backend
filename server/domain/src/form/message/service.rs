@@ -1,7 +1,7 @@
 use crate::{
     form::{answer::models::AnswerEntry, message::models::Message},
     types::authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
-    user::models::{Role::Administrator, User},
+    user::models::{Actor, Role::Administrator, User},
 };
 
 #[derive(Debug)]
@@ -27,16 +27,16 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{ActiveUser, Role, User, UserId},
+    ///     user::models::{ActiveUser, Actor, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
     /// let respondent_id: UserId = Uuid::new_v4().into();
-    /// let respondent = User::ActiveUser(ActiveUser::new(
+    /// let respondent: Actor = User::ActiveUser(ActiveUser::new(
     ///     "respondent".to_string(),
     ///     respondent_id,
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let related_answer = AnswerEntry::new(
     ///     AnswerAuthor::AuthenticatedUser(respondent_id),
@@ -52,17 +52,17 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User::ActiveUser(ActiveUser::new(
+    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::Administrator,
-    /// ));
+    /// )).into();
     ///
-    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    /// let unrelated_standard_user: Actor = User::ActiveUser(ActiveUser::new(
     ///     "unrelated_user".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -72,7 +72,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(message.can_create(&administrator, &context));
     /// assert!(!message.can_create(&unrelated_standard_user, &context));
     /// ```
-    fn can_create(&self, actor: &User, context: &MessageAuthorizationContext) -> bool {
+    fn can_create(&self, actor: &Actor, context: &MessageAuthorizationContext) -> bool {
         if context.related_answer_entry.id() != self.related_answer_id() {
             tracing::error!("The related answer entry does not match the context.");
 
@@ -81,7 +81,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
 
         matches!(
             actor,
-            User::ActiveUser(actor)
+            Actor::User(User::ActiveUser(actor))
                 if actor.role() == &Administrator
                     || (*actor.id() == *self.sender_id()
                         && context
@@ -109,16 +109,16 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{ActiveUser, Role, User, UserId},
+    ///     user::models::{ActiveUser, Actor, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
     /// let respondent_id: UserId = Uuid::new_v4().into();
-    /// let respondent = User::ActiveUser(ActiveUser::new(
+    /// let respondent: Actor = User::ActiveUser(ActiveUser::new(
     ///     "respondent".to_string(),
     ///     respondent_id,
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let related_answer = AnswerEntry::new(
     ///     AnswerAuthor::AuthenticatedUser(respondent_id),
@@ -134,17 +134,17 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User::ActiveUser(ActiveUser::new(
+    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::Administrator,
-    /// ));
+    /// )).into();
     ///
-    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    /// let unrelated_standard_user: Actor = User::ActiveUser(ActiveUser::new(
     ///     "unrelated_user".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -154,7 +154,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(message.can_read(&administrator, &context));
     /// assert!(!message.can_read(&unrelated_standard_user, &context));
     /// ```
-    fn can_read(&self, actor: &User, context: &MessageAuthorizationContext) -> bool {
+    fn can_read(&self, actor: &Actor, context: &MessageAuthorizationContext) -> bool {
         if context.related_answer_entry.id() != self.related_answer_id() {
             tracing::error!("The related answer entry does not match the context.");
 
@@ -163,7 +163,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
 
         matches!(
             actor,
-            User::ActiveUser(actor)
+            Actor::User(User::ActiveUser(actor))
                 if actor.role() == &Administrator
                     || context
                         .related_answer_entry
@@ -192,16 +192,16 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{ActiveUser, Role, User, UserId},
+    ///     user::models::{ActiveUser, Actor, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
     /// let respondent_id: UserId = Uuid::new_v4().into();
-    /// let respondent = User::ActiveUser(ActiveUser::new(
+    /// let respondent: Actor = User::ActiveUser(ActiveUser::new(
     ///     "respondent".to_string(),
     ///     respondent_id,
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let related_answer = AnswerEntry::new(
     ///     AnswerAuthor::AuthenticatedUser(respondent_id),
@@ -217,17 +217,17 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User::ActiveUser(ActiveUser::new(
+    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::Administrator,
-    /// ));
+    /// )).into();
     ///
-    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    /// let unrelated_standard_user: Actor = User::ActiveUser(ActiveUser::new(
     ///     "unrelated_user".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -237,8 +237,8 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(!message.can_update(&administrator, &context));
     /// assert!(!message.can_update(&unrelated_standard_user, &context));
     /// ```
-    fn can_update(&self, actor: &User, _context: &MessageAuthorizationContext) -> bool {
-        matches!(actor, User::ActiveUser(actor) if self.sender_id() == actor.id())
+    fn can_update(&self, actor: &Actor, _context: &MessageAuthorizationContext) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if self.sender_id() == actor.id())
     }
 
     /// [`Message`] の削除権限があるかどうかを判定します。
@@ -260,16 +260,16 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     ///         authorization_guard::AuthorizationGuardDefinitions,
     ///         authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     ///     },
-    ///     user::models::{ActiveUser, Role, User, UserId},
+    ///     user::models::{ActiveUser, Actor, Role, User, UserId},
     /// };
     /// use uuid::Uuid;
     ///
     /// let respondent_id: UserId = Uuid::new_v4().into();
-    /// let respondent = User::ActiveUser(ActiveUser::new(
+    /// let respondent: Actor = User::ActiveUser(ActiveUser::new(
     ///     "respondent".to_string(),
     ///     respondent_id,
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let related_answer = AnswerEntry::new(
     ///     AnswerAuthor::AuthenticatedUser(respondent_id),
@@ -285,17 +285,17 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// )
     /// .unwrap();
     ///
-    /// let administrator = User::ActiveUser(ActiveUser::new(
+    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::Administrator,
-    /// ));
+    /// )).into();
     ///
-    /// let unrelated_standard_user = User::ActiveUser(ActiveUser::new(
+    /// let unrelated_standard_user: Actor = User::ActiveUser(ActiveUser::new(
     ///     "unrelated_user".to_string(),
     ///     Uuid::new_v4().into(),
     ///     Role::StandardUser,
-    /// ));
+    /// )).into();
     ///
     /// let context = MessageAuthorizationContext {
     ///     related_answer_entry: related_answer,
@@ -305,7 +305,7 @@ impl AuthorizationGuardWithContextDefinitions<MessageAuthorizationContext> for M
     /// assert!(!message.can_delete(&administrator, &context));
     /// assert!(!message.can_delete(&unrelated_standard_user, &context));
     /// ```
-    fn can_delete(&self, actor: &User, _context: &MessageAuthorizationContext) -> bool {
-        matches!(actor, User::ActiveUser(actor) if self.sender_id() == actor.id())
+    fn can_delete(&self, actor: &Actor, _context: &MessageAuthorizationContext) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if self.sender_id() == actor.id())
     }
 }

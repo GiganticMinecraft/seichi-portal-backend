@@ -16,7 +16,7 @@ use domain::{
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
@@ -75,7 +75,7 @@ impl<
             form = form.change_settings(settings);
         }
         let form_id = *form.id();
-        let user_as_user = User::from(user.clone());
+        let user_as_user = Actor::from(user.clone());
 
         self.active_form_repository
             .create(user, form.into())
@@ -92,7 +92,7 @@ impl<
     /// `actor` が参照可能なフォームのリストを取得する
     pub async fn form_list(
         &self,
-        actor: &User,
+        actor: &Actor,
         offset: Option<u32>,
         limit: Option<u32>,
     ) -> Result<Vec<(ActiveForm, Vec<FormLabel>)>, Error> {
@@ -128,7 +128,7 @@ impl<
 
     pub async fn get_form(
         &self,
-        actor: &User,
+        actor: &Actor,
         form_id: FormId,
     ) -> Result<ActiveFormWithLabels, Error> {
         let form = self
@@ -155,7 +155,7 @@ impl<
         limit: Option<u32>,
         query: Option<String>,
     ) -> Result<Vec<ArchivedFormDetails>, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let forms = self
             .archived_form_repository
             .list(offset, limit, query)
@@ -202,7 +202,7 @@ impl<
         actor: &ActiveUser,
         form_id: FormId,
     ) -> Result<ArchivedFormDetails, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let form = self
             .archived_form_repository
             .get(form_id)
@@ -236,7 +236,7 @@ impl<
         actor: &ActiveUser,
         form_id: FormId,
     ) -> Result<ArchivedForm, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let form = self
             .active_form_repository
             .get(form_id)
@@ -280,7 +280,7 @@ impl<
         questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let current_form = self
             .active_form_repository
             .get(form_id)

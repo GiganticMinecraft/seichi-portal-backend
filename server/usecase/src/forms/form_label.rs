@@ -1,7 +1,7 @@
 use domain::{
     form::models::{FormLabel, FormLabelId, FormLabelName},
     repository::form::form_label_repository::FormLabelRepository,
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::{Error, usecase::UseCaseError};
 
@@ -15,7 +15,7 @@ impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
         actor: &ActiveUser,
         label_name: FormLabelName,
     ) -> Result<FormLabel, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let label = FormLabel::new(label_name);
         let label_id = label.id().to_owned();
 
@@ -32,7 +32,7 @@ impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
     }
 
     pub async fn get_labels_for_forms(&self, actor: &ActiveUser) -> Result<Vec<FormLabel>, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         self.form_label_repository
             .fetch_labels()
             .await?

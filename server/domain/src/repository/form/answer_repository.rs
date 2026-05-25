@@ -13,7 +13,7 @@ use crate::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Read, Update,
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 
 #[automock]
@@ -23,7 +23,7 @@ pub trait AnswerRepository: Send + Sync + 'static {
         &self,
         context: &AnswerEntryAuthorizationContext,
         answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
-        actor: &User,
+        actor: &Actor,
     ) -> Result<(), Error>;
     async fn get_answer(
         &self,

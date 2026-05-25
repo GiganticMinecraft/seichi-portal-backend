@@ -11,7 +11,7 @@ use domain::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Delete, Read, Update,
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 
@@ -29,7 +29,7 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Create, MessageAuthorizationContext>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         Ok(message
             .try_create(
                 &actor_user,
@@ -68,7 +68,7 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
         message: AuthorizationGuardWithContext<Message, Update, MessageAuthorizationContext>,
         content: String,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         message
             .try_update(
                 &actor_user,
@@ -114,7 +114,7 @@ impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Clie
         context: &MessageAuthorizationContext,
         message: AuthorizationGuardWithContext<Message, Delete, MessageAuthorizationContext>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         message
             .try_delete(
                 &actor_user,

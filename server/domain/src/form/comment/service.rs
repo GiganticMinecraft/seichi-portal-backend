@@ -6,7 +6,7 @@ use crate::{
     types::authorization_guard_with_context::{
         Actions, AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions,
     },
-    user::models::{Role::Administrator, User},
+    user::models::{Actor, Role::Administrator, User},
 };
 
 #[derive(Debug)]
@@ -19,43 +19,41 @@ pub struct CommentAuthorizationContext<Action: Actions> {
 impl<Action: Actions> AuthorizationGuardWithContextDefinitions<CommentAuthorizationContext<Action>>
     for Comment
 {
-    fn can_create(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
+    fn can_create(&self, actor: &Actor, context: &CommentAuthorizationContext<Action>) -> bool {
         context
             .related_answer_entry_guard
             .can_read(actor, &context.related_answer_entry_guard_context)
     }
 
-    fn can_read(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
+    fn can_read(&self, actor: &Actor, context: &CommentAuthorizationContext<Action>) -> bool {
         context
             .related_answer_entry_guard
             .can_read(actor, &context.related_answer_entry_guard_context)
     }
 
-    fn can_update(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
+    fn can_update(&self, actor: &Actor, context: &CommentAuthorizationContext<Action>) -> bool {
         match actor {
-            User::ActiveUser(actor) => {
+            Actor::User(User::ActiveUser(actor)) => {
                 (context.related_answer_entry_guard.can_read(
-                    &User::ActiveUser(actor.clone()),
+                    &Actor::from(actor.clone()),
                     &context.related_answer_entry_guard_context,
                 ) && self.commented_by() == actor.id())
                     || actor.role() == &Administrator
             }
-            User::TemporaryUser(_) | User::Anonymous => false,
+            _ => false,
         }
     }
 
-    fn can_delete(&self, actor: &User, context: &CommentAuthorizationContext<Action>) -> bool {
-        // NOTE: コメントの削除に関しては、コメント自体が全体公開されうるものなので、
-        // 適さないメッセージを Administrator が削除できる必要がある
+    fn can_delete(&self, actor: &Actor, context: &CommentAuthorizationContext<Action>) -> bool {
         match actor {
-            User::ActiveUser(actor) => {
+            Actor::User(User::ActiveUser(actor)) => {
                 (context.related_answer_entry_guard.can_read(
-                    &User::ActiveUser(actor.clone()),
+                    &Actor::from(actor.clone()),
                     &context.related_answer_entry_guard_context,
                 ) && self.commented_by() == actor.id())
                     || actor.role() == &Administrator
             }
-            User::TemporaryUser(_) | User::Anonymous => false,
+            _ => false,
         }
     }
 }

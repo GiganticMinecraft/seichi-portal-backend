@@ -5,7 +5,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{ActiveUser, DiscordUser, DiscordUserId, DiscordUserName, User},
+    user::models::{ActiveUser, Actor, DiscordUser, DiscordUserId, DiscordUserName},
 };
 use errors::{Error, infra::InfraError::Reqwest};
 use itertools::Itertools;
@@ -46,7 +46,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Create>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         user.try_create(&actor_user, |user| self.client.user().upsert_user(user))?
             .await
             .map_err(Into::into)
@@ -57,7 +57,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         user.try_update(&actor_user, |user| {
             self.client
                 .user()
@@ -142,7 +142,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         discord_user: &DiscordUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         user.try_update(&actor_user, |user| {
             self.client.user().link_discord_user(discord_user, user)
         })?
@@ -155,7 +155,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         actor: &ActiveUser,
         user: AuthorizationGuard<ActiveUser, Update>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         user.try_update(&actor_user, |user| {
             self.client.user().unlink_discord_user(user)
         })?
@@ -168,7 +168,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         actor: &ActiveUser,
         user: &AuthorizationGuard<ActiveUser, Read>,
     ) -> Result<Option<DiscordUser>, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let user = user.try_read(&actor_user)?;
 
         Ok(self

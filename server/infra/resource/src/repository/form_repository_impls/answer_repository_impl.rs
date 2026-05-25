@@ -11,7 +11,7 @@ use domain::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Read, Update,
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 use itertools::Itertools;
@@ -28,7 +28,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
         &self,
         context: &AnswerEntryAuthorizationContext,
         answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
-        actor: &User,
+        actor: &Actor,
     ) -> Result<(), Error> {
         answer
             .try_create(
@@ -110,7 +110,7 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
             AnswerEntryAuthorizationContext,
         >,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         answer_entry
             .try_update(
                 &actor_user,

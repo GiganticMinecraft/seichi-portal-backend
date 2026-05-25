@@ -55,6 +55,12 @@ pub enum User {
     Anonymous,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Actor {
+    User(User),
+    System,
+}
+
 impl From<ActiveUser> for User {
     fn from(user: ActiveUser) -> Self {
         Self::ActiveUser(user)
@@ -64,6 +70,24 @@ impl From<ActiveUser> for User {
 impl From<TemporaryUser> for User {
     fn from(user: TemporaryUser) -> Self {
         Self::TemporaryUser(user)
+    }
+}
+
+impl From<ActiveUser> for Actor {
+    fn from(user: ActiveUser) -> Self {
+        Self::User(User::ActiveUser(user))
+    }
+}
+
+impl From<TemporaryUser> for Actor {
+    fn from(user: TemporaryUser) -> Self {
+        Self::User(User::TemporaryUser(user))
+    }
+}
+
+impl From<User> for Actor {
+    fn from(user: User) -> Self {
+        Self::User(user)
     }
 }
 
@@ -114,20 +138,20 @@ impl TemporaryUser {
 }
 
 impl AuthorizationGuardDefinitions for ActiveUser {
-    fn can_create(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor == self)
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
     }
 
-    fn can_read(&self, _actor: &User) -> bool {
+    fn can_read(&self, _actor: &Actor) -> bool {
         true
     }
 
-    fn can_update(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor == self)
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
     }
 
-    fn can_delete(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor == self)
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
     }
 }
 
