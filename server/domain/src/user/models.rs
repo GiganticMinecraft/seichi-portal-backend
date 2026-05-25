@@ -52,6 +52,7 @@ impl PartialEq for ActiveUser {
 pub enum User {
     ActiveUser(ActiveUser),
     TemporaryUser(TemporaryUser),
+    Anonymous,
 }
 
 impl From<ActiveUser> for User {

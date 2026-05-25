@@ -87,6 +87,7 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
             match actor {
                 User::ActiveUser(actor) => actor.name(),
                 User::TemporaryUser(actor) => actor.name(),
+                User::Anonymous => unreachable!("Anonymous user cannot submit answers"),
             },
         )
     }
@@ -198,6 +199,7 @@ mod tests {
             match &actor {
                 User::ActiveUser(actor) => actor.name(),
                 User::TemporaryUser(actor) => actor.name(),
+                User::Anonymous => unreachable!(),
             },
         )
         .unwrap();
