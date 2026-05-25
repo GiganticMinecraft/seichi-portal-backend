@@ -159,7 +159,7 @@ impl<
         let form = self.active_form_repository.get(form_id).await?;
 
         let form_guard = form.ok_or(Error::from(FormNotFound))?;
-        let form = unsafe { form_guard.into_read_unchecked() };
+        let form = form_guard.try_into_read(&User::Anonymous)?;
         let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
         let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
