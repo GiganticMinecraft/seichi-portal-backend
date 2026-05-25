@@ -40,19 +40,19 @@ impl IntoResponse for GetMessagesResponse {
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use domain::form::models::FormId;
-use domain::notification::notification_api::NotificationAPI;
+use domain::notification::notificator::Notificator;
 use errors::ErrorExtra;
 
-pub struct RealInfrastructureRepositoryWithNotificationAPI<API: NotificationAPI + Send + Sync> {
+pub struct RealInfrastructureRepositoryWithNotificator<N: Notificator> {
     pub repository: RealInfrastructureRepository,
-    pub notification_api: API,
+    pub notificator: N,
 }
 
-impl<API: NotificationAPI + Send + Sync> RealInfrastructureRepositoryWithNotificationAPI<API> {
-    pub const fn new(repository: RealInfrastructureRepository, notification_api: API) -> Self {
+impl<N: Notificator> RealInfrastructureRepositoryWithNotificator<N> {
+    pub fn new(repository: RealInfrastructureRepository, notificator: N) -> Self {
         Self {
             repository,
-            notification_api,
+            notificator,
         }
     }
 }
@@ -78,9 +78,9 @@ impl<API: NotificationAPI + Send + Sync> RealInfrastructureRepositoryWithNotific
     security(("bearer" = [])),
     tag = "Messages"
 )]
-pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
+pub async fn post_message_handler<N: Notificator>(
     Extension(user): Extension<ActiveUser>,
-    State(state): State<Arc<RealInfrastructureRepositoryWithNotificationAPI<API>>>,
+    State(state): State<Arc<RealInfrastructureRepositoryWithNotificator<N>>>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<PostedMessageSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -96,13 +96,7 @@ pub async fn post_message_handler<API: NotificationAPI + Send + Sync>(
     let Json(message) = json.map_err_to_error().map_err(handle_error)?;
 
     form_message_use_case
-        .post_message(
-            &user,
-            form_id,
-            message.body,
-            answer_id,
-            &state.notification_api,
-        )
+        .post_message(&user, form_id, message.body, answer_id, &state.notificator)
         .await
         .map_err(handle_error)?;
 

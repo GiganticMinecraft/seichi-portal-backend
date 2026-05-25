@@ -15,10 +15,10 @@ use domain::search::models::SearchableFieldsWithOperation;
 use entrypoint::openapi;
 use futures::join;
 use hyper::header::SET_COOKIE;
-use presentation::api::notification_api_impl::NotificationAPIImpl;
+use presentation::api::notificator_impl::DiscordNotificator;
 use presentation::auth::{auth, optional_auth};
 use presentation::handlers::form::message_handler::{
-    RealInfrastructureRepositoryWithNotificationAPI, post_message_handler,
+    RealInfrastructureRepositoryWithNotificator, post_message_handler,
 };
 use presentation::handlers::search_handler::{
     initialize_search_engine, start_sync, start_watch_out_of_sync,
@@ -35,7 +35,6 @@ use tokio::{
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, log};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
-use usecase::notification::discord_dm_notificator_impl::DiscordDMNotificatorImpl;
 use utoipa_swagger_ui::SwaggerUi;
 
 #[tokio::main]
@@ -90,8 +89,7 @@ async fn main() -> anyhow::Result<()> {
     let shared_repository = Repository::new(conn).into_shared(health_check_repo);
 
     let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;
-    let notificator_impl = DiscordDMNotificatorImpl::new();
-    let notification_api = NotificationAPIImpl::new(discord_sender, notificator_impl);
+    let notificator = DiscordNotificator::new(discord_sender, shared_repository.to_owned());
 
     use presentation::handlers::health_check_handler;
 
@@ -127,12 +125,10 @@ async fn main() -> anyhow::Result<()> {
             shared_repository.to_owned(),
             auth,
         ))
-        .with_state(Arc::new(
-            RealInfrastructureRepositoryWithNotificationAPI::new(
-                shared_repository.to_owned(),
-                notification_api,
-            ),
-        ));
+        .with_state(Arc::new(RealInfrastructureRepositoryWithNotificator::new(
+            shared_repository.to_owned(),
+            notificator,
+        )));
 
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
