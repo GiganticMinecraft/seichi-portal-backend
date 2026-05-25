@@ -81,10 +81,7 @@ pub async fn optional_auth(
     match auth {
         Ok(auth) => {
             let user = resolve_user(&repository, auth.token()).await?;
-            request
-                .extensions_mut()
-                .insert(User::ActiveUser(user.clone()));
-            request.extensions_mut().insert(user);
+            request.extensions_mut().insert(User::ActiveUser(user));
         }
         Err(_) => {
             request.extensions_mut().insert(User::Anonymous);
