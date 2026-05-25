@@ -3,7 +3,7 @@ use domain::notification::models::{NotificationContent, NotificationPreference, 
 use domain::notification::notificator::Notificator;
 use domain::repository::Repositories;
 use domain::repository::user_repository::UserRepository;
-use domain::user::models::{ActiveUser, UserId};
+use domain::user::models::UserId;
 use errors::Error;
 use errors::usecase::UseCaseError::UserNotFound;
 use resource::outgoing::connection::ConnectionPool;
@@ -26,7 +26,6 @@ impl<R: Repositories> DiscordNotificator<R> {
 impl<R: Repositories> Notificator for DiscordNotificator<R> {
     async fn notify(
         &self,
-        actor: &ActiveUser,
         recipient: UserId,
         notification_type: NotificationType,
         notification_preference: &NotificationPreference,
@@ -43,10 +42,14 @@ impl<R: Repositories> Notificator for DiscordNotificator<R> {
             .await?
             .ok_or(Error::from(UserNotFound))?;
 
+        // SAFETY: 通知送信はシステム的な処理であり、特定のアクターに依存しない。
+        // 適切なシステム権限の仕組みは別途対応する。
+        let user = unsafe { user_guard.read_unchecked() };
+
         let discord_user = self
             .repositories
             .user_repository()
-            .fetch_discord_user(actor, &user_guard)
+            .fetch_discord_user(user, &user_guard)
             .await?;
 
         if let Some(discord_user) = discord_user {

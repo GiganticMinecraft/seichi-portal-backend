@@ -117,8 +117,10 @@ impl<
                             .fetch_notification_settings(notification_recipient_id.into_inner())
                             .await?;
 
+                        // SAFETY: 通知設定の読み取りはシステム的な処理であり、メッセージ送信者が
+                        // 受信者の通知設定を読める必要がある。適切なシステム権限の仕組みは別途対応する。
                         let notification_preference = match fetched_notification_preference {
-                            Some(settings) => settings.try_into_read(&actor_user)?,
+                            Some(settings) => unsafe { settings.into_read_unchecked() },
                             None => {
                                 let recipient = self
                                     .user_repository
@@ -134,14 +136,13 @@ impl<
                                     .create_notification_settings(&recipient, &settings)
                                     .await?;
 
-                                settings.into_read().try_into_read(&actor_user)?
+                                unsafe { settings.into_read().into_read_unchecked() }
                             }
                         };
 
                         let url = &*FRONTEND.url;
                         notificator
                             .notify(
-                                actor,
                                 notification_recipient_id,
                                 NotificationType::MessageReceived,
                                 &notification_preference,

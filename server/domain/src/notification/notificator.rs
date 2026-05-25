@@ -3,14 +3,13 @@ use errors::Error;
 
 use crate::{
     notification::models::{NotificationContent, NotificationPreference, NotificationType},
-    user::models::{ActiveUser, UserId},
+    user::models::UserId,
 };
 
 #[async_trait]
 pub trait Notificator: Send + Sync {
     async fn notify(
         &self,
-        actor: &ActiveUser,
         recipient: UserId,
         notification_type: NotificationType,
         notification_preference: &NotificationPreference,
