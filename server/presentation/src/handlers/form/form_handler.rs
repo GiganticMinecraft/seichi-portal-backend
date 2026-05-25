@@ -194,6 +194,7 @@ fn archived_form_schema_from_parts(
 )]
 pub async fn create_form_handler(
     Extension(user): Extension<ActiveUser>,
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormCreateSchema>, JsonRejection>,
 ) -> Result<CreateFormResponse, Response> {
@@ -227,7 +228,7 @@ pub async fn create_form_handler(
         id: form.id().to_owned(),
         title: form.title().to_owned(),
         description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(&User::from(user.clone()), form.settings()),
+        settings: FormSettingsSchema::from_settings_ref(&actor, form.settings()),
         metadata: FormMetaSchema::from_meta_ref(form.metadata()),
         questions: form
             .questions()
@@ -358,6 +359,7 @@ pub async fn get_form_handler(
 )]
 pub async fn archive_form_handler(
     Extension(user): Extension<ActiveUser>,
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -373,7 +375,7 @@ pub async fn archive_form_handler(
     Ok((
         StatusCode::OK,
         Json(archived_form_schema_from_parts(
-            &User::from(user.clone()),
+            &actor,
             archived_form,
             user,
             vec![],
@@ -405,6 +407,7 @@ pub async fn archive_form_handler(
 )]
 pub async fn update_form_handler(
     Extension(user): Extension<ActiveUser>,
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormUpdateSchema>, JsonRejection>,
@@ -473,10 +476,7 @@ pub async fn update_form_handler(
         id: updated_form.id().to_owned(),
         title: updated_form.title().to_owned(),
         description: updated_form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(
-            &User::from(user.clone()),
-            updated_form.settings(),
-        ),
+        settings: FormSettingsSchema::from_settings_ref(&actor, updated_form.settings()),
         metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
         questions: updated_form
             .questions()
@@ -509,6 +509,7 @@ pub async fn update_form_handler(
 )]
 pub async fn archived_form_list_handler(
     Extension(user): Extension<ActiveUser>,
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
     query: Result<
@@ -538,7 +539,7 @@ pub async fn archived_form_list_handler(
             .into_iter()
             .map(|details| {
                 archived_form_schema_from_parts(
-                    &User::from(user.clone()),
+                    &actor,
                     details.form,
                     details.archived_by,
                     details.labels,
@@ -568,6 +569,7 @@ pub async fn archived_form_list_handler(
 )]
 pub async fn get_archived_form_handler(
     Extension(user): Extension<ActiveUser>,
+    Extension(actor): Extension<User>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<ArchivedFormResponse, Response> {
@@ -584,7 +586,7 @@ pub async fn get_archived_form_handler(
         .map_err(handle_error)?;
 
     Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
-        &User::from(user.clone()),
+        &actor,
         form,
         archived_by,
         labels,
