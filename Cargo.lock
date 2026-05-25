@@ -1020,7 +1020,6 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "serenity",
  "strum 0.28.0",
  "strum_macros 0.28.0",
  "test-case",
