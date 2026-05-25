@@ -64,9 +64,6 @@ pub async fn auth(
 
     let user = resolve_user(&repository, auth.token()).await?;
 
-    request
-        .extensions_mut()
-        .insert(User::ActiveUser(user.clone()));
     request.extensions_mut().insert(user);
 
     Ok(next.run(request).await)
