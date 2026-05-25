@@ -1,9 +1,7 @@
 use common::config::FRONTEND;
 use domain::form::models::FormId;
-use domain::notification::discord_dm_notificator::{
-    DiscordDMNotificationType, DiscordDMSendContents,
-};
-use domain::notification::notification_api::NotificationAPI;
+use domain::notification::models::{NotificationContent, NotificationType};
+use domain::notification::notificator::Notificator;
 use domain::{
     form::{
         answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
@@ -57,13 +55,13 @@ impl<
     R5: UserRepository,
 > MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
-    pub async fn post_message<API: NotificationAPI>(
+    pub async fn post_message<N: Notificator>(
         &self,
         actor: &ActiveUser,
         form_id: FormId,
         message_body: String,
         answer_id: AnswerId,
-        notification_api: &API,
+        notificator: &N,
     ) -> Result<(), Error> {
         let actor_user = User::from(actor.clone());
         let form_guard = self
@@ -97,12 +95,6 @@ impl<
                     .author()
                     .authenticated_user_id()
                     .ok_or(Error::from(UserNotFound))?;
-                let notification_recipient = self
-                    .user_repository
-                    .find_by(notification_recipient_id.into_inner())
-                    .await?
-                    .ok_or(Error::from(UserNotFound))?
-                    .try_into_read(&actor_user)?;
 
                 let message_sender_id = *message.sender_id();
                 let message_context = MessageAuthorizationContext {
@@ -119,53 +111,48 @@ impl<
                     .await;
 
                 match post_message_result {
-                    Ok(_) if &message_sender_id != notification_recipient.id() => {
-                        if let Some(discord_user) = self
-                            .user_repository
-                            .fetch_discord_user(actor, &notification_recipient.to_owned().into())
-                            .await?
-                        {
-                            let fetched_notification_preference = self
-                                .notification_repository
-                                .fetch_notification_settings(
-                                    notification_recipient.id().into_inner(),
-                                )
-                                .await?;
+                    Ok(_) if message_sender_id != notification_recipient_id => {
+                        let fetched_notification_preference = self
+                            .notification_repository
+                            .fetch_notification_settings(notification_recipient_id.into_inner())
+                            .await?;
 
-                            let notification_preference = match fetched_notification_preference {
-                                Some(settings) => settings.try_into_read(&actor_user)?,
-                                None => {
-                                    let settings: AuthorizationGuard<_, Create> =
-                                        NotificationPreference::new(*notification_recipient.id())
-                                            .into();
+                        // SAFETY: 通知設定の読み取りはシステム的な処理であり、メッセージ送信者が
+                        // 受信者の通知設定を読める必要がある。適切なシステム権限の仕組みは別途対応する。
+                        let notification_preference = match fetched_notification_preference {
+                            Some(settings) => unsafe { settings.into_read_unchecked() },
+                            None => {
+                                let recipient = self
+                                    .user_repository
+                                    .find_by(notification_recipient_id.into_inner())
+                                    .await?
+                                    .ok_or(Error::from(UserNotFound))?
+                                    .try_into_read(&actor_user)?;
 
-                                    self.notification_repository
-                                        .create_notification_settings(
-                                            &notification_recipient,
-                                            &settings,
-                                        )
-                                        .await?;
+                                let settings: AuthorizationGuard<_, Create> =
+                                    NotificationPreference::new(*recipient.id()).into();
 
-                                    settings.into_read().try_into_read(&actor_user)?
-                                }
-                            };
+                                self.notification_repository
+                                    .create_notification_settings(&recipient, &settings)
+                                    .await?;
 
-                            let url = &*FRONTEND.url;
-                            notification_api
-                                .send_discord_dm_notification(
-                                    discord_user.id().to_owned(),
-                                    DiscordDMNotificationType::Message,
-                                    &notification_preference,
-                                    &DiscordDMSendContents::new(vec![
-                                        "あなたの回答にメッセージが送信されました。".to_string(),
-                                        "メッセージを確認してください。".to_string(),
-                                        format!(
-                                            "{url}/forms/{form_id}/answers/{answer_id}/messages"
-                                        ),
-                                    ]),
-                                )
-                                .await?;
-                        }
+                                unsafe { settings.into_read().into_read_unchecked() }
+                            }
+                        };
+
+                        let url = &*FRONTEND.url;
+                        notificator
+                            .notify(
+                                notification_recipient_id,
+                                NotificationType::MessageReceived,
+                                &notification_preference,
+                                &NotificationContent::new(vec![
+                                    "あなたの回答にメッセージが送信されました。".to_string(),
+                                    "メッセージを確認してください。".to_string(),
+                                    format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
+                                ]),
+                            )
+                            .await?;
 
                         Ok(())
                     }

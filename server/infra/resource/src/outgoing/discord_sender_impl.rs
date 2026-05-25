@@ -1,12 +1,11 @@
-use domain::{notification::discord_sender::DiscordSender, user::models::DiscordUserId};
+use domain::user::models::DiscordUserId;
 use errors::{Error, infra::InfraError};
-use serenity::{all::UserId, async_trait};
+use serenity::all::UserId;
 
 use crate::outgoing::connection::ConnectionPool;
 
-#[async_trait]
-impl DiscordSender for ConnectionPool {
-    async fn send_direct_message(
+impl ConnectionPool {
+    pub async fn send_direct_message(
         &self,
         user_id: DiscordUserId,
         message: String,

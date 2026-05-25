@@ -1,5 +1,3 @@
-pub mod discord_dm_notificator_impl;
-
 use domain::types::authorization_guard::AuthorizationGuard;
 use domain::types::authorization_guard_with_context::Create;
 use domain::{

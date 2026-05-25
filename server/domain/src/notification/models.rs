@@ -5,6 +5,26 @@ use crate::{
     user::models::{Role, User, UserId},
 };
 
+#[derive(Debug)]
+pub enum NotificationType {
+    MessageReceived,
+}
+
+#[derive(Debug)]
+pub struct NotificationContent {
+    lines: Vec<String>,
+}
+
+impl NotificationContent {
+    pub fn new(lines: Vec<String>) -> Self {
+        Self { lines }
+    }
+
+    pub fn to_message(&self) -> String {
+        self.lines.join("\n")
+    }
+}
+
 #[derive(Getters, Debug)]
 pub struct NotificationPreference {
     recipient_id: UserId,
@@ -30,6 +50,14 @@ impl NotificationPreference {
         Self {
             recipient_id,
             is_send_message_notification,
+        }
+    }
+}
+
+impl NotificationPreference {
+    pub fn is_enabled(&self, notification_type: &NotificationType) -> bool {
+        match notification_type {
+            NotificationType::MessageReceived => self.is_send_message_notification,
         }
     }
 }
