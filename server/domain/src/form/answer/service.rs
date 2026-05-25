@@ -9,7 +9,7 @@ use crate::{
         models::Visibility,
     },
     types::authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
-    user::models::{Role, User},
+    user::models::{Actor, Role, User},
 };
 
 #[derive(Debug)]
@@ -21,16 +21,16 @@ pub struct AnswerEntryAuthorizationContext {
 }
 
 impl AuthorizationGuardWithContextDefinitions<AnswerEntryAuthorizationContext> for AnswerEntry {
-    fn can_create(&self, actor: &User, context: &AnswerEntryAuthorizationContext) -> bool {
+    fn can_create(&self, actor: &Actor, context: &AnswerEntryAuthorizationContext) -> bool {
         let is_within_period = context.response_period.is_within_period(Utc::now());
 
         match (self.author(), actor) {
-            (AnswerAuthor::AuthenticatedUser(user_id), User::ActiveUser(user)) => {
+            (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
                 let is_public_form = context.form_visibility == Visibility::PUBLIC;
                 *user_id == *user.id()
                     && ((is_public_form && is_within_period) || user.role() == &Role::Administrator)
             }
-            (AnswerAuthor::TemporaryUser(_), User::TemporaryUser(_)) => {
+            (AnswerAuthor::TemporaryUser(_), Actor::User(User::TemporaryUser(_))) => {
                 context.form_visibility == Visibility::PUBLIC
                     && context.allow_temporary_answers
                     && is_within_period
@@ -39,25 +39,25 @@ impl AuthorizationGuardWithContextDefinitions<AnswerEntryAuthorizationContext> f
         }
     }
 
-    fn can_read(&self, actor: &User, context: &AnswerEntryAuthorizationContext) -> bool {
+    fn can_read(&self, actor: &Actor, context: &AnswerEntryAuthorizationContext) -> bool {
         match actor {
-            User::ActiveUser(user) => {
+            Actor::User(User::ActiveUser(user)) => {
                 self.author().authenticated_user_id() == Some(*user.id())
                     || context.answer_visibility == AnswerVisibility::PUBLIC
                     || user.role() == &Role::Administrator
             }
-            User::TemporaryUser(_) | User::Anonymous => false,
+            _ => false,
         }
     }
 
-    fn can_update(&self, _actor: &User, _context: &AnswerEntryAuthorizationContext) -> bool {
+    fn can_update(&self, _actor: &Actor, _context: &AnswerEntryAuthorizationContext) -> bool {
         false
     }
 
-    fn can_delete(&self, actor: &User, _context: &AnswerEntryAuthorizationContext) -> bool {
+    fn can_delete(&self, actor: &Actor, _context: &AnswerEntryAuthorizationContext) -> bool {
         matches!(
             actor,
-            User::ActiveUser(user) if user.role() == &Role::Administrator
+            Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator
         )
     }
 }
@@ -74,6 +74,7 @@ mod tests {
         models::Visibility,
     };
     use crate::types::authorization_guard_with_context::AuthorizationGuardWithContextDefinitions;
+    use crate::user::models::Actor;
 
     #[test]
     fn temporary_answer_creation_requires_public_form() {
@@ -93,7 +94,7 @@ mod tests {
         );
 
         assert!(!answer.can_create(
-            &crate::user::models::User::TemporaryUser(crate::user::models::TemporaryUser::new(
+            &Actor::from(crate::user::models::TemporaryUser::new(
                 "guest".to_string(),
                 "contact".to_string()
             )),
@@ -119,7 +120,7 @@ mod tests {
         );
 
         assert!(answer.can_create(
-            &crate::user::models::User::TemporaryUser(crate::user::models::TemporaryUser::new(
+            &Actor::from(crate::user::models::TemporaryUser::new(
                 "guest".to_string(),
                 "contact".to_string()
             )),
@@ -149,7 +150,7 @@ mod tests {
         );
 
         assert!(!answer.can_create(
-            &crate::user::models::User::TemporaryUser(crate::user::models::TemporaryUser::new(
+            &Actor::from(crate::user::models::TemporaryUser::new(
                 "guest".to_string(),
                 "contact".to_string()
             )),

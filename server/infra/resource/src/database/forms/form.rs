@@ -351,7 +351,7 @@ async fn update_form_root(
 
     let webhook_url = form
         .settings()
-        .webhook_url(&domain::user::models::User::ActiveUser(updated_by.clone()))
+        .webhook_url(&domain::user::models::Actor::from(updated_by.clone()))
         .ok()
         .map(ToOwned::to_owned)
         .and_then(WebhookUrl::into_inner)

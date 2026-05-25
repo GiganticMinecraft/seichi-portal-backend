@@ -15,7 +15,7 @@ use domain::{
         search_repository::SearchRepository,
     },
     search::models::SearchableFieldsWithOperation,
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
@@ -61,7 +61,7 @@ impl<
         actor: &ActiveUser,
         query: String,
     ) -> Result<CrossSearchOutput, Error> {
-        let actor = User::ActiveUser(actor.clone());
+        let actor = Actor::from(actor.clone());
         let (forms, users, label_for_forms, label_for_answers, answers, comments) = try_join!(
             self.search_repository.search_forms(&query),
             self.search_repository.search_users(&query),
@@ -267,15 +267,17 @@ impl<
                     let sync_rate = search_engine_records.try_into_sync_rate(&repository_records)?;
 
                     if sync_rate.is_out_of_sync() {
+                        let system = Actor::System;
+
                         let forms = self
                             .active_form_repository
                             .list(None, None)
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let form = unsafe { guard.into_read_unchecked() };
+                                let form = guard.try_into_read(&system)?;
 
-                                (
+                                Ok((
                                     domain::search::models::SearchableFields::FormMetaData(
                                         domain::search::models::FormMetaData {
                                             id: form.id().to_owned(),
@@ -284,19 +286,19 @@ impl<
                                         },
                                     ),
                                     Operation::Update,
-                                )
+                                ))
                             })
-                            .collect::<Vec<_>>();
+                            .collect::<Result<Vec<_>, errors::Error>>()?;
 
                         let answers = self
                             .answer_repository
                             .get_all_answers()
                             .await?
                             .into_iter()
-                            .flat_map(|guard| {
-                                let entry = unsafe { guard.into_read_unchecked() };
+                            .map(|guard| {
+                                let entry = guard.try_into_read_as_system(&system)?;
 
-                                entry
+                                Ok(entry
                                     .contents()
                                     .iter()
                                     .map(|content| {
@@ -312,8 +314,11 @@ impl<
                                             Operation::Update,
                                         )
                                     })
-                                    .collect::<Vec<_>>()
+                                    .collect::<Vec<_>>())
                             })
+                            .collect::<Result<Vec<_>, errors::Error>>()?
+                            .into_iter()
+                            .flatten()
                             .collect::<Vec<_>>();
 
                         let comments = self
@@ -322,9 +327,9 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let comment = unsafe { guard.into_read_unchecked() };
+                                let comment = guard.try_into_read_as_system(&system)?;
 
-                                (
+                                Ok((
                                     domain::search::models::SearchableFields::FormAnswerComments(
                                         domain::search::models::FormAnswerComments {
                                             id: comment.comment_id().to_owned(),
@@ -333,9 +338,9 @@ impl<
                                         },
                                     ),
                                     Operation::Update,
-                                )
+                                ))
                             })
-                            .collect::<Vec<_>>();
+                            .collect::<Result<Vec<_>, errors::Error>>()?;
 
                         let labels_for_forms = self
                             .form_label_repository
@@ -343,9 +348,9 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let label = unsafe { guard.into_read_unchecked() };
+                                let label = guard.try_into_read(&system)?;
 
-                                (
+                                Ok((
                                     domain::search::models::SearchableFields::LabelForForms(
                                         domain::search::models::LabelForForms {
                                             id: label.id().to_owned(),
@@ -353,9 +358,9 @@ impl<
                                         },
                                     ),
                                     Operation::Update,
-                                )
+                                ))
                             })
-                            .collect::<Vec<_>>();
+                            .collect::<Result<Vec<_>, errors::Error>>()?;
 
                         let labels_for_answers = self
                             .form_answer_label_repository
@@ -363,9 +368,9 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let label = unsafe { guard.into_read_unchecked() };
+                                let label = guard.try_into_read(&system)?;
 
-                                (
+                                Ok((
                                     domain::search::models::SearchableFields::LabelForFormAnswers(
                                         domain::search::models::LabelForFormAnswers {
                                             id: label.id().to_owned(),
@@ -373,9 +378,9 @@ impl<
                                         },
                                     ),
                                     Operation::Update,
-                                )
+                                ))
                             })
-                            .collect::<Vec<_>>();
+                            .collect::<Result<Vec<_>, errors::Error>>()?;
 
                         let users = self
                             .user_repository
@@ -383,9 +388,9 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let user = unsafe { guard.into_read_unchecked() };
+                                let user = guard.try_into_read(&system)?;
 
-                                (
+                                Ok((
                                     domain::search::models::SearchableFields::Users(
                                         domain::search::models::Users {
                                             id: user.id().into_inner(),
@@ -393,9 +398,9 @@ impl<
                                         },
                                     ),
                                     Operation::Update,
-                                )
+                                ))
                             })
-                            .collect::<Vec<_>>();
+                            .collect::<Result<Vec<_>, errors::Error>>()?;
 
                         let data = forms
                             .into_iter()

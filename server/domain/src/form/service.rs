@@ -12,7 +12,7 @@ use crate::{
         models::{FormId, Question},
     },
     repository::form::active_form_repository::ActiveFormRepository,
-    user::models::User,
+    user::models::{Actor, User},
 };
 
 pub struct DefaultAnswerTitleDomainService<'a, FormRepo: ActiveFormRepository> {
@@ -63,7 +63,7 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
 
     pub async fn to_answer_title(
         &self,
-        actor: &User,
+        actor: &Actor,
         form_id: FormId,
         answers: &PostedAnswerContents,
     ) -> Result<AnswerTitle, Error> {
@@ -85,9 +85,9 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
             &questions,
             answers,
             match actor {
-                User::ActiveUser(actor) => actor.name(),
-                User::TemporaryUser(actor) => actor.name(),
-                User::Anonymous => unreachable!("Anonymous user cannot submit answers"),
+                Actor::User(User::ActiveUser(actor)) => actor.name(),
+                Actor::User(User::TemporaryUser(actor)) => actor.name(),
+                _ => unreachable!("Only authenticated and temporary users can submit answers"),
             },
         )
     }

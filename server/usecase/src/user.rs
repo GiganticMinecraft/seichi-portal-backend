@@ -1,6 +1,6 @@
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{ActiveUser, Role, User},
+    user::models::{ActiveUser, Actor, Role},
 };
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
@@ -13,7 +13,7 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 
 impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn find_by(&self, actor: &ActiveUser, uuid: Uuid) -> Result<ActiveUser, Error> {
-        let actor_ref = User::from(actor.clone());
+        let actor_ref = Actor::from(actor.clone());
         self.repository
             .find_by(uuid)
             .await?
@@ -38,7 +38,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         uuid: Uuid,
         role: Role,
     ) -> Result<ActiveUser, Error> {
-        let actor_ref = User::from(actor.clone());
+        let actor_ref = Actor::from(actor.clone());
         let current_user_guard = self
             .repository
             .find_by(uuid)
@@ -65,7 +65,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     }
 
     pub async fn fetch_all_users(&self, actor: &ActiveUser) -> Result<Vec<ActiveUser>, Error> {
-        let actor_ref = User::from(actor.clone());
+        let actor_ref = Actor::from(actor.clone());
         self.repository
             .fetch_all_users()
             .await?
@@ -84,7 +84,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         match fetched_user {
             Some(user) => {
                 let guard = user.to_owned().into();
-                let user_ref = User::from(user.clone());
+                let user_ref = Actor::from(user.clone());
                 self.repository.upsert_user(&user, guard).await?;
                 // NOTE: リクエスト時点では token しかわからないので
                 //  token で検索したユーザーが操作者であるとする
@@ -154,7 +154,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        let actor_ref = User::from(actor.clone());
+        let actor_ref = Actor::from(actor.clone());
         let discord_user = self.repository.fetch_discord_user(actor, &guard).await?;
 
         let user = guard.try_into_read(&actor_ref)?;

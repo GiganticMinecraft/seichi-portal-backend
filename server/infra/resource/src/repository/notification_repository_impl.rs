@@ -6,7 +6,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 use uuid::Uuid;
@@ -23,7 +23,7 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
         actor: &ActiveUser,
         notification_settings: &AuthorizationGuard<NotificationPreference, Create>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         notification_settings
             .try_create(&actor_user, |settings| {
                 self.client
@@ -54,7 +54,7 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
         actor: &ActiveUser,
         notification_settings: AuthorizationGuard<NotificationPreference, Update>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         notification_settings
             .try_update(&actor_user, |settings| {
                 self.client

@@ -14,7 +14,7 @@ use domain::{
     },
     repository::user_repository::UserRepository,
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
@@ -68,7 +68,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -114,7 +114,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         answer_id: AnswerId,
         comment: Comment,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -157,7 +157,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         comment_id: CommentId,
         content: Option<CommentContent>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let answer_guard = self
             .answer_repository
             .get_answer(answer_id)
@@ -211,7 +211,7 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         answer_id: AnswerId,
         comment_id: CommentId,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let comment_guard = self
             .comment_repository
             .get_comment(comment_id)

@@ -1,7 +1,7 @@
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::{Error, usecase::UseCaseError::LabelNotFound};
 use types::non_empty_string::NonEmptyString;
@@ -16,7 +16,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
         actor: &ActiveUser,
         label_name: NonEmptyString,
     ) -> Result<AnswerLabel, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let answer_label = AnswerLabel::new(label_name);
         let label_id = answer_label.id().to_owned();
 
@@ -36,7 +36,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
         &self,
         actor: &ActiveUser,
     ) -> Result<Vec<AnswerLabel>, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         Ok(self
             .answer_label_repository
             .get_labels_for_answers()
@@ -68,7 +68,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
         label_id: AnswerLabelId,
         name: Option<NonEmptyString>,
     ) -> Result<AnswerLabel, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let current_label = self
             .answer_label_repository
             .get_label_for_answers(label_id)

@@ -5,7 +5,7 @@ use domain::{
     repository::{
         notification_repository::NotificationRepository, user_repository::UserRepository,
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
@@ -25,7 +25,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         actor: ActiveUser,
         target: Uuid,
     ) -> Result<NotificationPreference, Error> {
-        let actor_user = User::from(actor);
+        let actor_user = Actor::from(actor);
         let notification_settings = self.repository.fetch_notification_settings(target).await?;
 
         match notification_settings {

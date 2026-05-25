@@ -9,7 +9,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Read, Update},
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 
@@ -32,7 +32,7 @@ where
         actor: &ActiveUser,
         form: AuthorizationGuard<ActiveForm, Create>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let form = form.try_into_create(&actor_user, |form| form)?;
         self.client.form().create(&form, actor).await?;
         Ok(())
@@ -75,7 +75,7 @@ where
         actor: &ActiveUser,
         updated_form: AuthorizationGuard<ActiveForm, Update>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let updated_form = updated_form.try_into_update(&actor_user, |form| form)?;
         self.client.form().update(&updated_form, actor).await?;
         Ok(())
@@ -133,7 +133,7 @@ where
         actor: &ActiveUser,
         form: AuthorizationGuard<ArchivedForm, Create>,
     ) -> Result<AuthorizationGuard<ArchivedForm, Read>, Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let form = form.try_into_create(&actor_user, |form| form)?;
         let archived_form = self.client.form().archive(&form).await?;
         Ok(AuthorizationGuard::<ArchivedForm, Create>::from(archived_form).into_read())
@@ -145,7 +145,7 @@ where
         actor: &ActiveUser,
         form: AuthorizationGuard<ArchivedForm, Update>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let form = form.try_into_update(&actor_user, |form| form)?;
         let form_id = *form.form().id();
         let _restored = form.unarchive();

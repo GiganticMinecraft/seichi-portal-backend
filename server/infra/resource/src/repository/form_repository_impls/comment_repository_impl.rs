@@ -16,7 +16,7 @@ use domain::{
     types::authorization_guard_with_context::{
         AuthorizationGuardWithContext, Create, Delete, Read,
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 use itertools::Itertools;
@@ -84,7 +84,7 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
         actor: &ActiveUser,
         comment: AuthorizationGuardWithContext<Comment, Create, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         comment
             .try_create(
                 &actor_user,
@@ -107,7 +107,7 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
         actor: &ActiveUser,
         comment: AuthorizationGuardWithContext<Comment, Update, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         comment
             .try_update(
                 &actor_user,
@@ -129,7 +129,7 @@ impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Clie
         actor: &ActiveUser,
         comment: AuthorizationGuardWithContext<Comment, Delete, CommentAuthorizationContext<Read>>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         comment
             .try_delete(
                 &actor_user,

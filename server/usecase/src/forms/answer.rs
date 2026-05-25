@@ -18,7 +18,7 @@ use domain::{
     },
     repository::user_repository::UserRepository,
     types::authorization_guard_with_context::AuthorizationGuardWithContext,
-    user::models::{ActiveUser, TemporaryUser, User},
+    user::models::{ActiveUser, Actor, TemporaryUser, User},
 };
 use errors::{
     Error,
@@ -114,7 +114,7 @@ impl<
 
         let form = form
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&User::from(user.clone()))?;
+            .try_into_read(&Actor::from(user.clone()))?;
         let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
         let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
@@ -143,7 +143,7 @@ impl<
         };
 
         let guard = AuthorizationGuardWithContext::new(answer_entry);
-        let actor = User::from(user);
+        let actor = Actor::from(user);
 
         self.answer_repository
             .post_answer(&context, guard, &actor)
@@ -159,7 +159,7 @@ impl<
         let form = self.active_form_repository.get(form_id).await?;
 
         let form_guard = form.ok_or(Error::from(FormNotFound))?;
-        let form = form_guard.try_into_read(&User::Anonymous)?;
+        let form = form_guard.try_into_read(&Actor::from(User::Anonymous))?;
         let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
         let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
@@ -180,7 +180,7 @@ impl<
             allow_temporary_answers: form_settings.allow_temporary_answers(),
         };
 
-        let actor = User::TemporaryUser(temporary_user.clone());
+        let actor = Actor::from(temporary_user.clone());
         let answer_entry = AnswerEntry::new(
             AnswerAuthor::TemporaryUser(temporary_user),
             form_id,
@@ -207,7 +207,7 @@ impl<
                 .await?
                 .ok_or(FormNotFound)?;
 
-            let user_ref = User::from(user.clone());
+            let user_ref = Actor::from(user.clone());
             let form = form_guard.try_read(&user_ref)?;
             let form_settings = form.settings();
 
@@ -264,7 +264,7 @@ impl<
             .await?
             .ok_or(FormNotFound)?;
 
-        let actor_ref = User::from(actor.clone());
+        let actor_ref = Actor::from(actor.clone());
         let form_settings = form.try_read(&actor_ref)?.settings();
 
         let context = AnswerEntryAuthorizationContext {
@@ -329,7 +329,7 @@ impl<
             .then(|form_answer_guard| {
                 let user = user.clone();
                 async move {
-                    let user_ref = User::from(user.clone());
+                    let user_ref = Actor::from(user.clone());
                     let context_user = user_ref.clone();
                     let context = form_answer_guard
                         .create_context(move |entry| {
@@ -418,7 +418,7 @@ impl<
             .await?
             .ok_or(FormNotFound)?;
 
-        let actor_ref = User::from(actor.clone());
+        let actor_ref = Actor::from(actor.clone());
         let form = form_guard.try_read(&actor_ref)?;
         let form_settings = form.settings();
 

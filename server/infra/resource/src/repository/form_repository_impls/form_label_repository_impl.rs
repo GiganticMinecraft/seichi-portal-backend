@@ -6,7 +6,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Delete, Read, Update},
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 use itertools::Itertools;
@@ -24,7 +24,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
         label: AuthorizationGuard<FormLabel, Create>,
         actor: &ActiveUser,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         label
             .try_create(&actor_user, |label| {
                 self.client.form_label().create_label_for_forms(label)
@@ -81,7 +81,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
         label: AuthorizationGuard<FormLabel, Delete>,
         actor: &ActiveUser,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         label
             .try_into_delete(&actor_user, |label| {
                 self.client
@@ -99,7 +99,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
         label: AuthorizationGuard<FormLabel, Update>,
         actor: &ActiveUser,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         label
             .try_update(&actor_user, |label| {
                 self.client

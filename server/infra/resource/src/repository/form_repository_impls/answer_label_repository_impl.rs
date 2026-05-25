@@ -6,7 +6,7 @@ use domain::{
         authorization_guard::AuthorizationGuard,
         authorization_guard_with_context::{Create, Delete, Read, Update},
     },
-    user::models::{ActiveUser, User},
+    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 use itertools::Itertools;
@@ -24,7 +24,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
         actor: &ActiveUser,
         label: AuthorizationGuard<AnswerLabel, Create>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         label
             .try_create(&actor_user, |label| {
                 self.client
@@ -100,7 +100,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
         actor: &ActiveUser,
         label: AuthorizationGuard<AnswerLabel, Delete>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         label
             .try_delete(&actor_user, |label| {
                 self.client
@@ -117,7 +117,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
         actor: &ActiveUser,
         label: AuthorizationGuard<AnswerLabel, Update>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         label
             .try_update(&actor_user, |label| {
                 self.client
@@ -135,7 +135,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
         answer_id: AnswerId,
         labels: Vec<AuthorizationGuard<AnswerLabel, Update>>,
     ) -> Result<(), Error> {
-        let actor_user = User::from(actor.clone());
+        let actor_user = Actor::from(actor.clone());
         let label_ids = labels
             .into_iter()
             .map(|guard| guard.try_into_update(&actor_user, |label| *label.id()))

@@ -14,7 +14,7 @@ use crate::{
         question::models::{Question, QuestionId},
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Role, TemporaryUser, User, UserId},
+    user::models::{Actor, Role, TemporaryUser, User, UserId},
 };
 
 pub type AnswerId = types::Id<AnswerEntry>;
@@ -241,20 +241,20 @@ impl AnswerLabel {
 }
 
 impl AuthorizationGuardDefinitions for AnswerLabel {
-    fn can_create(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
     }
 
-    fn can_read(&self, _actor: &User) -> bool {
+    fn can_read(&self, _actor: &Actor) -> bool {
         true
     }
 
-    fn can_update(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
     }
 
-    fn can_delete(&self, actor: &User) -> bool {
-        matches!(actor, User::ActiveUser(actor) if actor.role() == &Role::Administrator)
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
     }
 }
 

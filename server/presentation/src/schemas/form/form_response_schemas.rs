@@ -69,7 +69,7 @@ pub struct FormSettingsSchema {
 }
 
 impl FormSettingsSchema {
-    pub fn from_settings_ref(actor: &domain::user::models::User, settings: &FormSettings) -> Self {
+    pub fn from_settings_ref(actor: &domain::user::models::Actor, settings: &FormSettings) -> Self {
         FormSettingsSchema {
             webhook_url: settings
                 .webhook_url(actor)
