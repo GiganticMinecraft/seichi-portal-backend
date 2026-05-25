@@ -92,17 +92,16 @@ impl<
     /// `actor` が参照可能なフォームのリストを取得する
     pub async fn form_list(
         &self,
-        actor: &ActiveUser,
+        actor: &User,
         offset: Option<u32>,
         limit: Option<u32>,
     ) -> Result<Vec<(ActiveForm, Vec<FormLabel>)>, Error> {
-        let actor_user = User::from(actor.clone());
         let forms = self
             .active_form_repository
             .list(offset, limit)
             .await?
             .into_iter()
-            .flat_map(|form| form.try_into_read(&actor_user))
+            .flat_map(|form| form.try_into_read(actor))
             .collect::<Vec<_>>();
 
         let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
@@ -118,7 +117,7 @@ impl<
                     form,
                     labels
                         .into_iter()
-                        .map(|guard| guard.try_into_read(&actor_user))
+                        .map(|guard| guard.try_into_read(actor))
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             })
@@ -129,22 +128,21 @@ impl<
 
     pub async fn get_form(
         &self,
-        actor: &ActiveUser,
+        actor: &User,
         form_id: FormId,
     ) -> Result<ActiveFormWithLabels, Error> {
-        let actor_user = User::from(actor.clone());
         let form = self
             .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&actor_user)?;
+            .try_into_read(actor)?;
         let labels = self
             .form_label_repository
             .fetch_labels_by_form_id(form_id)
             .await?
             .into_iter()
-            .map(|label| label.try_into_read(&actor_user))
+            .map(|label| label.try_into_read(actor))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ActiveFormWithLabels { form, labels })
