@@ -17,7 +17,6 @@ strum_macros = { workspace = true }
 types = { path = "../types" }
 uuid = { workspace = true }
 regex = { workspace = true }
-serenity = { workspace = true }
 tracing = { workspace = true }
 common = { path = "../common" }
 

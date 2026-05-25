@@ -1,12 +1,6 @@
-use domain::{
-    form::models::WebhookUrl, notification::discord_sender::DiscordSender,
-    user::models::DiscordUserId,
-};
+use domain::{notification::discord_sender::DiscordSender, user::models::DiscordUserId};
 use errors::{Error, infra::InfraError};
-use serenity::{
-    all::{ExecuteWebhook, UserId},
-    async_trait,
-};
+use serenity::{all::UserId, async_trait};
 
 use crate::outgoing::connection::ConnectionPool;
 
@@ -36,30 +30,6 @@ impl DiscordSender for ConnectionPool {
             .say(&http, message)
             .await
             .map_err(Into::<InfraError>::into)?;
-
-        Ok(())
-    }
-
-    async fn send_webhook_message(
-        &self,
-        webhook_url: WebhookUrl,
-        message: ExecuteWebhook,
-    ) -> Result<(), Error> {
-        if let Some(webhook_url) = webhook_url.into_inner() {
-            let http = &self.pool.http;
-
-            let webhook = serenity::model::webhook::Webhook::from_url(
-                http,
-                webhook_url.into_inner().as_str(),
-            )
-            .await
-            .map_err(Into::<InfraError>::into)?;
-
-            webhook
-                .execute(http, false, message)
-                .await
-                .map_err(Into::<InfraError>::into)?;
-        }
 
         Ok(())
     }
