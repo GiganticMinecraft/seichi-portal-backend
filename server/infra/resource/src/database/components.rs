@@ -10,6 +10,7 @@ use domain::search::models::{NumberOfRecordsPerAggregate, RealAnswers};
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
+        answer_entry_set::models::{AnswerEntrySet, AnswerEntrySetId},
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
@@ -71,6 +72,18 @@ pub trait FormDatabase: Send + Sync {
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
+    async fn create_answer_entry_set(
+        &self,
+        answer_entry_set: &AnswerEntrySet,
+    ) -> Result<(), InfraError>;
+    async fn get_answer_entry_set(
+        &self,
+        id: AnswerEntrySetId,
+    ) -> Result<Option<AnswerEntrySet>, InfraError>;
+    async fn update_answer_entry_set(
+        &self,
+        answer_entry_set: &AnswerEntrySet,
+    ) -> Result<(), InfraError>;
 }
 
 #[automock]

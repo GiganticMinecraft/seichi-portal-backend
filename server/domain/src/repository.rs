@@ -7,6 +7,7 @@ pub mod user_repository;
 pub trait Repositories: Send + Sync {
     type ConcreteActiveFormRepository: form::active_form_repository::ActiveFormRepository;
     type ConcreteArchivedFormRepository: form::archived_form_repository::ArchivedFormRepository;
+    type ConcreteAnswerEntrySetRepository: form::answer_entry_set_repository::AnswerEntrySetRepository;
     type ConcreteFormAnswerRepository: form::answer_repository::AnswerRepository;
     type ConcreteAnswerLabelRepository: form::answer_label_repository::AnswerLabelRepository;
     type ConcreteFormMessageRepository: form::message_repository::MessageRepository;
@@ -18,6 +19,7 @@ pub trait Repositories: Send + Sync {
     type ConcreteHealthCheckRepository: health_check_repository::HealthCheckRepository;
     fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository;
     fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository;
+    fn answer_entry_set_repository(&self) -> &Self::ConcreteAnswerEntrySetRepository;
     fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository;
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository;
     fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository;

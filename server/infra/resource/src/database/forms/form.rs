@@ -898,6 +898,146 @@ impl FormDatabase for ConnectionPool {
         })
         .await
     }
+
+    #[tracing::instrument]
+    async fn create_answer_entry_set(
+        &self,
+        answer_entry_set: &domain::form::answer_entry_set::models::AnswerEntrySet,
+    ) -> Result<(), InfraError> {
+        let id = answer_entry_set.id().into_inner().to_string();
+        let visibility = answer_entry_set.visibility().to_string();
+        let allow_temporary_answers = *answer_entry_set.allow_temporary_answers();
+        let default_answer_title = answer_entry_set
+            .default_answer_title()
+            .to_owned()
+            .into_inner()
+            .map(NonEmptyString::into_inner);
+        let start_at = answer_entry_set.response_period().start_at().to_owned();
+        let end_at = answer_entry_set.response_period().end_at().to_owned();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query(
+                    r#"INSERT INTO answer_entry_sets
+                    (id, answer_visibility, allow_temporary_answers, default_answer_title, response_period_start_at, response_period_end_at)
+                    VALUES (?, ?, ?, ?, ?, ?)"#,
+                )
+                .bind(id)
+                .bind(visibility)
+                .bind(allow_temporary_answers)
+                .bind(default_answer_title)
+                .bind(start_at)
+                .bind(end_at)
+                .execute(&mut **txn)
+                .await?;
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn get_answer_entry_set(
+        &self,
+        id: domain::form::answer_entry_set::models::AnswerEntrySetId,
+    ) -> Result<Option<domain::form::answer_entry_set::models::AnswerEntrySet>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let row = sqlx::query(
+                    r"SELECT id, answer_visibility, allow_temporary_answers, default_answer_title,
+                        response_period_start_at, response_period_end_at
+                    FROM answer_entry_sets WHERE id = ?",
+                )
+                .bind(id.into_inner().to_string())
+                .fetch_optional(&mut **txn)
+                .await?;
+
+                row.map(|row| -> Result<_, InfraError> {
+                    let map_domain_err = |e: errors::domain::DomainError| InfraError::Unexpected {
+                        cause: e.to_string(),
+                    };
+
+                    let id = domain::form::answer_entry_set::models::AnswerEntrySetId::from(
+                        Uuid::parse_str(&row.try_get::<String, _>("id")?)
+                            .map_err(Into::<InfraError>::into)?,
+                    );
+                    let visibility: domain::form::answer::settings::models::AnswerVisibility = row
+                        .try_get::<String, _>("answer_visibility")?
+                        .try_into()
+                        .map_err(map_domain_err)?;
+                    let allow_temporary_answers: bool = row.try_get("allow_temporary_answers")?;
+                    let default_answer_title =
+                        domain::form::answer::settings::models::DefaultAnswerTitle::new(
+                            row.try_get::<Option<String>, _>("default_answer_title")?
+                                .map(NonEmptyString::try_new)
+                                .transpose()
+                                .map_err(|e| InfraError::Unexpected {
+                                    cause: e.to_string(),
+                                })?,
+                        );
+                    let response_period =
+                        domain::form::answer::settings::models::ResponsePeriod::try_new(
+                            row.try_get("response_period_start_at")?,
+                            row.try_get("response_period_end_at")?,
+                        )
+                        .map_err(map_domain_err)?;
+
+                    Ok(
+                        domain::form::answer_entry_set::models::AnswerEntrySet::from_raw_parts(
+                            id,
+                            default_answer_title,
+                            visibility,
+                            response_period,
+                            allow_temporary_answers,
+                        ),
+                    )
+                })
+                .transpose()
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn update_answer_entry_set(
+        &self,
+        answer_entry_set: &domain::form::answer_entry_set::models::AnswerEntrySet,
+    ) -> Result<(), InfraError> {
+        let id = answer_entry_set.id().into_inner().to_string();
+        let visibility = answer_entry_set.visibility().to_string();
+        let allow_temporary_answers = *answer_entry_set.allow_temporary_answers();
+        let default_answer_title = answer_entry_set
+            .default_answer_title()
+            .to_owned()
+            .into_inner()
+            .map(NonEmptyString::into_inner);
+        let start_at = answer_entry_set.response_period().start_at().to_owned();
+        let end_at = answer_entry_set.response_period().end_at().to_owned();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query(
+                    r#"UPDATE answer_entry_sets SET
+                        answer_visibility = ?,
+                        allow_temporary_answers = ?,
+                        default_answer_title = ?,
+                        response_period_start_at = ?,
+                        response_period_end_at = ?
+                    WHERE id = ?"#,
+                )
+                .bind(visibility)
+                .bind(allow_temporary_answers)
+                .bind(default_answer_title)
+                .bind(start_at)
+                .bind(end_at)
+                .bind(id)
+                .execute(&mut **txn)
+                .await?;
+                Ok::<_, InfraError>(())
+            })
+        })
+        .await
+    }
 }
 
 async fn sync_label_ids(
