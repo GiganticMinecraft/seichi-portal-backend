@@ -3,10 +3,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use domain::{
     form::{
-        answer::{
-            models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
-            settings::models::{DefaultAnswerTitle, ResponsePeriod},
-        },
+        answer::models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
         answer_entry_set::models::AnswerEntrySetId,
         comment::models::CommentContent,
         models::{
@@ -104,13 +101,8 @@ pub struct ActiveFormRecord {
     pub description: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub start_at: Option<DateTime<Utc>>,
-    pub end_at: Option<DateTime<Utc>>,
     pub webhook_url: Option<String>,
-    pub default_answer_title: Option<String>,
     pub visibility: String,
-    pub allow_temporary_answers: bool,
-    pub answer_visibility: String,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
     pub answer_entry_set_id: String,
@@ -126,13 +118,8 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             description,
             created_at,
             updated_at,
-            start_at,
-            end_at,
             webhook_url,
-            default_answer_title,
             visibility,
-            allow_temporary_answers,
-            answer_visibility,
             questions,
             label_ids,
             answer_entry_set_id,
@@ -150,16 +137,8 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             FormDescription::new(description),
             FormMeta::from_raw_parts(created_at, updated_at),
             FormSettings::from_raw_parts(
-                ResponsePeriod::try_new(start_at, end_at)?,
                 WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
-                DefaultAnswerTitle::new(
-                    default_answer_title
-                        .map(NonEmptyString::try_new)
-                        .transpose()?,
-                ),
                 visibility.try_into()?,
-                allow_temporary_answers,
-                answer_visibility.try_into()?,
             ),
             QuestionSet::try_new(questions)?,
             FormLabelIdSet::try_new(label_ids)?,

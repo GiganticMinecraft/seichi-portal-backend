@@ -1,9 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::{
-        answer::models::{AnswerEntry, AnswerId},
-        models::FormId,
-    },
+    form::answer::models::{AnswerEntry, AnswerId},
     repository::form::answer_repository::AnswerRepository,
 };
 use errors::Error;
@@ -32,28 +29,6 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
             .await?
             .map(TryInto::<AnswerEntry>::try_into)
             .transpose()
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, Error> {
-        self.client
-            .form_answer()
-            .get_answers_by_form_id(form_id)
-            .await?
-            .into_iter()
-            .map(TryInto::<AnswerEntry>::try_into)
-            .collect()
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_all_answers(&self) -> Result<Vec<AnswerEntry>, Error> {
-        self.client
-            .form_answer()
-            .get_all_answers()
-            .await?
-            .into_iter()
-            .map(TryInto::<AnswerEntry>::try_into)
-            .collect()
     }
 
     #[tracing::instrument(skip(self))]

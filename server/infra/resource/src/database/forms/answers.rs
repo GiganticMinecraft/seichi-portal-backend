@@ -2,10 +2,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use domain::{
-    form::{
-        answer::models::{AnswerAuthor, AnswerEntry, AnswerId},
-        models::FormId,
-    },
+    form::answer::models::{AnswerAuthor, AnswerEntry, AnswerId},
     user::models::{ActiveUser, Role, TemporaryUser},
 };
 use errors::infra::InfraError;
@@ -38,7 +35,9 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
     }
 }
 
-fn author_from_row(row: &sqlx::mysql::MySqlRow) -> Result<AnswerAuthorRecord, InfraError> {
+pub(crate) fn author_from_row(
+    row: &sqlx::mysql::MySqlRow,
+) -> Result<AnswerAuthorRecord, InfraError> {
     let author_type: String = row.try_get("author_type")?;
     match author_type.as_str() {
         "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(ActiveUser::new(
@@ -59,7 +58,7 @@ fn author_from_row(row: &sqlx::mysql::MySqlRow) -> Result<AnswerAuthorRecord, In
     }
 }
 
-async fn fetch_real_answers_by_answer_ids<T>(
+pub(crate) async fn fetch_real_answers_by_answer_ids<T>(
     txn: &mut DatabaseTransaction,
     answer_ids: &[T],
 ) -> Result<Vec<(Uuid, FormAnswerContentRecord)>, InfraError>
@@ -96,7 +95,7 @@ where
         .collect()
 }
 
-fn attach_contents(
+pub(crate) fn attach_contents(
     form_answer_records: Vec<FormAnswerRecord>,
     answer_id_with_content_record: Vec<(Uuid, FormAnswerContentRecord)>,
 ) -> Result<Vec<FormAnswerRecord>, InfraError> {
@@ -249,100 +248,6 @@ impl FormAnswerDatabase for ConnectionPool {
                         })
                     })
                     .transpose()
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn get_answers_by_form_id(
-        &self,
-        form_id: FormId,
-    ) -> Result<Vec<FormAnswerRecord>, InfraError> {
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let answers = sqlx::query(
-                    r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
-                        users.name AS user_name, users.role AS user_role,
-                        temporary_user_id, temporary_users.name AS temporary_user_name,
-                        temporary_users.contact_text AS temporary_user_contact_text,
-                        timestamp FROM answers
-                        LEFT JOIN users ON answers.user = users.id
-                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-                        WHERE form_id = ?
-                        ORDER BY answers.timestamp",
-                )
-                .bind(form_id.into_inner().to_string())
-                .fetch_all(&mut **txn)
-                .await?;
-
-                let form_answer_records = answers
-                    .into_iter()
-                    .map(|rs| {
-                        let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
-
-                        Ok::<_, InfraError>(FormAnswerRecord {
-                            id: answer_id.to_string(),
-                            author: author_from_row(&rs)?,
-                            timestamp: rs.try_get("timestamp")?,
-                            form_id: rs.try_get("form_id")?,
-                            title: rs.try_get("title")?,
-                            contents: Vec::new(),
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let answer_ids = form_answer_records
-                    .iter()
-                    .map(|record| record.id.to_owned())
-                    .collect_vec();
-
-                let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-                attach_contents(form_answer_records, contents)
-            })
-        })
-        .await
-    }
-
-    #[tracing::instrument]
-    async fn get_all_answers(&self) -> Result<Vec<FormAnswerRecord>, InfraError> {
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let answers = sqlx::query(
-                    r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
-                        users.name AS user_name, users.role AS user_role,
-                        temporary_user_id, temporary_users.name AS temporary_user_name,
-                        temporary_users.contact_text AS temporary_user_contact_text,
-                        timestamp FROM answers
-                        LEFT JOIN users ON answers.user = users.id
-                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-                        ORDER BY answers.timestamp",
-                )
-                .fetch_all(&mut **txn)
-                .await?;
-
-                let form_answer_records = answers
-                    .into_iter()
-                    .map(|rs| {
-                        let answer_id = Uuid::from_str(&rs.try_get::<String, _>("answer_id")?)?;
-
-                        Ok::<_, InfraError>(FormAnswerRecord {
-                            id: answer_id.to_string(),
-                            author: author_from_row(&rs)?,
-                            timestamp: rs.try_get("timestamp")?,
-                            form_id: rs.try_get("form_id")?,
-                            title: rs.try_get("title")?,
-                            contents: Vec::new(),
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let answer_ids = form_answer_records
-                    .iter()
-                    .map(|record| record.id.to_owned())
-                    .collect_vec();
-                let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-                attach_contents(form_answer_records, contents)
             })
         })
         .await

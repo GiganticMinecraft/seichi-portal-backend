@@ -19,6 +19,7 @@ pub trait AnswerEntrySetRepository: Send + Sync + 'static {
         &self,
         id: AnswerEntrySetId,
     ) -> Result<Option<AuthorizationGuard<AnswerEntrySet, Read>>, Error>;
+    async fn list_all(&self) -> Result<Vec<AuthorizationGuard<AnswerEntrySet, Read>>, Error>;
     async fn update(
         &self,
         answer_entry_set: AuthorizationGuard<AnswerEntrySet, Update>,

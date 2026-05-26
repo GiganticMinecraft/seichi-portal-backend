@@ -7,11 +7,12 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
-    form::{models::FormId, question::models::QuestionSet},
-    repository::Repositories,
+    form::{
+        answer_entry_set::models::AnswerEntrySet, models::FormId, question::models::QuestionSet,
+    },
+    repository::{Repositories, form::answer_entry_set_repository::AnswerEntrySetRepository},
     user::models::{ActiveUser, Actor, User},
 };
-use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::{
@@ -146,14 +147,55 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
         archived_form_repository: repository.archived_form_repository(),
         notification_repository: repository.notification_repository(),
         form_label_repository: repository.form_label_repository(),
-        answer_repository: repository.form_answer_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
         user_repository: repository.user_repository(),
+    }
+}
+
+async fn fetch_answer_entry_set(
+    repository: &RealInfrastructureRepository,
+    actor: &Actor,
+    form: &domain::form::models::ActiveForm,
+) -> Result<AnswerEntrySet, errors::Error> {
+    repository
+        .answer_entry_set_repository()
+        .get(*form.answer_entry_set_id())
+        .await?
+        .ok_or(errors::usecase::UseCaseError::FormNotFound)?
+        .try_into_read(actor)
+        .map_err(Into::into)
+}
+
+fn form_schema(
+    actor: &Actor,
+    form: &domain::form::models::ActiveForm,
+    answer_entry_set: &AnswerEntrySet,
+    labels: Vec<domain::form::models::FormLabel>,
+) -> FormSchema {
+    FormSchema {
+        id: form.id().to_owned(),
+        title: form.title().to_owned(),
+        description: form.description().to_owned(),
+        settings: FormSettingsSchema::from_settings_and_entry_set(
+            actor,
+            form.settings(),
+            answer_entry_set,
+        ),
+        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+        questions: form
+            .questions()
+            .iter()
+            .cloned()
+            .map(QuestionResponseSchema::from)
+            .collect(),
+        labels,
     }
 }
 
 fn archived_form_schema_from_parts(
     actor: &Actor,
     form: domain::form::models::ArchivedForm,
+    answer_entry_set: &AnswerEntrySet,
     archived_by: ActiveUser,
     labels: Vec<domain::form::models::FormLabel>,
 ) -> ArchivedFormSchema {
@@ -161,7 +203,11 @@ fn archived_form_schema_from_parts(
         id: form.form().id().to_owned(),
         title: form.form().title().to_owned(),
         description: form.form().description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(actor, form.form().settings()),
+        settings: FormSettingsSchema::from_settings_and_entry_set(
+            actor,
+            form.form().settings(),
+            answer_entry_set,
+        ),
         metadata: FormMetaSchema::from_meta_ref(form.form().metadata()),
         archived_at: *form.archived_at(),
         archived_by,
@@ -223,23 +269,17 @@ pub async fn create_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(CreateFormResponse::Created(FormSchema {
-        id: form.id().to_owned(),
-        title: form.title().to_owned(),
-        description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(
-            &Actor::from(user.clone()),
-            form.settings(),
-        ),
-        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
-        labels: vec![],
-    }))
+    let actor = Actor::from(user.clone());
+    let answer_entry_set = fetch_answer_entry_set(&repository, &actor, &form)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(CreateFormResponse::Created(form_schema(
+        &actor,
+        &form,
+        &answer_entry_set,
+        vec![],
+    )))
 }
 
 #[utoipa::path(
@@ -276,26 +316,14 @@ pub async fn form_list_handler(
         .await
         .map_err(handle_error)?;
 
-    let response_schema = forms
-        .into_iter()
-        .map(|(form, labels)| FormSchema {
-            id: form.id().to_owned(),
-            title: form.title().to_owned(),
-            description: form.description().to_owned(),
-            settings: FormSettingsSchema::from_settings_ref(
-                &Actor::from(user.clone()),
-                form.settings(),
-            ),
-            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-            questions: form
-                .questions()
-                .iter()
-                .cloned()
-                .map(QuestionResponseSchema::from)
-                .collect(),
-            labels,
-        })
-        .collect_vec();
+    let actor = Actor::from(user.clone());
+    let mut response_schema = Vec::with_capacity(forms.len());
+    for (form, labels) in forms {
+        let answer_entry_set = fetch_answer_entry_set(&repository, &actor, &form)
+            .await
+            .map_err(handle_error)?;
+        response_schema.push(form_schema(&actor, &form, &answer_entry_set, labels));
+    }
 
     Ok(FormListResponse::Ok(response_schema))
 }
@@ -332,23 +360,17 @@ pub async fn get_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(GetFormResponse::Ok(FormSchema {
-        id: form.id().to_owned(),
-        title: form.title().to_owned(),
-        description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(
-            &Actor::from(user.clone()),
-            form.settings(),
-        ),
-        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
+    let actor = Actor::from(user.clone());
+    let answer_entry_set = fetch_answer_entry_set(&repository, &actor, &form)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(GetFormResponse::Ok(form_schema(
+        &actor,
+        &form,
+        &answer_entry_set,
         labels,
-    }))
+    )))
 }
 
 #[utoipa::path(
@@ -382,12 +404,17 @@ pub async fn archive_form_handler(
         .archive_form(&user, form_id)
         .await
         .map_err(handle_error)?;
+    let actor = Actor::from(user.clone());
+    let answer_entry_set = fetch_answer_entry_set(&repository, &actor, archived_form.form())
+        .await
+        .map_err(handle_error)?;
 
     Ok((
         StatusCode::OK,
         Json(archived_form_schema_from_parts(
-            &Actor::from(user.clone()),
+            &actor,
             archived_form,
+            &answer_entry_set,
             user,
             vec![],
         )),
@@ -482,23 +509,17 @@ pub async fn update_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(UpdateFormResponse::Ok(FormSchema {
-        id: updated_form.id().to_owned(),
-        title: updated_form.title().to_owned(),
-        description: updated_form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(
-            &Actor::from(user.clone()),
-            updated_form.settings(),
-        ),
-        metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
-        questions: updated_form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
+    let actor = Actor::from(user.clone());
+    let answer_entry_set = fetch_answer_entry_set(&repository, &actor, &updated_form)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UpdateFormResponse::Ok(form_schema(
+        &actor,
+        &updated_form,
+        &answer_entry_set,
         labels,
-    }))
+    )))
 }
 
 #[utoipa::path(
@@ -547,19 +568,21 @@ pub async fn archived_form_list_handler(
         .map_err(handle_error)?;
 
     let actor = Actor::from(user);
-    Ok(ArchivedFormListResponse::Ok(
-        forms
-            .into_iter()
-            .map(|details| {
-                archived_form_schema_from_parts(
-                    &actor,
-                    details.form,
-                    details.archived_by,
-                    details.labels,
-                )
-            })
-            .collect(),
-    ))
+    let mut response_schema = Vec::with_capacity(forms.len());
+    for details in forms {
+        let answer_entry_set = fetch_answer_entry_set(&repository, &actor, details.form.form())
+            .await
+            .map_err(handle_error)?;
+        response_schema.push(archived_form_schema_from_parts(
+            &actor,
+            details.form,
+            &answer_entry_set,
+            details.archived_by,
+            details.labels,
+        ));
+    }
+
+    Ok(ArchivedFormListResponse::Ok(response_schema))
 }
 
 #[utoipa::path(
@@ -597,9 +620,15 @@ pub async fn get_archived_form_handler(
         .await
         .map_err(handle_error)?;
 
+    let actor = Actor::from(user.clone());
+    let answer_entry_set = fetch_answer_entry_set(&repository, &actor, form.form())
+        .await
+        .map_err(handle_error)?;
+
     Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
-        &Actor::from(user.clone()),
+        &actor,
         form,
+        &answer_entry_set,
         archived_by,
         labels,
     )))

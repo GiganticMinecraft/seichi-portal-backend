@@ -242,14 +242,10 @@ impl<
         let actor_ref = Actor::from(actor.clone());
         let answer_entry_set = self.read_answer_entry_set(form_id, &actor_ref).await?;
 
-        let all_answers = self
-            .answer_repository
-            .get_answers_by_form_id(form_id)
-            .await?;
-
-        let visible_answers: Vec<AnswerEntry> = all_answers
+        let visible_answers: Vec<AnswerEntry> = answer_entry_set
+            .visible_entries(&actor_ref)
             .into_iter()
-            .filter(|entry| answer_entry_set.can_read_entry(entry, &actor_ref))
+            .cloned()
             .collect();
 
         stream::iter(visible_answers)
@@ -276,18 +272,30 @@ impl<
     }
 
     pub async fn get_all_answers(&self, user: &ActiveUser) -> Result<Vec<AnswerDetails>, Error> {
-        stream::iter(self.answer_repository.get_all_answers().await?)
+        let actor_ref = Actor::from(user.clone());
+        let visible_answers = self
+            .answer_entry_set_repository
+            .list_all()
+            .await?
+            .into_iter()
+            .flat_map(|set_guard| {
+                set_guard
+                    .try_into_read(&actor_ref)
+                    .map(|set| {
+                        set.visible_entries(&actor_ref)
+                            .into_iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
+
+        stream::iter(visible_answers)
             .then(|form_answer| {
                 let user = user.clone();
                 async move {
                     let actor_ref = Actor::from(user.clone());
-                    let form_id = *form_answer.form_id();
-
-                    let answer_entry_set = self.read_answer_entry_set(form_id, &actor_ref).await?;
-
-                    if !answer_entry_set.can_read_entry(&form_answer, &actor_ref) {
-                        return Err(Error::from(DomainError::Forbidden));
-                    }
 
                     let answer_id = *form_answer.id();
                     let (labels, comments) = try_join!(

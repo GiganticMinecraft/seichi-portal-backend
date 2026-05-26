@@ -1,25 +1,21 @@
-use errors::{Error, domain::DomainError};
+use errors::Error;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::{
-    form::{
-        answer::{
-            models::{AnswerTitle, PostedAnswerContents},
-            settings::models::DefaultAnswerTitle,
-        },
-        models::{FormId, Question},
+use crate::form::{
+    answer::{
+        models::{AnswerTitle, PostedAnswerContents},
+        settings::models::DefaultAnswerTitle,
     },
-    repository::form::active_form_repository::ActiveFormRepository,
-    user::models::{Actor, User},
+    models::Question,
 };
 
-pub struct DefaultAnswerTitleDomainService<'a, FormRepo: ActiveFormRepository> {
-    pub form_repo: &'a FormRepo,
+pub struct DefaultAnswerTitleDomainService<FormRepo> {
+    _phantom: std::marker::PhantomData<FormRepo>,
 }
 
-impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRepo> {
+impl<FormRepo> DefaultAnswerTitleDomainService<FormRepo> {
     pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
         questions: &[Question],
@@ -60,37 +56,6 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
             None => Ok(AnswerTitle::new(None)),
         }
     }
-
-    pub async fn to_answer_title(
-        &self,
-        actor: &Actor,
-        form_id: FormId,
-        answers: &PostedAnswerContents,
-    ) -> Result<AnswerTitle, Error> {
-        let form = self
-            .form_repo
-            .get(form_id)
-            .await?
-            .ok_or(DomainError::NotFound)?
-            .try_into_read(actor)?;
-        let default_answer_title = form
-            .settings()
-            .answer_settings()
-            .default_answer_title()
-            .to_owned();
-        let questions = form.questions().as_slice().to_vec();
-
-        Self::to_answer_title_from_questions(
-            default_answer_title,
-            &questions,
-            answers,
-            match actor {
-                Actor::User(User::ActiveUser(actor)) => actor.name(),
-                Actor::User(User::TemporaryUser(actor)) => actor.name(),
-                _ => unreachable!("Only authenticated and temporary users can submit answers"),
-            },
-        )
-    }
 }
 
 fn question_placeholder_regex() -> &'static Regex {
@@ -109,6 +74,7 @@ mod tests {
         answer::models::FormAnswerContent,
         question::models::{QuestionId, QuestionType},
     };
+    use crate::user::models::User;
 
     fn question_id(seed: &str) -> QuestionId {
         Uuid::parse_str(seed).unwrap().into()

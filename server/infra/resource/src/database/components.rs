@@ -80,6 +80,7 @@ pub trait FormDatabase: Send + Sync {
         &self,
         id: AnswerEntrySetId,
     ) -> Result<Option<AnswerEntrySet>, InfraError>;
+    async fn list_answer_entry_sets(&self) -> Result<Vec<AnswerEntrySet>, InfraError>;
     async fn update_answer_entry_set(
         &self,
         answer_entry_set: &AnswerEntrySet,
@@ -94,11 +95,6 @@ pub trait FormAnswerDatabase: Send + Sync {
         &self,
         answer_id: AnswerId,
     ) -> Result<Option<FormAnswerRecord>, InfraError>;
-    async fn get_answers_by_form_id(
-        &self,
-        form_id: FormId,
-    ) -> Result<Vec<FormAnswerRecord>, InfraError>;
-    async fn get_all_answers(&self) -> Result<Vec<FormAnswerRecord>, InfraError>;
     async fn get_answers_by_answer_ids(
         &self,
         answer_ids: Vec<AnswerId>,

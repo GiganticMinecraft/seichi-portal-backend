@@ -235,26 +235,34 @@ impl<
                             .collect::<Result<Vec<_>, errors::Error>>()?;
 
                         let answers = self
-                            .answer_repository
-                            .get_all_answers()
+                            .answer_entry_set_repository
+                            .list_all()
                             .await?
                             .into_iter()
-                            .flat_map(|entry| {
-                                entry
-                                    .contents()
+                            .map(|guard| guard.try_into_read(&system).map_err(Error::from))
+                            .collect::<Result<Vec<_>, errors::Error>>()?
+                            .into_iter()
+                            .flat_map(|set| {
+                                set.entries()
                                     .iter()
-                                    .map(|content| {
-                                        (
-                                            domain::search::models::SearchableFields::RealAnswers(
-                                                domain::search::models::RealAnswers {
-                                                    id: content.id,
-                                                    answer_id: entry.id().to_owned(),
-                                                    question_id: content.question_id,
-                                                    answer: content.answer.to_owned(),
-                                                },
-                                            ),
-                                            Operation::Update,
-                                        )
+                                    .flat_map(|entry| {
+                                        entry
+                                            .contents()
+                                            .iter()
+                                            .map(|content| {
+                                                (
+                                                    domain::search::models::SearchableFields::RealAnswers(
+                                                        domain::search::models::RealAnswers {
+                                                            id: content.id,
+                                                            answer_id: entry.id().to_owned(),
+                                                            question_id: content.question_id,
+                                                            answer: content.answer.to_owned(),
+                                                        },
+                                                    ),
+                                                    Operation::Update,
+                                                )
+                                            })
+                                            .collect::<Vec<_>>()
                                     })
                                     .collect::<Vec<_>>()
                             })

@@ -9,7 +9,8 @@ use domain::{
     },
     repository::{
         form::{
-            active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository,
+            active_form_repository::ActiveFormRepository,
+            answer_entry_set_repository::AnswerEntrySetRepository,
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
         },
@@ -34,14 +35,14 @@ pub struct FormUseCase<
     ArchivedFormRepo: ArchivedFormRepository,
     NotificationRepo: NotificationRepository,
     FormLabelRepo: FormLabelRepository,
-    AnswerRepo: AnswerRepository,
+    AnswerEntrySetRepo: AnswerEntrySetRepository,
     UserRepo: UserRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub archived_form_repository: &'a ArchivedFormRepo,
     pub notification_repository: &'a NotificationRepo,
     pub form_label_repository: &'a FormLabelRepo,
-    pub answer_repository: &'a AnswerRepo,
+    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
     pub user_repository: &'a UserRepo,
 }
 
@@ -50,7 +51,7 @@ impl<
     R2: ArchivedFormRepository,
     R3: NotificationRepository,
     R4: FormLabelRepository,
-    R5: AnswerRepository,
+    R5: AnswerEntrySetRepository,
     R6: UserRepository,
 > FormUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
@@ -62,20 +63,32 @@ impl<
         allow_temporary_answers: Option<bool>,
         user: &ActiveUser,
     ) -> Result<ActiveForm, Error> {
-        let mut form = ActiveForm::new(
+        use domain::form::answer::settings::models::{
+            AnswerVisibility as AV, DefaultAnswerTitle as DAT, ResponsePeriod as RP,
+        };
+        use domain::form::answer_entry_set::models::AnswerEntrySet;
+
+        let user_as_user = Actor::from(user.clone());
+
+        let mut answer_entry_set =
+            AnswerEntrySet::new(DAT::new(None), AV::PRIVATE, RP::try_new(None, None)?, false);
+        if let Some(allow) = allow_temporary_answers {
+            answer_entry_set = answer_entry_set.change_allow_temporary_answers(allow);
+        }
+
+        let answer_entry_set_guard =
+            domain::types::authorization_guard::AuthorizationGuard::from(answer_entry_set.clone());
+        self.answer_entry_set_repository
+            .create(answer_entry_set_guard)
+            .await?;
+
+        let form = ActiveForm::new_with_answer_entry_set_id(
             title,
             description,
             QuestionSet::try_new(questions).map_err(Error::from)?,
+            *answer_entry_set.id(),
         );
-        if let Some(allow_temporary_answers) = allow_temporary_answers {
-            let settings = form
-                .settings()
-                .to_owned()
-                .change_allow_temporary_answers(allow_temporary_answers);
-            form = form.change_settings(settings);
-        }
         let form_id = *form.id();
-        let user_as_user = Actor::from(user.clone());
 
         self.active_form_repository
             .create(user, form.into())
@@ -286,15 +299,9 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
-        let current_questions = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&actor_user)?
-            .questions()
-            .as_slice()
-            .to_vec();
+        let current_form_read = current_form.try_read(&actor_user)?;
+        let answer_entry_set_id = *current_form_read.answer_entry_set_id();
+        let current_questions = current_form_read.questions().as_slice().to_vec();
 
         if let Some(questions) = &questions {
             let existing_question_ids = current_questions
@@ -312,14 +319,47 @@ impl<
                 .into());
             }
 
-            let has_answers = !self
-                .answer_repository
-                .get_answers_by_form_id(form_id)
+            let answer_entry_set_guard = self
+                .answer_entry_set_repository
+                .get(answer_entry_set_id)
                 .await?
-                .is_empty();
+                .ok_or(Error::from(FormNotFound))?;
+            let answer_entry_set = answer_entry_set_guard.try_read(&actor_user)?;
+            let has_answers = !answer_entry_set.entries().is_empty();
             if has_answers {
                 validate_answered_form_question_update(&current_questions, questions.as_slice())?;
             }
+        }
+
+        if response_period.is_some()
+            || default_answer_title.is_some()
+            || answer_visibility.is_some()
+            || allow_temporary_answers.is_some()
+        {
+            let set_guard = self
+                .answer_entry_set_repository
+                .get(answer_entry_set_id)
+                .await?
+                .ok_or(Error::from(FormNotFound))?;
+            let updated_set = set_guard.into_update().map(|set| {
+                let set = match answer_visibility {
+                    None => set,
+                    Some(v) => set.change_visibility(v),
+                };
+                let set = match default_answer_title {
+                    None => set,
+                    Some(t) => set.change_default_answer_title(t),
+                };
+                let set = match response_period {
+                    None => set,
+                    Some(p) => set.change_response_period(p),
+                };
+                match allow_temporary_answers {
+                    None => set,
+                    Some(a) => set.change_allow_temporary_answers(a),
+                }
+            });
+            self.answer_entry_set_repository.update(updated_set).await?;
         }
 
         let label_ids = match label_ids {
@@ -337,41 +377,22 @@ impl<
             None => None,
         };
 
-        let updated_form = current_form.into_update().map(|form| {
-            let current_answer_settings = form.settings().answer_settings().to_owned();
-            let updated_answer_settings = match answer_visibility {
-                None => current_answer_settings,
-                Some(visibility) => current_answer_settings.change_visibility(visibility),
-            };
-            let updated_answer_settings = match default_answer_title {
-                None => updated_answer_settings,
-                Some(default_answer_title) => {
-                    updated_answer_settings.change_default_answer_title(default_answer_title)
-                }
-            };
-            let updated_answer_settings = match response_period {
-                None => updated_answer_settings,
-                Some(response_period) => {
-                    updated_answer_settings.change_response_period(response_period)
-                }
-            };
+        let current_form = self
+            .active_form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
 
+        let updated_form = current_form.into_update().map(|form| {
             let current_settings = form.settings().to_owned();
             let updated_settings = match visibility {
                 None => current_settings,
                 Some(visibility) => current_settings.change_visibility(visibility),
             };
-            let updated_settings = match allow_temporary_answers {
-                None => updated_settings,
-                Some(allow_temporary_answers) => {
-                    updated_settings.change_allow_temporary_answers(allow_temporary_answers)
-                }
-            };
             let updated_settings = match webhook {
                 None => updated_settings,
                 Some(webhook) => updated_settings.change_webhook_url(webhook),
             };
-            let updated_settings = updated_settings.change_answer_settings(updated_answer_settings);
 
             let updated_form = match title {
                 None => form,
@@ -580,7 +601,7 @@ mod tests {
         repository::{
             form::{
                 active_form_repository::MockActiveFormRepository,
-                answer_repository::MockAnswerRepository,
+                answer_entry_set_repository::MockAnswerEntrySetRepository,
                 archived_form_repository::MockArchivedFormRepository,
                 form_label_repository::MockFormLabelRepository,
             },
@@ -658,7 +679,11 @@ mod tests {
             .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
 
         let form_label_repository = MockFormLabelRepository::new();
-        let answer_repository = MockAnswerRepository::new();
+        let mut answer_entry_set_repository = MockAnswerEntrySetRepository::new();
+        answer_entry_set_repository
+            .expect_create()
+            .times(1)
+            .returning(|_| Ok(()));
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
         let user_repository = MockUserRepository::new();
@@ -668,7 +693,7 @@ mod tests {
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
-            answer_repository: &answer_repository,
+            answer_entry_set_repository: &answer_entry_set_repository,
             user_repository: &user_repository,
         };
 
@@ -707,7 +732,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(vec![]));
 
-        let answer_repository = MockAnswerRepository::new();
+        let answer_entry_set_repository = MockAnswerEntrySetRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
         let user_repository = MockUserRepository::new();
@@ -717,7 +742,7 @@ mod tests {
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
-            answer_repository: &answer_repository,
+            answer_entry_set_repository: &answer_entry_set_repository,
             user_repository: &user_repository,
         };
 

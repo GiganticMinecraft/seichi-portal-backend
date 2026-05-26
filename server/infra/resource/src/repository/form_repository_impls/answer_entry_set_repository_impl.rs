@@ -48,6 +48,18 @@ where
     }
 
     #[tracing::instrument(skip(self))]
+    async fn list_all(&self) -> Result<Vec<AuthorizationGuard<AnswerEntrySet, Read>>, Error> {
+        Ok(self
+            .client
+            .form()
+            .list_answer_entry_sets()
+            .await?
+            .into_iter()
+            .map(|set| AuthorizationGuard::<AnswerEntrySet, Create>::from(set).into_read())
+            .collect())
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn update(
         &self,
         answer_entry_set: AuthorizationGuard<AnswerEntrySet, Update>,

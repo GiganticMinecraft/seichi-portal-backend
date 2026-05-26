@@ -16,12 +16,7 @@ use types::non_empty_string::NonEmptyString;
 pub use crate::form::question::models::{Question, QuestionSet};
 
 use crate::{
-    form::{
-        answer::settings::models::{
-            AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
-        },
-        answer_entry_set::models::AnswerEntrySetId,
-    },
+    form::answer_entry_set::models::AnswerEntrySetId,
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Actor, Role::Administrator, User, UserId},
 };
@@ -63,9 +58,6 @@ pub struct FormSettings {
     webhook_url: WebhookUrl,
     #[serde(default)]
     visibility: Visibility,
-    #[serde(default)]
-    allow_temporary_answers: bool,
-    answer_settings: AnswerSettings,
 }
 
 impl FormSettings {
@@ -73,12 +65,6 @@ impl FormSettings {
         Self {
             webhook_url: WebhookUrl::try_new(None).unwrap(),
             visibility: Visibility::PUBLIC,
-            allow_temporary_answers: false,
-            answer_settings: AnswerSettings::new(
-                DefaultAnswerTitle::new(None),
-                AnswerVisibility::PRIVATE,
-                ResponsePeriod::try_new(None, None).unwrap(),
-            ),
         }
     }
 
@@ -94,14 +80,6 @@ impl FormSettings {
         &self.visibility
     }
 
-    pub fn answer_settings(&self) -> &AnswerSettings {
-        &self.answer_settings
-    }
-
-    pub fn allow_temporary_answers(&self) -> bool {
-        self.allow_temporary_answers
-    }
-
     pub fn change_webhook_url(self, webhook_url: WebhookUrl) -> Self {
         Self {
             webhook_url,
@@ -113,37 +91,10 @@ impl FormSettings {
         Self { visibility, ..self }
     }
 
-    pub fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
-        Self {
-            allow_temporary_answers,
-            ..self
-        }
-    }
-
-    pub fn change_answer_settings(self, answer_settings: AnswerSettings) -> Self {
-        Self {
-            answer_settings,
-            ..self
-        }
-    }
-
-    pub fn from_raw_parts(
-        response_period: ResponsePeriod,
-        webhook_url: WebhookUrl,
-        default_answer_title: DefaultAnswerTitle,
-        visibility: Visibility,
-        allow_temporary_answers: bool,
-        answer_visibility: AnswerVisibility,
-    ) -> Self {
+    pub fn from_raw_parts(webhook_url: WebhookUrl, visibility: Visibility) -> Self {
         Self {
             webhook_url,
             visibility,
-            allow_temporary_answers,
-            answer_settings: AnswerSettings::new(
-                default_answer_title,
-                answer_visibility,
-                response_period,
-            ),
         }
     }
 }
@@ -282,7 +233,12 @@ pub struct ActiveForm {
 }
 
 impl ActiveForm {
-    pub fn new(title: FormTitle, description: FormDescription, questions: QuestionSet) -> Self {
+    pub fn new_with_answer_entry_set_id(
+        title: FormTitle,
+        description: FormDescription,
+        questions: QuestionSet,
+        answer_entry_set_id: AnswerEntrySetId,
+    ) -> Self {
         Self {
             id: FormId::new(),
             title,
@@ -291,7 +247,7 @@ impl ActiveForm {
             settings: FormSettings::new(),
             questions,
             label_ids: FormLabelIdSet::empty(),
-            answer_entry_set_id: AnswerEntrySetId::new(),
+            answer_entry_set_id,
         }
     }
 
@@ -412,7 +368,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// };
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormTitle};
-    /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
     /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
@@ -509,12 +464,8 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     FormDescription::new(String::from("")),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
-    ///         ResponsePeriod::try_new(None, None).unwrap(),
     ///         WebhookUrl::try_new(None).unwrap(),
-    ///         DefaultAnswerTitle::new(None),
-    ///         Visibility::PRIVATE,
-    ///         false,
-    ///         AnswerVisibility::PRIVATE
+    ///         Visibility::PRIVATE
     ///     ),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
@@ -527,12 +478,8 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     FormDescription::new(String::from("")),
     ///     FormMeta::new(),
     ///     FormSettings::from_raw_parts(
-    ///         ResponsePeriod::try_new(None, None).unwrap(),
     ///         WebhookUrl::try_new(None).unwrap(),
-    ///         DefaultAnswerTitle::new(None),
-    ///         Visibility::PUBLIC,
-    ///         false,
-    ///         AnswerVisibility::PRIVATE
+    ///         Visibility::PUBLIC
     ///     ),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
@@ -913,10 +860,11 @@ mod tests {
 
     #[test]
     fn active_form_new_has_empty_label_ids() {
-        let form = ActiveForm::new(
+        let form = ActiveForm::new_with_answer_entry_set_id(
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             sample_question_set(),
+            AnswerEntrySetId::new(),
         );
 
         assert!(form.label_ids().as_slice().is_empty());
@@ -925,10 +873,11 @@ mod tests {
     #[test]
     fn active_form_replace_label_ids_replaces_ids() {
         let label_id = FormLabelId::new();
-        let form = ActiveForm::new(
+        let form = ActiveForm::new_with_answer_entry_set_id(
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             sample_question_set(),
+            AnswerEntrySetId::new(),
         )
         .replace_label_ids(FormLabelIdSet::try_new(vec![label_id]).unwrap());
 
