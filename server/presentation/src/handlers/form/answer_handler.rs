@@ -109,6 +109,7 @@ pub async fn get_all_answers(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     let answers = form_answer_use_case
@@ -162,6 +163,7 @@ pub async fn get_answer_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -209,6 +211,7 @@ pub async fn get_answer_by_form_id_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -265,6 +268,7 @@ pub async fn post_answer_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -317,6 +321,7 @@ pub async fn post_temporary_answer_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -377,6 +382,7 @@ pub async fn update_answer_handler(
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;

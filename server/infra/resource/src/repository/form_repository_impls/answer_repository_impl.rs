@@ -1,20 +1,12 @@
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::{
-            models::{AnswerEntry, AnswerId},
-            service::AnswerEntryAuthorizationContext,
-        },
+        answer::models::{AnswerEntry, AnswerId},
         models::FormId,
     },
     repository::form::answer_repository::AnswerRepository,
-    types::authorization_guard_with_context::{
-        AuthorizationGuardWithContext, Create, Read, Update,
-    },
-    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
-use itertools::Itertools;
 
 use crate::{
     database::components::{DatabaseComponents, FormAnswerDatabase},
@@ -24,99 +16,51 @@ use crate::{
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn post_answer(
-        &self,
-        context: &AnswerEntryAuthorizationContext,
-        answer: AuthorizationGuardWithContext<AnswerEntry, Create, AnswerEntryAuthorizationContext>,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        answer
-            .try_create(
-                actor,
-                |entry| self.client.form_answer().post_answer(entry),
-                context,
-            )?
+    async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), Error> {
+        self.client
+            .form_answer()
+            .post_answer(answer)
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_answer(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<
-        Option<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
-        Error,
-    > {
-        Ok(self
-            .client
+    async fn get_answer(&self, answer_id: AnswerId) -> Result<Option<AnswerEntry>, Error> {
+        self.client
             .form_answer()
             .get_answers(answer_id)
             .await?
             .map(TryInto::<AnswerEntry>::try_into)
-            .transpose()?
-            .map(|entry| AuthorizationGuardWithContext::new(entry).into_read()))
+            .transpose()
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_answers_by_form_id(
-        &self,
-        form_id: FormId,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
-        Error,
-    > {
-        Ok(self
-            .client
+    async fn get_answers_by_form_id(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, Error> {
+        self.client
             .form_answer()
             .get_answers_by_form_id(form_id)
-            .await
-            .map(|answers| {
-                answers
-                    .into_iter()
-                    .map(|posted_answers_record| posted_answers_record.try_into())
-                    .collect::<Result<Vec<AnswerEntry>, _>>()
-            })??
+            .await?
             .into_iter()
-            .map(|entry| AuthorizationGuardWithContext::new(entry).into_read())
-            .collect_vec())
+            .map(TryInto::<AnswerEntry>::try_into)
+            .collect()
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_all_answers(
-        &self,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
-        Error,
-    > {
+    async fn get_all_answers(&self) -> Result<Vec<AnswerEntry>, Error> {
         self.client
             .form_answer()
             .get_all_answers()
             .await?
             .into_iter()
             .map(TryInto::<AnswerEntry>::try_into)
-            .map_ok(|entry| AuthorizationGuardWithContext::new(entry).into_read())
-            .collect::<Result<Vec<_>, _>>()
+            .collect()
     }
 
     #[tracing::instrument(skip(self))]
-    async fn update_answer_entry(
-        &self,
-        actor: &ActiveUser,
-        context: &AnswerEntryAuthorizationContext,
-        answer_entry: AuthorizationGuardWithContext<
-            AnswerEntry,
-            Update,
-            AnswerEntryAuthorizationContext,
-        >,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        answer_entry
-            .try_update(
-                &actor_user,
-                |entry| self.client.form_answer().update_answer_entry(entry),
-                context,
-            )?
+    async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), Error> {
+        self.client
+            .form_answer()
+            .update_answer_entry(answer_entry)
             .await
             .map_err(Into::into)
     }

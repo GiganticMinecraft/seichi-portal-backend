@@ -2,20 +2,16 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::form::answer::models::AnswerEntry;
-use crate::form::answer::service::AnswerEntryAuthorizationContext;
 use crate::search::models::NumberOfRecordsPerAggregate;
 use crate::{
     form::{
-        answer::models::AnswerLabel,
-        comment::{models::Comment, service::CommentAuthorizationContext},
+        answer::models::{AnswerEntry, AnswerLabel},
+        comment::models::Comment,
         models::{ActiveForm, FormLabel},
     },
     search::models::SearchableFieldsWithOperation,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
-    },
+    types::authorization_guard::AuthorizationGuard,
+    types::authorization_guard_with_context::Read,
     user::models::ActiveUser,
 };
 
@@ -38,20 +34,8 @@ pub trait SearchRepository: Send + Sync + 'static {
         &self,
         query: &str,
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error>;
-    async fn search_answers(
-        &self,
-        query: &str,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
-        Error,
-    >;
-    async fn search_comments(
-        &self,
-        query: &str,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    >;
+    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerEntry>, Error>;
+    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, Error>;
     async fn sync_search_engine(&self, data: &[SearchableFieldsWithOperation])
     -> Result<(), Error>;
     async fn fetch_search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, Error>;

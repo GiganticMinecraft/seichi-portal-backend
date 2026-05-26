@@ -1,24 +1,19 @@
-use crate::database::components::FormAnswerDatabase;
 use crate::{
-    database::components::{DatabaseComponents, SearchDatabase},
+    database::components::{DatabaseComponents, FormAnswerDatabase, SearchDatabase},
     repository::Repository,
 };
 use async_trait::async_trait;
 use domain::form::answer::models::AnswerEntry;
-use domain::form::answer::service::AnswerEntryAuthorizationContext;
 use domain::search::models::NumberOfRecordsPerAggregate;
 use domain::{
     form::{
         answer::models::AnswerLabel,
-        comment::{models::Comment, service::CommentAuthorizationContext},
+        comment::models::Comment,
         models::{ActiveForm, FormLabel},
     },
     repository::search_repository::SearchRepository,
     search::models::SearchableFieldsWithOperation,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{AuthorizationGuardWithContext, Read},
-    },
+    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
     user::models::ActiveUser,
 };
 use errors::Error;
@@ -82,13 +77,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .collect_vec())
     }
 
-    async fn search_answers(
-        &self,
-        query: &str,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<AnswerEntry, Read, AnswerEntryAuthorizationContext>>,
-        Error,
-    > {
+    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerEntry>, Error> {
         let real_answers = self.client.search().search_answers(query).await?;
         let answer_ids = real_answers
             .iter()
@@ -101,25 +90,18 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .await?
             .into_iter()
             .map(TryInto::<AnswerEntry>::try_into)
-            .map_ok(|entry| AuthorizationGuardWithContext::new(entry).into_read())
-            .collect::<Result<Vec<_>, _>>()
+            .collect()
     }
 
-    async fn search_comments(
-        &self,
-        query: &str,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    > {
+    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, Error> {
         Ok(self
             .client
             .search()
             .search_comments(query)
             .await?
             .into_iter()
-            .map(|comment| AuthorizationGuardWithContext::new(comment).into_read())
-            .collect())
+            .map(Ok::<_, Error>)
+            .collect::<Result<Vec<_>, _>>()?)
     }
 
     async fn sync_search_engine(

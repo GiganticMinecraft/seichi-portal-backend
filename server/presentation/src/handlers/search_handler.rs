@@ -68,6 +68,7 @@ pub async fn cross_search(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
@@ -104,6 +105,7 @@ pub async fn start_sync(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     search_use_case
@@ -123,6 +125,7 @@ pub async fn start_watch_out_of_sync(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     search_use_case
@@ -141,6 +144,7 @@ pub async fn initialize_search_engine(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
     };
 
     search_use_case.initialize_search_engine().await

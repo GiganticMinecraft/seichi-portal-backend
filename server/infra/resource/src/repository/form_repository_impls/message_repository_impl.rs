@@ -1,130 +1,79 @@
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::AnswerEntry,
-        message::{
-            models::{Message, MessageId},
-            service::MessageAuthorizationContext,
-        },
+        answer::models::AnswerId,
+        message::models::{Message, MessageId},
     },
     repository::form::message_repository::MessageRepository,
-    types::authorization_guard_with_context::{
-        AuthorizationGuardWithContext, Create, Delete, Read, Update,
-    },
-    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 
 use crate::{
-    database::components::{DatabaseComponents, FormMessageDatabase},
+    database::components::{DatabaseComponents, FormAnswerDatabase, FormMessageDatabase},
     repository::Repository,
 };
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> MessageRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn post_message(
-        &self,
-        actor: &ActiveUser,
-        context: &MessageAuthorizationContext,
-        message: AuthorizationGuardWithContext<Message, Create, MessageAuthorizationContext>,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        Ok(message
-            .try_create(
-                &actor_user,
-                |message: &Message| self.client.form_message().post_message(message),
-                context,
-            )?
-            .await?)
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn fetch_messages_by_answer(
-        &self,
-        answers: &AnswerEntry,
-    ) -> Result<Vec<AuthorizationGuardWithContext<Message, Read, MessageAuthorizationContext>>, Error>
-    {
+    async fn post_message(&self, message: &Message) -> Result<(), Error> {
         self.client
             .form_message()
-            .fetch_messages_by_form_answer(answers)
-            .await?
-            .into_iter()
-            .map(|record| {
-                Ok::<Message, Error>(record.try_into()?).map(|message| {
-                    let guard = AuthorizationGuardWithContext::new(message);
-
-                    guard.into_read()
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn update_message_body(
-        &self,
-        actor: &ActiveUser,
-        context: &MessageAuthorizationContext,
-        message: AuthorizationGuardWithContext<Message, Update, MessageAuthorizationContext>,
-        content: String,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        message
-            .try_update(
-                &actor_user,
-                |message: &Message| {
-                    let message_id = message.id().to_owned();
-
-                    self.client
-                        .form_message()
-                        .update_message_body(message_id, content)
-                },
-                context,
-            )?
+            .post_message(message)
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn fetch_message(
+    async fn fetch_messages_by_answer_id(
         &self,
-        message_id: &MessageId,
-    ) -> Result<
-        Option<AuthorizationGuardWithContext<Message, Read, MessageAuthorizationContext>>,
-        Error,
-    > {
+        answer_id: AnswerId,
+    ) -> Result<Vec<Message>, Error> {
+        let answer = self
+            .client
+            .form_answer()
+            .get_answers(answer_id)
+            .await?
+            .map(TryInto::<domain::form::answer::models::AnswerEntry>::try_into)
+            .transpose()?;
+
+        match answer {
+            Some(answer) => self
+                .client
+                .form_message()
+                .fetch_messages_by_form_answer(&answer)
+                .await?
+                .into_iter()
+                .map(TryInto::<Message>::try_into)
+                .collect(),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn update_message_body(&self, message_id: MessageId, body: String) -> Result<(), Error> {
+        self.client
+            .form_message()
+            .update_message_body(message_id, body)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn fetch_message(&self, message_id: &MessageId) -> Result<Option<Message>, Error> {
         self.client
             .form_message()
             .fetch_message(message_id)
             .await?
-            .map(|record| {
-                Ok::<Message, Error>(record.try_into()?).map(|message| {
-                    let guard = AuthorizationGuardWithContext::new(message);
-
-                    guard.into_read()
-                })
-            })
+            .map(TryInto::<Message>::try_into)
             .transpose()
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete_message(
-        &self,
-        actor: &ActiveUser,
-        context: &MessageAuthorizationContext,
-        message: AuthorizationGuardWithContext<Message, Delete, MessageAuthorizationContext>,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        message
-            .try_delete(
-                &actor_user,
-                |message: &Message| {
-                    let message_id = message.id().to_owned();
-
-                    self.client.form_message().delete_message(message_id)
-                },
-                context,
-            )?
+    async fn delete_message(&self, message_id: MessageId) -> Result<(), Error> {
+        self.client
+            .form_message()
+            .delete_message(message_id)
             .await
             .map_err(Into::into)
     }

@@ -1,4 +1,5 @@
 use crate::models::CrossSearchOutput;
+use domain::repository::form::answer_entry_set_repository::AnswerEntrySetRepository;
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
@@ -6,10 +7,6 @@ use domain::repository::user_repository::UserRepository;
 use domain::search::models::NumberOfRecords;
 use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
-    form::{
-        answer::service::AnswerEntryAuthorizationContext,
-        comment::service::CommentAuthorizationContext,
-    },
     repository::{
         form::{active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository},
         search_repository::SearchRepository,
@@ -17,11 +14,8 @@ use domain::{
     search::models::SearchableFieldsWithOperation,
     user::models::{ActiveUser, Actor},
 };
-use errors::{
-    Error,
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
-};
-use futures::{future::try_join_all, try_join};
+use errors::Error;
+use futures::try_join;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
@@ -36,6 +30,7 @@ pub struct SearchUseCase<
     FormAnswerLabelRepo: AnswerLabelRepository,
     FormLabelRepo: FormLabelRepository,
     UserRepo: UserRepository,
+    AnswerEntrySetRepo: AnswerEntrySetRepository,
 > {
     pub search_repository: &'a SearchRepo,
     pub answer_repository: &'a AnswerRepo,
@@ -44,6 +39,7 @@ pub struct SearchUseCase<
     pub form_answer_label_repository: &'a FormAnswerLabelRepo,
     pub form_label_repository: &'a FormLabelRepo,
     pub user_repository: &'a UserRepo,
+    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
 }
 
 impl<
@@ -54,7 +50,8 @@ impl<
     R5: AnswerLabelRepository,
     R6: FormLabelRepository,
     R7: UserRepository,
-> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
+    R8: AnswerEntrySetRepository,
+> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7, R8>
 {
     pub async fn cross_search(
         &self,
@@ -91,103 +88,74 @@ impl<
             .flat_map(|guard| guard.try_into_read(&actor))
             .collect::<Vec<_>>();
 
-        let answers_futs = answers
-            .into_iter()
-            .map(|guard| {
-                let actor = actor.clone();
-                async move {
-                    let context = guard
-                        .create_context(|entry| {
-                            let form_id = entry.form_id().to_owned();
-                            let actor = actor.clone();
+        let mut visible_answers = Vec::new();
+        for entry in answers {
+            let form_id = *entry.form_id();
+            let form_guard = match self.active_form_repository.get(form_id).await? {
+                Some(g) => g,
+                None => continue,
+            };
+            let form = match form_guard.try_read(&actor) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let set_guard = match self
+                .answer_entry_set_repository
+                .get(*form.answer_entry_set_id())
+                .await?
+            {
+                Some(g) => g,
+                None => continue,
+            };
+            let answer_entry_set = match set_guard.try_read(&actor) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            if answer_entry_set.can_read_entry(&entry, &actor) {
+                visible_answers.push(entry);
+            }
+        }
 
-                            async move {
-                                let form_guard = self
-                                    .active_form_repository
-                                    .get(form_id)
-                                    .await?
-                                    .ok_or(Error::from(FormNotFound))?;
-
-                                let form = form_guard.try_read(&actor)?;
-
-                                Ok(AnswerEntryAuthorizationContext::from_form_settings(
-                                    form.settings(),
-                                ))
-                            }
-                        })
-                        .await?;
-
-                    guard
-                        .try_into_read(&actor, &context)
-                        .map_err(Into::<Error>::into)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let answers = try_join_all(answers_futs).await?;
-
-        let comment_futs = comments
-            .into_iter()
-            .map(|guard| {
-                let actor = actor.clone();
-                async move {
-                    let context = guard
-                        .create_context(|comment| {
-                            let answer_id = comment.answer_id().to_owned();
-                            let actor = actor.clone();
-
-                            async move {
-                                let answer_entry_guard = self
-                                    .answer_repository
-                                    .get_answer(answer_id)
-                                    .await?
-                                    .ok_or(Error::from(AnswerNotFound))?;
-
-                                let answer_entry_context = answer_entry_guard
-                                    .create_context(|entry| {
-                                        let form_id = entry.form_id().to_owned();
-                                        let actor = actor.clone();
-
-                                        async move {
-                                            let form_guard = self
-                                                .active_form_repository
-                                                .get(form_id)
-                                                .await?
-                                                .ok_or(Error::from(FormNotFound))?;
-
-                                            let form = form_guard.try_read(&actor)?;
-
-                                            Ok(AnswerEntryAuthorizationContext::from_form_settings(
-                                                form.settings(),
-                                            ))
-                                        }
-                                    })
-                                    .await?;
-
-                                Ok(CommentAuthorizationContext {
-                                    related_answer_entry_guard: answer_entry_guard,
-                                    related_answer_entry_guard_context: answer_entry_context,
-                                })
-                            }
-                        })
-                        .await?;
-
-                    guard
-                        .try_into_read(&actor, &context)
-                        .map_err(Into::<Error>::into)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let comments = try_join_all(comment_futs).await?;
+        let mut visible_comments = Vec::new();
+        for comment in comments {
+            let answer_id = *comment.answer_id();
+            let answer = match self.answer_repository.get_answer(answer_id).await? {
+                Some(a) => a,
+                None => continue,
+            };
+            let form_id = *answer.form_id();
+            let form_guard = match self.active_form_repository.get(form_id).await? {
+                Some(g) => g,
+                None => continue,
+            };
+            let form = match form_guard.try_read(&actor) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let set_guard = match self
+                .answer_entry_set_repository
+                .get(*form.answer_entry_set_id())
+                .await?
+            {
+                Some(g) => g,
+                None => continue,
+            };
+            let answer_entry_set = match set_guard.try_read(&actor) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            if answer_entry_set.can_read_entry(&answer, &actor) {
+                visible_comments.push(comment);
+            }
+        }
 
         Ok(CrossSearchOutput {
             forms,
             users,
             label_for_forms,
             label_for_answers,
-            answers,
-            comments,
+            answers: visible_answers,
+            comments: visible_comments,
         })
     }
 
@@ -271,10 +239,8 @@ impl<
                             .get_all_answers()
                             .await?
                             .into_iter()
-                            .map(|guard| {
-                                let entry = guard.try_into_read_as_system(&system)?;
-
-                                Ok(entry
+                            .flat_map(|entry| {
+                                entry
                                     .contents()
                                     .iter()
                                     .map(|content| {
@@ -290,11 +256,8 @@ impl<
                                             Operation::Update,
                                         )
                                     })
-                                    .collect::<Vec<_>>())
+                                    .collect::<Vec<_>>()
                             })
-                            .collect::<Result<Vec<_>, errors::Error>>()?
-                            .into_iter()
-                            .flatten()
                             .collect::<Vec<_>>();
 
                         let comments = self
@@ -302,10 +265,8 @@ impl<
                             .get_all_comments()
                             .await?
                             .into_iter()
-                            .map(|guard| {
-                                let comment = guard.try_into_read_as_system(&system)?;
-
-                                Ok((
+                            .map(|comment| {
+                                (
                                     domain::search::models::SearchableFields::FormAnswerComments(
                                         domain::search::models::FormAnswerComments {
                                             id: comment.comment_id().to_owned(),
@@ -314,9 +275,9 @@ impl<
                                         },
                                     ),
                                     Operation::Update,
-                                ))
+                                )
                             })
-                            .collect::<Result<Vec<_>, errors::Error>>()?;
+                            .collect::<Vec<_>>();
 
                         let labels_for_forms = self
                             .form_label_repository

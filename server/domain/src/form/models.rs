@@ -472,6 +472,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// };
     /// use uuid::Uuid;
     /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
+    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{
     ///     FormDescription, FormId, FormMeta,
     ///     FormLabelIdSet, FormTitle, Visibility, WebhookUrl
