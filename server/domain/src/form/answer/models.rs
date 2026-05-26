@@ -158,7 +158,7 @@ impl PostedAnswerContents {
     }
 }
 
-#[derive(Serialize, Deserialize, Getters, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Getters, Clone, PartialEq, Debug)]
 pub struct AnswerEntry {
     id: AnswerId,
     author: AnswerAuthor,

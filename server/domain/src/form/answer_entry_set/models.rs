@@ -1,7 +1,10 @@
 use derive_getters::Getters;
 
 use crate::{
-    form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+    form::answer::{
+        models::AnswerEntry,
+        settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+    },
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Actor, Role::Administrator, User},
 };
@@ -15,6 +18,7 @@ pub struct AnswerEntrySet {
     visibility: AnswerVisibility,
     response_period: ResponsePeriod,
     allow_temporary_answers: bool,
+    entries: Vec<AnswerEntry>,
 }
 
 impl AnswerEntrySet {
@@ -30,15 +34,18 @@ impl AnswerEntrySet {
             visibility,
             response_period,
             allow_temporary_answers,
+            entries: Vec::new(),
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from_raw_parts(
         id: AnswerEntrySetId,
         default_answer_title: DefaultAnswerTitle,
         visibility: AnswerVisibility,
         response_period: ResponsePeriod,
         allow_temporary_answers: bool,
+        entries: Vec<AnswerEntry>,
     ) -> Self {
         Self {
             id,
@@ -46,6 +53,7 @@ impl AnswerEntrySet {
             visibility,
             response_period,
             allow_temporary_answers,
+            entries,
         }
     }
 

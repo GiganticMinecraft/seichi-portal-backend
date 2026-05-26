@@ -989,6 +989,7 @@ impl FormDatabase for ConnectionPool {
                             visibility,
                             response_period,
                             allow_temporary_answers,
+                            Vec::new(),
                         ),
                     )
                 })
