@@ -2,9 +2,13 @@ use chrono::Utc;
 use errors::domain::DomainError;
 
 use crate::{
-    form::answer::{
-        models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle},
-        settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+    form::{
+        answer::{
+            models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle},
+            settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+        },
+        comment::models::CommentId,
+        models::FormId,
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Actor, Role::Administrator, User},
@@ -15,6 +19,7 @@ pub type AnswerEntrySetId = types::Id<AnswerEntrySet>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnswerEntrySet {
     id: AnswerEntrySetId,
+    form_id: FormId,
     default_answer_title: DefaultAnswerTitle,
     visibility: AnswerVisibility,
     response_period: ResponsePeriod,
@@ -24,6 +29,7 @@ pub struct AnswerEntrySet {
 
 impl AnswerEntrySet {
     pub fn new(
+        form_id: FormId,
         default_answer_title: DefaultAnswerTitle,
         visibility: AnswerVisibility,
         response_period: ResponsePeriod,
@@ -31,6 +37,7 @@ impl AnswerEntrySet {
     ) -> Self {
         Self {
             id: AnswerEntrySetId::new(),
+            form_id,
             default_answer_title,
             visibility,
             response_period,
@@ -42,6 +49,7 @@ impl AnswerEntrySet {
     #[allow(clippy::too_many_arguments)]
     pub fn from_raw_parts(
         id: AnswerEntrySetId,
+        form_id: FormId,
         default_answer_title: DefaultAnswerTitle,
         visibility: AnswerVisibility,
         response_period: ResponsePeriod,
@@ -50,6 +58,7 @@ impl AnswerEntrySet {
     ) -> Self {
         Self {
             id,
+            form_id,
             default_answer_title,
             visibility,
             response_period,
@@ -60,6 +69,10 @@ impl AnswerEntrySet {
 
     pub fn id(&self) -> &AnswerEntrySetId {
         &self.id
+    }
+
+    pub fn form_id(&self) -> &FormId {
+        &self.form_id
     }
 
     pub fn default_answer_title(&self) -> &DefaultAnswerTitle {
@@ -121,13 +134,24 @@ impl AnswerEntrySet {
     }
 
     pub fn change_entry_title(
-        &self,
+        self,
         answer_id: AnswerId,
         actor: &Actor,
         title: AnswerTitle,
-    ) -> Result<AnswerEntry, DomainError> {
-        let entry = self.read_entry(answer_id, actor)?;
-        Ok(entry.clone().with_title(title))
+    ) -> Result<Self, DomainError> {
+        self.read_entry(answer_id, actor).map(|_| ())?;
+        let entries = self
+            .entries
+            .into_iter()
+            .map(|entry| {
+                if *entry.id() == answer_id {
+                    entry.with_title(title.clone())
+                } else {
+                    entry
+                }
+            })
+            .collect();
+        Ok(Self { entries, ..self })
     }
 
     pub fn entries_as_system(&self, actor: &Actor) -> Result<&[AnswerEntry], DomainError> {
@@ -187,6 +211,51 @@ impl AnswerEntrySet {
             ..self
         }
     }
+
+    pub fn can_create_comment(
+        &self,
+        answer_id: AnswerId,
+        actor: &Actor,
+    ) -> Result<bool, DomainError> {
+        self.read_entry(answer_id, actor)?;
+        Ok(matches!(actor, Actor::User(User::ActiveUser(_))))
+    }
+
+    pub fn can_update_comment(
+        &self,
+        answer_id: AnswerId,
+        comment_id: CommentId,
+        actor: &Actor,
+    ) -> Result<bool, DomainError> {
+        let entry = self.read_entry(answer_id, actor)?;
+        let comment = entry
+            .find_comment(comment_id)
+            .ok_or(DomainError::NotFound)?;
+        Ok(match actor {
+            Actor::User(User::ActiveUser(user)) => {
+                comment.commented_by() == user.id() || user.role() == &Administrator
+            }
+            _ => false,
+        })
+    }
+
+    pub fn can_delete_comment(
+        &self,
+        answer_id: AnswerId,
+        comment_id: CommentId,
+        actor: &Actor,
+    ) -> Result<bool, DomainError> {
+        let entry = self.read_entry(answer_id, actor)?;
+        let comment = entry
+            .find_comment(comment_id)
+            .ok_or(DomainError::NotFound)?;
+        Ok(match actor {
+            Actor::User(User::ActiveUser(user)) => {
+                comment.commented_by() == user.id() || user.role() == &Administrator
+            }
+            _ => false,
+        })
+    }
 }
 
 fn is_administrator(actor: &Actor) -> bool {
@@ -229,6 +298,7 @@ mod tests {
         response_period: ResponsePeriod,
     ) -> AnswerEntrySet {
         AnswerEntrySet::new(
+            FormId::new(),
             DefaultAnswerTitle::new(None),
             AnswerVisibility::PRIVATE,
             response_period,
@@ -246,9 +316,7 @@ mod tests {
                 AnswerId::new(),
                 author,
                 Utc::now(),
-                FormId::new(),
                 AnswerTitle::new(None),
-                Vec::new(),
                 Vec::new(),
                 Vec::new(),
             )
@@ -261,6 +329,7 @@ mod tests {
     ) -> AnswerEntrySet {
         AnswerEntrySet::from_raw_parts(
             AnswerEntrySetId::new(),
+            FormId::new(),
             DefaultAnswerTitle::new(None),
             visibility,
             ResponsePeriod::try_new(None, None).unwrap(),

@@ -38,7 +38,6 @@ impl Message {
     /// let related_answer = AnswerEntry::new(
     ///     AnswerAuthor::AuthenticatedUser(user_id),
     ///     Default::default(),
-    ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
     ///
@@ -50,7 +49,6 @@ impl Message {
     ///
     /// let related_answer = AnswerEntry::new(
     ///     AnswerAuthor::AuthenticatedUser(user_id),
-    ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );
@@ -95,7 +93,6 @@ impl Message {
     ///
     /// let related_answer = AnswerEntry::new(
     ///     AnswerAuthor::AuthenticatedUser(user_id),
-    ///     Default::default(),
     ///     Default::default(),
     ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
     /// );

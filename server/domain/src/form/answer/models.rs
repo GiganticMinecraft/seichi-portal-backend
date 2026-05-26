@@ -11,8 +11,6 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     form::{
         comment::models::{Comment, CommentId},
-        message::models::{Message, MessageId},
-        models::FormId,
         question::models::{Question, QuestionId},
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
@@ -165,30 +163,21 @@ pub struct AnswerEntry {
     id: AnswerId,
     author: AnswerAuthor,
     timestamp: DateTime<Utc>,
-    form_id: FormId,
     title: AnswerTitle,
     contents: Vec<FormAnswerContent>,
     comments: Vec<Comment>,
-    messages: Vec<Message>,
 }
 
 impl AnswerEntry {
     /// [`AnswerEntry`] を新しく作成します。
-    pub fn new(
-        author: AnswerAuthor,
-        form_id: FormId,
-        title: AnswerTitle,
-        contents: PostedAnswerContents,
-    ) -> Self {
+    pub fn new(author: AnswerAuthor, title: AnswerTitle, contents: PostedAnswerContents) -> Self {
         Self {
             id: AnswerId::new(),
             author,
             timestamp: Utc::now(),
-            form_id,
             title,
             contents: contents.into_inner(),
             comments: Vec::new(),
-            messages: Vec::new(),
         }
     }
 
@@ -202,21 +191,17 @@ impl AnswerEntry {
         id: AnswerId,
         author: AnswerAuthor,
         timestamp: DateTime<Utc>,
-        form_id: FormId,
         title: AnswerTitle,
         contents: Vec<FormAnswerContent>,
         comments: Vec<Comment>,
-        messages: Vec<Message>,
     ) -> Self {
         Self {
             id,
             author,
             timestamp,
-            form_id,
             title,
             contents,
             comments,
-            messages,
         }
     }
 
@@ -226,10 +211,6 @@ impl AnswerEntry {
 
     pub fn find_comment(&self, comment_id: CommentId) -> Option<&Comment> {
         self.comments.iter().find(|c| *c.comment_id() == comment_id)
-    }
-
-    pub fn find_message(&self, message_id: MessageId) -> Option<&Message> {
-        self.messages.iter().find(|m| *m.id() == message_id)
     }
 }
 
