@@ -7,6 +7,7 @@ use domain::{
             models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
             settings::models::{DefaultAnswerTitle, ResponsePeriod},
         },
+        answer_entry_set::models::AnswerEntrySetId,
         comment::models::CommentContent,
         models::{
             ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
@@ -112,6 +113,7 @@ pub struct ActiveFormRecord {
     pub answer_visibility: String,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
+    pub answer_entry_set_id: String,
 }
 
 impl TryFrom<ActiveFormRecord> for ActiveForm {
@@ -133,6 +135,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             answer_visibility,
             questions,
             label_ids,
+            answer_entry_set_id,
         }: ActiveFormRecord,
     ) -> Result<Self, Self::Error> {
         let questions = questions
@@ -160,6 +163,9 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             ),
             QuestionSet::try_new(questions)?,
             FormLabelIdSet::try_new(label_ids)?,
+            AnswerEntrySetId::from(
+                Uuid::parse_str(&answer_entry_set_id).map_err(Into::<InfraError>::into)?,
+            ),
         ))
     }
 }

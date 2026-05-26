@@ -614,6 +614,7 @@ mod tests {
             FormSettings::new(),
             questions,
             FormLabelIdSet::empty(),
+            domain::form::answer_entry_set::models::AnswerEntrySetId::new(),
         )
     }
 

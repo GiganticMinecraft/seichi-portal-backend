@@ -16,8 +16,11 @@ use types::non_empty_string::NonEmptyString;
 pub use crate::form::question::models::{Question, QuestionSet};
 
 use crate::{
-    form::answer::settings::models::{
-        AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+    form::{
+        answer::settings::models::{
+            AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+        },
+        answer_entry_set::models::AnswerEntrySetId,
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Actor, Role::Administrator, User, UserId},
@@ -274,6 +277,8 @@ pub struct ActiveForm {
     questions: QuestionSet,
     #[serde(default)]
     label_ids: FormLabelIdSet,
+    #[serde(default)]
+    answer_entry_set_id: AnswerEntrySetId,
 }
 
 impl ActiveForm {
@@ -286,6 +291,7 @@ impl ActiveForm {
             settings: FormSettings::new(),
             questions,
             label_ids: FormLabelIdSet::empty(),
+            answer_entry_set_id: AnswerEntrySetId::new(),
         }
     }
 
@@ -312,6 +318,7 @@ impl ActiveForm {
         Self { label_ids, ..self }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from_raw_parts(
         id: FormId,
         title: FormTitle,
@@ -320,6 +327,7 @@ impl ActiveForm {
         settings: FormSettings,
         questions: QuestionSet,
         label_ids: FormLabelIdSet,
+        answer_entry_set_id: AnswerEntrySetId,
     ) -> Self {
         Self {
             id,
@@ -329,6 +337,7 @@ impl ActiveForm {
             settings,
             questions,
             label_ids,
+            answer_entry_set_id,
         }
     }
 
@@ -404,6 +413,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormTitle};
     /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
+    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -437,6 +447,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         ]).unwrap(),
     ///     ).unwrap(),
     ///     FormLabelIdSet::empty(),
+    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -506,6 +517,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     ),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
+    ///     AnswerEntrySetId::new(),
     /// );
     ///
     ///  let public_form = ActiveForm::from_raw_parts(
@@ -523,6 +535,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     ),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
+    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(private_form.can_read(&administrator));
@@ -549,6 +562,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -582,6 +596,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         ]).unwrap(),
     ///     ).unwrap(),
     ///     FormLabelIdSet::empty(),
+    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -604,6 +619,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -637,6 +653,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         ]).unwrap(),
     ///     ).unwrap(),
     ///     FormLabelIdSet::empty(),
+    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(!form.can_delete(&administrator));
