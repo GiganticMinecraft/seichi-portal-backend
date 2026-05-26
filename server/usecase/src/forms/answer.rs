@@ -127,20 +127,13 @@ impl<
             user.name(),
         )?;
 
-        let form_settings = form.settings();
-
         let answer_entry = AnswerEntry::new(
             AnswerAuthor::AuthenticatedUser(*user.id()),
             form_id,
             title,
             posted_answers,
         );
-        let context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
 
         let guard = AuthorizationGuardWithContext::new(answer_entry);
         let actor = Actor::from(user);
@@ -172,13 +165,7 @@ impl<
             temporary_user.name(),
         )?;
 
-        let form_settings = form.settings();
-        let context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
 
         let actor = Actor::from(temporary_user.clone());
         let answer_entry = AnswerEntry::new(
@@ -209,14 +196,8 @@ impl<
 
             let user_ref = Actor::from(user.clone());
             let form = form_guard.try_read(&user_ref)?;
-            let form_settings = form.settings();
 
-            let context = AnswerEntryAuthorizationContext {
-                form_visibility: form_settings.visibility().to_owned(),
-                response_period: form_settings.answer_settings().response_period().to_owned(),
-                answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                allow_temporary_answers: form_settings.allow_temporary_answers(),
-            };
+            let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
             let fetch_labels = self
                 .answer_label_repository
                 .get_labels_for_answers_by_answer_id(answer_id);
@@ -265,14 +246,9 @@ impl<
             .ok_or(FormNotFound)?;
 
         let actor_ref = Actor::from(actor.clone());
-        let form_settings = form.try_read(&actor_ref)?.settings();
+        let form = form.try_read(&actor_ref)?;
 
-        let context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
         stream::iter(
             self.answer_repository
                 .get_answers_by_form_id(form_id)
@@ -290,12 +266,8 @@ impl<
 
             let comment_authorization_context = CommentAuthorizationContext {
                 related_answer_entry_guard: form_answer_guard,
-                related_answer_entry_guard_context: AnswerEntryAuthorizationContext {
-                    form_visibility: form_settings.visibility().to_owned(),
-                    response_period: form_settings.answer_settings().response_period().to_owned(),
-                    answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-                    allow_temporary_answers: form_settings.allow_temporary_answers(),
-                },
+                related_answer_entry_guard_context:
+                    AnswerEntryAuthorizationContext::from_form_settings(form.settings()),
             };
 
             let comments = comments
@@ -344,21 +316,10 @@ impl<
                                     .ok_or(FormNotFound)?;
 
                                 let form = guard.try_read(&user)?;
-                                let form_settings = form.settings();
 
-                                Ok(AnswerEntryAuthorizationContext {
-                                    form_visibility: form_settings.visibility().to_owned(),
-                                    response_period: form_settings
-                                        .answer_settings()
-                                        .response_period()
-                                        .to_owned(),
-                                    answer_visibility: form_settings
-                                        .answer_settings()
-                                        .visibility()
-                                        .to_owned(),
-                                    allow_temporary_answers: form_settings
-                                        .allow_temporary_answers(),
-                                })
+                                Ok(AnswerEntryAuthorizationContext::from_form_settings(
+                                    form.settings(),
+                                ))
                             }
                         })
                         .await?;
@@ -420,14 +381,8 @@ impl<
 
         let actor_ref = Actor::from(actor.clone());
         let form = form_guard.try_read(&actor_ref)?;
-        let form_settings = form.settings();
 
-        let context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
         if let Some(title) = title {
             let answer_entry = self
                 .answer_repository
