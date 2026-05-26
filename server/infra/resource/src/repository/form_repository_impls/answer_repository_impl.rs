@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::answer::models::{AnswerEntry, AnswerId},
-    repository::form::answer_repository::AnswerRepository,
+    form::answer::models::AnswerEntry, repository::form::answer_repository::AnswerRepository,
 };
 use errors::Error;
 
@@ -19,16 +18,6 @@ impl<Client: DatabaseComponents + 'static> AnswerRepository for Repository<Clien
             .post_answer(answer)
             .await
             .map_err(Into::into)
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_answer(&self, answer_id: AnswerId) -> Result<Option<AnswerEntry>, Error> {
-        self.client
-            .form_answer()
-            .get_answers(answer_id)
-            .await?
-            .map(TryInto::<AnswerEntry>::try_into)
-            .transpose()
     }
 
     #[tracing::instrument(skip(self))]

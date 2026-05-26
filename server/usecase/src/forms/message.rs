@@ -12,7 +12,7 @@ use domain::{
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_set_repository::AnswerEntrySetRepository,
-            answer_repository::AnswerRepository, message_repository::MessageRepository,
+            message_repository::MessageRepository,
         },
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
@@ -32,14 +32,12 @@ use crate::{models::MessageWithSender, user_reference_resolver::resolve_user_ref
 pub struct MessageUseCase<
     'a,
     MessageRepo: MessageRepository,
-    AnswerRepo: AnswerRepository,
     NotificationRepo: NotificationRepository,
     FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
     AnswerEntrySetRepo: AnswerEntrySetRepository,
 > {
     pub message_repository: &'a MessageRepo,
-    pub answer_repository: &'a AnswerRepo,
     pub notification_repository: &'a NotificationRepo,
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
@@ -48,12 +46,11 @@ pub struct MessageUseCase<
 
 impl<
     R1: MessageRepository,
-    R2: AnswerRepository,
-    R3: NotificationRepository,
-    R4: ActiveFormRepository,
-    R5: UserRepository,
-    R6: AnswerEntrySetRepository,
-> MessageUseCase<'_, R1, R2, R3, R4, R5, R6>
+    R2: NotificationRepository,
+    R3: ActiveFormRepository,
+    R4: UserRepository,
+    R5: AnswerEntrySetRepository,
+> MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
     async fn verify_answer_readable(
         &self,
@@ -75,17 +72,13 @@ impl<
             .ok_or(FormNotFound)?;
         let answer_entry_set = set_guard.try_read(actor)?;
 
-        let answer = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(AnswerNotFound)?;
-
-        if !answer_entry_set.can_read_entry(&answer, actor) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
-
-        Ok(answer)
+        answer_entry_set
+            .read_entry(answer_id, actor)
+            .cloned()
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })
     }
 
     pub async fn post_message<N: Notificator>(

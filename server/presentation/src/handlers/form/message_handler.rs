@@ -86,7 +86,6 @@ pub async fn post_message_handler<N: Notificator>(
 ) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: state.repository.form_message_repository(),
-        answer_repository: state.repository.form_answer_repository(),
         notification_repository: state.repository.notification_repository(),
         active_form_repository: state.repository.active_form_repository(),
         user_repository: state.repository.user_repository(),
@@ -134,7 +133,6 @@ pub async fn update_message_handler(
 ) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
-        answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
@@ -179,7 +177,6 @@ pub async fn get_messages_handler(
 ) -> Result<GetMessagesResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
-        answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
@@ -237,7 +234,6 @@ pub async fn delete_message_handler(
 ) -> Result<impl IntoResponse, Response> {
     let form_message_use_case = MessageUseCase {
         message_repository: repository.form_message_repository(),
-        answer_repository: repository.form_answer_repository(),
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),

@@ -7,7 +7,7 @@ use domain::{
     },
     repository::form::{
         active_form_repository::ActiveFormRepository,
-        answer_entry_set_repository::AnswerEntrySetRepository, answer_repository::AnswerRepository,
+        answer_entry_set_repository::AnswerEntrySetRepository,
         comment_repository::CommentRepository,
     },
     repository::user_repository::UserRepository,
@@ -24,13 +24,11 @@ use crate::{models::CommentWithAuthor, user_reference_resolver::resolve_user_ref
 pub struct CommentUseCase<
     'a,
     CommentRepo: CommentRepository,
-    AnswerRepo: AnswerRepository,
     FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
     AnswerEntrySetRepo: AnswerEntrySetRepository,
 > {
     pub comment_repository: &'a CommentRepo,
-    pub answer_repository: &'a AnswerRepo,
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
@@ -38,11 +36,10 @@ pub struct CommentUseCase<
 
 impl<
     R1: CommentRepository,
-    R2: AnswerRepository,
-    R3: ActiveFormRepository,
-    R4: UserRepository,
-    R5: AnswerEntrySetRepository,
-> CommentUseCase<'_, R1, R2, R3, R4, R5>
+    R2: ActiveFormRepository,
+    R3: UserRepository,
+    R4: AnswerEntrySetRepository,
+> CommentUseCase<'_, R1, R2, R3, R4>
 {
     async fn verify_answer_readable(
         &self,
@@ -64,15 +61,12 @@ impl<
             .ok_or(FormNotFound)?;
         let answer_entry_set = set_guard.try_read(actor)?;
 
-        let answer = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(AnswerNotFound)?;
-
-        if !answer_entry_set.can_read_entry(&answer, actor) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+        answer_entry_set
+            .read_entry(answer_id, actor)
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })?;
 
         Ok(())
     }

@@ -65,7 +65,6 @@ pub async fn get_form_comment(
 ) -> Result<GetFormCommentResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -115,7 +114,6 @@ pub async fn post_form_comment(
 ) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -168,7 +166,6 @@ pub async fn update_form_comment(
 ) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -219,7 +216,6 @@ pub async fn delete_form_comment_handler(
 ) -> Result<impl IntoResponse, Response> {
     let form_comment_use_case = CommentUseCase {
         comment_repository: repository.form_comment_repository(),
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),

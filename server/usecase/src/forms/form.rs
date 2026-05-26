@@ -325,7 +325,7 @@ impl<
                 .await?
                 .ok_or(Error::from(FormNotFound))?;
             let answer_entry_set = answer_entry_set_guard.try_read(&actor_user)?;
-            let has_answers = !answer_entry_set.entries().is_empty();
+            let has_answers = answer_entry_set.has_entries();
             if has_answers {
                 validate_answered_form_question_update(&current_questions, questions.as_slice())?;
             }

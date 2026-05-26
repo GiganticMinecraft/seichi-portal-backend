@@ -1,9 +1,9 @@
 use chrono::Utc;
-use derive_getters::Getters;
+use errors::domain::DomainError;
 
 use crate::{
     form::answer::{
-        models::{AnswerAuthor, AnswerEntry, AnswerId},
+        models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle},
         settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
@@ -12,7 +12,7 @@ use crate::{
 
 pub type AnswerEntrySetId = types::Id<AnswerEntrySet>;
 
-#[derive(Getters, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AnswerEntrySet {
     id: AnswerEntrySetId,
     default_answer_title: DefaultAnswerTitle,
@@ -58,7 +58,31 @@ impl AnswerEntrySet {
         }
     }
 
-    pub fn visible_entries(&self, actor: &Actor) -> Vec<&AnswerEntry> {
+    pub fn id(&self) -> &AnswerEntrySetId {
+        &self.id
+    }
+
+    pub fn default_answer_title(&self) -> &DefaultAnswerTitle {
+        &self.default_answer_title
+    }
+
+    pub fn visibility(&self) -> &AnswerVisibility {
+        &self.visibility
+    }
+
+    pub fn response_period(&self) -> &ResponsePeriod {
+        &self.response_period
+    }
+
+    pub fn allow_temporary_answers(&self) -> &bool {
+        &self.allow_temporary_answers
+    }
+
+    pub fn has_entries(&self) -> bool {
+        !self.entries.is_empty()
+    }
+
+    pub fn readable_entries(&self, actor: &Actor) -> Vec<&AnswerEntry> {
         match actor {
             Actor::User(User::ActiveUser(user)) if user.role() == &Administrator => {
                 self.entries.iter().collect()
@@ -78,8 +102,39 @@ impl AnswerEntrySet {
         }
     }
 
-    pub fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
+    fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
         self.entries.iter().find(|e| *e.id() == answer_id)
+    }
+
+    pub fn read_entry(
+        &self,
+        answer_id: AnswerId,
+        actor: &Actor,
+    ) -> Result<&AnswerEntry, DomainError> {
+        let entry = self.find_entry(answer_id).ok_or(DomainError::NotFound)?;
+
+        if self.can_read_entry(entry, actor) {
+            Ok(entry)
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
+    pub fn change_entry_title(
+        self,
+        answer_id: AnswerId,
+        actor: &Actor,
+        title: AnswerTitle,
+    ) -> Result<AnswerEntry, DomainError> {
+        let entry = self.read_entry(answer_id, actor)?;
+        Ok(entry.clone().with_title(title))
+    }
+
+    pub fn entries_as_system(&self, actor: &Actor) -> Result<&[AnswerEntry], DomainError> {
+        match actor {
+            Actor::System => Ok(&self.entries),
+            _ => Err(DomainError::Forbidden),
+        }
     }
 
     pub fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
@@ -96,7 +151,7 @@ impl AnswerEntrySet {
         }
     }
 
-    pub fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
+    fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
         match actor {
             Actor::User(User::ActiveUser(user)) => {
                 entry.author().authenticated_user_id() == Some(*user.id())
@@ -159,9 +214,13 @@ impl AuthorizationGuardDefinitions for AnswerEntrySet {
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Utc};
+    use uuid::Uuid;
 
-    use crate::form::answer::settings::models::ResponsePeriod;
-    use crate::user::models::Actor;
+    use crate::form::{
+        answer::{models::AnswerTitle, settings::models::ResponsePeriod},
+        models::FormId,
+    };
+    use crate::user::models::{ActiveUser, Actor, Role, UserId};
 
     use super::*;
 
@@ -174,6 +233,37 @@ mod tests {
             AnswerVisibility::PRIVATE,
             response_period,
             allow_temporary_answers,
+        )
+    }
+
+    fn active_user(role: Role) -> ActiveUser {
+        ActiveUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
+        unsafe {
+            AnswerEntry::from_raw_parts(
+                AnswerId::new(),
+                author,
+                Utc::now(),
+                FormId::new(),
+                AnswerTitle::new(None),
+                Vec::new(),
+            )
+        }
+    }
+
+    fn answer_entry_set_with_visibility(
+        visibility: AnswerVisibility,
+        entries: Vec<AnswerEntry>,
+    ) -> AnswerEntrySet {
+        AnswerEntrySet::from_raw_parts(
+            AnswerEntrySetId::new(),
+            DefaultAnswerTitle::new(None),
+            visibility,
+            ResponsePeriod::try_new(None, None).unwrap(),
+            false,
+            entries,
         )
     }
 
@@ -227,5 +317,54 @@ mod tests {
         ));
 
         assert!(!set.can_accept_answer(&author, &actor));
+    }
+
+    #[test]
+    fn private_entry_can_be_read_by_its_author() {
+        let author = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
+
+        assert!(set.read_entry(answer_id, &Actor::from(author)).is_ok());
+    }
+
+    #[test]
+    fn private_entry_cannot_be_read_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
+
+        assert!(matches!(
+            set.read_entry(answer_id, &Actor::from(other)),
+            Err(DomainError::Forbidden)
+        ));
+    }
+
+    #[test]
+    fn private_entry_can_be_read_by_administrator() {
+        let author = active_user(Role::StandardUser);
+        let administrator = active_user(Role::Administrator);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
+
+        assert!(
+            set.read_entry(answer_id, &Actor::from(administrator))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn public_entry_can_be_read_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PUBLIC, vec![entry]);
+
+        assert!(set.read_entry(answer_id, &Actor::from(other)).is_ok());
     }
 }

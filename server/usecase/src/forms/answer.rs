@@ -209,15 +209,13 @@ impl<
         let actor = Actor::from(user.clone());
         let answer_entry_set = self.read_answer_entry_set(form_id, &actor).await?;
 
-        let form_answer = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(AnswerNotFound)?;
-
-        if !answer_entry_set.can_read_entry(&form_answer, &actor) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+        let form_answer = answer_entry_set
+            .read_entry(answer_id, &actor)
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })?
+            .clone();
 
         let (labels, comments) = try_join!(
             self.answer_label_repository
@@ -243,7 +241,7 @@ impl<
         let answer_entry_set = self.read_answer_entry_set(form_id, &actor_ref).await?;
 
         let visible_answers: Vec<AnswerEntry> = answer_entry_set
-            .visible_entries(&actor_ref)
+            .readable_entries(&actor_ref)
             .into_iter()
             .cloned()
             .collect();
@@ -282,7 +280,7 @@ impl<
                 set_guard
                     .try_into_read(&actor_ref)
                     .map(|set| {
-                        set.visible_entries(&actor_ref)
+                        set.readable_entries(&actor_ref)
                             .into_iter()
                             .cloned()
                             .collect::<Vec<_>>()
@@ -330,18 +328,16 @@ impl<
         let actor_ref = Actor::from(actor.clone());
         let answer_entry_set = self.read_answer_entry_set(form_id, &actor_ref).await?;
 
-        let mut form_answer = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(AnswerNotFound)?;
-
-        if !answer_entry_set.can_read_entry(&form_answer, &actor_ref) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+        let mut form_answer = answer_entry_set
+            .read_entry(answer_id, &actor_ref)
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })?
+            .clone();
 
         if let Some(title) = title {
-            form_answer = form_answer.with_title(title);
+            form_answer = answer_entry_set.change_entry_title(answer_id, &actor_ref, title)?;
             self.answer_repository
                 .update_answer_entry(&form_answer)
                 .await?;

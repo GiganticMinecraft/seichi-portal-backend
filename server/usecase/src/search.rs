@@ -111,16 +111,30 @@ impl<
                 Ok(s) => s,
                 Err(_) => continue,
             };
-            if answer_entry_set.can_read_entry(&entry, &actor) {
-                visible_answers.push(entry);
+            if let Ok(answer) = answer_entry_set.read_entry(*entry.id(), &actor) {
+                visible_answers.push(answer.clone());
             }
         }
 
         let mut visible_comments = Vec::new();
         for comment in comments {
             let answer_id = *comment.answer_id();
-            let answer = match self.answer_repository.get_answer(answer_id).await? {
-                Some(a) => a,
+            let mut readable_answer = None;
+
+            for set_guard in self.answer_entry_set_repository.list_all().await? {
+                let answer_entry_set = match set_guard.try_into_read(&actor) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+
+                if let Ok(answer) = answer_entry_set.read_entry(answer_id, &actor) {
+                    readable_answer = Some(answer.clone());
+                    break;
+                }
+            }
+
+            let answer = match readable_answer {
+                Some(answer) => answer,
                 None => continue,
             };
             let form_id = *answer.form_id();
@@ -128,25 +142,11 @@ impl<
                 Some(g) => g,
                 None => continue,
             };
-            let form = match form_guard.try_read(&actor) {
-                Ok(f) => f,
+            match form_guard.try_read(&actor) {
+                Ok(_) => {}
                 Err(_) => continue,
-            };
-            let set_guard = match self
-                .answer_entry_set_repository
-                .get(*form.answer_entry_set_id())
-                .await?
-            {
-                Some(g) => g,
-                None => continue,
-            };
-            let answer_entry_set = match set_guard.try_read(&actor) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-            if answer_entry_set.can_read_entry(&answer, &actor) {
-                visible_comments.push(comment);
             }
+            visible_comments.push(comment);
         }
 
         Ok(CrossSearchOutput {
@@ -243,8 +243,9 @@ impl<
                             .collect::<Result<Vec<_>, errors::Error>>()?
                             .into_iter()
                             .flat_map(|set| {
-                                set.entries()
-                                    .iter()
+                                set.entries_as_system(&system)
+                                    .into_iter()
+                                    .flat_map(|entries| entries.iter())
                                     .flat_map(|entry| {
                                         entry
                                             .contents()
