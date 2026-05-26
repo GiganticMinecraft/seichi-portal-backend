@@ -6,7 +6,7 @@ use crate::{
             models::{AnswerAuthor, AnswerEntry},
             settings::models::{AnswerVisibility, ResponsePeriod},
         },
-        models::Visibility,
+        models::{FormSettings, Visibility},
     },
     types::authorization_guard_with_context::AuthorizationGuardWithContextDefinitions,
     user::models::{Actor, Role, User},
@@ -18,6 +18,17 @@ pub struct AnswerEntryAuthorizationContext {
     pub response_period: ResponsePeriod,
     pub answer_visibility: AnswerVisibility,
     pub allow_temporary_answers: bool,
+}
+
+impl AnswerEntryAuthorizationContext {
+    pub fn from_form_settings(settings: &FormSettings) -> Self {
+        Self {
+            form_visibility: *settings.visibility(),
+            response_period: settings.answer_settings().response_period().to_owned(),
+            answer_visibility: *settings.answer_settings().visibility(),
+            allow_temporary_answers: settings.allow_temporary_answers(),
+        }
+    }
 }
 
 impl AuthorizationGuardWithContextDefinitions<AnswerEntryAuthorizationContext> for AnswerEntry {

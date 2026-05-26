@@ -73,12 +73,8 @@ impl<
         let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
-        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let answer_entry_authorization_context =
+            AnswerEntryAuthorizationContext::from_form_settings(form_settings);
         let form_answer = self
             .answer_repository
             .get_answer(answer_id)
@@ -177,12 +173,8 @@ impl<
 
         let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
-        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let answer_entry_authorization_context =
+            AnswerEntryAuthorizationContext::from_form_settings(form_settings);
         let answers = self
             .answer_repository
             .get_answer(answer_id)
@@ -241,12 +233,8 @@ impl<
         let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
-        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let answer_entry_authorization_context =
+            AnswerEntryAuthorizationContext::from_form_settings(form_settings);
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)
@@ -297,12 +285,8 @@ impl<
         let form = form_guard.try_read(&actor_user)?;
         let form_settings = form.settings();
 
-        let answer_entry_authorization_context = AnswerEntryAuthorizationContext {
-            form_visibility: form_settings.visibility().to_owned(),
-            response_period: form_settings.answer_settings().response_period().to_owned(),
-            answer_visibility: form_settings.answer_settings().visibility().to_owned(),
-            allow_temporary_answers: form_settings.allow_temporary_answers(),
-        };
+        let answer_entry_authorization_context =
+            AnswerEntryAuthorizationContext::from_form_settings(form_settings);
         let answer_entry = self
             .answer_repository
             .get_answer(answer_id)

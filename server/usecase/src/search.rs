@@ -109,21 +109,10 @@ impl<
                                     .ok_or(Error::from(FormNotFound))?;
 
                                 let form = form_guard.try_read(&actor)?;
-                                let form_settings = form.settings();
 
-                                Ok(AnswerEntryAuthorizationContext {
-                                    form_visibility: form_settings.visibility().to_owned(),
-                                    response_period: form_settings
-                                        .answer_settings()
-                                        .response_period()
-                                        .to_owned(),
-                                    answer_visibility: form_settings
-                                        .answer_settings()
-                                        .visibility()
-                                        .to_owned(),
-                                    allow_temporary_answers: form_settings
-                                        .allow_temporary_answers(),
-                                })
+                                Ok(AnswerEntryAuthorizationContext::from_form_settings(
+                                    form.settings(),
+                                ))
                             }
                         })
                         .await?;
@@ -167,23 +156,10 @@ impl<
                                                 .ok_or(Error::from(FormNotFound))?;
 
                                             let form = form_guard.try_read(&actor)?;
-                                            let form_settings = form.settings();
 
-                                            Ok(AnswerEntryAuthorizationContext {
-                                                form_visibility: form_settings
-                                                    .visibility()
-                                                    .to_owned(),
-                                                response_period: form_settings
-                                                    .answer_settings()
-                                                    .response_period()
-                                                    .to_owned(),
-                                                answer_visibility: form_settings
-                                                    .answer_settings()
-                                                    .visibility()
-                                                    .to_owned(),
-                                                allow_temporary_answers: form_settings
-                                                    .allow_temporary_answers(),
-                                            })
+                                            Ok(AnswerEntryAuthorizationContext::from_form_settings(
+                                                form.settings(),
+                                            ))
                                         }
                                     })
                                     .await?;
