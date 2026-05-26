@@ -82,7 +82,7 @@ impl<
             .create(answer_entry_set_guard)
             .await?;
 
-        let form = ActiveForm::new_with_answer_entry_set_id(
+        let form = ActiveForm::new(
             title,
             description,
             QuestionSet::try_new(questions).map_err(Error::from)?,

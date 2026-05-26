@@ -233,7 +233,7 @@ pub struct ActiveForm {
 }
 
 impl ActiveForm {
-    pub fn new_with_answer_entry_set_id(
+    pub fn new(
         title: FormTitle,
         description: FormDescription,
         questions: QuestionSet,
@@ -860,7 +860,7 @@ mod tests {
 
     #[test]
     fn active_form_new_has_empty_label_ids() {
-        let form = ActiveForm::new_with_answer_entry_set_id(
+        let form = ActiveForm::new(
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             sample_question_set(),
@@ -873,7 +873,7 @@ mod tests {
     #[test]
     fn active_form_replace_label_ids_replaces_ids() {
         let label_id = FormLabelId::new();
-        let form = ActiveForm::new_with_answer_entry_set_id(
+        let form = ActiveForm::new(
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             sample_question_set(),
