@@ -121,7 +121,7 @@ impl AnswerEntrySet {
     }
 
     pub fn change_entry_title(
-        self,
+        &self,
         answer_id: AnswerId,
         actor: &Actor,
         title: AnswerTitle,
@@ -199,7 +199,7 @@ impl AuthorizationGuardDefinitions for AnswerEntrySet {
     }
 
     fn can_read(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::System | Actor::User(User::ActiveUser(_)))
+        matches!(actor, Actor::System | Actor::User(_))
     }
 
     fn can_update(&self, actor: &Actor) -> bool {

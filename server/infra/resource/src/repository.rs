@@ -67,7 +67,6 @@ impl<
     type ConcreteArchivedFormRepository = Repository<Client>;
     type ConcreteAnswerEntrySetRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
-    type ConcreteFormAnswerRepository = Repository<Client>;
     type ConcreteFormCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
     type ConcreteFormMessageRepository = Repository<Client>;
@@ -77,10 +76,6 @@ impl<
     type ConcreteHealthCheckRepository = H;
 
     fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository {
-        &self.db
-    }
-
-    fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository {
         &self.db
     }
 

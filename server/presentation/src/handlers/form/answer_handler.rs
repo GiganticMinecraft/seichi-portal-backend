@@ -104,7 +104,6 @@ pub async fn get_all_answers(
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetAllAnswersResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
@@ -158,7 +157,6 @@ pub async fn get_answer_handler(
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetAnswerResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
@@ -206,7 +204,6 @@ pub async fn get_answer_by_form_id_handler(
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<GetAnswersByFormResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
@@ -263,7 +260,6 @@ pub async fn post_answer_handler(
     json: Result<Json<AnswerCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
@@ -316,7 +312,6 @@ pub async fn post_temporary_answer_handler(
     json: Result<Json<TemporaryAnswerCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
@@ -377,7 +372,6 @@ pub async fn update_answer_handler(
     json: Result<Json<AnswerUpdateSchema>, JsonRejection>,
 ) -> Result<UpdateAnswerResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
-        answer_repository: repository.form_answer_repository(),
         active_form_repository: repository.active_form_repository(),
         comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),

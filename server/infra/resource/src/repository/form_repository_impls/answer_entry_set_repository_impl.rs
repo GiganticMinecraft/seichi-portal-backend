@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use domain::{
+    form::answer::models::AnswerEntry,
     form::answer_entry_set::models::{AnswerEntrySet, AnswerEntrySetId},
     repository::form::answer_entry_set_repository::AnswerEntrySetRepository,
     types::{
@@ -12,7 +13,7 @@ use errors::Error;
 
 use crate::{
     database::{
-        components::{DatabaseComponents, FormDatabase},
+        components::{DatabaseComponents, FormAnswerDatabase, FormDatabase},
         connection::DatabaseTransaction,
     },
     repository::Repository,
@@ -71,5 +72,45 @@ where
             .update_answer_entry_set(&answer_entry_set)
             .await?;
         Ok(())
+    }
+
+    #[tracing::instrument(skip(self, answer_entry_set))]
+    async fn add_entry(
+        &self,
+        answer_entry_set: &AuthorizationGuard<AnswerEntrySet, Read>,
+        answer_entry: &AnswerEntry,
+        actor: &Actor,
+    ) -> Result<(), Error> {
+        let answer_entry_set = answer_entry_set.try_read(actor)?;
+
+        if !answer_entry_set.can_accept_answer(answer_entry.author(), actor) {
+            return Err(errors::domain::DomainError::Forbidden.into());
+        }
+
+        self.client.form_answer().post_answer(answer_entry).await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self, answer_entry_set))]
+    async fn update_entry(
+        &self,
+        answer_entry_set: &AuthorizationGuard<AnswerEntrySet, Read>,
+        answer_entry: &AnswerEntry,
+        actor: &Actor,
+    ) -> Result<(), Error> {
+        answer_entry_set
+            .try_read(actor)?
+            .read_entry(*answer_entry.id(), actor)?;
+
+        self.client
+            .form_answer()
+            .update_answer_entry(answer_entry)
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn size_entries(&self) -> Result<u32, Error> {
+        self.client.form_answer().size().await.map_err(Into::into)
     }
 }

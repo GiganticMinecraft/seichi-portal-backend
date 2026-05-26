@@ -8,8 +8,7 @@ use domain::search::models::NumberOfRecords;
 use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
     repository::{
-        form::{active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository},
-        search_repository::SearchRepository,
+        form::active_form_repository::ActiveFormRepository, search_repository::SearchRepository,
     },
     search::models::SearchableFieldsWithOperation,
     user::models::{ActiveUser, Actor},
@@ -24,7 +23,6 @@ use tokio::time;
 pub struct SearchUseCase<
     'a,
     SearchRepo: SearchRepository,
-    AnswerRepo: AnswerRepository,
     FormRepo: ActiveFormRepository,
     CommentRepo: CommentRepository,
     FormAnswerLabelRepo: AnswerLabelRepository,
@@ -33,7 +31,6 @@ pub struct SearchUseCase<
     AnswerEntrySetRepo: AnswerEntrySetRepository,
 > {
     pub search_repository: &'a SearchRepo,
-    pub answer_repository: &'a AnswerRepo,
     pub active_form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub form_answer_label_repository: &'a FormAnswerLabelRepo,
@@ -44,14 +41,13 @@ pub struct SearchUseCase<
 
 impl<
     R1: SearchRepository,
-    R2: AnswerRepository,
-    R3: ActiveFormRepository,
-    R4: CommentRepository,
-    R5: AnswerLabelRepository,
-    R6: FormLabelRepository,
-    R7: UserRepository,
-    R8: AnswerEntrySetRepository,
-> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7, R8>
+    R2: ActiveFormRepository,
+    R3: CommentRepository,
+    R4: AnswerLabelRepository,
+    R5: FormLabelRepository,
+    R6: UserRepository,
+    R7: AnswerEntrySetRepository,
+> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
 {
     pub async fn cross_search(
         &self,
@@ -199,7 +195,9 @@ impl<
 
                     let repository_records = NumberOfRecordsPerAggregate {
                         form_meta_data: NumberOfRecords(self.active_form_repository.size().await?),
-                        real_answers: NumberOfRecords(self.answer_repository.size().await?),
+                        real_answers: NumberOfRecords(
+                            self.answer_entry_set_repository.size_entries().await?,
+                        ),
                         form_answer_comments: NumberOfRecords(self.comment_repository.size().await?),
                         label_for_form_answers: NumberOfRecords(
                             self.form_answer_label_repository.size().await?,

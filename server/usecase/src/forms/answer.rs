@@ -11,10 +11,10 @@ use domain::{
     repository::form::{
         active_form_repository::ActiveFormRepository,
         answer_entry_set_repository::AnswerEntrySetRepository,
-        answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
-        comment_repository::CommentRepository,
+        answer_label_repository::AnswerLabelRepository, comment_repository::CommentRepository,
     },
     repository::user_repository::UserRepository,
+    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
     user::models::{ActiveUser, Actor, TemporaryUser, User},
 };
 use errors::{
@@ -31,14 +31,12 @@ use crate::{
 
 pub struct AnswerUseCase<
     'a,
-    AnswerRepo: AnswerRepository,
     FormRepo: ActiveFormRepository,
     CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
     UserRepo: UserRepository,
     AnswerEntrySetRepo: AnswerEntrySetRepository,
 > {
-    pub answer_repository: &'a AnswerRepo,
     pub active_form_repository: &'a FormRepo,
     pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
@@ -47,19 +45,18 @@ pub struct AnswerUseCase<
 }
 
 impl<
-    R1: AnswerRepository,
-    R2: ActiveFormRepository,
-    R3: CommentRepository,
-    R4: AnswerLabelRepository,
-    R5: UserRepository,
-    R6: AnswerEntrySetRepository,
-> AnswerUseCase<'_, R1, R2, R3, R4, R5, R6>
+    R1: ActiveFormRepository,
+    R2: CommentRepository,
+    R3: AnswerLabelRepository,
+    R4: UserRepository,
+    R5: AnswerEntrySetRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
-    async fn read_answer_entry_set(
+    async fn read_answer_entry_set_guard(
         &self,
         form_id: FormId,
         actor: &Actor,
-    ) -> Result<AnswerEntrySet, Error> {
+    ) -> Result<AuthorizationGuard<AnswerEntrySet, Read>, Error> {
         let form_guard = self
             .active_form_repository
             .get(form_id)
@@ -75,7 +72,19 @@ impl<
             .await?
             .ok_or(FormNotFound)?;
 
-        set_guard.try_into_read(actor).map_err(Into::into)
+        set_guard.try_read(actor)?;
+        Ok(set_guard)
+    }
+
+    async fn read_answer_entry_set(
+        &self,
+        form_id: FormId,
+        actor: &Actor,
+    ) -> Result<AnswerEntrySet, Error> {
+        self.read_answer_entry_set_guard(form_id, actor)
+            .await?
+            .try_into_read(actor)
+            .map_err(Into::into)
     }
 
     async fn build_answer_details(
@@ -135,7 +144,8 @@ impl<
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         let actor = Actor::from(user.clone());
-        let answer_entry_set = self.read_answer_entry_set(form_id, &actor).await?;
+        let answer_entry_set_guard = self.read_answer_entry_set_guard(form_id, &actor).await?;
+        let answer_entry_set = answer_entry_set_guard.try_read(&actor)?;
 
         let form_guard = self
             .active_form_repository
@@ -146,7 +156,7 @@ impl<
         let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
 
-        let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
+        let title = DefaultAnswerTitleDomainService::<R1>::to_answer_title_from_questions(
             answer_entry_set.default_answer_title().to_owned(),
             &questions,
             &posted_answers,
@@ -160,7 +170,9 @@ impl<
 
         let answer_entry = AnswerEntry::new(author, form_id, title, posted_answers);
 
-        self.answer_repository.post_answer(&answer_entry).await
+        self.answer_entry_set_repository
+            .add_entry(&answer_entry_set_guard, &answer_entry, &actor)
+            .await
     }
 
     pub async fn post_temporary_answers(
@@ -170,9 +182,11 @@ impl<
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         let actor = Actor::from(temporary_user.clone());
-        let answer_entry_set = self
-            .read_answer_entry_set(form_id, &Actor::from(User::Anonymous))
+        let anonymous_actor = Actor::from(User::Anonymous);
+        let answer_entry_set_guard = self
+            .read_answer_entry_set_guard(form_id, &anonymous_actor)
             .await?;
+        let answer_entry_set = answer_entry_set_guard.try_read(&anonymous_actor)?;
 
         let form_guard = self
             .active_form_repository
@@ -183,7 +197,7 @@ impl<
         let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
 
-        let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
+        let title = DefaultAnswerTitleDomainService::<R1>::to_answer_title_from_questions(
             answer_entry_set.default_answer_title().to_owned(),
             &questions,
             &posted_answers,
@@ -197,7 +211,9 @@ impl<
 
         let answer_entry = AnswerEntry::new(author, form_id, title, posted_answers);
 
-        self.answer_repository.post_answer(&answer_entry).await
+        self.answer_entry_set_repository
+            .add_entry(&answer_entry_set_guard, &answer_entry, &actor)
+            .await
     }
 
     pub async fn get_answers(
@@ -326,7 +342,10 @@ impl<
         title: Option<AnswerTitle>,
     ) -> Result<AnswerDetails, Error> {
         let actor_ref = Actor::from(actor.clone());
-        let answer_entry_set = self.read_answer_entry_set(form_id, &actor_ref).await?;
+        let answer_entry_set_guard = self
+            .read_answer_entry_set_guard(form_id, &actor_ref)
+            .await?;
+        let answer_entry_set = answer_entry_set_guard.try_read(&actor_ref)?;
 
         let mut form_answer = answer_entry_set
             .read_entry(answer_id, &actor_ref)
@@ -338,8 +357,8 @@ impl<
 
         if let Some(title) = title {
             form_answer = answer_entry_set.change_entry_title(answer_id, &actor_ref, title)?;
-            self.answer_repository
-                .update_answer_entry(&form_answer)
+            self.answer_entry_set_repository
+                .update_entry(&answer_entry_set_guard, &form_answer, &actor_ref)
                 .await?;
         }
 
