@@ -249,6 +249,8 @@ mod tests {
                 FormId::new(),
                 AnswerTitle::new(None),
                 Vec::new(),
+                Vec::new(),
+                Vec::new(),
             )
         }
     }

@@ -10,6 +10,8 @@ use types::non_empty_string::NonEmptyString;
 
 use crate::{
     form::{
+        comment::models::{Comment, CommentId},
+        message::models::{Message, MessageId},
         models::FormId,
         question::models::{Question, QuestionId},
     },
@@ -166,6 +168,8 @@ pub struct AnswerEntry {
     form_id: FormId,
     title: AnswerTitle,
     contents: Vec<FormAnswerContent>,
+    comments: Vec<Comment>,
+    messages: Vec<Message>,
 }
 
 impl AnswerEntry {
@@ -183,6 +187,8 @@ impl AnswerEntry {
             form_id,
             title,
             contents: contents.into_inner(),
+            comments: Vec::new(),
+            messages: Vec::new(),
         }
     }
 
@@ -191,6 +197,7 @@ impl AnswerEntry {
     /// # Safety
     /// この関数はオブジェクトを新しく作成しない場合
     /// (例えば、データベースから取得した場合)にのみ使用してください。
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn from_raw_parts(
         id: AnswerId,
         author: AnswerAuthor,
@@ -198,6 +205,8 @@ impl AnswerEntry {
         form_id: FormId,
         title: AnswerTitle,
         contents: Vec<FormAnswerContent>,
+        comments: Vec<Comment>,
+        messages: Vec<Message>,
     ) -> Self {
         Self {
             id,
@@ -206,11 +215,21 @@ impl AnswerEntry {
             form_id,
             title,
             contents,
+            comments,
+            messages,
         }
     }
 
     pub fn with_title(self, title: AnswerTitle) -> Self {
         Self { title, ..self }
+    }
+
+    pub fn find_comment(&self, comment_id: CommentId) -> Option<&Comment> {
+        self.comments.iter().find(|c| *c.comment_id() == comment_id)
+    }
+
+    pub fn find_message(&self, message_id: MessageId) -> Option<&Message> {
+        self.messages.iter().find(|m| *m.id() == message_id)
     }
 }
 

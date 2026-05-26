@@ -9,8 +9,6 @@ pub trait Repositories: Send + Sync {
     type ConcreteArchivedFormRepository: form::archived_form_repository::ArchivedFormRepository;
     type ConcreteAnswerEntrySetRepository: form::answer_entry_set_repository::AnswerEntrySetRepository;
     type ConcreteAnswerLabelRepository: form::answer_label_repository::AnswerLabelRepository;
-    type ConcreteFormMessageRepository: form::message_repository::MessageRepository;
-    type ConcreteFormCommentRepository: form::comment_repository::CommentRepository;
     type ConcreteFormLabelRepository: form::form_label_repository::FormLabelRepository;
     type ConcreteUserRepository: user_repository::UserRepository;
     type ConcreteSearchRepository: search_repository::SearchRepository;
@@ -20,8 +18,6 @@ pub trait Repositories: Send + Sync {
     fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository;
     fn answer_entry_set_repository(&self) -> &Self::ConcreteAnswerEntrySetRepository;
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository;
-    fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository;
-    fn form_comment_repository(&self) -> &Self::ConcreteFormCommentRepository;
     fn form_label_repository(&self) -> &Self::ConcreteFormLabelRepository;
     fn user_repository(&self) -> &Self::ConcreteUserRepository;
     fn search_repository(&self) -> &Self::ConcreteSearchRepository;

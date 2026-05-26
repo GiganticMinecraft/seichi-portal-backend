@@ -63,7 +63,6 @@ pub async fn cross_search(
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
@@ -99,7 +98,6 @@ pub async fn start_sync(
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
@@ -118,7 +116,6 @@ pub async fn start_watch_out_of_sync(
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
@@ -136,7 +133,6 @@ pub async fn initialize_search_engine(
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),

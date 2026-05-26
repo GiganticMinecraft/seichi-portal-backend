@@ -18,7 +18,7 @@ impl CommentContent {
     }
 }
 
-#[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct Comment {
     answer_id: AnswerId,
     comment_id: CommentId,

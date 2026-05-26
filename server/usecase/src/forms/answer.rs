@@ -11,7 +11,7 @@ use domain::{
     repository::form::{
         active_form_repository::ActiveFormRepository,
         answer_entry_set_repository::AnswerEntrySetRepository,
-        answer_label_repository::AnswerLabelRepository, comment_repository::CommentRepository,
+        answer_label_repository::AnswerLabelRepository,
     },
     repository::user_repository::UserRepository,
     types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
@@ -22,7 +22,7 @@ use errors::{
     domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
-use futures::{StreamExt, stream, try_join};
+use futures::{StreamExt, stream};
 
 use crate::{
     models::{AnswerDetails, CommentWithAuthor},
@@ -32,13 +32,11 @@ use crate::{
 pub struct AnswerUseCase<
     'a,
     FormRepo: ActiveFormRepository,
-    CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
     UserRepo: UserRepository,
     AnswerEntrySetRepo: AnswerEntrySetRepository,
 > {
     pub active_form_repository: &'a FormRepo,
-    pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
@@ -46,11 +44,10 @@ pub struct AnswerUseCase<
 
 impl<
     R1: ActiveFormRepository,
-    R2: CommentRepository,
-    R3: AnswerLabelRepository,
-    R4: UserRepository,
-    R5: AnswerEntrySetRepository,
-> AnswerUseCase<'_, R1, R2, R3, R4, R5>
+    R2: AnswerLabelRepository,
+    R3: UserRepository,
+    R4: AnswerEntrySetRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4>
 {
     async fn read_answer_entry_set_guard(
         &self,
@@ -92,8 +89,9 @@ impl<
         actor: &ActiveUser,
         form_answer: AnswerEntry,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
-        comments: Vec<domain::form::comment::models::Comment>,
     ) -> Result<AnswerDetails, Error> {
+        let comments = form_answer.comments().to_vec();
+
         let user_ids = form_answer
             .author()
             .authenticated_user_id()
@@ -233,19 +231,15 @@ impl<
             })?
             .clone();
 
-        let (labels, comments) = try_join!(
-            self.answer_label_repository
-                .get_labels_for_answers_by_answer_id(answer_id),
-            self.comment_repository.get_comments(answer_id)
-        )?;
-
-        let labels = labels
+        let labels = self
+            .answer_label_repository
+            .get_labels_for_answers_by_answer_id(answer_id)
+            .await?
             .into_iter()
             .map(|label| label.try_into_read(&actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.build_answer_details(user, form_answer, labels, comments)
-            .await
+        self.build_answer_details(user, form_answer, labels).await
     }
 
     pub async fn get_answers_by_form_id(
@@ -265,19 +259,15 @@ impl<
         stream::iter(visible_answers)
             .then(|form_answer| async {
                 let answer_id = *form_answer.id();
-                let (labels, comments) = try_join!(
-                    self.answer_label_repository
-                        .get_labels_for_answers_by_answer_id(answer_id),
-                    self.comment_repository.get_comments(answer_id)
-                )?;
-
-                let labels = labels
+                let labels = self
+                    .answer_label_repository
+                    .get_labels_for_answers_by_answer_id(answer_id)
+                    .await?
                     .into_iter()
                     .map(|label| label.try_into_read(&actor_ref))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                self.build_answer_details(actor, form_answer, labels, comments)
-                    .await
+                self.build_answer_details(actor, form_answer, labels).await
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
@@ -312,19 +302,15 @@ impl<
                     let actor_ref = Actor::from(user.clone());
 
                     let answer_id = *form_answer.id();
-                    let (labels, comments) = try_join!(
-                        self.answer_label_repository
-                            .get_labels_for_answers_by_answer_id(answer_id),
-                        self.comment_repository.get_comments(answer_id)
-                    )?;
-
-                    let labels = labels
+                    let labels = self
+                        .answer_label_repository
+                        .get_labels_for_answers_by_answer_id(answer_id)
+                        .await?
                         .into_iter()
                         .map(|label| label.try_into_read(&actor_ref))
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    self.build_answer_details(&user, form_answer, labels, comments)
-                        .await
+                    self.build_answer_details(&user, form_answer, labels).await
                 }
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
@@ -362,18 +348,14 @@ impl<
                 .await?;
         }
 
-        let (labels, comments) = try_join!(
-            self.answer_label_repository
-                .get_labels_for_answers_by_answer_id(answer_id),
-            self.comment_repository.get_comments(answer_id)
-        )?;
-
-        let labels = labels
+        let labels = self
+            .answer_label_repository
+            .get_labels_for_answers_by_answer_id(answer_id)
+            .await?
             .into_iter()
             .map(|label| label.try_into_read(&actor_ref))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.build_answer_details(actor, form_answer, labels, comments)
-            .await
+        self.build_answer_details(actor, form_answer, labels).await
     }
 }

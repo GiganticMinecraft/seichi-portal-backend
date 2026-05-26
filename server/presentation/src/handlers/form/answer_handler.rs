@@ -105,7 +105,6 @@ pub async fn get_all_answers(
 ) -> Result<GetAllAnswersResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -158,7 +157,6 @@ pub async fn get_answer_handler(
 ) -> Result<GetAnswerResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -205,7 +203,6 @@ pub async fn get_answer_by_form_id_handler(
 ) -> Result<GetAnswersByFormResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -261,7 +258,6 @@ pub async fn post_answer_handler(
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -313,7 +309,6 @@ pub async fn post_temporary_answer_handler(
 ) -> Result<impl IntoResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),
@@ -373,7 +368,6 @@ pub async fn update_answer_handler(
 ) -> Result<UpdateAnswerResponse, Response> {
     let form_answer_use_case = AnswerUseCase {
         active_form_repository: repository.active_form_repository(),
-        comment_repository: repository.form_comment_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_set_repository: repository.answer_entry_set_repository(),

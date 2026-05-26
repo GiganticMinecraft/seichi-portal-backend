@@ -67,9 +67,7 @@ impl<
     type ConcreteArchivedFormRepository = Repository<Client>;
     type ConcreteAnswerEntrySetRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
-    type ConcreteFormCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
-    type ConcreteFormMessageRepository = Repository<Client>;
     type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
     type ConcreteUserRepository = Repository<Client>;
@@ -80,14 +78,6 @@ impl<
     }
 
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository {
-        &self.db
-    }
-
-    fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository {
-        &self.db
-    }
-
-    fn form_comment_repository(&self) -> &Self::ConcreteFormCommentRepository {
         &self.db
     }
 

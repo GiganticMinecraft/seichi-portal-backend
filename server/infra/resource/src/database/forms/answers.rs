@@ -17,7 +17,9 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    records::{AnswerAuthorRecord, FormAnswerContentRecord, FormAnswerRecord},
+    records::{
+        AnswerAuthorRecord, CommentRecord, FormAnswerContentRecord, FormAnswerRecord, MessageRecord,
+    },
 };
 
 fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Option<String>) {
@@ -116,6 +118,142 @@ pub(crate) fn attach_contents(
                             .map(|(_, content_record)| content_record)
                             .collect_vec()
                     })
+                    .unwrap_or_default(),
+                ..record
+            })
+        })
+        .collect()
+}
+
+pub(crate) async fn fetch_comments_by_answer_ids<T>(
+    txn: &mut DatabaseTransaction,
+    answer_ids: &[T],
+) -> Result<Vec<(Uuid, CommentRecord)>, InfraError>
+where
+    T: AsRef<str>,
+{
+    if answer_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let sql = format!(
+        r"SELECT form_answer_comments.id AS comment_id, answer_id,
+            commented_by AS commented_by_id, users.name AS commented_by_name,
+            users.role AS commented_by_role, content,
+            timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+        FROM form_answer_comments
+        INNER JOIN users ON form_answer_comments.commented_by = users.id
+        WHERE answer_id IN ({})",
+        std::iter::repeat_n("?", answer_ids.len()).join(", ")
+    );
+
+    answer_ids
+        .iter()
+        .fold(query(&sql), |query, answer_id| {
+            query.bind(answer_id.as_ref())
+        })
+        .fetch_all(&mut **txn)
+        .await?
+        .into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>((
+                Uuid::from_str(&row.try_get::<String, _>("answer_id")?)?,
+                CommentRecord {
+                    answer_id: row.try_get("answer_id")?,
+                    comment_id: row.try_get("comment_id")?,
+                    content: row.try_get("content")?,
+                    timestamp: row.try_get("timestamp!: chrono::DateTime<chrono::Utc>")?,
+                    commented_by_id: row.try_get("commented_by_id")?,
+                    commented_by_name: row.try_get("commented_by_name")?,
+                    commented_by_role: row.try_get("commented_by_role")?,
+                },
+            ))
+        })
+        .collect()
+}
+
+pub(crate) async fn fetch_messages_by_answer_ids<T>(
+    txn: &mut DatabaseTransaction,
+    answer_ids: &[T],
+) -> Result<Vec<(Uuid, MessageRecord)>, InfraError>
+where
+    T: AsRef<str>,
+{
+    if answer_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let sql = format!(
+        r"SELECT messages.id AS id, related_answer_id AS related_answer,
+            sender AS sender_id, users.name AS sender_name,
+            users.role AS sender_role, body,
+            timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+        FROM messages
+        INNER JOIN users ON users.id = messages.sender
+        WHERE related_answer_id IN ({})",
+        std::iter::repeat_n("?", answer_ids.len()).join(", ")
+    );
+
+    answer_ids
+        .iter()
+        .fold(query(&sql), |query, answer_id| {
+            query.bind(answer_id.as_ref())
+        })
+        .fetch_all(&mut **txn)
+        .await?
+        .into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>((
+                Uuid::from_str(&row.try_get::<String, _>("related_answer")?)?,
+                MessageRecord {
+                    id: row.try_get("id")?,
+                    related_answer: row.try_get("related_answer")?,
+                    sender_id: row.try_get("sender_id")?,
+                    sender_name: row.try_get("sender_name")?,
+                    sender_role: row.try_get("sender_role")?,
+                    body: row.try_get("body")?,
+                    timestamp: row.try_get("timestamp!: chrono::DateTime<chrono::Utc>")?,
+                },
+            ))
+        })
+        .collect()
+}
+
+pub(crate) fn attach_entry_children(
+    form_answer_records: Vec<FormAnswerRecord>,
+    content_records: Vec<(Uuid, FormAnswerContentRecord)>,
+    comment_records: Vec<(Uuid, CommentRecord)>,
+    message_records: Vec<(Uuid, MessageRecord)>,
+) -> Result<Vec<FormAnswerRecord>, InfraError> {
+    let grouped_contents = content_records
+        .into_iter()
+        .into_group_map_by(|(answer_id, _)| *answer_id);
+    let grouped_comments = comment_records
+        .into_iter()
+        .into_group_map_by(|(answer_id, _)| *answer_id);
+    let grouped_messages = message_records
+        .into_iter()
+        .into_group_map_by(|(answer_id, _)| *answer_id);
+
+    form_answer_records
+        .into_iter()
+        .map(|record| {
+            let answer_uuid = Uuid::from_str(&record.id)?;
+            Ok::<_, InfraError>(FormAnswerRecord {
+                contents: grouped_contents
+                    .get(&answer_uuid)
+                    .cloned()
+                    .map(|v| v.into_iter().map(|(_, r)| r).collect_vec())
+                    .unwrap_or_default(),
+                comments: grouped_comments
+                    .get(&answer_uuid)
+                    .cloned()
+                    .map(|v| v.into_iter().map(|(_, r)| r).collect_vec())
+                    .unwrap_or_default(),
+                messages: grouped_messages
+                    .get(&answer_uuid)
+                    .cloned()
+                    .map(|v| v.into_iter().map(|(_, r)| r).collect_vec())
                     .unwrap_or_default(),
                 ..record
             })
@@ -245,6 +383,8 @@ impl FormAnswerDatabase for ConnectionPool {
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
                             contents,
+                            comments: Vec::new(),
+                            messages: Vec::new(),
                         })
                     })
                     .transpose()
@@ -299,6 +439,8 @@ impl FormAnswerDatabase for ConnectionPool {
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
                             contents: Vec::new(),
+                            comments: Vec::new(),
+                            messages: Vec::new(),
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;

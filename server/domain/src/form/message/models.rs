@@ -1,12 +1,13 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use errors::domain::DomainError;
+use serde::{Deserialize, Serialize};
 
 use crate::{form::answer::models::AnswerId, user::models::UserId};
 
 pub type MessageId = types::Id<Message>;
 
-#[derive(Getters, PartialEq, Debug)]
+#[derive(Getters, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Message {
     id: MessageId,
     related_answer_id: AnswerId,

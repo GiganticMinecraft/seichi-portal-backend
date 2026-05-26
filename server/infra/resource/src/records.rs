@@ -210,6 +210,7 @@ impl TryFrom<UserRecord> for ActiveUser {
     }
 }
 
+#[derive(Clone)]
 pub struct CommentRecord {
     pub answer_id: String,
     pub comment_id: String,
@@ -257,6 +258,8 @@ pub struct FormAnswerRecord {
     pub form_id: String,
     pub title: Option<String>,
     pub contents: Vec<FormAnswerContentRecord>,
+    pub comments: Vec<CommentRecord>,
+    pub messages: Vec<MessageRecord>,
 }
 
 pub enum AnswerAuthorRecord {
@@ -275,6 +278,8 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             form_id,
             title,
             contents,
+            comments,
+            messages,
         }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
         let author = match author {
@@ -283,6 +288,14 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             }
             AnswerAuthorRecord::TemporaryUser(user) => AnswerAuthor::TemporaryUser(user),
         };
+        let comments = comments
+            .into_iter()
+            .map(TryInto::<domain::form::comment::models::Comment>::try_into)
+            .collect::<Result<Vec<_>, _>>()?;
+        let messages = messages
+            .into_iter()
+            .map(TryInto::<domain::form::message::models::Message>::try_into)
+            .collect::<Result<Vec<_>, _>>()?;
         unsafe {
             Ok(AnswerEntry::from_raw_parts(
                 Uuid::from_str(&id)
@@ -296,6 +309,8 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<_, _>>()?,
+                comments,
+                messages,
             ))
         }
     }
@@ -337,6 +352,7 @@ impl TryFrom<FormLabelRecord> for FormLabel {
     }
 }
 
+#[derive(Clone)]
 pub struct MessageRecord {
     pub id: String,
     pub related_answer: String,
