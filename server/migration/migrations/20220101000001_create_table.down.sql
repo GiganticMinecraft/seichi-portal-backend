@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS
+    message_threads,
     archived_label_settings_for_form_answers,
     archived_label_settings_for_forms,
     archived_messages,
@@ -11,6 +12,7 @@ DROP TABLE IF EXISTS
     archived_form_choices,
     archived_form_questions,
     archived_form_meta_data,
+    archived_answer_entry_sets,
     messages,
     label_settings_for_forms,
     label_for_forms,
@@ -25,6 +27,7 @@ DROP TABLE IF EXISTS
     form_choices,
     form_questions,
     form_meta_data,
+    answer_entry_sets,
     discord_notification_settings,
     discord_linked_users,
     temporary_users,

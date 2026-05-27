@@ -24,6 +24,15 @@ CREATE TABLE IF NOT EXISTS discord_notification_settings(
     FOREIGN KEY fk_discord_notification_settings_id(discord_id) REFERENCES discord_linked_users(discord_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS answer_entry_sets(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    response_period_start_at DATETIME,
+    response_period_end_at DATETIME,
+    allow_temporary_answers BOOL NOT NULL DEFAULT FALSE,
+    default_answer_title TEXT
+);
+
 CREATE TABLE IF NOT EXISTS form_meta_data(
     id CHAR(36) NOT NULL PRIMARY KEY,
     title TEXT NOT NULL,
@@ -31,12 +40,14 @@ CREATE TABLE IF NOT EXISTS form_meta_data(
     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
     allow_temporary_answers BOOL NOT NULL DEFAULT FALSE,
     answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    answer_entry_set_id CHAR(36) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by CHAR(36) NOT NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     updated_by CHAR(36) NOT NULL,
     FOREIGN KEY fk_form_meta_data_created_by(created_by) REFERENCES users(id),
-    FOREIGN KEY fk_form_meta_data_updated_by(updated_by) REFERENCES users(id)
+    FOREIGN KEY fk_form_meta_data_updated_by(updated_by) REFERENCES users(id),
+    FOREIGN KEY fk_form_meta_data_answer_entry_set_id(answer_entry_set_id) REFERENCES answer_entry_sets(id)
 );
 
 CREATE TABLE IF NOT EXISTS form_questions(
@@ -159,6 +170,15 @@ CREATE TABLE IF NOT EXISTS messages(
     FOREIGN KEY fk_message_sender(sender) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS archived_answer_entry_sets(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    response_period_start_at DATETIME,
+    response_period_end_at DATETIME,
+    allow_temporary_answers BOOL NOT NULL DEFAULT FALSE,
+    default_answer_title TEXT
+);
+
 CREATE TABLE IF NOT EXISTS archived_form_meta_data(
     id CHAR(36) NOT NULL PRIMARY KEY,
     title TEXT NOT NULL,
@@ -166,6 +186,7 @@ CREATE TABLE IF NOT EXISTS archived_form_meta_data(
     visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
     allow_temporary_answers BOOL NOT NULL DEFAULT FALSE,
     answer_visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    answer_entry_set_id CHAR(36) NOT NULL,
     created_at DATETIME NOT NULL,
     created_by CHAR(36) NOT NULL,
     updated_at DATETIME NOT NULL,
@@ -285,4 +306,12 @@ CREATE TABLE IF NOT EXISTS archived_label_settings_for_form_answers(
     label_id CHAR(36) NOT NULL,
     FOREIGN KEY fk_archived_label_settings_for_form_answers_answer_id(answer_id) REFERENCES archived_answers(id) ON DELETE CASCADE,
     FOREIGN KEY fk_archived_label_settings_for_form_answers_label_id(label_id) REFERENCES label_for_form_answers(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS message_threads (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL UNIQUE,
+    answer_author_id CHAR(36) NOT NULL,
+    FOREIGN KEY (answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+    FOREIGN KEY (answer_author_id) REFERENCES users(id)
 );
