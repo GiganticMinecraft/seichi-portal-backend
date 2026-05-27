@@ -80,56 +80,51 @@ impl<
             .flat_map(|guard| guard.try_into_read(&actor))
             .collect::<Vec<_>>();
 
+        let all_sets = self.answer_entry_set_repository.list_all().await?;
+
         let mut visible_answers = Vec::new();
-        for entry in answers {
-            let form_id = *entry.form_id();
-            let form_guard = match self.active_form_repository.get(form_id).await? {
-                Some(g) => g,
-                None => continue,
-            };
-            let form = match form_guard.try_read(&actor) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-            let set_guard = match self
-                .answer_entry_set_repository
-                .get(*form.answer_entry_set_id())
-                .await?
-            {
-                Some(g) => g,
-                None => continue,
-            };
-            let answer_entry_set = match set_guard.try_read(&actor) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-            if let Ok(answer) = answer_entry_set.read_entry(*entry.id(), &actor) {
-                visible_answers.push(answer.clone());
+        'entries: for entry in answers {
+            for set_guard in &all_sets {
+                let answer_entry_set = match set_guard.try_read(&actor) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                let Ok(answer) = answer_entry_set.read_entry(*entry.id(), &actor) else {
+                    continue;
+                };
+                let form_id = *answer_entry_set.form_id();
+                let form_guard = match self.active_form_repository.get(form_id).await? {
+                    Some(g) => g,
+                    None => continue,
+                };
+                if form_guard.try_read(&actor).is_ok() {
+                    visible_answers.push(answer.clone());
+                }
+                continue 'entries;
             }
         }
 
         let mut visible_comments = Vec::new();
         for comment in comments {
             let answer_id = *comment.answer_id();
-            let mut readable_answer = None;
+            let mut found_set: Option<_> = None;
 
-            for set_guard in self.answer_entry_set_repository.list_all().await? {
-                let answer_entry_set = match set_guard.try_into_read(&actor) {
+            for set_guard in &all_sets {
+                let answer_entry_set = match set_guard.try_read(&actor) {
                     Ok(s) => s,
                     Err(_) => continue,
                 };
-
-                if let Ok(answer) = answer_entry_set.read_entry(answer_id, &actor) {
-                    readable_answer = Some(answer.clone());
+                if answer_entry_set.read_entry(answer_id, &actor).is_ok() {
+                    found_set = Some(answer_entry_set);
                     break;
                 }
             }
 
-            let answer = match readable_answer {
-                Some(answer) => answer,
+            let answer_entry_set = match found_set {
+                Some(s) => s,
                 None => continue,
             };
-            let form_id = *answer.form_id();
+            let form_id = *answer_entry_set.form_id();
             let form_guard = match self.active_form_repository.get(form_id).await? {
                 Some(g) => g,
                 None => continue,

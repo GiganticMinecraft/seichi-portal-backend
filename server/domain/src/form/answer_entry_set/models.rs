@@ -4,10 +4,10 @@ use errors::domain::DomainError;
 use crate::{
     form::{
         answer::{
-            models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle},
+            models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
             settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
         },
-        comment::models::CommentId,
+        comment::models::{Comment, CommentId},
         models::FormId,
     },
     types::authorization_guard::AuthorizationGuardDefinitions,
@@ -161,10 +161,16 @@ impl AnswerEntrySet {
         }
     }
 
-    pub fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
+    pub fn try_accept_answer(
+        &self,
+        author: AnswerAuthor,
+        actor: &Actor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<AnswerEntry, DomainError> {
         let is_within_period = self.response_period.is_within_period(Utc::now());
 
-        match (author, actor) {
+        let allowed = match (&author, actor) {
             (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
                 *user_id == *user.id() && (is_within_period || user.role() == &Administrator)
             }
@@ -172,7 +178,13 @@ impl AnswerEntrySet {
                 self.allow_temporary_answers && is_within_period
             }
             _ => false,
+        };
+
+        if !allowed {
+            return Err(DomainError::Forbidden);
         }
+
+        Ok(AnswerEntry::new(author, title, posted_answers))
     }
 
     fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
@@ -212,49 +224,36 @@ impl AnswerEntrySet {
         }
     }
 
-    pub fn can_create_comment(
+    pub fn read_entry_for_comment(
         &self,
         answer_id: AnswerId,
         actor: &Actor,
-    ) -> Result<bool, DomainError> {
-        self.read_entry(answer_id, actor)?;
-        Ok(matches!(actor, Actor::User(User::ActiveUser(_))))
+    ) -> Result<&AnswerEntry, DomainError> {
+        let entry = self.read_entry(answer_id, actor)?;
+        match actor {
+            Actor::User(User::ActiveUser(_)) => Ok(entry),
+            _ => Err(DomainError::Forbidden),
+        }
     }
 
-    pub fn can_update_comment(
+    pub fn read_comment_for_modification(
         &self,
         answer_id: AnswerId,
         comment_id: CommentId,
         actor: &Actor,
-    ) -> Result<bool, DomainError> {
+    ) -> Result<&Comment, DomainError> {
         let entry = self.read_entry(answer_id, actor)?;
         let comment = entry
             .find_comment(comment_id)
             .ok_or(DomainError::NotFound)?;
-        Ok(match actor {
-            Actor::User(User::ActiveUser(user)) => {
-                comment.commented_by() == user.id() || user.role() == &Administrator
+        match actor {
+            Actor::User(User::ActiveUser(user))
+                if comment.commented_by() == user.id() || user.role() == &Administrator =>
+            {
+                Ok(comment)
             }
-            _ => false,
-        })
-    }
-
-    pub fn can_delete_comment(
-        &self,
-        answer_id: AnswerId,
-        comment_id: CommentId,
-        actor: &Actor,
-    ) -> Result<bool, DomainError> {
-        let entry = self.read_entry(answer_id, actor)?;
-        let comment = entry
-            .find_comment(comment_id)
-            .ok_or(DomainError::NotFound)?;
-        Ok(match actor {
-            Actor::User(User::ActiveUser(user)) => {
-                comment.commented_by() == user.id() || user.role() == &Administrator
-            }
-            _ => false,
-        })
+            _ => Err(DomainError::Forbidden),
+        }
     }
 }
 
@@ -338,6 +337,10 @@ mod tests {
         )
     }
 
+    fn empty_posted_answers() -> PostedAnswerContents {
+        PostedAnswerContents::try_new(&[], vec![]).unwrap()
+    }
+
     #[test]
     fn temporary_answer_creation_requires_allow_flag() {
         let set = answer_entry_set(false, ResponsePeriod::try_new(None, None).unwrap());
@@ -350,7 +353,15 @@ mod tests {
             "contact".to_string(),
         ));
 
-        assert!(!set.can_accept_answer(&author, &actor));
+        assert!(
+            set.try_accept_answer(
+                author,
+                &actor,
+                AnswerTitle::new(None),
+                empty_posted_answers()
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -365,7 +376,15 @@ mod tests {
             "contact".to_string(),
         ));
 
-        assert!(set.can_accept_answer(&author, &actor));
+        assert!(
+            set.try_accept_answer(
+                author,
+                &actor,
+                AnswerTitle::new(None),
+                empty_posted_answers()
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -387,7 +406,15 @@ mod tests {
             "contact".to_string(),
         ));
 
-        assert!(!set.can_accept_answer(&author, &actor));
+        assert!(
+            set.try_accept_answer(
+                author,
+                &actor,
+                AnswerTitle::new(None),
+                empty_posted_answers()
+            )
+            .is_err()
+        );
     }
 
     #[test]

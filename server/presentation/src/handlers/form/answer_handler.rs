@@ -121,6 +121,7 @@ pub async fn get_all_answers(
             .map(|answer_details| {
                 FormAnswer::new(
                     answer_details.form_answer,
+                    answer_details.form_id,
                     answer_details.author,
                     answer_details.comments,
                     answer_details.labels,
@@ -171,6 +172,7 @@ pub async fn get_answer_handler(
 
     Ok(GetAnswerResponse::Ok(FormAnswer::new(
         answer_details.form_answer,
+        answer_details.form_id,
         answer_details.author,
         answer_details.comments,
         answer_details.labels,
@@ -221,6 +223,7 @@ pub async fn get_answer_by_form_id_handler(
             .map(|answer_details| {
                 FormAnswer::new(
                     answer_details.form_answer,
+                    answer_details.form_id,
                     answer_details.author,
                     answer_details.comments,
                     answer_details.labels,
@@ -383,6 +386,7 @@ pub async fn update_answer_handler(
 
     Ok(UpdateAnswerResponse::Ok(FormAnswer::new(
         answer_details.form_answer,
+        answer_details.form_id,
         answer_details.author,
         answer_details.comments,
         answer_details.labels,

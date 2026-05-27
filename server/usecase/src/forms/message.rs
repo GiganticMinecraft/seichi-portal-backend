@@ -1,4 +1,5 @@
 use common::config::FRONTEND;
+use domain::form::message_thread::models::MessageThread;
 use domain::form::models::FormId;
 use domain::notification::models::{NotificationContent, NotificationType};
 use domain::notification::notificator::Notificator;
@@ -13,13 +14,14 @@ use domain::{
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_set_repository::AnswerEntrySetRepository,
+            message_thread_repository::MessageThreadRepository,
         },
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
     types::{
         authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Read},
+        authorization_guard_with_context::{Create, Read, Update},
     },
     user::models::{ActiveUser, Actor},
 };
@@ -37,11 +39,13 @@ pub struct MessageUseCase<
     FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
     AnswerEntrySetRepo: AnswerEntrySetRepository,
+    MessageThreadRepo: MessageThreadRepository,
 > {
     pub notification_repository: &'a NotificationRepo,
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub message_thread_repository: &'a MessageThreadRepo,
 }
 
 impl<
@@ -49,7 +53,8 @@ impl<
     R2: ActiveFormRepository,
     R3: UserRepository,
     R4: AnswerEntrySetRepository,
-> MessageUseCase<'_, R1, R2, R3, R4>
+    R5: MessageThreadRepository,
+> MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
     async fn read_answer_entry_set_guard_and_entry(
         &self,
@@ -91,19 +96,12 @@ impl<
         notificator: &N,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (set_guard, form_answer) = self
+        let (_set_guard, form_answer) = self
             .read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        let form_id = *form_answer.form_id();
-        let answer_id = *form_answer.id();
-
         match Message::try_new(answer_id, *actor.id(), message_body) {
             Ok(message) => {
-                if !message.can_create_for_answer(&actor_user, &form_answer) {
-                    return Err(Error::from(DomainError::Forbidden));
-                }
-
                 let notification_recipient_id = form_answer
                     .author()
                     .authenticated_user_id()
@@ -111,10 +109,32 @@ impl<
 
                 let message_sender_id = *message.sender_id();
 
-                let post_result = self
-                    .answer_entry_set_repository
-                    .add_message(&set_guard, answer_id, &message, &actor_user)
-                    .await;
+                let post_result = match self
+                    .message_thread_repository
+                    .get_by_answer_id(answer_id)
+                    .await?
+                {
+                    Some(thread_guard) => {
+                        let thread = thread_guard.try_read(&actor_user)?;
+                        let updated = thread.clone().add_message(message);
+                        let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
+                        self.message_thread_repository
+                            .update(guard, &actor_user)
+                            .await
+                    }
+                    None => {
+                        let answer_author_id = form_answer
+                            .author()
+                            .authenticated_user_id()
+                            .ok_or(Error::from(UserNotFound))?;
+                        let thread =
+                            MessageThread::new(answer_id, answer_author_id).add_message(message);
+                        let guard = AuthorizationGuard::<MessageThread, Create>::from(thread);
+                        self.message_thread_repository
+                            .create(guard, &actor_user)
+                            .await
+                    }
+                };
 
                 match post_result {
                     Ok(_) if message_sender_id != notification_recipient_id => {
@@ -175,16 +195,20 @@ impl<
         answer_id: AnswerId,
     ) -> Result<Vec<MessageWithSender>, Error> {
         let actor_user = Actor::from(actor.clone());
-        let (_set_guard, form_answer) = self
-            .read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
+        self.read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        let messages = form_answer
-            .messages()
-            .iter()
-            .filter(|msg| msg.can_read_for_answer(&actor_user, &form_answer))
-            .cloned()
-            .collect::<Vec<_>>();
+        let messages = match self
+            .message_thread_repository
+            .get_by_answer_id(answer_id)
+            .await?
+        {
+            None => vec![],
+            Some(thread_guard) => {
+                let thread = thread_guard.try_read(&actor_user)?;
+                thread.messages().to_vec()
+            }
+        };
 
         let sender_ids = messages.iter().map(|m| *m.sender_id()).collect();
         let senders = resolve_user_references(self.user_repository, actor, sender_ids).await?;
@@ -210,21 +234,24 @@ impl<
         body: Option<String>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (set_guard, form_answer) = self
-            .read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
+        self.read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        let message = form_answer
-            .find_message(*message_id)
-            .ok_or(MessageNotFound)?;
+        let thread_guard = self
+            .message_thread_repository
+            .get_by_answer_id(answer_id)
+            .await?
+            .ok_or(Error::from(MessageNotFound))?;
 
-        if !message.can_update_message(&actor_user) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+        let thread = thread_guard.try_read(&actor_user)?;
 
         if let Some(body) = body {
-            self.answer_entry_set_repository
-                .update_message_body(&set_guard, answer_id, *message_id, body, &actor_user)
+            let updated = thread
+                .clone()
+                .update_message_body(*message_id, &actor_user, body)?;
+            let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
+            self.message_thread_repository
+                .update(guard, &actor_user)
                 .await?;
         }
 
@@ -239,20 +266,21 @@ impl<
         message_id: &MessageId,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (set_guard, form_answer) = self
-            .read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
+        self.read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        let message = form_answer
-            .find_message(*message_id)
-            .ok_or(MessageNotFound)?;
+        let thread_guard = self
+            .message_thread_repository
+            .get_by_answer_id(answer_id)
+            .await?
+            .ok_or(Error::from(MessageNotFound))?;
 
-        if !message.can_delete_message(&actor_user) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+        let thread = thread_guard.try_read(&actor_user)?;
 
-        self.answer_entry_set_repository
-            .delete_message(&set_guard, answer_id, *message_id, &actor_user)
+        let updated = thread.clone().remove_message(*message_id, &actor_user)?;
+        let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
+        self.message_thread_repository
+            .update(guard, &actor_user)
             .await
     }
 }

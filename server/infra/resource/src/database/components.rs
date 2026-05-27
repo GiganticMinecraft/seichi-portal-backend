@@ -29,6 +29,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormAnswerDatabase: FormAnswerDatabase;
     type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
     type ConcreteFormMessageDatabase: FormMessageDatabase;
+    type ConcreteFormMessageThreadDatabase: FormMessageThreadDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
     type ConcreteUserDatabase: UserDatabase;
@@ -42,6 +43,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
+    fn form_message_thread(&self) -> &Self::ConcreteFormMessageThreadDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
@@ -90,7 +92,7 @@ pub trait FormDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormAnswerDatabase: Send + Sync {
-    async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), InfraError>;
+    async fn post_answer(&self, answer: &AnswerEntry, form_id: FormId) -> Result<(), InfraError>;
     async fn get_answers(
         &self,
         answer_id: AnswerId,
@@ -99,7 +101,11 @@ pub trait FormAnswerDatabase: Send + Sync {
         &self,
         answer_ids: Vec<AnswerId>,
     ) -> Result<Vec<FormAnswerRecord>, InfraError>;
-    async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError>;
+    async fn update_answer_entry(
+        &self,
+        answer_entry: &AnswerEntry,
+        form_id: FormId,
+    ) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
 
@@ -142,11 +148,30 @@ pub trait FormMessageDatabase: Send + Sync {
         &self,
         answers: &AnswerEntry,
     ) -> Result<Vec<MessageRecord>, InfraError>;
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<MessageRecord>, InfraError>;
     async fn fetch_message(
         &self,
         message_id: &MessageId,
     ) -> Result<Option<MessageRecord>, InfraError>;
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormMessageThreadDatabase: Send + Sync {
+    async fn create_message_thread(
+        &self,
+        thread_id: &str,
+        answer_id: &str,
+        answer_author_id: &str,
+    ) -> Result<(), InfraError>;
+    async fn get_thread_metadata_by_answer_id(
+        &self,
+        answer_id: &str,
+    ) -> Result<Option<(String, String, String)>, InfraError>;
 }
 
 #[automock]

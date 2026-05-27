@@ -116,10 +116,9 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
         let set_guard = self
             .read_answer_entry_set_guard(&actor_user, form_id)
             .await?;
+        let answer_entry_set = set_guard.try_read(&actor_user)?;
 
-        if !comment.can_create_on_entry(&actor_user) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+        answer_entry_set.read_entry_for_comment(answer_id, &actor_user)?;
 
         self.answer_entry_set_repository
             .add_comment(&set_guard, answer_id, &comment, &actor_user)
@@ -140,21 +139,16 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
             .await?;
         let answer_entry_set = set_guard.try_read(&actor_user)?;
 
-        let entry = answer_entry_set
-            .read_entry(answer_id, &actor_user)
+        let current_comment = answer_entry_set
+            .read_comment_for_modification(answer_id, comment_id, &actor_user)
             .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
+                DomainError::NotFound => Error::from(CommentNotFound),
                 error => Error::from(error),
-            })?;
-
-        let current_comment = entry.find_comment(comment_id).ok_or(CommentNotFound)?;
-
-        if !current_comment.can_update_on_entry(&actor_user) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
+            })?
+            .clone();
 
         if let Some(content) = content {
-            let updated = current_comment.clone().with_updated_content(content);
+            let updated = current_comment.with_updated_content(content);
             self.answer_entry_set_repository
                 .update_comment(&set_guard, answer_id, &updated, &actor_user)
                 .await?;
@@ -176,18 +170,12 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
             .await?;
         let answer_entry_set = set_guard.try_read(&actor_user)?;
 
-        let entry = answer_entry_set
-            .read_entry(answer_id, &actor_user)
+        answer_entry_set
+            .read_comment_for_modification(answer_id, comment_id, &actor_user)
             .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
+                DomainError::NotFound => Error::from(CommentNotFound),
                 error => Error::from(error),
             })?;
-
-        let comment = entry.find_comment(comment_id).ok_or(CommentNotFound)?;
-
-        if !comment.can_delete_on_entry(&actor_user) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
 
         self.answer_entry_set_repository
             .delete_comment(&set_guard, answer_id, comment_id, &actor_user)

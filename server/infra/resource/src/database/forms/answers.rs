@@ -2,7 +2,10 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use domain::{
-    form::answer::models::{AnswerAuthor, AnswerEntry, AnswerId},
+    form::{
+        answer::models::{AnswerAuthor, AnswerEntry, AnswerId},
+        models::FormId,
+    },
     user::models::{ActiveUser, Role, TemporaryUser},
 };
 use errors::infra::InfraError;
@@ -264,9 +267,9 @@ pub(crate) fn attach_entry_children(
 #[async_trait]
 impl FormAnswerDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), InfraError> {
+    async fn post_answer(&self, answer: &AnswerEntry, form_id: FormId) -> Result<(), InfraError> {
         let answer_id = answer.id().to_owned().into_inner().to_string();
-        let form_id = answer.form_id().to_owned().into_inner().to_string();
+        let form_id = form_id.into_inner().to_string();
         let (author_type, user_id, temporary_user_id) = answer_author_columns(answer);
         let temporary_user = answer.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
@@ -458,9 +461,13 @@ impl FormAnswerDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError> {
+    async fn update_answer_entry(
+        &self,
+        answer_entry: &AnswerEntry,
+        form_id: FormId,
+    ) -> Result<(), InfraError> {
         let answer_id = answer_entry.id().to_owned().into_inner().to_string();
-        let form_id = answer_entry.form_id().to_owned().to_string();
+        let form_id = form_id.into_inner().to_string();
         let (author_type, user, temporary_user_id) = answer_author_columns(answer_entry);
         let temporary_user = answer_entry.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer_entry.title().to_owned())

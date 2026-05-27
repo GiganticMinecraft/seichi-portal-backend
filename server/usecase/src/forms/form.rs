@@ -67,11 +67,18 @@ impl<
             AnswerVisibility as AV, DefaultAnswerTitle as DAT, ResponsePeriod as RP,
         };
         use domain::form::answer_entry_set::models::AnswerEntrySet;
+        use domain::form::models::{FormLabelIdSet, FormMeta, FormSettings};
 
         let user_as_user = Actor::from(user.clone());
 
-        let mut answer_entry_set =
-            AnswerEntrySet::new(DAT::new(None), AV::PRIVATE, RP::try_new(None, None)?, false);
+        let form_id = FormId::new();
+        let mut answer_entry_set = AnswerEntrySet::new(
+            form_id,
+            DAT::new(None),
+            AV::PRIVATE,
+            RP::try_new(None, None)?,
+            false,
+        );
         if let Some(allow) = allow_temporary_answers {
             answer_entry_set = answer_entry_set.change_allow_temporary_answers(allow);
         }
@@ -82,13 +89,16 @@ impl<
             .create(answer_entry_set_guard)
             .await?;
 
-        let form = ActiveForm::new(
+        let form = ActiveForm::from_raw_parts(
+            form_id,
             title,
             description,
+            FormMeta::new(),
+            FormSettings::new(),
             QuestionSet::try_new(questions).map_err(Error::from)?,
+            FormLabelIdSet::empty(),
             *answer_entry_set.id(),
         );
-        let form_id = *form.id();
 
         self.active_form_repository
             .create(user, form.into())

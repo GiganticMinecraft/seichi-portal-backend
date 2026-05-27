@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::form::{
-    answer::models::AnswerEntry,
+    answer::models::{AnswerEntry, AnswerId},
     message::models::{Message, MessageId},
 };
 use errors::infra::InfraError;
@@ -76,6 +76,32 @@ impl FormMessageDatabase for ConnectionPool {
                     INNER JOIN users ON users.id = messages.sender
                     WHERE related_answer_id = ?",
                     answer_id.to_string(),
+                )
+                .fetch_all(&mut **txn)
+                .await?;
+
+                Ok::<_, InfraError>(rows)
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<MessageRecord>, InfraError> {
+        let answer_id = answer_id.into_inner().to_string();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rows = sqlx::query_as!(
+                    MessageRecord,
+                    r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM messages
+                    INNER JOIN users ON users.id = messages.sender
+                    WHERE related_answer_id = ?",
+                    answer_id,
                 )
                 .fetch_all(&mut **txn)
                 .await?;

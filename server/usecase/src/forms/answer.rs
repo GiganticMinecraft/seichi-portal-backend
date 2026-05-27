@@ -87,6 +87,7 @@ impl<
     async fn build_answer_details(
         &self,
         actor: &ActiveUser,
+        form_id: FormId,
         form_answer: AnswerEntry,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
     ) -> Result<AnswerDetails, Error> {
@@ -128,6 +129,7 @@ impl<
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(AnswerDetails {
+            form_id,
             form_answer,
             author,
             labels,
@@ -162,11 +164,8 @@ impl<
         )?;
 
         let author = AnswerAuthor::AuthenticatedUser(*user.id());
-        if !answer_entry_set.can_accept_answer(&author, &actor) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
-
-        let answer_entry = AnswerEntry::new(author, form_id, title, posted_answers);
+        let answer_entry =
+            answer_entry_set.try_accept_answer(author, &actor, title, posted_answers)?;
 
         self.answer_entry_set_repository
             .add_entry(&answer_entry_set_guard, &answer_entry, &actor)
@@ -203,11 +202,8 @@ impl<
         )?;
 
         let author = AnswerAuthor::TemporaryUser(temporary_user);
-        if !answer_entry_set.can_accept_answer(&author, &actor) {
-            return Err(Error::from(DomainError::Forbidden));
-        }
-
-        let answer_entry = AnswerEntry::new(author, form_id, title, posted_answers);
+        let answer_entry =
+            answer_entry_set.try_accept_answer(author, &actor, title, posted_answers)?;
 
         self.answer_entry_set_repository
             .add_entry(&answer_entry_set_guard, &answer_entry, &actor)
@@ -239,7 +235,8 @@ impl<
             .map(|label| label.try_into_read(&actor))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.build_answer_details(user, form_answer, labels).await
+        self.build_answer_details(user, form_id, form_answer, labels)
+            .await
     }
 
     pub async fn get_answers_by_form_id(
@@ -267,7 +264,8 @@ impl<
                     .map(|label| label.try_into_read(&actor_ref))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                self.build_answer_details(actor, form_answer, labels).await
+                self.build_answer_details(actor, form_id, form_answer, labels)
+                    .await
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
@@ -277,7 +275,7 @@ impl<
 
     pub async fn get_all_answers(&self, user: &ActiveUser) -> Result<Vec<AnswerDetails>, Error> {
         let actor_ref = Actor::from(user.clone());
-        let visible_answers = self
+        let visible_answers: Vec<(FormId, AnswerEntry)> = self
             .answer_entry_set_repository
             .list_all()
             .await?
@@ -286,9 +284,10 @@ impl<
                 set_guard
                     .try_into_read(&actor_ref)
                     .map(|set| {
+                        let form_id = *set.form_id();
                         set.readable_entries(&actor_ref)
                             .into_iter()
-                            .cloned()
+                            .map(move |entry| (form_id, entry.clone()))
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default()
@@ -296,7 +295,7 @@ impl<
             .collect::<Vec<_>>();
 
         stream::iter(visible_answers)
-            .then(|form_answer| {
+            .then(|(form_id, form_answer)| {
                 let user = user.clone();
                 async move {
                     let actor_ref = Actor::from(user.clone());
@@ -310,7 +309,8 @@ impl<
                         .map(|label| label.try_into_read(&actor_ref))
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    self.build_answer_details(&user, form_answer, labels).await
+                    self.build_answer_details(&user, form_id, form_answer, labels)
+                        .await
                 }
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
@@ -342,7 +342,16 @@ impl<
             .clone();
 
         if let Some(title) = title {
-            form_answer = answer_entry_set.change_entry_title(answer_id, &actor_ref, title)?;
+            let updated_set = answer_entry_set
+                .clone()
+                .change_entry_title(answer_id, &actor_ref, title)?;
+            form_answer = updated_set
+                .read_entry(answer_id, &actor_ref)
+                .map_err(|error| match error {
+                    DomainError::NotFound => Error::from(AnswerNotFound),
+                    error => Error::from(error),
+                })?
+                .clone();
             self.answer_entry_set_repository
                 .update_entry(&answer_entry_set_guard, &form_answer, &actor_ref)
                 .await?;
@@ -356,6 +365,7 @@ impl<
             .map(|label| label.try_into_read(&actor_ref))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.build_answer_details(actor, form_answer, labels).await
+        self.build_answer_details(actor, form_id, form_answer, labels)
+            .await
     }
 }

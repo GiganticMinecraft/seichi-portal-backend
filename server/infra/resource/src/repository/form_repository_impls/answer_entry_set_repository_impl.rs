@@ -4,7 +4,6 @@ use domain::{
         answer::models::{AnswerEntry, AnswerId},
         answer_entry_set::models::{AnswerEntrySet, AnswerEntrySetId},
         comment::models::{Comment, CommentId},
-        message::models::{Message, MessageId},
     },
     repository::form::answer_entry_set_repository::AnswerEntrySetRepository,
     types::{
@@ -17,10 +16,7 @@ use errors::Error;
 
 use crate::{
     database::{
-        components::{
-            DatabaseComponents, FormAnswerDatabase, FormCommentDatabase, FormDatabase,
-            FormMessageDatabase,
-        },
+        components::{DatabaseComponents, FormAnswerDatabase, FormCommentDatabase, FormDatabase},
         connection::DatabaseTransaction,
     },
     repository::Repository,
@@ -88,13 +84,12 @@ where
         answer_entry: &AnswerEntry,
         actor: &Actor,
     ) -> Result<(), Error> {
-        let answer_entry_set = answer_entry_set.try_read(actor)?;
+        let set = answer_entry_set.try_read(actor)?;
 
-        if !answer_entry_set.can_accept_answer(answer_entry.author(), actor) {
-            return Err(errors::domain::DomainError::Forbidden.into());
-        }
-
-        self.client.form_answer().post_answer(answer_entry).await?;
+        self.client
+            .form_answer()
+            .post_answer(answer_entry, *set.form_id())
+            .await?;
         Ok(())
     }
 
@@ -105,13 +100,12 @@ where
         answer_entry: &AnswerEntry,
         actor: &Actor,
     ) -> Result<(), Error> {
-        answer_entry_set
-            .try_read(actor)?
-            .read_entry(*answer_entry.id(), actor)?;
+        let set = answer_entry_set.try_read(actor)?;
+        set.read_entry(*answer_entry.id(), actor)?;
 
         self.client
             .form_answer()
-            .update_answer_entry(answer_entry)
+            .update_answer_entry(answer_entry, *set.form_id())
             .await?;
         Ok(())
     }
@@ -192,60 +186,5 @@ where
     #[tracing::instrument(skip(self))]
     async fn size_comments(&self) -> Result<u32, Error> {
         self.client.form_comment().size().await.map_err(Into::into)
-    }
-
-    #[tracing::instrument(skip(self, answer_entry_set))]
-    async fn add_message(
-        &self,
-        answer_entry_set: &AuthorizationGuard<AnswerEntrySet, Read>,
-        answer_id: AnswerId,
-        message: &Message,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        answer_entry_set
-            .try_read(actor)?
-            .read_entry(answer_id, actor)?;
-
-        self.client.form_message().post_message(message).await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self, answer_entry_set))]
-    async fn update_message_body(
-        &self,
-        answer_entry_set: &AuthorizationGuard<AnswerEntrySet, Read>,
-        answer_id: AnswerId,
-        message_id: MessageId,
-        body: String,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        answer_entry_set
-            .try_read(actor)?
-            .read_entry(answer_id, actor)?;
-
-        self.client
-            .form_message()
-            .update_message_body(message_id, body)
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self, answer_entry_set))]
-    async fn delete_message(
-        &self,
-        answer_entry_set: &AuthorizationGuard<AnswerEntrySet, Read>,
-        answer_id: AnswerId,
-        message_id: MessageId,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        answer_entry_set
-            .try_read(actor)?
-            .read_entry(answer_id, actor)?;
-
-        self.client
-            .form_message()
-            .delete_message(message_id)
-            .await?;
-        Ok(())
     }
 }

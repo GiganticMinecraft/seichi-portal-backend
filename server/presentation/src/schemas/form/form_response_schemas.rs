@@ -401,6 +401,7 @@ pub struct FormAnswer {
 impl FormAnswer {
     pub fn new(
         answer: domain::form::answer::models::AnswerEntry,
+        form_id: domain::form::models::FormId,
         author: domain::user::models::User,
         comments: Vec<usecase::models::CommentWithAuthor>,
         labels: Vec<domain::form::answer::models::AnswerLabel>,
@@ -408,7 +409,7 @@ impl FormAnswer {
         FormAnswer {
             id: answer.id().to_owned().into(),
             author: author.into(),
-            form_id: answer.form_id().into_inner(),
+            form_id: form_id.into_inner(),
             timestamp: answer.timestamp().to_owned(),
             title: answer
                 .title()

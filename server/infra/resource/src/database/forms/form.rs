@@ -311,6 +311,9 @@ async fn answer_entry_set_from_row(
     let id = AnswerEntrySetId::from(
         Uuid::parse_str(&row.try_get::<String, _>("id")?).map_err(Into::<InfraError>::into)?,
     );
+    let form_id = FormId::from(
+        Uuid::parse_str(&row.try_get::<String, _>("form_id")?).map_err(Into::<InfraError>::into)?,
+    );
     let visibility: AnswerVisibility = row
         .try_get::<String, _>("answer_visibility")?
         .try_into()
@@ -333,6 +336,7 @@ async fn answer_entry_set_from_row(
 
     Ok(AnswerEntrySet::from_raw_parts(
         id,
+        form_id,
         default_answer_title,
         visibility,
         response_period,
@@ -1015,9 +1019,12 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let row = sqlx::query(
-                    r"SELECT id, answer_visibility, allow_temporary_answers, default_answer_title,
-                        response_period_start_at, response_period_end_at
-                    FROM answer_entry_sets WHERE id = ?",
+                    r"SELECT aes.id, aes.answer_visibility, aes.allow_temporary_answers,
+                        aes.default_answer_title, aes.response_period_start_at,
+                        aes.response_period_end_at, f.id AS form_id
+                    FROM answer_entry_sets aes
+                    INNER JOIN form_meta_data f ON f.answer_entry_set_id = aes.id
+                    WHERE aes.id = ?",
                 )
                 .bind(id.into_inner().to_string())
                 .fetch_optional(&mut **txn)
@@ -1037,10 +1044,12 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = sqlx::query(
-                    r"SELECT id, answer_visibility, allow_temporary_answers, default_answer_title,
-                        response_period_start_at, response_period_end_at
-                    FROM answer_entry_sets
-                    ORDER BY id",
+                    r"SELECT aes.id, aes.answer_visibility, aes.allow_temporary_answers,
+                        aes.default_answer_title, aes.response_period_start_at,
+                        aes.response_period_end_at, f.id AS form_id
+                    FROM answer_entry_sets aes
+                    INNER JOIN form_meta_data f ON f.answer_entry_set_id = aes.id
+                    ORDER BY aes.id",
                 )
                 .fetch_all(&mut **txn)
                 .await?;

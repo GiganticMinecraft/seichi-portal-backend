@@ -275,11 +275,11 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             id,
             author,
             timestamp,
-            form_id,
+            form_id: _,
             title,
             contents,
             comments,
-            messages,
+            messages: _,
         }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
         let author = match author {
@@ -292,10 +292,6 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             .into_iter()
             .map(TryInto::<domain::form::comment::models::Comment>::try_into)
             .collect::<Result<Vec<_>, _>>()?;
-        let messages = messages
-            .into_iter()
-            .map(TryInto::<domain::form::message::models::Message>::try_into)
-            .collect::<Result<Vec<_>, _>>()?;
         unsafe {
             Ok(AnswerEntry::from_raw_parts(
                 Uuid::from_str(&id)
@@ -303,14 +299,12 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                     .into(),
                 author,
                 timestamp,
-                FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
                 contents
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<_, _>>()?,
                 comments,
-                messages,
             ))
         }
     }

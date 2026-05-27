@@ -69,28 +69,51 @@ impl MessageThread {
         self.messages.iter().find(|m| *m.id() == message_id)
     }
 
-    pub fn can_update_message(
-        &self,
+    pub fn update_message_body(
+        self,
         message_id: MessageId,
         actor: &Actor,
-    ) -> Result<bool, DomainError> {
+        new_body: String,
+    ) -> Result<Self, DomainError> {
         let message = self.find_message(message_id).ok_or(DomainError::NotFound)?;
-        Ok(matches!(
-            actor,
-            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id()
-        ))
+        match actor {
+            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id() => {}
+            _ => return Err(DomainError::Forbidden),
+        }
+        let messages = self
+            .messages
+            .into_iter()
+            .map(|m| {
+                if *m.id() == message_id {
+                    unsafe {
+                        Message::from_raw_parts(
+                            *m.id(),
+                            *m.related_answer_id(),
+                            *m.sender_id(),
+                            new_body.clone(),
+                            *m.timestamp(),
+                        )
+                    }
+                } else {
+                    m
+                }
+            })
+            .collect();
+        Ok(Self { messages, ..self })
     }
 
-    pub fn can_delete_message(
-        &self,
-        message_id: MessageId,
-        actor: &Actor,
-    ) -> Result<bool, DomainError> {
+    pub fn remove_message(self, message_id: MessageId, actor: &Actor) -> Result<Self, DomainError> {
         let message = self.find_message(message_id).ok_or(DomainError::NotFound)?;
-        Ok(matches!(
-            actor,
-            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id()
-        ))
+        match actor {
+            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id() => {}
+            _ => return Err(DomainError::Forbidden),
+        }
+        let messages = self
+            .messages
+            .into_iter()
+            .filter(|m| *m.id() != message_id)
+            .collect();
+        Ok(Self { messages, ..self })
     }
 }
 
