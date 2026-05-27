@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::form::{
     answer::models::AnswerEntry,
-    answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-    answer_entry_set::models::{AnswerEntrySet, AnswerEntrySetId},
+    answer_entry_set::models::{
+        AnswerEntrySet, AnswerEntrySetId, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+    },
     models::{FormLabelId, WebhookUrl},
     question::models::{Choice, Question, QuestionId, QuestionType},
 };

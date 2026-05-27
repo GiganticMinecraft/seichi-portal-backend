@@ -1,9 +1,7 @@
 use domain::form::question::models::{ChoiceId, QuestionId, QuestionType};
 use domain::form::{
-    answer::{
-        models::{AnswerLabelId, AnswerTitle},
-        settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-    },
+    answer::models::{AnswerLabelId, AnswerTitle},
+    answer_entry_set::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
     models::{FormLabelId, FormTitle, Visibility, WebhookUrl},
 };
 use serde::{Deserialize, Deserializer};

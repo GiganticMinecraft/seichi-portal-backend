@@ -1,8 +1,9 @@
 use chrono::Utc;
 use domain::{
     form::{
-        answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-        answer_entry_set::models::AnswerEntrySet,
+        answer_entry_set::models::{
+            AnswerEntrySet, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+        },
         models::{
             ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
             FormLabelIdSet, FormMeta, FormSettings, FormTitle, Question, QuestionSet, Visibility,

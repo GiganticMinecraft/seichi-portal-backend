@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use domain::form::{
     answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
-    answer::settings::models::DefaultAnswerTitle,
     answer_entry_set::models::AnswerEntrySet,
+    answer_entry_set::models::DefaultAnswerTitle,
     models::{FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility},
     question::models::{Choice, Question, QuestionType},
 };
@@ -27,13 +27,13 @@ pub enum AnswerVisibility {
     Private,
 }
 
-impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVisibility {
-    fn from(val: domain::form::answer::settings::models::AnswerVisibility) -> Self {
+impl From<domain::form::answer_entry_set::models::AnswerVisibility> for AnswerVisibility {
+    fn from(val: domain::form::answer_entry_set::models::AnswerVisibility) -> Self {
         match val {
-            domain::form::answer::settings::models::AnswerVisibility::PUBLIC => {
+            domain::form::answer_entry_set::models::AnswerVisibility::PUBLIC => {
                 AnswerVisibility::Public
             }
-            domain::form::answer::settings::models::AnswerVisibility::PRIVATE => {
+            domain::form::answer_entry_set::models::AnswerVisibility::PRIVATE => {
                 AnswerVisibility::Private
             }
         }
