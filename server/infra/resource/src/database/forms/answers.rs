@@ -10,7 +10,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
-use sqlx::{Row, query};
+use sqlx::{Row, mysql::MySqlRow, query};
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
@@ -40,9 +40,7 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
     }
 }
 
-pub(crate) fn author_from_row(
-    row: &sqlx::mysql::MySqlRow,
-) -> Result<AnswerAuthorRecord, InfraError> {
+pub(crate) fn author_from_row(row: &MySqlRow) -> Result<AnswerAuthorRecord, InfraError> {
     let author_type: String = row.try_get("author_type")?;
     match author_type.as_str() {
         "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(ActiveUser::new(

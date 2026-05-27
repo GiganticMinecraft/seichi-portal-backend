@@ -9,11 +9,11 @@ use domain::form::{
 };
 use domain::{
     form::models::{ActiveForm, ArchivedForm, FormId},
-    user::models::{ActiveUser, Role},
+    user::models::{ActiveUser, Actor, Role},
 };
-use errors::infra::InfraError;
+use errors::{Error, domain::DomainError, infra::InfraError};
 use itertools::Itertools;
-use sqlx::{MySqlConnection, Row, query};
+use sqlx::{MySqlConnection, Row, mysql::MySqlRow, query};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use types::non_empty_string::NonEmptyString;
@@ -29,7 +29,9 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    records::{ActiveFormRecord, ArchivedFormRecord, ChoiceRecord, QuestionRecord},
+    records::{
+        ActiveFormRecord, ArchivedFormRecord, ChoiceRecord, FormAnswerRecord, QuestionRecord,
+    },
 };
 
 struct FormRow {
@@ -195,7 +197,7 @@ async fn archived_form_record_from_row(
     })
 }
 
-fn form_row_from_db_row(row: sqlx::mysql::MySqlRow) -> Result<FormRow, InfraError> {
+fn form_row_from_db_row(row: MySqlRow) -> Result<FormRow, InfraError> {
     Ok(FormRow {
         id: row.try_get("id")?,
         title: row.try_get("title")?,
@@ -208,9 +210,7 @@ fn form_row_from_db_row(row: sqlx::mysql::MySqlRow) -> Result<FormRow, InfraErro
     })
 }
 
-fn archived_form_row_from_db_row(
-    row: sqlx::mysql::MySqlRow,
-) -> Result<ArchivedFormRow, InfraError> {
+fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, InfraError> {
     Ok(ArchivedFormRow {
         form: FormRow {
             id: row.try_get("id")?,
@@ -270,7 +270,7 @@ async fn fetch_answer_entries_for_entry_set(
         .map(|row| {
             let answer_id = Uuid::parse_str(&row.try_get::<String, _>("answer_id")?)?;
 
-            Ok::<_, InfraError>(crate::records::FormAnswerRecord {
+            Ok::<_, InfraError>(FormAnswerRecord {
                 id: answer_id.to_string(),
                 author: author_from_row(&row)?,
                 timestamp: row.try_get("timestamp")?,
@@ -295,16 +295,16 @@ async fn fetch_answer_entries_for_entry_set(
         .into_iter()
         .map(TryInto::<AnswerEntry>::try_into)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error: errors::Error| InfraError::Unexpected {
+        .map_err(|error: Error| InfraError::Unexpected {
             cause: error.to_string(),
         })
 }
 
 async fn answer_entry_set_from_row(
     txn: &mut DatabaseTransaction,
-    row: sqlx::mysql::MySqlRow,
+    row: MySqlRow,
 ) -> Result<AnswerEntrySet, InfraError> {
-    let map_domain_err = |e: errors::domain::DomainError| InfraError::Unexpected {
+    let map_domain_err = |e: DomainError| InfraError::Unexpected {
         cause: e.to_string(),
     };
 
@@ -429,7 +429,7 @@ async fn update_form_root(
 
     let webhook_url = form
         .settings()
-        .webhook_url(&domain::user::models::Actor::from(updated_by.clone()))
+        .webhook_url(&Actor::from(updated_by.clone()))
         .ok()
         .map(ToOwned::to_owned)
         .and_then(WebhookUrl::into_inner)
@@ -920,7 +920,7 @@ impl FormDatabase for ConnectionPool {
                 archived_form_record_from_row(txn, row)
                     .await?
                     .try_into()
-                    .map_err(|error: errors::Error| InfraError::Unexpected {
+                    .map_err(|error: Error| InfraError::Unexpected {
                         cause: error.to_string(),
                     })
             })
@@ -977,7 +977,7 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn create_answer_entry_set(
         &self,
-        answer_entry_set: &domain::form::answer_entry_set::models::AnswerEntrySet,
+        answer_entry_set: &AnswerEntrySet,
     ) -> Result<(), InfraError> {
         let id = answer_entry_set.id().into_inner().to_string();
         let visibility = answer_entry_set.visibility().to_string();
@@ -1058,7 +1058,6 @@ impl FormDatabase for ConnectionPool {
                 for row in rows {
                     sets.push(answer_entry_set_from_row(txn, row).await?);
                 }
-
                 Ok::<_, InfraError>(sets)
             })
         })

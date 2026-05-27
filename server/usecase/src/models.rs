@@ -2,6 +2,7 @@ use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerLabel},
         comment::models::Comment,
+        message::models::Message,
         models::{ActiveForm, ArchivedForm, FormId, FormLabel},
         question::models::{Question, QuestionId},
     },
@@ -33,7 +34,7 @@ pub struct CommentWithAuthor {
 }
 
 pub struct MessageWithSender {
-    pub message: domain::form::message::models::Message,
+    pub message: Message,
     pub sender: ActiveUser,
 }
 

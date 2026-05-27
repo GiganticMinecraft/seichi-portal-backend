@@ -1,7 +1,7 @@
 use domain::{
     form::{
         answer::models::{
-            AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent,
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
             PostedAnswerContents,
         },
         answer_entry_set::models::AnswerEntrySet,
@@ -89,7 +89,7 @@ impl<
         actor: &ActiveUser,
         form_id: FormId,
         form_answer: AnswerEntry,
-        labels: Vec<domain::form::answer::models::AnswerLabel>,
+        labels: Vec<AnswerLabel>,
     ) -> Result<AnswerDetails, Error> {
         let comments = form_answer.comments().to_vec();
 

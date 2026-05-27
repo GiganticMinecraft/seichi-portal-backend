@@ -2909,6 +2909,7 @@ dependencies = [
  "common",
  "domain",
  "errors",
+ "futures",
  "itertools",
  "resource",
  "serde",

@@ -8,7 +8,8 @@ use domain::{
     },
     user::models::Actor,
 };
-use errors::Error;
+use errors::{Error, infra::InfraError};
+use std::collections::HashSet;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -75,11 +76,11 @@ where
 
         let thread = MessageThread::from_raw_parts(
             Uuid::from_str(&thread_id_str)
-                .map_err(errors::infra::InfraError::from)?
+                .map_err(InfraError::from)?
                 .into(),
             answer_id,
             Uuid::from_str(&answer_author_id_str)
-                .map_err(errors::infra::InfraError::from)?
+                .map_err(InfraError::from)?
                 .into(),
             messages,
         );
@@ -103,7 +104,7 @@ where
             .fetch_messages_by_answer_id(*thread.answer_id())
             .await?;
 
-        let current_ids: std::collections::HashSet<String> = thread
+        let current_ids: HashSet<String> = thread
             .messages()
             .iter()
             .map(|m| m.id().into_inner().to_string())
@@ -113,17 +114,12 @@ where
             if !current_ids.contains(&record.id) {
                 self.client
                     .form_message()
-                    .delete_message(
-                        Uuid::from_str(&record.id)
-                            .map_err(errors::infra::InfraError::from)?
-                            .into(),
-                    )
+                    .delete_message(Uuid::from_str(&record.id).map_err(InfraError::from)?.into())
                     .await?;
             }
         }
 
-        let existing_ids: std::collections::HashSet<String> =
-            existing.into_iter().map(|r| r.id).collect();
+        let existing_ids: HashSet<String> = existing.into_iter().map(|r| r.id).collect();
 
         for message in thread.messages() {
             let msg_id_str = message.id().into_inner().to_string();

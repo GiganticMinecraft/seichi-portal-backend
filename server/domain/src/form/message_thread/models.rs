@@ -59,10 +59,9 @@ impl MessageThread {
         &self.messages
     }
 
-    pub fn add_message(self, message: Message) -> Self {
-        let mut messages = self.messages;
-        messages.push(message);
-        Self { messages, ..self }
+    pub fn add_message(mut self, message: Message) -> Self {
+        self.messages.push(message);
+        self
     }
 
     pub fn find_message(&self, message_id: MessageId) -> Option<&Message> {

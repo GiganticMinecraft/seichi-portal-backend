@@ -2,9 +2,11 @@ use chrono::Utc;
 use domain::{
     form::{
         answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
+        answer_entry_set::models::AnswerEntrySet,
         models::{
             ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
-            FormLabelIdSet, FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
+            FormLabelIdSet, FormMeta, FormSettings, FormTitle, Question, QuestionSet, Visibility,
+            WebhookUrl,
         },
     },
     repository::{
@@ -17,6 +19,7 @@ use domain::{
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
+    types::authorization_guard::AuthorizationGuard,
     user::models::{ActiveUser, Actor},
 };
 use errors::{
@@ -63,28 +66,21 @@ impl<
         allow_temporary_answers: Option<bool>,
         user: &ActiveUser,
     ) -> Result<ActiveForm, Error> {
-        use domain::form::answer::settings::models::{
-            AnswerVisibility as AV, DefaultAnswerTitle as DAT, ResponsePeriod as RP,
-        };
-        use domain::form::answer_entry_set::models::AnswerEntrySet;
-        use domain::form::models::{FormLabelIdSet, FormMeta, FormSettings};
-
         let user_as_user = Actor::from(user.clone());
 
         let form_id = FormId::new();
         let mut answer_entry_set = AnswerEntrySet::new(
             form_id,
-            DAT::new(None),
-            AV::PRIVATE,
-            RP::try_new(None, None)?,
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PRIVATE,
+            ResponsePeriod::try_new(None, None)?,
             false,
         );
         if let Some(allow) = allow_temporary_answers {
             answer_entry_set = answer_entry_set.change_allow_temporary_answers(allow);
         }
 
-        let answer_entry_set_guard =
-            domain::types::authorization_guard::AuthorizationGuard::from(answer_entry_set.clone());
+        let answer_entry_set_guard = AuthorizationGuard::from(answer_entry_set.clone());
         self.answer_entry_set_repository
             .create(answer_entry_set_guard)
             .await?;
@@ -603,6 +599,7 @@ mod tests {
     use super::*;
     use domain::{
         form::{
+            answer_entry_set::models::AnswerEntrySetId,
             models::{
                 ActiveForm, FormDescription, FormLabelIdSet, FormMeta, FormSettings, FormTitle,
             },
@@ -645,7 +642,7 @@ mod tests {
             FormSettings::new(),
             questions,
             FormLabelIdSet::empty(),
-            domain::form::answer_entry_set::models::AnswerEntrySetId::new(),
+            AnswerEntrySetId::new(),
         )
     }
 
