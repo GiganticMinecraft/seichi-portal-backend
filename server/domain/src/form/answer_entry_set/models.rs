@@ -360,10 +360,7 @@ mod tests {
     use chrono::{Duration, Utc};
     use uuid::Uuid;
 
-    use crate::form::{
-        answer::{models::AnswerTitle, settings::models::ResponsePeriod},
-        models::FormId,
-    };
+    use crate::form::{answer::models::AnswerTitle, models::FormId};
     use crate::user::models::{ActiveUser, Actor, Role, UserId};
 
     use super::*;
