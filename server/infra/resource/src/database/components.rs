@@ -138,7 +138,7 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
 
 #[async_trait]
 pub trait FormMessageDatabase: Send + Sync {
-    async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
+    async fn post_message(&self, message: &Message, answer_id: AnswerId) -> Result<(), InfraError>;
     async fn update_message_body(
         &self,
         message_id: MessageId,

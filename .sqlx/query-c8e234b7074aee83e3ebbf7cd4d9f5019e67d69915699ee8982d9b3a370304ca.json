@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM messages\n                    INNER JOIN users ON users.id = messages.sender\n                    WHERE messages.id = ?",
+  "query": "SELECT messages.id AS id, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM messages\n                    INNER JOIN users ON users.id = messages.sender\n                    WHERE related_answer_id = ?",
   "describe": {
     "columns": [
       {
@@ -14,15 +14,6 @@
       },
       {
         "ordinal": 1,
-        "name": "related_answer",
-        "type_info": {
-          "type": "String",
-          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "max_size": 144
-        }
-      },
-      {
-        "ordinal": 2,
         "name": "sender_id",
         "type_info": {
           "type": "String",
@@ -31,7 +22,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 2,
         "name": "sender_name",
         "type_info": {
           "type": "VarString",
@@ -40,7 +31,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "sender_role",
         "type_info": {
           "type": "String",
@@ -49,7 +40,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "body",
         "type_info": {
           "type": "Blob",
@@ -58,7 +49,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "timestamp!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -76,9 +67,8 @@
       false,
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "fefa920611a0cbd428204484ea1ad38bb919556d6e69f5e28d9b2d396cc2ef9c"
+  "hash": "c8e234b7074aee83e3ebbf7cd4d9f5019e67d69915699ee8982d9b3a370304ca"
 }

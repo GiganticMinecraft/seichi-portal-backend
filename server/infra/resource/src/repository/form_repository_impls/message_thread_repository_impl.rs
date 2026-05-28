@@ -43,7 +43,10 @@ where
             .await?;
 
         for message in thread.messages() {
-            self.client.form_message().post_message(message).await?;
+            self.client
+                .form_message()
+                .post_message(message, *thread.answer_id())
+                .await?;
         }
 
         Ok(())
@@ -129,7 +132,10 @@ where
                     .update_message_body(*message.id(), message.body().to_owned())
                     .await?;
             } else {
-                self.client.form_message().post_message(message).await?;
+                self.client
+                    .form_message()
+                    .post_message(message, *thread.answer_id())
+                    .await?;
             }
         }
 

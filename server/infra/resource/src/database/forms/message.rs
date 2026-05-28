@@ -13,9 +13,9 @@ use crate::{
 #[async_trait]
 impl FormMessageDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn post_message(&self, message: &Message) -> Result<(), InfraError> {
+    async fn post_message(&self, message: &Message, answer_id: AnswerId) -> Result<(), InfraError> {
         let id = message.id().to_string().to_owned();
-        let related_answer_id = message.related_answer_id().to_string();
+        let related_answer_id = answer_id.into_inner().to_string();
         let sender = message.sender_id().to_string();
         let body = message.body().to_owned();
         let timestamp = message.timestamp().to_owned();
@@ -71,7 +71,7 @@ impl FormMessageDatabase for ConnectionPool {
             Box::pin(async move {
                 let rows = sqlx::query_as!(
                     MessageRecord,
-                    r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    r"SELECT messages.id AS id, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
                     WHERE related_answer_id = ?",
@@ -97,7 +97,7 @@ impl FormMessageDatabase for ConnectionPool {
             Box::pin(async move {
                 let rows = sqlx::query_as!(
                     MessageRecord,
-                    r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    r"SELECT messages.id AS id, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
                     WHERE related_answer_id = ?",
@@ -123,7 +123,7 @@ impl FormMessageDatabase for ConnectionPool {
             Box::pin(async move {
                 let row = sqlx::query_as!(
                     MessageRecord,
-                    r"SELECT messages.id AS id, related_answer_id AS related_answer, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    r"SELECT messages.id AS id, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
                     WHERE messages.id = ?",

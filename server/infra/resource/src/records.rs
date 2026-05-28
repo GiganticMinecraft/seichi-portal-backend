@@ -351,7 +351,6 @@ impl TryFrom<FormLabelRecord> for FormLabel {
 #[derive(Clone)]
 pub struct MessageRecord {
     pub id: String,
-    pub related_answer: String,
     pub sender_name: String,
     pub sender_id: String,
     pub sender_role: String,
@@ -365,7 +364,6 @@ impl TryFrom<MessageRecord> for Message {
     fn try_from(
         MessageRecord {
             id,
-            related_answer,
             sender_name: _,
             sender_id,
             sender_role: _,
@@ -376,9 +374,6 @@ impl TryFrom<MessageRecord> for Message {
         unsafe {
             Ok(Message::from_raw_parts(
                 Uuid::from_str(&id)
-                    .map_err(Into::<InfraError>::into)?
-                    .into(),
-                Uuid::from_str(&related_answer)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
                 Uuid::from_str(&sender_id)

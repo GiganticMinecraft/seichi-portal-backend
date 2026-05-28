@@ -3,14 +3,13 @@ use derive_getters::Getters;
 use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 
-use crate::{form::answer::models::AnswerId, user::models::UserId};
+use crate::user::models::UserId;
 
 pub type MessageId = types::Id<Message>;
 
 #[derive(Getters, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Message {
     id: MessageId,
-    related_answer_id: AnswerId,
     sender_id: UserId,
     body: String,
     timestamp: DateTime<Utc>,
@@ -25,50 +24,26 @@ impl Message {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::{
-    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
-    ///         message::models::Message,
-    ///     },
+    ///     form::message::models::Message,
     ///     user::models::UserId,
     /// };
     /// use uuid::Uuid;
     ///
     /// let user_id: UserId = Uuid::new_v4().into();
     ///
-    /// let related_answer = AnswerEntry::new(
-    ///     AnswerAuthor::AuthenticatedUser(user_id),
-    ///     Default::default(),
-    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
-    /// );
-    ///
-    /// let success_message = Message::try_new(
-    ///     *related_answer.id(),
-    ///     user_id,
-    ///     "test message".to_string(),
-    /// );
-    ///
-    /// let related_answer = AnswerEntry::new(
-    ///     AnswerAuthor::AuthenticatedUser(user_id),
-    ///     Default::default(),
-    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
-    /// );
-    /// let message_with_empty_body = Message::try_new(*related_answer.id(), user_id, "".to_string());
+    /// let success_message = Message::try_new(user_id, "test message".to_string());
+    /// let message_with_empty_body = Message::try_new(user_id, "".to_string());
     ///
     /// assert!(success_message.is_ok());
     /// assert!(message_with_empty_body.is_err());
     /// ```
-    pub fn try_new(
-        related_answer_id: AnswerId,
-        sender_id: UserId,
-        body: String,
-    ) -> Result<Self, DomainError> {
+    pub fn try_new(sender_id: UserId, body: String) -> Result<Self, DomainError> {
         if body.is_empty() {
             return Err(DomainError::EmptyMessageBody);
         }
 
         Ok(Self {
             id: MessageId::new(),
-            related_answer_id,
             sender_id,
             body,
             timestamp: Utc::now(),
@@ -81,26 +56,16 @@ impl Message {
     /// ```
     /// use chrono::Utc;
     /// use domain::{
-    ///     form::{
-    ///         answer::models::{AnswerAuthor, AnswerEntry, PostedAnswerContents},
-    ///         message::models::{Message, MessageId},
-    ///     },
+    ///     form::message::models::{Message, MessageId},
     ///     user::models::UserId,
     /// };
     /// use uuid::Uuid;
     ///
     /// let user_id: UserId = Uuid::new_v4().into();
     ///
-    /// let related_answer = AnswerEntry::new(
-    ///     AnswerAuthor::AuthenticatedUser(user_id),
-    ///     Default::default(),
-    ///     PostedAnswerContents::try_new(&[], vec![]).unwrap(),
-    /// );
-    ///
     /// unsafe {
     ///     let message = Message::from_raw_parts(
     ///         MessageId::new(),
-    ///         *related_answer.id(),
     ///         user_id,
     ///         "test message".to_string(),
     ///         Utc::now(),
@@ -114,14 +79,12 @@ impl Message {
     /// データの信頼性が保証されている場合にのみ使用してください。
     pub unsafe fn from_raw_parts(
         id: MessageId,
-        related_answer_id: AnswerId,
         sender_id: UserId,
         body: String,
         timestamp: DateTime<Utc>,
     ) -> Self {
         Self {
             id,
-            related_answer_id,
             sender_id,
             body,
             timestamp,

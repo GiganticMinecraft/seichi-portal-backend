@@ -100,7 +100,7 @@ impl<
             .read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        match Message::try_new(answer_id, *actor.id(), message_body) {
+        match Message::try_new(*actor.id(), message_body) {
             Ok(message) => {
                 let notification_recipient_id = form_answer
                     .author()

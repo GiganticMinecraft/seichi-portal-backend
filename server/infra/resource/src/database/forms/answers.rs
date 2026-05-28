@@ -208,7 +208,6 @@ where
                 Uuid::from_str(&row.try_get::<String, _>("related_answer")?)?,
                 MessageRecord {
                     id: row.try_get("id")?,
-                    related_answer: row.try_get("related_answer")?,
                     sender_id: row.try_get("sender_id")?,
                     sender_name: row.try_get("sender_name")?,
                     sender_role: row.try_get("sender_role")?,

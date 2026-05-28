@@ -87,7 +87,6 @@ impl MessageThread {
                     unsafe {
                         Message::from_raw_parts(
                             *m.id(),
-                            *m.related_answer_id(),
                             *m.sender_id(),
                             new_body.clone(),
                             *m.timestamp(),
