@@ -9,11 +9,9 @@ use crate::form::{
     models::Question,
 };
 
-pub struct DefaultAnswerTitleDomainService<FormRepo> {
-    _phantom: std::marker::PhantomData<FormRepo>,
-}
+pub struct DefaultAnswerTitleDomainService;
 
-impl<FormRepo> DefaultAnswerTitleDomainService<FormRepo> {
+impl DefaultAnswerTitleDomainService {
     pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
         questions: &[Question],
@@ -154,9 +152,7 @@ mod tests {
             Default::default(),
         ));
 
-        let result = DefaultAnswerTitleDomainService::<
-            crate::repository::form::active_form_repository::MockActiveFormRepository,
-        >::to_answer_title_from_questions(
+        let result = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             default_answer_title,
             questions.as_slice(),
             &answers,

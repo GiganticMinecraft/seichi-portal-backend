@@ -156,7 +156,7 @@ impl<
         let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
 
-        let title = DefaultAnswerTitleDomainService::<R1>::to_answer_title_from_questions(
+        let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             answer_entry_set.default_answer_title().to_owned(),
             &questions,
             &posted_answers,
@@ -194,7 +194,7 @@ impl<
         let questions = form.questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
 
-        let title = DefaultAnswerTitleDomainService::<R1>::to_answer_title_from_questions(
+        let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             answer_entry_set.default_answer_title().to_owned(),
             &questions,
             &posted_answers,
