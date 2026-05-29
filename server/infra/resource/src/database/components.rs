@@ -6,7 +6,10 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use domain::search::models::{NumberOfRecordsPerAggregate, RealAnswers};
+use domain::search::models::{
+    AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
+    NumberOfRecordsPerAggregate, UserSearchHit,
+};
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
@@ -247,12 +250,18 @@ pub trait UserDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait SearchDatabase: Send + Sync {
-    async fn search_users(&self, query: &str) -> Result<Vec<ActiveUser>, InfraError>;
-    async fn search_forms(&self, query: &str) -> Result<Vec<ActiveForm>, InfraError>;
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError>;
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<RealAnswers>, InfraError>;
-    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError>;
+    async fn search_users(&self, query: &str) -> Result<Vec<UserSearchHit>, InfraError>;
+    async fn search_forms(&self, query: &str) -> Result<Vec<FormSearchHit>, InfraError>;
+    async fn search_labels_for_forms(
+        &self,
+        query: &str,
+    ) -> Result<Vec<FormLabelSearchHit>, InfraError>;
+    async fn search_labels_for_answers(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AnswerLabelSearchHit>, InfraError>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, InfraError>;
+    async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError>;
     async fn sync_search_engine(
         &self,
         data: &[SearchableFieldsWithOperation],

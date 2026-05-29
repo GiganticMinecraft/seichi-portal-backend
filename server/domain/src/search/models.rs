@@ -5,6 +5,7 @@ use crate::form::{
     models::{FormDescription, FormId, FormLabelId, FormTitle},
     question::models::QuestionId,
 };
+use crate::user::models::UserId;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use errors::Error;
@@ -30,7 +31,7 @@ pub enum SearchableFields {
 
 pub type SearchableFieldsWithOperation = (SearchableFields, Operation);
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FormMetaData {
     pub id: FormId,
     pub title: FormTitle,
@@ -45,26 +46,57 @@ pub struct RealAnswers {
     pub answer: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FormAnswerComments {
     pub id: CommentId,
     pub answer_id: AnswerId,
     pub content: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug)]
+pub struct AnswerSearchHit {
+    pub answer_id: AnswerId,
+}
+
+#[derive(Debug)]
+pub struct CommentSearchHit {
+    pub comment_id: CommentId,
+    pub answer_id: AnswerId,
+}
+
+#[derive(Debug)]
+pub struct UserSearchHit {
+    pub user_id: UserId,
+}
+
+#[derive(Debug)]
+pub struct FormSearchHit {
+    pub form_id: FormId,
+}
+
+#[derive(Debug)]
+pub struct FormLabelSearchHit {
+    pub label_id: FormLabelId,
+}
+
+#[derive(Debug)]
+pub struct AnswerLabelSearchHit {
+    pub label_id: AnswerLabelId,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LabelForFormAnswers {
     pub id: AnswerLabelId,
     pub name: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LabelForForms {
     pub id: FormLabelId,
     pub name: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Users {
     pub id: Uuid,
     pub name: String,

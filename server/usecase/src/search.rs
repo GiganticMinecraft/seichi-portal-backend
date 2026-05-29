@@ -60,25 +60,57 @@ impl<
             self.search_repository.search_comments(&query)
         )?;
 
-        let forms = forms
-            .into_iter()
-            .flat_map(|guard| guard.try_into_read(&actor))
-            .collect::<Vec<_>>();
+        let mut visible_forms = Vec::new();
+        for form in forms {
+            let Some(form_guard) = self.active_form_repository.get(form.form_id).await? else {
+                continue;
+            };
+            if let Ok(form) = form_guard.try_into_read(&actor) {
+                visible_forms.push(form);
+            }
+        }
 
-        let users = users
-            .into_iter()
-            .flat_map(|guard| guard.try_into_read(&actor))
-            .collect::<Vec<_>>();
+        let mut visible_users = Vec::new();
+        for user in users {
+            let Some(user_guard) = self
+                .user_repository
+                .find_by(user.user_id.into_inner())
+                .await?
+            else {
+                continue;
+            };
+            if let Ok(user) = user_guard.try_into_read(&actor) {
+                visible_users.push(user);
+            }
+        }
 
-        let label_for_forms = label_for_forms
-            .into_iter()
-            .flat_map(|guard| guard.try_into_read(&actor))
-            .collect::<Vec<_>>();
+        let mut visible_label_for_forms = Vec::new();
+        for label in label_for_forms {
+            let Some(label_guard) = self
+                .form_label_repository
+                .fetch_label(label.label_id)
+                .await?
+            else {
+                continue;
+            };
+            if let Ok(label) = label_guard.try_into_read(&actor) {
+                visible_label_for_forms.push(label);
+            }
+        }
 
-        let label_for_answers = label_for_answers
-            .into_iter()
-            .flat_map(|guard| guard.try_into_read(&actor))
-            .collect::<Vec<_>>();
+        let mut visible_label_for_answers = Vec::new();
+        for label in label_for_answers {
+            let Some(label_guard) = self
+                .form_answer_label_repository
+                .get_label_for_answers(label.label_id)
+                .await?
+            else {
+                continue;
+            };
+            if let Ok(label) = label_guard.try_into_read(&actor) {
+                visible_label_for_answers.push(label);
+            }
+        }
 
         let all_sets = self.answer_entry_set_repository.list_all().await?;
 
@@ -89,7 +121,7 @@ impl<
                     Ok(s) => s,
                     Err(_) => continue,
                 };
-                let Ok(answer) = answer_entry_set.read_entry(*entry.id(), &actor) else {
+                let Ok(answer) = answer_entry_set.read_entry(entry.answer_id, &actor) else {
                     continue;
                 };
                 let form_id = *answer_entry_set.form_id();
@@ -106,7 +138,6 @@ impl<
 
         let mut visible_comments = Vec::new();
         for comment in comments {
-            let answer_id = *comment.answer_id();
             let mut found_set: Option<_> = None;
 
             for set_guard in &all_sets {
@@ -114,7 +145,10 @@ impl<
                     Ok(s) => s,
                     Err(_) => continue,
                 };
-                if answer_entry_set.read_entry(answer_id, &actor).is_ok() {
+                if answer_entry_set
+                    .read_entry(comment.answer_id, &actor)
+                    .is_ok()
+                {
                     found_set = Some(answer_entry_set);
                     break;
                 }
@@ -133,14 +167,20 @@ impl<
                 Ok(_) => {}
                 Err(_) => continue,
             }
-            visible_comments.push(comment);
+            let Ok(answer) = answer_entry_set.read_entry(comment.answer_id, &actor) else {
+                continue;
+            };
+            let Some(comment) = answer.find_comment(comment.comment_id) else {
+                continue;
+            };
+            visible_comments.push(comment.clone());
         }
 
         Ok(CrossSearchOutput {
-            forms,
-            users,
-            label_for_forms,
-            label_for_answers,
+            forms: visible_forms,
+            users: visible_users,
+            label_for_forms: visible_label_for_forms,
+            label_for_answers: visible_label_for_answers,
             answers: visible_answers,
             comments: visible_comments,
         })
