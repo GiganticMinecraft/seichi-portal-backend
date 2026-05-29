@@ -59,9 +59,11 @@ impl MessageThread {
         &self.messages
     }
 
-    pub fn add_message(mut self, message: Message) -> Self {
-        self.messages.push(message);
-        self
+    pub fn add_message(self, message: Message) -> Self {
+        Self {
+            messages: self.messages.into_iter().chain([message]).collect(),
+            ..self
+        }
     }
 
     pub fn find_message(&self, message_id: MessageId) -> Option<&Message> {
