@@ -70,16 +70,17 @@ impl<
         let user_as_user = Actor::from(user.clone());
 
         let form_id = FormId::new();
-        let mut answer_entry_set = AnswerEntrySet::new(
+        let answer_entry_set = AnswerEntrySet::new(
             form_id,
             DefaultAnswerTitle::new(None),
             AnswerVisibility::PRIVATE,
             ResponsePeriod::try_new(None, None)?,
             false,
         );
-        if let Some(allow) = allow_temporary_answers {
-            answer_entry_set = answer_entry_set.change_allow_temporary_answers(allow);
-        }
+        let answer_entry_set = match allow_temporary_answers {
+            Some(allow) => answer_entry_set.change_allow_temporary_answers(allow),
+            None => answer_entry_set,
+        };
 
         let answer_entry_set_guard = AuthorizationGuard::from(answer_entry_set.clone());
         self.answer_entry_set_repository

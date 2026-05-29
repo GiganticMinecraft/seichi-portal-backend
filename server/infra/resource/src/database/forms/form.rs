@@ -13,6 +13,7 @@ use domain::{
     user::models::{ActiveUser, Actor, Role},
 };
 use errors::{Error, domain::DomainError, infra::InfraError};
+use futures::{TryStreamExt, stream};
 use itertools::Itertools;
 use sqlx::{MySqlConnection, Row, mysql::MySqlRow, query};
 use std::collections::{BTreeMap, BTreeSet};
@@ -799,11 +800,19 @@ impl FormDatabase for ConnectionPool {
                 .fetch_all(&mut **txn)
                 .await?;
 
-                let mut forms = Vec::with_capacity(rows.len());
-                for row in rows {
-                    forms.push(active_form_record_from_row(txn, form_row_from_db_row(row)?).await?);
-                }
-                Ok::<_, InfraError>(forms)
+                stream::try_unfold((rows.into_iter(), txn), |(mut rows, txn)| async move {
+                    match rows.next() {
+                        Some(row) => {
+                            let record =
+                                active_form_record_from_row(txn, form_row_from_db_row(row)?)
+                                    .await?;
+                            Ok::<_, InfraError>(Some((record, (rows, txn))))
+                        }
+                        None => Ok::<_, InfraError>(None),
+                    }
+                })
+                .try_collect()
+                .await
             })
         })
         .await
@@ -869,14 +878,21 @@ impl FormDatabase for ConnectionPool {
                     .await?
                 };
 
-                let mut forms = Vec::with_capacity(rows.len());
-                for row in rows {
-                    forms.push(
-                        archived_form_record_from_row(txn, archived_form_row_from_db_row(row)?)
-                            .await?,
-                    );
-                }
-                Ok::<_, InfraError>(forms)
+                stream::try_unfold((rows.into_iter(), txn), |(mut rows, txn)| async move {
+                    match rows.next() {
+                        Some(row) => {
+                            let record = archived_form_record_from_row(
+                                txn,
+                                archived_form_row_from_db_row(row)?,
+                            )
+                            .await?;
+                            Ok::<_, InfraError>(Some((record, (rows, txn))))
+                        }
+                        None => Ok::<_, InfraError>(None),
+                    }
+                })
+                .try_collect()
+                .await
             })
         })
         .await
@@ -1055,11 +1071,17 @@ impl FormDatabase for ConnectionPool {
                 .fetch_all(&mut **txn)
                 .await?;
 
-                let mut sets = Vec::with_capacity(rows.len());
-                for row in rows {
-                    sets.push(answer_entry_set_from_row(txn, row).await?);
-                }
-                Ok::<_, InfraError>(sets)
+                stream::try_unfold((rows.into_iter(), txn), |(mut rows, txn)| async move {
+                    match rows.next() {
+                        Some(row) => {
+                            let set = answer_entry_set_from_row(txn, row).await?;
+                            Ok::<_, InfraError>(Some((set, (rows, txn))))
+                        }
+                        None => Ok::<_, InfraError>(None),
+                    }
+                })
+                .try_collect()
+                .await
             })
         })
         .await

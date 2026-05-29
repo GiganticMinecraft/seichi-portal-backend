@@ -333,29 +333,33 @@ impl<
             .await?;
         let answer_entry_set = answer_entry_set_guard.try_read(&actor_ref)?;
 
-        let mut form_answer = answer_entry_set
-            .read_entry(answer_id, &actor_ref)
-            .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
-                error => Error::from(error),
-            })?
-            .clone();
+        let form_answer = match title {
+            Some(title) => {
+                let updated_set = answer_entry_set
+                    .clone()
+                    .change_entry_title(answer_id, &actor_ref, title)?;
+                let form_answer = updated_set
+                    .read_entry(answer_id, &actor_ref)
+                    .map_err(|error| match error {
+                        DomainError::NotFound => Error::from(AnswerNotFound),
+                        error => Error::from(error),
+                    })?
+                    .clone();
 
-        if let Some(title) = title {
-            let updated_set = answer_entry_set
-                .clone()
-                .change_entry_title(answer_id, &actor_ref, title)?;
-            form_answer = updated_set
+                self.answer_entry_set_repository
+                    .update_entry(&answer_entry_set_guard, &form_answer, &actor_ref)
+                    .await?;
+
+                form_answer
+            }
+            None => answer_entry_set
                 .read_entry(answer_id, &actor_ref)
                 .map_err(|error| match error {
                     DomainError::NotFound => Error::from(AnswerNotFound),
                     error => Error::from(error),
                 })?
-                .clone();
-            self.answer_entry_set_repository
-                .update_entry(&answer_entry_set_guard, &form_answer, &actor_ref)
-                .await?;
-        }
+                .clone(),
+        };
 
         let labels = self
             .answer_label_repository
