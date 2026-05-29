@@ -357,7 +357,7 @@ impl AuthorizationGuardDefinitions for AnswerEntrySet {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
     use uuid::Uuid;
 
     use crate::form::{answer::models::AnswerTitle, models::FormId};
@@ -383,16 +383,11 @@ mod tests {
     }
 
     fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
-        unsafe {
-            AnswerEntry::from_raw_parts(
-                AnswerId::new(),
-                author,
-                Utc::now(),
-                AnswerTitle::new(None),
-                Vec::new(),
-                Vec::new(),
-            )
-        }
+        AnswerEntry::new(
+            author,
+            AnswerTitle::new(None),
+            PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
+        )
     }
 
     fn answer_entry_set_with_visibility(

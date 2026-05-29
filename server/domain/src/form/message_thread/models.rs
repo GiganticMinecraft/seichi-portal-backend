@@ -76,19 +76,12 @@ impl MessageThread {
             .into_iter()
             .map(|m| {
                 if *m.id() == message_id {
-                    unsafe {
-                        Message::from_raw_parts(
-                            *m.id(),
-                            *m.sender_id(),
-                            new_body.clone(),
-                            *m.timestamp(),
-                        )
-                    }
+                    m.update_body(new_body.clone())
                 } else {
-                    m
+                    Ok(m)
                 }
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         Ok(Self { messages, ..self })
     }
 

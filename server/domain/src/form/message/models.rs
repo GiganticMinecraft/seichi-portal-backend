@@ -50,6 +50,14 @@ impl Message {
         })
     }
 
+    pub fn update_body(self, body: String) -> Result<Self, DomainError> {
+        if body.is_empty() {
+            return Err(DomainError::EmptyMessageBody);
+        }
+
+        Ok(Self { body, ..self })
+    }
+
     /// [`Message`] の各フィールドの値を受け取り、[`Message`] を生成します。
     ///
     /// # Examples
