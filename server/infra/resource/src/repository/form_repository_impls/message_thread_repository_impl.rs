@@ -33,13 +33,12 @@ where
         actor: &Actor,
     ) -> Result<(), Error> {
         let thread = message_thread.try_into_create(actor, |t| t)?;
-        let id = thread.id().into_inner().to_string();
         let answer_id = thread.answer_id().into_inner().to_string();
         let answer_author_id = thread.answer_author_id().to_string();
 
         self.client
             .form_message_thread()
-            .create_message_thread(&id, &answer_id, &answer_author_id)
+            .create_message_thread(&answer_id, &answer_author_id)
             .await?;
 
         for message in thread.messages() {
@@ -59,10 +58,10 @@ where
     ) -> Result<Option<AuthorizationGuard<MessageThread, Read>>, Error> {
         let answer_id_str = answer_id.into_inner().to_string();
 
-        let Some((thread_id_str, _, answer_author_id_str)) = self
+        let Some(answer_author_id_str) = self
             .client
             .form_message_thread()
-            .get_thread_metadata_by_answer_id(&answer_id_str)
+            .get_thread_author_by_answer_id(&answer_id_str)
             .await?
         else {
             return Ok(None);
@@ -78,9 +77,6 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         let thread = MessageThread::from_raw_parts(
-            Uuid::from_str(&thread_id_str)
-                .map_err(InfraError::from)?
-                .into(),
             answer_id,
             Uuid::from_str(&answer_author_id_str)
                 .map_err(InfraError::from)?

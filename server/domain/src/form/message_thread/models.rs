@@ -9,11 +9,8 @@ use crate::{
     user::models::{Actor, Role::Administrator, User, UserId},
 };
 
-pub type MessageThreadId = types::Id<MessageThread>;
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct MessageThread {
-    id: MessageThreadId,
     answer_id: AnswerId,
     answer_author_id: UserId,
     messages: Vec<Message>,
@@ -22,7 +19,6 @@ pub struct MessageThread {
 impl MessageThread {
     pub fn new(answer_id: AnswerId, answer_author_id: UserId) -> Self {
         Self {
-            id: MessageThreadId::new(),
             answer_id,
             answer_author_id,
             messages: Vec::new(),
@@ -30,21 +26,15 @@ impl MessageThread {
     }
 
     pub fn from_raw_parts(
-        id: MessageThreadId,
         answer_id: AnswerId,
         answer_author_id: UserId,
         messages: Vec<Message>,
     ) -> Self {
         Self {
-            id,
             answer_id,
             answer_author_id,
             messages,
         }
-    }
-
-    pub fn id(&self) -> &MessageThreadId {
-        &self.id
     }
 
     pub fn answer_id(&self) -> &AnswerId {

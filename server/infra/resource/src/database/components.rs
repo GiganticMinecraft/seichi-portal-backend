@@ -164,14 +164,13 @@ pub trait FormMessageDatabase: Send + Sync {
 pub trait FormMessageThreadDatabase: Send + Sync {
     async fn create_message_thread(
         &self,
-        thread_id: &str,
         answer_id: &str,
         answer_author_id: &str,
     ) -> Result<(), InfraError>;
-    async fn get_thread_metadata_by_answer_id(
+    async fn get_thread_author_by_answer_id(
         &self,
         answer_id: &str,
-    ) -> Result<Option<(String, String, String)>, InfraError>;
+    ) -> Result<Option<String>, InfraError>;
 }
 
 #[automock]
