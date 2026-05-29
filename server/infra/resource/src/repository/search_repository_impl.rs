@@ -13,7 +13,7 @@ use domain::{
     },
     repository::search_repository::SearchRepository,
     search::models::SearchableFieldsWithOperation,
-    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
+    types::authorization_guard::{AuthorizationGuard, Read},
     user::models::ActiveUser,
 };
 use errors::Error;

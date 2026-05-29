@@ -14,7 +14,7 @@ use domain::{
         answer_label_repository::AnswerLabelRepository,
     },
     repository::user_repository::UserRepository,
-    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
+    types::authorization_guard::{AuthorizationGuard, Read},
     user::models::{ActiveUser, Actor, TemporaryUser, User},
 };
 use errors::{

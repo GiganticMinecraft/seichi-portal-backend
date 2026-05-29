@@ -1,5 +1,5 @@
 use domain::types::authorization_guard::AuthorizationGuard;
-use domain::types::authorization_guard_with_context::Create;
+use domain::types::authorization_guard::Create;
 use domain::{
     notification::models::NotificationPreference,
     repository::{

@@ -4,7 +4,7 @@ use domain::{
     repository::form::form_label_repository::FormLabelRepository,
     types::{
         authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Delete, Read, Update},
+        authorization_guard::{Create, Delete, Read, Update},
     },
     user::models::{ActiveUser, Actor},
 };

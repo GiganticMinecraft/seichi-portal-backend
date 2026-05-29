@@ -11,7 +11,7 @@ use domain::{
         answer_entry_set_repository::AnswerEntrySetRepository,
     },
     repository::user_repository::UserRepository,
-    types::{authorization_guard::AuthorizationGuard, authorization_guard_with_context::Read},
+    types::authorization_guard::{AuthorizationGuard, Read},
     user::models::{ActiveUser, Actor},
 };
 use errors::{

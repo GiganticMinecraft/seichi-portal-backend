@@ -5,7 +5,7 @@ use mockall::automock;
 use crate::{
     form::{answer::models::AnswerId, message_thread::models::MessageThread},
     types::authorization_guard::AuthorizationGuard,
-    types::authorization_guard_with_context::{Create, Read, Update},
+    types::authorization_guard::{Create, Read, Update},
     user::models::Actor,
 };
 

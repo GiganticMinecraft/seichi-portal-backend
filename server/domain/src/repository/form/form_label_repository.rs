@@ -6,7 +6,7 @@ use crate::{
     form::models::{FormId, FormLabel, FormLabelId},
     types::{
         authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Delete, Read, Update},
+        authorization_guard::{Create, Delete, Read, Update},
     },
     user::models::ActiveUser,
 };
