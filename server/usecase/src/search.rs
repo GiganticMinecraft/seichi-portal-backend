@@ -13,7 +13,7 @@ use domain::{
     user::models::{ActiveUser, Actor},
 };
 use errors::Error;
-use futures::try_join;
+use futures::{StreamExt, TryStreamExt, stream, try_join};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
@@ -60,121 +60,113 @@ impl<
             self.search_repository.search_comments(&query)
         )?;
 
-        let mut visible_forms = Vec::new();
-        for form in forms {
-            let Some(form_guard) = self.active_form_repository.get(form.form_id).await? else {
-                continue;
-            };
-            if let Ok(form) = form_guard.try_into_read(&actor) {
-                visible_forms.push(form);
-            }
-        }
+        let actor_ref = &actor;
 
-        let mut visible_users = Vec::new();
-        for user in users {
-            let Some(user_guard) = self
-                .user_repository
-                .find_by(user.user_id.into_inner())
-                .await?
-            else {
-                continue;
-            };
-            if let Ok(user) = user_guard.try_into_read(&actor) {
-                visible_users.push(user);
-            }
-        }
+        let visible_forms = stream::iter(forms)
+            .then(|form| async move {
+                self.active_form_repository
+                    .get(form.form_id)
+                    .await
+                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+            })
+            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_collect()
+            .await?;
 
-        let mut visible_label_for_forms = Vec::new();
-        for label in label_for_forms {
-            let Some(label_guard) = self
-                .form_label_repository
-                .fetch_label(label.label_id)
-                .await?
-            else {
-                continue;
-            };
-            if let Ok(label) = label_guard.try_into_read(&actor) {
-                visible_label_for_forms.push(label);
-            }
-        }
+        let visible_users = stream::iter(users)
+            .then(|user| async move {
+                self.user_repository
+                    .find_by(user.user_id.into_inner())
+                    .await
+                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+            })
+            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_collect()
+            .await?;
 
-        let mut visible_label_for_answers = Vec::new();
-        for label in label_for_answers {
-            let Some(label_guard) = self
-                .form_answer_label_repository
-                .get_label_for_answers(label.label_id)
-                .await?
-            else {
-                continue;
-            };
-            if let Ok(label) = label_guard.try_into_read(&actor) {
-                visible_label_for_answers.push(label);
-            }
-        }
+        let visible_label_for_forms = stream::iter(label_for_forms)
+            .then(|label| async move {
+                self.form_label_repository
+                    .fetch_label(label.label_id)
+                    .await
+                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+            })
+            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_collect()
+            .await?;
+
+        let visible_label_for_answers = stream::iter(label_for_answers)
+            .then(|label| async move {
+                self.form_answer_label_repository
+                    .get_label_for_answers(label.label_id)
+                    .await
+                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+            })
+            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_collect()
+            .await?;
 
         let all_sets = self.answer_entry_set_repository.list_all().await?;
 
-        let mut visible_answers = Vec::new();
-        'entries: for entry in answers {
-            for set_guard in &all_sets {
-                let answer_entry_set = match set_guard.try_read(&actor) {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let Ok(answer) = answer_entry_set.read_entry(entry.answer_id, &actor) else {
-                    continue;
-                };
-                let form_id = *answer_entry_set.form_id();
-                let form_guard = match self.active_form_repository.get(form_id).await? {
-                    Some(g) => g,
-                    None => continue,
-                };
-                if form_guard.try_read(&actor).is_ok() {
-                    visible_answers.push(answer.clone());
+        let visible_answers = stream::iter(answers)
+            .then(|entry| {
+                let all_sets = &all_sets;
+
+                async move {
+                    let Some((answer, form_id)) = all_sets.iter().find_map(|set_guard| {
+                        let answer_entry_set = set_guard.try_read(actor_ref).ok()?;
+                        let answer = answer_entry_set
+                            .read_entry(entry.answer_id, actor_ref)
+                            .ok()?
+                            .clone();
+
+                        Some((answer, *answer_entry_set.form_id()))
+                    }) else {
+                        return Ok::<_, Error>(None);
+                    };
+
+                    let is_form_visible = self
+                        .active_form_repository
+                        .get(form_id)
+                        .await?
+                        .is_some_and(|form_guard| form_guard.try_read(actor_ref).is_ok());
+
+                    Ok::<_, Error>(is_form_visible.then_some(answer))
                 }
-                continue 'entries;
-            }
-        }
+            })
+            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_collect()
+            .await?;
 
-        let mut visible_comments = Vec::new();
-        for comment in comments {
-            let mut found_set: Option<_> = None;
+        let visible_comments = stream::iter(comments)
+            .then(|comment| {
+                let all_sets = &all_sets;
 
-            for set_guard in &all_sets {
-                let answer_entry_set = match set_guard.try_read(&actor) {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                if answer_entry_set
-                    .read_entry(comment.answer_id, &actor)
-                    .is_ok()
-                {
-                    found_set = Some(answer_entry_set);
-                    break;
+                async move {
+                    let Some((comment, form_id)) = all_sets.iter().find_map(|set_guard| {
+                        let answer_entry_set = set_guard.try_read(actor_ref).ok()?;
+                        let answer = answer_entry_set
+                            .read_entry(comment.answer_id, actor_ref)
+                            .ok()?;
+                        let comment = answer.find_comment(comment.comment_id)?.clone();
+
+                        Some((comment, *answer_entry_set.form_id()))
+                    }) else {
+                        return Ok::<_, Error>(None);
+                    };
+
+                    let is_form_visible = self
+                        .active_form_repository
+                        .get(form_id)
+                        .await?
+                        .is_some_and(|form_guard| form_guard.try_read(actor_ref).is_ok());
+
+                    Ok::<_, Error>(is_form_visible.then_some(comment))
                 }
-            }
-
-            let answer_entry_set = match found_set {
-                Some(s) => s,
-                None => continue,
-            };
-            let form_id = *answer_entry_set.form_id();
-            let form_guard = match self.active_form_repository.get(form_id).await? {
-                Some(g) => g,
-                None => continue,
-            };
-            match form_guard.try_read(&actor) {
-                Ok(_) => {}
-                Err(_) => continue,
-            }
-            let Ok(answer) = answer_entry_set.read_entry(comment.answer_id, &actor) else {
-                continue;
-            };
-            let Some(comment) = answer.find_comment(comment.comment_id) else {
-                continue;
-            };
-            visible_comments.push(comment.clone());
-        }
+            })
+            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_collect()
+            .await?;
 
         Ok(CrossSearchOutput {
             forms: visible_forms,
