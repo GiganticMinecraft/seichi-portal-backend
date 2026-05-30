@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use domain::{
-    form::{answer::models::AnswerId, comment::models::Comment},
+    form::{answer::models::AnswerEntry, comment::models::Comment},
     repository::form::comment_repository::CommentRepository,
-    types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::Actor,
 };
 use errors::Error;
@@ -35,14 +35,19 @@ where
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn find_by_answer_id(&self, answer_id: AnswerId) -> Result<Vec<Comment>, Error> {
+    #[tracing::instrument(skip(self, answer))]
+    async fn find_by_answer(
+        &self,
+        answer: &AnswerEntry,
+    ) -> Result<Vec<AuthorizationGuard<Comment, Read>>, Error> {
         self.client
             .form_comment()
-            .get_comments(answer_id)
+            .get_comments(*answer.id())
             .await?
             .into_iter()
-            .map(TryInto::<Comment>::try_into)
+            .map(|record| {
+                TryInto::<Comment>::try_into(record).map(AuthorizationGuard::<Comment, Read>::from)
+            })
             .collect()
     }
 

@@ -3,8 +3,8 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::{answer::models::AnswerId, comment::models::Comment},
-    types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
+    form::{answer::models::AnswerEntry, comment::models::Comment},
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
     user::models::Actor,
 };
 
@@ -21,7 +21,14 @@ pub trait CommentRepository: Send + Sync + 'static {
         comment: AuthorizationGuard<Comment, Create>,
         actor: &Actor,
     ) -> Result<(), Error>;
-    async fn find_by_answer_id(&self, answer_id: AnswerId) -> Result<Vec<Comment>, Error>;
+    /// 閲覧可能であることが確認済みの [`AnswerEntry`] に紐づくコメントを取得する。
+    ///
+    /// コメントを読むには紐づく [`AnswerEntry`] が閲覧可能である必要があるため、
+    /// その前提を引数で要求し、結果は [`Read`] ガードで保護して返す。
+    async fn find_by_answer(
+        &self,
+        answer: &AnswerEntry,
+    ) -> Result<Vec<AuthorizationGuard<Comment, Read>>, Error>;
     async fn update(
         &self,
         comment: AuthorizationGuard<Comment, Update>,

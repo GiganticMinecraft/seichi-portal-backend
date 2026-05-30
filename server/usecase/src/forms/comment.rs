@@ -100,14 +100,20 @@ impl<
             .await?;
         let answer_entry_set = set_guard.try_read(&actor_user)?;
 
-        answer_entry_set
+        let entry = answer_entry_set
             .read_entry(answer_id, &actor_user)
             .map_err(|error| match error {
                 DomainError::NotFound => Error::from(AnswerNotFound),
                 error => Error::from(error),
             })?;
 
-        let comments = self.comment_repository.find_by_answer_id(answer_id).await?;
+        let comments = self
+            .comment_repository
+            .find_by_answer(entry)
+            .await?
+            .into_iter()
+            .map(|comment| comment.try_into_read(&actor_user).map_err(Error::from))
+            .collect::<Result<Vec<_>, _>>()?;
 
         self.build_comments_with_authors(actor, comments).await
     }
