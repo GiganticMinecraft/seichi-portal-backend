@@ -123,7 +123,6 @@ pub async fn get_all_answers(
                     answer_details.form_answer,
                     answer_details.form_id,
                     answer_details.author,
-                    answer_details.comments,
                     answer_details.labels,
                 )
             })
@@ -174,7 +173,6 @@ pub async fn get_answer_handler(
         answer_details.form_answer,
         answer_details.form_id,
         answer_details.author,
-        answer_details.comments,
         answer_details.labels,
     )))
 }
@@ -225,7 +223,6 @@ pub async fn get_answer_by_form_id_handler(
                     answer_details.form_answer,
                     answer_details.form_id,
                     answer_details.author,
-                    answer_details.comments,
                     answer_details.labels,
                 )
             })
@@ -388,7 +385,6 @@ pub async fn update_answer_handler(
         answer_details.form_answer,
         answer_details.form_id,
         answer_details.author,
-        answer_details.comments,
         answer_details.labels,
     )))
 }

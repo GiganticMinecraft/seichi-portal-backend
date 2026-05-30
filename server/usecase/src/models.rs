@@ -14,7 +14,6 @@ pub struct AnswerDetails {
     pub form_answer: AnswerEntry,
     pub author: User,
     pub labels: Vec<AnswerLabel>,
-    pub comments: Vec<CommentWithAuthor>,
 }
 
 pub struct ActiveFormWithLabels {

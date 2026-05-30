@@ -24,10 +24,7 @@ use errors::{
 };
 use futures::{StreamExt, stream};
 
-use crate::{
-    models::{AnswerDetails, CommentWithAuthor},
-    user_reference_resolver::resolve_user_references,
-};
+use crate::{models::AnswerDetails, user_reference_resolver::resolve_user_references};
 
 pub struct AnswerUseCase<
     'a,
@@ -87,13 +84,10 @@ impl<
         form_answer: AnswerEntry,
         labels: Vec<AnswerLabel>,
     ) -> Result<AnswerDetails, Error> {
-        let comments = form_answer.comments().to_vec();
-
         let user_ids = form_answer
             .author()
             .authenticated_user_id()
             .into_iter()
-            .chain(comments.iter().map(|comment| *comment.commented_by()))
             .collect();
 
         let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
@@ -110,26 +104,11 @@ impl<
             }
         };
 
-        let comments = comments
-            .into_iter()
-            .map(|comment| {
-                let commented_by = users
-                    .get(comment.commented_by())
-                    .cloned()
-                    .ok_or(Error::from(errors::usecase::UseCaseError::UserNotFound))?;
-                Ok::<_, Error>(CommentWithAuthor {
-                    comment,
-                    commented_by,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
         Ok(AnswerDetails {
             form_id,
             form_answer,
             author,
             labels,
-            comments,
         })
     }
 

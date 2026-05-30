@@ -395,7 +395,6 @@ pub struct FormAnswer {
     timestamp: DateTime<Utc>,
     title: Option<String>,
     answers: Vec<AnswerContent>,
-    comments: Vec<AnswerComment>,
     labels: Vec<AnswerLabels>,
 }
 
@@ -404,7 +403,6 @@ impl FormAnswer {
         answer: AnswerEntry,
         form_id: FormId,
         author: domain::user::models::User,
-        comments: Vec<CommentWithAuthor>,
         labels: Vec<AnswerLabel>,
     ) -> Self {
         FormAnswer {
@@ -422,7 +420,6 @@ impl FormAnswer {
                 .iter()
                 .map(AnswerContent::from_ref)
                 .collect_vec(),
-            comments: comments.into_iter().map(Into::into).collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
         }
     }
