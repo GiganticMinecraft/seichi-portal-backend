@@ -9,10 +9,7 @@ use std::collections::{BTreeSet, HashMap};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    form::{
-        comment::models::{Comment, CommentId},
-        question::models::{Question, QuestionId},
-    },
+    form::question::models::{Question, QuestionId},
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Actor, Role, TemporaryUser, User, UserId},
 };
@@ -165,7 +162,6 @@ pub struct AnswerEntry {
     timestamp: DateTime<Utc>,
     title: AnswerTitle,
     contents: Vec<FormAnswerContent>,
-    comments: Vec<Comment>,
 }
 
 impl AnswerEntry {
@@ -177,7 +173,6 @@ impl AnswerEntry {
             timestamp: Utc::now(),
             title,
             contents: contents.into_inner(),
-            comments: Vec::new(),
         }
     }
 
@@ -193,7 +188,6 @@ impl AnswerEntry {
         timestamp: DateTime<Utc>,
         title: AnswerTitle,
         contents: Vec<FormAnswerContent>,
-        comments: Vec<Comment>,
     ) -> Self {
         Self {
             id,
@@ -201,16 +195,11 @@ impl AnswerEntry {
             timestamp,
             title,
             contents,
-            comments,
         }
     }
 
     pub fn with_title(self, title: AnswerTitle) -> Self {
         Self { title, ..self }
-    }
-
-    pub fn find_comment(&self, comment_id: CommentId) -> Option<&Comment> {
-        self.comments.iter().find(|c| *c.comment_id() == comment_id)
     }
 }
 

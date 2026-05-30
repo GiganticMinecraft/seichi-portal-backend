@@ -260,7 +260,6 @@ pub struct FormAnswerRecord {
     pub form_id: String,
     pub title: Option<String>,
     pub contents: Vec<FormAnswerContentRecord>,
-    pub comments: Vec<CommentRecord>,
     pub messages: Vec<MessageRecord>,
 }
 
@@ -280,7 +279,6 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             form_id: _,
             title,
             contents,
-            comments,
             messages: _,
         }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
@@ -290,10 +288,6 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             }
             AnswerAuthorRecord::TemporaryUser(user) => AnswerAuthor::TemporaryUser(user),
         };
-        let comments = comments
-            .into_iter()
-            .map(TryInto::<Comment>::try_into)
-            .collect::<Result<Vec<_>, _>>()?;
         unsafe {
             Ok(AnswerEntry::from_raw_parts(
                 Uuid::from_str(&id)
@@ -306,7 +300,6 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<_, _>>()?,
-                comments,
             ))
         }
     }

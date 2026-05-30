@@ -23,8 +23,8 @@ use uuid::Uuid;
 
 use crate::{
     database::forms::answers::{
-        attach_entry_children, author_from_row, fetch_comments_by_answer_ids,
-        fetch_messages_by_answer_ids, fetch_real_answers_by_answer_ids,
+        attach_entry_children, author_from_row, fetch_messages_by_answer_ids,
+        fetch_real_answers_by_answer_ids,
     },
     database::{
         components::FormDatabase,
@@ -279,7 +279,6 @@ async fn fetch_answer_entries_for_entry_set(
                 form_id: row.try_get("form_id")?,
                 title: row.try_get("title")?,
                 contents: Vec::new(),
-                comments: Vec::new(),
                 messages: Vec::new(),
             })
         })
@@ -290,10 +289,9 @@ async fn fetch_answer_entries_for_entry_set(
         .map(|record| record.id.to_owned())
         .collect_vec();
     let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
-    let comments = fetch_comments_by_answer_ids(txn, &answer_ids).await?;
     let messages = fetch_messages_by_answer_ids(txn, &answer_ids).await?;
 
-    attach_entry_children(form_answer_records, contents, comments, messages)?
+    attach_entry_children(form_answer_records, contents, messages)?
         .into_iter()
         .map(TryInto::<AnswerEntry>::try_into)
         .collect::<Result<Vec<_>, _>>()
