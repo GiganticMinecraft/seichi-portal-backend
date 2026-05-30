@@ -9,9 +9,10 @@ use domain::{
     repository::form::{
         active_form_repository::ActiveFormRepository,
         answer_entry_set_repository::AnswerEntrySetRepository,
+        comment_repository::CommentRepository,
     },
     repository::user_repository::UserRepository,
-    types::authorization_guard::{AuthorizationGuard, Read},
+    types::authorization_guard::{AuthorizationGuard, Delete, Read, Update},
     user::models::{ActiveUser, Actor},
 };
 use errors::{
@@ -27,14 +28,20 @@ pub struct CommentUseCase<
     FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
     AnswerEntrySetRepo: AnswerEntrySetRepository,
+    CommentRepo: CommentRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub comment_repository: &'a CommentRepo,
 }
 
-impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
-    CommentUseCase<'_, R1, R2, R3>
+impl<
+    R1: ActiveFormRepository,
+    R2: UserRepository,
+    R3: AnswerEntrySetRepository,
+    R4: CommentRepository,
+> CommentUseCase<'_, R1, R2, R3, R4>
 {
     async fn read_answer_entry_set_guard(
         &self,
@@ -93,14 +100,14 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
             .await?;
         let answer_entry_set = set_guard.try_read(&actor_user)?;
 
-        let entry = answer_entry_set
+        answer_entry_set
             .read_entry(answer_id, &actor_user)
             .map_err(|error| match error {
                 DomainError::NotFound => Error::from(AnswerNotFound),
                 error => Error::from(error),
             })?;
 
-        let comments = entry.comments().to_vec();
+        let comments = self.comment_repository.find_by_answer_id(answer_id).await?;
 
         self.build_comments_with_authors(actor, comments).await
     }
@@ -110,7 +117,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
         actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
-        comment: Comment,
+        content: CommentContent,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
         let set_guard = self
@@ -118,10 +125,10 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
             .await?;
         let answer_entry_set = set_guard.try_read(&actor_user)?;
 
-        answer_entry_set.read_entry_for_comment(answer_id, &actor_user)?;
+        let comment_guard = answer_entry_set.create_comment(answer_id, &actor_user, content)?;
 
-        self.answer_entry_set_repository
-            .add_comment(&set_guard, answer_id, &comment, &actor_user)
+        self.comment_repository
+            .create(comment_guard, &actor_user)
             .await
     }
 
@@ -148,10 +155,10 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
             .clone();
 
         if let Some(content) = content {
-            let updated = current_comment.with_updated_content(content);
-            self.answer_entry_set_repository
-                .update_comment(&set_guard, answer_id, &updated, &actor_user)
-                .await?;
+            let updated = AuthorizationGuard::<_, Update>::from(
+                current_comment.with_updated_content(content),
+            );
+            self.comment_repository.update(updated, &actor_user).await?;
         }
 
         Ok(())
@@ -170,15 +177,16 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntrySetRepository>
             .await?;
         let answer_entry_set = set_guard.try_read(&actor_user)?;
 
-        answer_entry_set
+        let comment = answer_entry_set
             .read_comment_for_modification(answer_id, comment_id, &actor_user)
             .map_err(|error| match error {
                 DomainError::NotFound => Error::from(CommentNotFound),
                 error => Error::from(error),
-            })?;
+            })?
+            .clone();
 
-        self.answer_entry_set_repository
-            .delete_comment(&set_guard, answer_id, comment_id, &actor_user)
+        self.comment_repository
+            .delete(AuthorizationGuard::<_, Delete>::from(comment), &actor_user)
             .await
     }
 }

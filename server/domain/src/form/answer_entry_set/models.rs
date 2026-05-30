@@ -13,10 +13,10 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     form::{
         answer::models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
-        comment::models::{Comment, CommentId},
+        comment::models::{Comment, CommentContent, CommentId},
         models::FormId,
     },
-    types::authorization_guard::AuthorizationGuardDefinitions,
+    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create},
     user::models::{Actor, Role::Administrator, User},
 };
 
@@ -310,6 +310,31 @@ impl AnswerEntrySet {
             Actor::User(User::ActiveUser(_)) => Ok(entry),
             _ => Err(DomainError::Forbidden),
         }
+    }
+
+    /// 対象の [`AnswerEntry`] が `actor` から閲覧可能であることをゲートとして検証したうえで、
+    /// 新しい [`Comment`] の作成ガードを生成します。
+    ///
+    /// [`Comment`] はこのファクトリ経由でのみ生成できるため、文脈ゲートを通らない
+    /// コメントが作られることはありません。
+    pub fn create_comment(
+        &self,
+        answer_id: AnswerId,
+        actor: &Actor,
+        content: CommentContent,
+    ) -> Result<AuthorizationGuard<Comment, Create>, DomainError> {
+        self.read_entry_for_comment(answer_id, actor)?;
+
+        let commented_by = match actor {
+            Actor::User(User::ActiveUser(user)) => *user.id(),
+            _ => return Err(DomainError::Forbidden),
+        };
+
+        Ok(AuthorizationGuard::from(Comment::new(
+            answer_id,
+            content,
+            commented_by,
+        )))
     }
 
     pub fn read_comment_for_modification(

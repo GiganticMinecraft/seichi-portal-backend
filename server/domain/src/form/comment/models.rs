@@ -4,7 +4,11 @@ use deriving_via::DerivingVia;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
-use crate::{form::answer::models::AnswerId, user::models::UserId};
+use crate::{
+    form::answer::models::AnswerId,
+    types::authorization_guard::AuthorizationGuardDefinitions,
+    user::models::{Actor, Role::Administrator, User, UserId},
+};
 
 pub type CommentId = types::Id<Comment>;
 
@@ -28,7 +32,12 @@ pub struct Comment {
 }
 
 impl Comment {
-    pub fn new(answer_id: AnswerId, content: CommentContent, commented_by: UserId) -> Self {
+    /// [`Comment`] を新しく作成します。
+    ///
+    /// コメントの生成は必ず紐づく [`AnswerEntry`](crate::form::answer::models::AnswerEntry)
+    /// の認可ゲートを通す必要があるため、この関数は crate 内
+    /// (集約のファクトリ) からのみ呼び出せるようにしてあります。
+    pub(crate) fn new(answer_id: AnswerId, content: CommentContent, commented_by: UserId) -> Self {
         Self {
             answer_id,
             comment_id: CommentId::new(),
@@ -56,5 +65,31 @@ impl Comment {
             timestamp,
             commented_by,
         }
+    }
+}
+
+/// [`Comment`] 自身で完結する認可のみをここで定義します。
+///
+/// 「紐づく [`AnswerEntry`](crate::form::answer::models::AnswerEntry) が閲覧可能か」
+/// という文脈依存の判定は AnswerEntry 側のゲートが担うため、ここには含めません。
+impl AuthorizationGuardDefinitions for Comment {
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if *user.id() == self.commented_by)
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::System | Actor::User(_))
+    }
+
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if *user.id() == self.commented_by)
+    }
+
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::User(User::ActiveUser(user))
+                if *user.id() == self.commented_by || user.role() == &Administrator
+        )
     }
 }

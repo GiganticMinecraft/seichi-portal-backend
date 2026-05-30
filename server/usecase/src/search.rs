@@ -1,6 +1,7 @@
 use crate::models::CrossSearchOutput;
 use domain::repository::form::answer_entry_set_repository::AnswerEntrySetRepository;
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
+use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
 use domain::search::models::NumberOfRecords;
@@ -27,6 +28,7 @@ pub struct SearchUseCase<
     FormLabelRepo: FormLabelRepository,
     UserRepo: UserRepository,
     AnswerEntrySetRepo: AnswerEntrySetRepository,
+    CommentRepo: CommentRepository,
 > {
     pub search_repository: &'a SearchRepo,
     pub active_form_repository: &'a FormRepo,
@@ -34,6 +36,7 @@ pub struct SearchUseCase<
     pub form_label_repository: &'a FormLabelRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub comment_repository: &'a CommentRepo,
 }
 
 impl<
@@ -43,7 +46,8 @@ impl<
     R4: FormLabelRepository,
     R5: UserRepository,
     R6: AnswerEntrySetRepository,
-> SearchUseCase<'_, R1, R2, R3, R4, R5, R6>
+    R7: CommentRepository,
+> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
 {
     pub async fn cross_search(
         &self,
@@ -222,7 +226,7 @@ impl<
                             self.answer_entry_set_repository.size_entries().await?,
                         ),
                         form_answer_comments: NumberOfRecords(
-                            self.answer_entry_set_repository.size_comments().await?,
+                            self.comment_repository.size().await?,
                         ),
                         label_for_form_answers: NumberOfRecords(
                             self.form_answer_label_repository.size().await?,
@@ -293,8 +297,8 @@ impl<
                             .collect::<Vec<_>>();
 
                         let comments = self
-                            .answer_entry_set_repository
-                            .get_all_comments()
+                            .comment_repository
+                            .get_all()
                             .await?
                             .into_iter()
                             .map(|comment| {

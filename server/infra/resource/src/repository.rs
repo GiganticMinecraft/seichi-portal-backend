@@ -67,6 +67,7 @@ impl<
     type ConcreteArchivedFormRepository = Repository<Client>;
     type ConcreteAnswerEntrySetRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
+    type ConcreteCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
     type ConcreteMessageThreadRepository = Repository<Client>;
     type ConcreteNotificationRepository = Repository<Client>;
@@ -107,6 +108,10 @@ impl<
     }
 
     fn answer_entry_set_repository(&self) -> &Self::ConcreteAnswerEntrySetRepository {
+        &self.db
+    }
+
+    fn comment_repository(&self) -> &Self::ConcreteCommentRepository {
         &self.db
     }
 
