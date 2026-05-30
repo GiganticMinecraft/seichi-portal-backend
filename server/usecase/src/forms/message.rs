@@ -20,7 +20,7 @@ use domain::{
         user_repository::UserRepository,
     },
     types::{
-        authorization_guard::AuthorizationGuard,
+        authorization_guard::{Allowed, AuthorizationGuard},
         authorization_guard::{Create, Read, Update},
     },
     user::models::{ActiveUser, Actor},
@@ -61,30 +61,30 @@ impl<
         actor: &Actor,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<(AuthorizationGuard<AnswerEntrySet, Read>, AnswerEntry), Error> {
+    ) -> Result<(Allowed<AnswerEntrySet, Read>, AnswerEntry), Error> {
         let form_guard = self
             .active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
-        let form = form_guard.try_read(actor)?;
+        let form = form_guard.try_read(actor.clone())?;
 
         let set_guard = self
             .answer_entry_set_repository
             .get(*form.answer_entry_set_id())
             .await?
             .ok_or(FormNotFound)?;
-        let answer_entry_set = set_guard.try_read(actor)?;
+        let answer_entry_set = set_guard.try_read(actor.clone())?;
 
         let entry = answer_entry_set
-            .read_entry(answer_id, actor)
-            .cloned()
+            .read_entry(answer_id)
+            .map(|entry| entry.into_inner())
             .map_err(|error| match error {
                 DomainError::NotFound => Error::from(AnswerNotFound),
                 error => Error::from(error),
             })?;
 
-        Ok((set_guard, entry))
+        Ok((answer_entry_set, entry))
     }
 
     pub async fn post_message<N: Notificator>(
@@ -115,11 +115,11 @@ impl<
                     .await?
                 {
                     Some(thread_guard) => {
-                        let thread = thread_guard.try_read(&actor_user)?;
-                        let updated = thread.clone().add_message(message);
+                        let thread = thread_guard.try_read(actor_user.clone())?;
+                        let updated = thread.value().clone().add_message(message);
                         let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
                         self.message_thread_repository
-                            .update(guard, &actor_user)
+                            .update(guard.try_update(actor_user.clone())?)
                             .await
                     }
                     None => {
@@ -131,7 +131,7 @@ impl<
                             MessageThread::new(answer_id, answer_author_id).add_message(message);
                         let guard = AuthorizationGuard::<MessageThread, Create>::from(thread);
                         self.message_thread_repository
-                            .create(guard, &actor_user)
+                            .create(guard.try_create(actor_user.clone())?)
                             .await
                     }
                 };
@@ -144,23 +144,28 @@ impl<
                             .await?;
 
                         let notification_preference = match fetched_notification_preference {
-                            Some(settings) => settings.try_into_read(&Actor::System)?,
+                            Some(settings) => settings.try_read(Actor::System)?.into_inner(),
                             None => {
                                 let recipient = self
                                     .user_repository
                                     .find_by(notification_recipient_id.into_inner())
                                     .await?
                                     .ok_or(Error::from(UserNotFound))?
-                                    .try_into_read(&actor_user)?;
+                                    .try_read(actor_user.clone())?
+                                    .into_inner();
 
-                                let settings: AuthorizationGuard<_, Create> =
-                                    NotificationPreference::new(*recipient.id()).into();
+                                let preference = NotificationPreference::new(*recipient.id());
 
                                 self.notification_repository
-                                    .create_notification_settings(&recipient, &settings)
+                                    .create_notification_settings(
+                                        AuthorizationGuard::<_, Create>::from(preference.clone())
+                                            .try_create(Actor::from(recipient.clone()))?,
+                                    )
                                     .await?;
 
-                                settings.into_read().try_into_read(&Actor::System)?
+                                AuthorizationGuard::<_, Read>::from(preference)
+                                    .try_read(Actor::System)?
+                                    .into_inner()
                             }
                         };
 
@@ -205,7 +210,7 @@ impl<
         {
             None => vec![],
             Some(thread_guard) => {
-                let thread = thread_guard.try_read(&actor_user)?;
+                let thread = thread_guard.try_read(actor_user.clone())?;
                 thread.messages().to_vec()
             }
         };
@@ -243,15 +248,17 @@ impl<
             .await?
             .ok_or(Error::from(MessageNotFound))?;
 
-        let thread = thread_guard.try_read(&actor_user)?;
+        let thread = thread_guard.try_read(actor_user.clone())?;
 
         if let Some(body) = body {
-            let updated = thread
-                .clone()
-                .update_message_body(*message_id, &actor_user, body)?;
+            let updated =
+                thread
+                    .value()
+                    .clone()
+                    .update_message_body(*message_id, &actor_user, body)?;
             let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
             self.message_thread_repository
-                .update(guard, &actor_user)
+                .update(guard.try_update(actor_user.clone())?)
                 .await?;
         }
 
@@ -275,12 +282,15 @@ impl<
             .await?
             .ok_or(Error::from(MessageNotFound))?;
 
-        let thread = thread_guard.try_read(&actor_user)?;
+        let thread = thread_guard.try_read(actor_user.clone())?;
 
-        let updated = thread.clone().remove_message(*message_id, &actor_user)?;
+        let updated = thread
+            .value()
+            .clone()
+            .remove_message(*message_id, &actor_user)?;
         let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
         self.message_thread_repository
-            .update(guard, &actor_user)
+            .update(guard.try_update(actor_user.clone())?)
             .await
     }
 }

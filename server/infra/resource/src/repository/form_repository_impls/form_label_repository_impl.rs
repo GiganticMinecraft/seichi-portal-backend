@@ -2,11 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::models::{FormId, FormLabel, FormLabelId},
     repository::form::form_label_repository::FormLabelRepository,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard::{Create, Delete, Read, Update},
-    },
-    user::models::{ActiveUser, Actor},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 use errors::Error;
 use itertools::Itertools;
@@ -19,16 +15,10 @@ use crate::{
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Client> {
     #[tracing::instrument(skip(self))]
-    async fn create_label_for_forms(
-        &self,
-        label: AuthorizationGuard<FormLabel, Create>,
-        actor: &ActiveUser,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        label
-            .try_create(&actor_user, |label| {
-                self.client.form_label().create_label_for_forms(label)
-            })?
+    async fn create_label_for_forms(&self, label: Allowed<FormLabel, Create>) -> Result<(), Error> {
+        self.client
+            .form_label()
+            .create_label_for_forms(label.value())
             .await
             .map_err(Into::into)
     }
@@ -76,18 +66,10 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     }
 
     #[tracing::instrument(skip(self))]
-    async fn delete_label_for_forms(
-        &self,
-        label: AuthorizationGuard<FormLabel, Delete>,
-        actor: &ActiveUser,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        label
-            .try_into_delete(&actor_user, |label| {
-                self.client
-                    .form_label()
-                    .delete_label_for_forms(label.id().to_owned())
-            })?
+    async fn delete_label_for_forms(&self, label: Allowed<FormLabel, Delete>) -> Result<(), Error> {
+        self.client
+            .form_label()
+            .delete_label_for_forms(label.value().id().to_owned())
             .await
             .map_err(Into::into)
     }
@@ -96,16 +78,11 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
     async fn edit_label_for_forms(
         &self,
         id: FormLabelId,
-        label: AuthorizationGuard<FormLabel, Update>,
-        actor: &ActiveUser,
+        label: Allowed<FormLabel, Update>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        label
-            .try_update(&actor_user, |label| {
-                self.client
-                    .form_label()
-                    .edit_label_for_forms(id, label.name().to_owned())
-            })?
+        self.client
+            .form_label()
+            .edit_label_for_forms(id, label.value().name().to_owned())
             .await
             .map_err(Into::into)
     }

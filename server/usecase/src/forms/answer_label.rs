@@ -1,6 +1,7 @@
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
+    types::authorization_guard::{AuthorizationGuard, Create},
     user::models::{ActiveUser, Actor},
 };
 use errors::{Error, usecase::UseCaseError::LabelNotFound};
@@ -21,14 +22,18 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
         let label_id = answer_label.id().to_owned();
 
         self.answer_label_repository
-            .create_label_for_answers(actor, answer_label.into())
+            .create_label_for_answers(
+                AuthorizationGuard::<_, Create>::from(answer_label)
+                    .try_create(actor_user.clone())?,
+            )
             .await?;
 
         self.answer_label_repository
             .get_label_for_answers(label_id)
             .await?
             .ok_or(Error::from(LabelNotFound))?
-            .try_into_read(&actor_user)
+            .try_read(actor_user.clone())
+            .map(|label| label.into_inner())
             .map_err(Into::into)
     }
 
@@ -42,7 +47,11 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
             .get_labels_for_answers()
             .await?
             .into_iter()
-            .flat_map(|label| label.try_into_read(&actor_user))
+            .flat_map(|label| {
+                label
+                    .try_read(actor_user.clone())
+                    .map(|label| label.into_inner())
+            })
             .collect::<Vec<_>>())
     }
 
@@ -58,7 +67,11 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
             .ok_or(Error::from(LabelNotFound))?;
 
         self.answer_label_repository
-            .delete_label_for_answers(actor, answer_label.into_delete())
+            .delete_label_for_answers(
+                answer_label
+                    .into_delete()
+                    .try_delete(Actor::from(actor.clone()))?,
+            )
             .await
     }
 
@@ -80,7 +93,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
                 .into_update()
                 .map(|label| label.renamed(new_name));
             self.answer_label_repository
-                .edit_label_for_answers(actor, updated_label)
+                .edit_label_for_answers(updated_label.try_update(actor_user.clone())?)
                 .await?;
         }
 
@@ -88,7 +101,8 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
             .get_label_for_answers(label_id)
             .await?
             .ok_or(Error::from(LabelNotFound))?
-            .try_into_read(&actor_user)
+            .try_read(actor_user.clone())
+            .map(|label| label.into_inner())
             .map_err(Into::into)
     }
 
@@ -98,16 +112,17 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
         answer_id: AnswerId,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), Error> {
+        let actor_user = Actor::from(actor.clone());
         let labels = self
             .answer_label_repository
             .get_labels_for_answers_by_label_ids(label_ids)
             .await?
             .into_iter()
-            .map(|label| label.into_update())
-            .collect::<Vec<_>>();
+            .map(|label| label.into_update().try_update(actor_user.clone()))
+            .collect::<Result<Vec<_>, _>>()?;
 
         self.answer_label_repository
-            .replace_answer_labels(actor, answer_id, labels)
+            .replace_answer_labels(answer_id, labels)
             .await
     }
 }

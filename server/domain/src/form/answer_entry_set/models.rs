@@ -13,10 +13,12 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     form::{
         answer::models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
-        comment::models::{Comment, CommentContent, CommentId},
+        comment::models::{Comment, CommentContent},
         models::FormId,
     },
-    types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions, Create},
+    types::authorization_guard::{
+        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizesRead, Create, Read,
+    },
     user::models::{Actor, Role::Administrator, User},
 };
 
@@ -191,22 +193,8 @@ impl AnswerEntrySet {
         }
     }
 
-    fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
+    pub(crate) fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
         self.entries.iter().find(|e| *e.id() == answer_id)
-    }
-
-    pub fn read_entry(
-        &self,
-        answer_id: AnswerId,
-        actor: &Actor,
-    ) -> Result<&AnswerEntry, DomainError> {
-        let entry = self.find_entry(answer_id).ok_or(DomainError::NotFound)?;
-
-        if self.can_read_entry(entry, actor) {
-            Ok(entry)
-        } else {
-            Err(DomainError::Forbidden)
-        }
     }
 
     pub fn change_entry_title(
@@ -215,7 +203,8 @@ impl AnswerEntrySet {
         actor: &Actor,
         title: AnswerTitle,
     ) -> Result<Self, DomainError> {
-        self.read_entry(answer_id, actor).map(|_| ())?;
+        let entry = self.find_entry(answer_id).ok_or(DomainError::NotFound)?;
+        self.check(actor, entry)?;
         let entries = self
             .entries
             .into_iter()
@@ -299,14 +288,35 @@ impl AnswerEntrySet {
             ..self
         }
     }
+}
+
+impl Allowed<AnswerEntrySet, Read> {
+    pub fn readable_entries(&self) -> Vec<Allowed<AnswerEntry, Read>> {
+        self.value()
+            .readable_entries(self.actor())
+            .into_iter()
+            .filter_map(|entry| self.authorize_read(entry.clone()).ok())
+            .collect()
+    }
+
+    pub fn read_entry(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
+        let entry = self
+            .value()
+            .find_entry(answer_id)
+            .ok_or(DomainError::NotFound)?
+            .clone();
+        self.authorize_read(entry)
+    }
 
     pub fn read_entry_for_comment(
         &self,
         answer_id: AnswerId,
-        actor: &Actor,
-    ) -> Result<&AnswerEntry, DomainError> {
-        let entry = self.read_entry(answer_id, actor)?;
-        match actor {
+    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
+        let entry = self.read_entry(answer_id)?;
+        match self.actor() {
             Actor::User(User::ActiveUser(_)) => Ok(entry),
             _ => Err(DomainError::Forbidden),
         }
@@ -320,12 +330,11 @@ impl AnswerEntrySet {
     pub fn create_comment(
         &self,
         answer_id: AnswerId,
-        actor: &Actor,
         content: CommentContent,
     ) -> Result<AuthorizationGuard<Comment, Create>, DomainError> {
-        self.read_entry_for_comment(answer_id, actor)?;
+        self.read_entry_for_comment(answer_id)?;
 
-        let commented_by = match actor {
+        let commented_by = match self.actor() {
             Actor::User(User::ActiveUser(user)) => *user.id(),
             _ => return Err(DomainError::Forbidden),
         };
@@ -336,25 +345,14 @@ impl AnswerEntrySet {
             commented_by,
         )))
     }
+}
 
-    pub fn read_comment_for_modification(
+impl Allowed<AnswerEntry, Read> {
+    pub fn authorize_comment(
         &self,
-        answer_id: AnswerId,
-        comment_id: CommentId,
-        actor: &Actor,
-    ) -> Result<&Comment, DomainError> {
-        let entry = self.read_entry(answer_id, actor)?;
-        let comment = entry
-            .find_comment(comment_id)
-            .ok_or(DomainError::NotFound)?;
-        match actor {
-            Actor::User(User::ActiveUser(user))
-                if comment.commented_by() == user.id() || user.role() == &Administrator =>
-            {
-                Ok(comment)
-            }
-            _ => Err(DomainError::Forbidden),
-        }
+        comment: Comment,
+    ) -> Result<Allowed<Comment, Read>, DomainError> {
+        self.authorize_read(comment)
     }
 }
 
@@ -377,6 +375,30 @@ impl AuthorizationGuardDefinitions for AnswerEntrySet {
 
     fn can_delete(&self, _actor: &Actor) -> bool {
         false
+    }
+}
+
+impl AuthorizesRead<AnswerEntry> for AnswerEntrySet {
+    fn check(&self, actor: &Actor, child: &AnswerEntry) -> Result<(), DomainError> {
+        if self.find_entry(*child.id()).is_none() {
+            return Err(DomainError::NotFound);
+        }
+
+        if self.can_read_entry(child, actor) {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl AuthorizesRead<Comment> for AnswerEntry {
+    fn check(&self, _actor: &Actor, child: &Comment) -> Result<(), DomainError> {
+        if child.answer_id() == self.id() {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
     }
 }
 
@@ -517,7 +539,10 @@ mod tests {
         let answer_id = *entry.id();
         let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
 
-        assert!(set.read_entry(answer_id, &Actor::from(author)).is_ok());
+        let set = AuthorizationGuard::<_, Read>::from(set)
+            .try_read(Actor::from(author))
+            .unwrap();
+        assert!(set.read_entry(answer_id).is_ok());
     }
 
     #[test]
@@ -528,8 +553,11 @@ mod tests {
         let answer_id = *entry.id();
         let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
 
+        let set = AuthorizationGuard::<_, Read>::from(set)
+            .try_read(Actor::from(other))
+            .unwrap();
         assert!(matches!(
-            set.read_entry(answer_id, &Actor::from(other)),
+            set.read_entry(answer_id),
             Err(DomainError::Forbidden)
         ));
     }
@@ -542,10 +570,10 @@ mod tests {
         let answer_id = *entry.id();
         let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
 
-        assert!(
-            set.read_entry(answer_id, &Actor::from(administrator))
-                .is_ok()
-        );
+        let set = AuthorizationGuard::<_, Read>::from(set)
+            .try_read(Actor::from(administrator))
+            .unwrap();
+        assert!(set.read_entry(answer_id).is_ok());
     }
 
     #[test]
@@ -556,6 +584,61 @@ mod tests {
         let answer_id = *entry.id();
         let set = answer_entry_set_with_visibility(AnswerVisibility::PUBLIC, vec![entry]);
 
-        assert!(set.read_entry(answer_id, &Actor::from(other)).is_ok());
+        let set = AuthorizationGuard::<_, Read>::from(set)
+            .try_read(Actor::from(other))
+            .unwrap();
+        assert!(set.read_entry(answer_id).is_ok());
+    }
+
+    #[test]
+    fn comment_read_is_authorized_by_readable_answer_entry() {
+        let author = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let comment = Comment::new(
+            answer_id,
+            CommentContent::new("comment".to_string().try_into().unwrap()),
+            *author.id(),
+        );
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
+
+        assert!(
+            AuthorizationGuard::<_, Read>::from(comment.clone())
+                .try_read(Actor::from(author.clone()))
+                .is_err()
+        );
+
+        let entry = AuthorizationGuard::<_, Read>::from(set)
+            .try_read(Actor::from(author))
+            .unwrap()
+            .read_entry(answer_id)
+            .unwrap();
+
+        assert!(entry.authorize_comment(comment).is_ok());
+    }
+
+    #[test]
+    fn comment_read_delegation_rejects_answer_mismatch() {
+        let author = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let entry_id = *entry.id();
+        let other_entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let other_entry_id = *other_entry.id();
+        let comment = Comment::new(
+            other_entry_id,
+            CommentContent::new("comment".to_string().try_into().unwrap()),
+            *author.id(),
+        );
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
+        let entry = AuthorizationGuard::<_, Read>::from(set)
+            .try_read(Actor::from(author))
+            .unwrap()
+            .read_entry(entry_id)
+            .unwrap();
+
+        assert!(matches!(
+            entry.authorize_comment(comment),
+            Err(DomainError::Forbidden)
+        ));
     }
 }

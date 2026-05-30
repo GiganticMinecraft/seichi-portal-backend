@@ -4,11 +4,7 @@ use mockall::automock;
 
 use crate::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard::{Create, Delete, Read, Update},
-    },
-    user::models::ActiveUser,
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 
 #[automock]
@@ -16,8 +12,7 @@ use crate::{
 pub trait AnswerLabelRepository: Send + Sync + 'static {
     async fn create_label_for_answers(
         &self,
-        actor: &ActiveUser,
-        label: AuthorizationGuard<AnswerLabel, Create>,
+        label: Allowed<AnswerLabel, Create>,
     ) -> Result<(), Error>;
     async fn get_labels_for_answers(
         &self,
@@ -36,19 +31,16 @@ pub trait AnswerLabelRepository: Send + Sync + 'static {
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error>;
     async fn delete_label_for_answers(
         &self,
-        actor: &ActiveUser,
-        label: AuthorizationGuard<AnswerLabel, Delete>,
+        label: Allowed<AnswerLabel, Delete>,
     ) -> Result<(), Error>;
     async fn edit_label_for_answers(
         &self,
-        actor: &ActiveUser,
-        label: AuthorizationGuard<AnswerLabel, Update>,
+        label: Allowed<AnswerLabel, Update>,
     ) -> Result<(), Error>;
     async fn replace_answer_labels(
         &self,
-        actor: &ActiveUser,
         answer_id: AnswerId,
-        labels: Vec<AuthorizationGuard<AnswerLabel, Update>>,
+        labels: Vec<Allowed<AnswerLabel, Update>>,
     ) -> Result<(), Error>;
     async fn size(&self) -> Result<u32, Error>;
 }

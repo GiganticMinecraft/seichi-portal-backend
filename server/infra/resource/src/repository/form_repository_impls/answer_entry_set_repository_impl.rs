@@ -6,10 +6,9 @@ use domain::{
     },
     repository::form::answer_entry_set_repository::AnswerEntrySetRepository,
     types::{
-        authorization_guard::AuthorizationGuard,
+        authorization_guard::{Allowed, AuthorizationGuard},
         authorization_guard::{Create, Read, Update},
     },
-    user::models::Actor,
 };
 use errors::Error;
 
@@ -27,15 +26,10 @@ where
     Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
 {
     #[tracing::instrument(skip(self))]
-    async fn create(
-        &self,
-        answer_entry_set: AuthorizationGuard<AnswerEntrySet, Create>,
-    ) -> Result<(), Error> {
-        let answer_entry_set = answer_entry_set.try_into_create(&Actor::System, |set| set)?;
-
+    async fn create(&self, answer_entry_set: Allowed<AnswerEntrySet, Create>) -> Result<(), Error> {
         self.client
             .form()
-            .create_answer_entry_set(&answer_entry_set)
+            .create_answer_entry_set(answer_entry_set.value())
             .await?;
         Ok(())
     }
@@ -63,15 +57,10 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    async fn update(
-        &self,
-        answer_entry_set: AuthorizationGuard<AnswerEntrySet, Update>,
-    ) -> Result<(), Error> {
-        let answer_entry_set = answer_entry_set.try_into_update(&Actor::System, |set| set)?;
-
+    async fn update(&self, answer_entry_set: Allowed<AnswerEntrySet, Update>) -> Result<(), Error> {
         self.client
             .form()
-            .update_answer_entry_set(&answer_entry_set)
+            .update_answer_entry_set(answer_entry_set.value())
             .await?;
         Ok(())
     }
@@ -79,15 +68,12 @@ where
     #[tracing::instrument(skip(self, answer_entry_set))]
     async fn add_entry(
         &self,
-        answer_entry_set: &AuthorizationGuard<AnswerEntrySet, Read>,
+        answer_entry_set: &Allowed<AnswerEntrySet, Read>,
         answer_entry: &AnswerEntry,
-        actor: &Actor,
     ) -> Result<(), Error> {
-        let set = answer_entry_set.try_read(actor)?;
-
         self.client
             .form_answer()
-            .post_answer(answer_entry, *set.form_id())
+            .post_answer(answer_entry, *answer_entry_set.value().form_id())
             .await?;
         Ok(())
     }
@@ -95,16 +81,14 @@ where
     #[tracing::instrument(skip(self, answer_entry_set))]
     async fn update_entry(
         &self,
-        answer_entry_set: &AuthorizationGuard<AnswerEntrySet, Read>,
+        answer_entry_set: &Allowed<AnswerEntrySet, Read>,
         answer_entry: &AnswerEntry,
-        actor: &Actor,
     ) -> Result<(), Error> {
-        let set = answer_entry_set.try_read(actor)?;
-        set.read_entry(*answer_entry.id(), actor)?;
+        answer_entry_set.read_entry(*answer_entry.id())?;
 
         self.client
             .form_answer()
-            .update_answer_entry(answer_entry, *set.form_id())
+            .update_answer_entry(answer_entry, *answer_entry_set.value().form_id())
             .await?;
         Ok(())
     }

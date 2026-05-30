@@ -5,11 +5,8 @@ use domain::{
         active_form_repository::ActiveFormRepository,
         archived_form_repository::ArchivedFormRepository,
     },
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard::{Create, Read, Update},
-    },
-    user::models::{ActiveUser, Actor},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
+    user::models::ActiveUser,
 };
 use errors::Error;
 
@@ -30,11 +27,9 @@ where
     async fn create(
         &self,
         actor: &ActiveUser,
-        form: AuthorizationGuard<ActiveForm, Create>,
+        form: Allowed<ActiveForm, Create>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        let form = form.try_into_create(&actor_user, |form| form)?;
-        self.client.form().create(&form, actor).await?;
+        self.client.form().create(form.value(), actor).await?;
         Ok(())
     }
 
@@ -73,11 +68,12 @@ where
     async fn update_form(
         &self,
         actor: &ActiveUser,
-        updated_form: AuthorizationGuard<ActiveForm, Update>,
+        updated_form: Allowed<ActiveForm, Update>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        let updated_form = updated_form.try_into_update(&actor_user, |form| form)?;
-        self.client.form().update(&updated_form, actor).await?;
+        self.client
+            .form()
+            .update(updated_form.value(), actor)
+            .await?;
         Ok(())
     }
 
@@ -130,25 +126,16 @@ where
     #[tracing::instrument(skip(self))]
     async fn archive(
         &self,
-        actor: &ActiveUser,
-        form: AuthorizationGuard<ArchivedForm, Create>,
+        form: Allowed<ArchivedForm, Create>,
     ) -> Result<AuthorizationGuard<ArchivedForm, Read>, Error> {
-        let actor_user = Actor::from(actor.clone());
-        let form = form.try_into_create(&actor_user, |form| form)?;
-        let archived_form = self.client.form().archive(&form).await?;
+        let archived_form = self.client.form().archive(form.value()).await?;
         Ok(AuthorizationGuard::<ArchivedForm, Create>::from(archived_form).into_read())
     }
 
     #[tracing::instrument(skip(self))]
-    async fn restore(
-        &self,
-        actor: &ActiveUser,
-        form: AuthorizationGuard<ArchivedForm, Update>,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        let form = form.try_into_update(&actor_user, |form| form)?;
-        let form_id = *form.form().id();
-        let _restored = form.unarchive();
+    async fn restore(&self, form: Allowed<ArchivedForm, Update>) -> Result<(), Error> {
+        let form_id = *form.value().form().id();
+        let _restored = form.into_inner().unarchive();
         self.client.form().restore(form_id).await?;
         Ok(())
     }

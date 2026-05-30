@@ -25,7 +25,7 @@ pub(crate) async fn resolve_user_references<R: UserRepository + ?Sized>(
         .await?
         .into_iter()
         .map(|guard| {
-            let user = guard.try_into_read(&actor_user)?;
+            let user = guard.try_read(actor_user.clone())?.into_inner();
             Ok((*user.id(), user))
         })
         .collect()

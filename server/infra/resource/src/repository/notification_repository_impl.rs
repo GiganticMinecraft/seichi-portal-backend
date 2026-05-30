@@ -2,11 +2,7 @@ use async_trait::async_trait;
 use domain::{
     notification::models::NotificationPreference,
     repository::notification_repository::NotificationRepository,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard::{Create, Read, Update},
-    },
-    user::models::{ActiveUser, Actor},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 use errors::Error;
 use uuid::Uuid;
@@ -20,16 +16,11 @@ use crate::{
 impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository<Client> {
     async fn create_notification_settings(
         &self,
-        actor: &ActiveUser,
-        notification_settings: &AuthorizationGuard<NotificationPreference, Create>,
+        notification_settings: Allowed<NotificationPreference, Create>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        notification_settings
-            .try_create(&actor_user, |settings| {
-                self.client
-                    .notification()
-                    .upsert_notification_settings(settings)
-            })?
+        self.client
+            .notification()
+            .upsert_notification_settings(notification_settings.value())
             .await
             .map_err(Into::into)
     }
@@ -51,16 +42,11 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
 
     async fn update_notification_settings(
         &self,
-        actor: &ActiveUser,
-        notification_settings: AuthorizationGuard<NotificationPreference, Update>,
+        notification_settings: Allowed<NotificationPreference, Update>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        notification_settings
-            .try_update(&actor_user, |settings| {
-                self.client
-                    .notification()
-                    .upsert_notification_settings(settings)
-            })?
+        self.client
+            .notification()
+            .upsert_notification_settings(notification_settings.value())
             .await
             .map_err(Into::into)
     }

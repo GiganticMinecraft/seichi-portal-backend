@@ -1,5 +1,4 @@
-use domain::types::authorization_guard::AuthorizationGuard;
-use domain::types::authorization_guard::Create;
+use domain::types::authorization_guard::{AuthorizationGuard, Create, Read};
 use domain::{
     notification::models::NotificationPreference,
     repository::{
@@ -30,7 +29,8 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
 
         match notification_settings {
             Some(notification_settings) => notification_settings
-                .try_into_read(&actor_user)
+                .try_read(actor_user.clone())
+                .map(|settings| settings.into_inner())
                 .map_err(Into::into),
             None => {
                 let target_user = self
@@ -39,13 +39,14 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
                     .await?
                     .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-                let target_user = target_user.try_into_read(&actor_user)?;
+                let target_user = target_user.try_read(actor_user.clone())?.into_inner();
                 let notification_settings: AuthorizationGuard<NotificationPreference, Create> =
                     NotificationPreference::new(*target_user.id()).into();
 
                 Ok(notification_settings
                     .into_read()
-                    .try_into_read(&actor_user)?)
+                    .try_read(actor_user.clone())?
+                    .into_inner())
             }
         }
     }
@@ -60,12 +61,10 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
             .user_repository
             .find_by(actor.id().into_inner())
             .await?
-            .ok_or(UseCaseError::UserNotFound)?;
+            .ok_or(UseCaseError::UserNotFound)?
+            .try_read(Actor::from(actor.clone()))?;
 
-        let discord_user = self
-            .user_repository
-            .fetch_discord_user(actor, &user)
-            .await?;
+        let discord_user = self.user_repository.fetch_discord_user(&user).await?;
 
         if discord_user.is_none() {
             return Err(Error::from(UseCaseError::DiscordNotLinked));
@@ -79,25 +78,30 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         let current_settings = match current_settings {
             Some(settings) => settings,
             None => {
-                let notification_settings = NotificationPreference::new(*actor.id()).into();
+                let preference = NotificationPreference::new(*actor.id());
 
                 self.repository
-                    .create_notification_settings(actor, &notification_settings)
+                    .create_notification_settings(
+                        AuthorizationGuard::<_, Create>::from(preference.clone())
+                            .try_create(Actor::from(actor.clone()))?,
+                    )
                     .await?;
 
-                notification_settings.into_read()
+                AuthorizationGuard::<_, Read>::from(preference)
             }
         };
 
         match is_send_message_notification {
             Some(is_send_message_notification) => {
-                let updated_notification_settings =
-                    current_settings.into_update().map(|settings| {
+                let updated_notification_settings = current_settings
+                    .into_update()
+                    .map(|settings| {
                         settings.update_send_message_notification(is_send_message_notification)
-                    });
+                    })
+                    .try_update(Actor::from(actor.clone()))?;
 
                 self.repository
-                    .update_notification_settings(actor, updated_notification_settings)
+                    .update_notification_settings(updated_notification_settings)
                     .await
             }
             None => Ok(()),

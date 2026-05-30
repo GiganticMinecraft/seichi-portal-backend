@@ -77,8 +77,8 @@ impl AuthorizationGuardDefinitions for Comment {
         matches!(actor, Actor::User(User::ActiveUser(user)) if *user.id() == self.commented_by)
     }
 
-    fn can_read(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::System | Actor::User(_))
+    fn can_read(&self, _actor: &Actor) -> bool {
+        false
     }
 
     fn can_update(&self, actor: &Actor) -> bool {

@@ -25,7 +25,7 @@ impl NotificationContent {
     }
 }
 
-#[derive(Getters, Debug)]
+#[derive(Getters, Debug, Clone)]
 pub struct NotificationPreference {
     recipient_id: UserId,
     is_send_message_notification: bool,

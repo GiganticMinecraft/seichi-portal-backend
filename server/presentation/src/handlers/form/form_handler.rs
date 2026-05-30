@@ -172,7 +172,8 @@ async fn fetch_answer_entry_set(
         .get(*form.answer_entry_set_id())
         .await?
         .ok_or(errors::usecase::UseCaseError::FormNotFound)?
-        .try_into_read(actor)
+        .try_read(actor.clone())
+        .map(|set| set.into_inner())
         .map_err(Into::into)
 }
 

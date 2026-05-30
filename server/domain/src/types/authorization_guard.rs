@@ -1,16 +1,18 @@
 use errors::domain::DomainError;
+use std::marker::PhantomData;
+use std::ops::Deref;
 
 use crate::user::models::Actor;
 
 pub trait Actions: private::Sealed {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Create;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Read;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Update;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Delete;
 
 impl Actions for Create {}
@@ -43,40 +45,92 @@ mod private {
 //  Read 権限を保持しているかつ Delete 権限を持たないユーザーが居る場合に
 //  AuthorizationGuard<T, Delete> から誤って `.into_read()` を呼び出すことで
 //  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions, A: Actions> {
     guard_target: T,
-    _phantom_data: std::marker::PhantomData<A>,
+    _phantom_data: PhantomData<A>,
+}
+
+/// 認可済みであることを型に残す証憑です。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Allowed<T, A: Actions> {
+    value: T,
+    actor: Actor,
+    _phantom_data: PhantomData<A>,
+}
+
+impl<T, A: Actions> Allowed<T, A> {
+    fn mint(value: T, actor: Actor) -> Self {
+        Self {
+            value,
+            actor,
+            _phantom_data: PhantomData,
+        }
+    }
+
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+
+    pub fn actor(&self) -> &Actor {
+        &self.actor
+    }
+}
+
+impl<T, A: Actions> Deref for Allowed<T, A> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> Allowed<T, Update>
+where
+    T: AuthorizationGuardDefinitions,
+{
+    pub fn map<F>(self, f: F) -> Self
+    where
+        F: FnOnce(T) -> T,
+    {
+        Self {
+            value: f(self.value),
+            actor: self.actor,
+            _phantom_data: PhantomData,
+        }
+    }
+}
+
+impl<T> Allowed<T, Read> {
+    pub fn authorize_read<C>(&self, child: C) -> Result<Allowed<C, Read>, DomainError>
+    where
+        T: AuthorizesRead<C>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
+    }
+}
+
+pub trait AuthorizesRead<Child> {
+    fn check(&self, actor: &Actor, child: &Child) -> Result<(), DomainError>;
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Create> {
     pub(crate) fn new(guard_target: T) -> Self {
         Self {
             guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 
-    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作 `f` を試みます。
-    pub fn try_create<'a, R, F>(&'a self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(&'a T) -> R,
-    {
-        if self.guard_target.can_create(actor) {
-            Ok(f(&self.guard_target))
-        } else {
-            Err(DomainError::Forbidden)
-        }
-    }
-
-    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作 `f` を試みます。
-    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
-    pub fn try_into_create<R, F>(self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(T) -> R,
-    {
-        if self.guard_target.can_create(actor) {
-            Ok(f(self.guard_target))
+    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成証憑を鋳造します。
+    pub fn try_create(self, actor: Actor) -> Result<Allowed<T, Create>, DomainError> {
+        if self.guard_target.can_create(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
         } else {
             Err(DomainError::Forbidden)
         }
@@ -86,39 +140,23 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Create> {
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
             guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 
     pub fn into_update(self) -> AuthorizationGuard<T, Update> {
         AuthorizationGuard {
             guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
-    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
-    pub fn try_update<'a, R, F>(&'a self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(&'a T) -> R,
-    {
-        if self.guard_target.can_update(actor) {
-            Ok(f(&self.guard_target))
-        } else {
-            Err(DomainError::Forbidden)
-        }
-    }
-
-    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
-    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
-    pub fn try_into_update<R, F>(self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(T) -> R,
-    {
-        if self.guard_target.can_update(actor) {
-            Ok(f(self.guard_target))
+    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新証憑を鋳造します。
+    pub fn try_update(self, actor: Actor) -> Result<Allowed<T, Update>, DomainError> {
+        if self.guard_target.can_update(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
         } else {
             Err(DomainError::Forbidden)
         }
@@ -131,7 +169,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
     {
         AuthorizationGuard {
             guard_target: f(self.guard_target),
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 
@@ -139,7 +177,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
             guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 
@@ -147,25 +185,16 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
     pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
         AuthorizationGuard {
             guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
-    /// `actor` が `guard_target` の参照を取得することを試みます。
-    pub fn try_read(&self, actor: &Actor) -> Result<&T, DomainError> {
-        if self.guard_target.can_read(actor) {
-            Ok(&self.guard_target)
-        } else {
-            Err(DomainError::Forbidden)
-        }
-    }
-
-    /// `actor` が `guard_target` を取得することを試みます。
-    pub fn try_into_read(self, actor: &Actor) -> Result<T, DomainError> {
-        if self.guard_target.can_read(actor) {
-            Ok(self.guard_target)
+    /// [`AuthorizationGuardDefinitions::can_read`] の条件で読み取り証憑を鋳造します。
+    pub fn try_read(self, actor: Actor) -> Result<Allowed<T, Read>, DomainError> {
+        if self.guard_target.can_read(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
         } else {
             Err(DomainError::Forbidden)
         }
@@ -175,7 +204,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
     pub fn into_update(self) -> AuthorizationGuard<T, Update> {
         AuthorizationGuard {
             guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 
@@ -183,32 +212,16 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
     pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
         AuthorizationGuard {
             guard_target: self.guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {
-    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
-    pub fn try_delete<'a, R, F>(&'a self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(&'a T) -> R,
-    {
-        if self.guard_target.can_delete(actor) {
-            Ok(f(&self.guard_target))
-        } else {
-            Err(DomainError::Forbidden)
-        }
-    }
-
-    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
-    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
-    pub fn try_into_delete<R, F>(self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(T) -> R,
-    {
-        if self.guard_target.can_delete(actor) {
-            Ok(f(self.guard_target))
+    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除証憑を鋳造します。
+    pub fn try_delete(self, actor: Actor) -> Result<Allowed<T, Delete>, DomainError> {
+        if self.guard_target.can_delete(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
         } else {
             Err(DomainError::Forbidden)
         }
@@ -264,7 +277,7 @@ impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Read> {
     fn from(guard_target: T) -> Self {
         Self {
             guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -273,7 +286,7 @@ impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Update>
     fn from(guard_target: T) -> Self {
         Self {
             guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -282,7 +295,7 @@ impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Delete>
     fn from(guard_target: T) -> Self {
         Self {
             guard_target,
-            _phantom_data: std::marker::PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -292,7 +305,9 @@ mod test {
     use uuid::Uuid;
 
     use crate::{
-        types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions},
+        types::authorization_guard::{
+            Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Delete,
+        },
         user::models::{ActiveUser, Actor, Role, User},
     };
 
@@ -344,24 +359,32 @@ mod test {
             _value: "test".to_string(),
         });
 
-        assert!(&guard.try_create(&admin, |_| {}).is_ok());
-        assert!(&guard.try_create(&standard_user, |_| {}).is_err());
+        assert!(&guard.clone().try_create(admin.clone()).is_ok());
+        assert!(&guard.try_create(standard_user.clone()).is_err());
 
-        let guard = guard.into_read();
-        assert!(&guard.try_read(&admin).is_ok());
-        assert!(&guard.try_read(&standard_user).is_ok());
+        let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        })
+        .into_read();
+        assert!(&guard.clone().try_read(admin.clone()).is_ok());
+        assert!(&guard.try_read(standard_user.clone()).is_ok());
 
-        let guard = guard.into_update();
-        assert!(&guard.try_update(&admin, |_| {}).is_ok());
-        assert!(&guard.try_update(&standard_user, |_| {}).is_err());
+        let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        })
+        .into_update();
+        assert!(&guard.clone().try_update(admin.clone()).is_ok());
+        assert!(&guard.try_update(standard_user.clone()).is_err());
 
-        let guard = guard.into_delete();
-        assert!(&guard.try_delete(&admin, |_| {}).is_ok());
-        assert!(&guard.try_delete(&standard_user, |_| {}).is_err());
+        let guard = AuthorizationGuard::<_, Delete>::from(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        });
+        assert!(&guard.clone().try_delete(admin.clone()).is_ok());
+        assert!(&guard.try_delete(standard_user.clone()).is_err());
     }
 
     #[test]
-    fn verify_same_data_for_try_read_and_try_into_read() {
+    fn allowed_can_borrow_and_unwrap_value() {
         let user: Actor = ActiveUser::new(
             "user".to_string(),
             Uuid::new_v4().into(),
@@ -375,12 +398,12 @@ mod test {
 
         let read_guard = guard.into_read();
 
-        let from_into_read = read_guard.try_read(&user);
+        let from_into_read = read_guard.clone().try_read(user.clone());
         assert!(from_into_read.is_ok());
 
-        let from_into_read = from_into_read.unwrap().to_owned();
+        let from_into_read = from_into_read.unwrap().into_inner();
 
-        let read_into = read_guard.try_into_read(&user);
+        let read_into = read_guard.try_read(user.clone()).map(Allowed::into_inner);
 
         assert!(read_into.is_ok());
 

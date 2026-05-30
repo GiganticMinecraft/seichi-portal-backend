@@ -2,8 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::{answer::models::AnswerEntry, comment::models::Comment},
     repository::form::comment_repository::CommentRepository,
-    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::Actor,
+    types::authorization_guard::{Allowed, Create, Delete, Read, Update},
 };
 use errors::Error;
 
@@ -21,12 +20,8 @@ where
     Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
 {
     #[tracing::instrument(skip(self, comment))]
-    async fn create(
-        &self,
-        comment: AuthorizationGuard<Comment, Create>,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        let comment = comment.try_into_create(actor, |comment| comment)?;
+    async fn create(&self, comment: Allowed<Comment, Create>) -> Result<(), Error> {
+        let comment = comment.into_inner();
 
         self.client
             .form_comment()
@@ -38,26 +33,23 @@ where
     #[tracing::instrument(skip(self, answer))]
     async fn find_by_answer(
         &self,
-        answer: &AnswerEntry,
-    ) -> Result<Vec<AuthorizationGuard<Comment, Read>>, Error> {
+        answer: &Allowed<AnswerEntry, Read>,
+    ) -> Result<Vec<Allowed<Comment, Read>>, Error> {
         self.client
             .form_comment()
-            .get_comments(*answer.id())
+            .get_comments(*answer.value().id())
             .await?
             .into_iter()
             .map(|record| {
-                TryInto::<Comment>::try_into(record).map(AuthorizationGuard::<Comment, Read>::from)
+                let comment = TryInto::<Comment>::try_into(record)?;
+                answer.authorize_comment(comment).map_err(Error::from)
             })
             .collect()
     }
 
     #[tracing::instrument(skip(self, comment))]
-    async fn update(
-        &self,
-        comment: AuthorizationGuard<Comment, Update>,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        let comment = comment.try_into_update(actor, |comment| comment)?;
+    async fn update(&self, comment: Allowed<Comment, Update>) -> Result<(), Error> {
+        let comment = comment.into_inner();
 
         self.client
             .form_comment()
@@ -67,31 +59,14 @@ where
     }
 
     #[tracing::instrument(skip(self, comment))]
-    async fn delete(
-        &self,
-        comment: AuthorizationGuard<Comment, Delete>,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        let comment = comment.try_into_delete(actor, |comment| comment)?;
+    async fn delete(&self, comment: Allowed<Comment, Delete>) -> Result<(), Error> {
+        let comment = comment.into_inner();
 
         self.client
             .form_comment()
             .delete_comment(*comment.comment_id())
             .await?;
         Ok(())
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_all(&self) -> Result<Vec<AuthorizationGuard<Comment, Read>>, Error> {
-        self.client
-            .form_comment()
-            .get_all_comments()
-            .await?
-            .into_iter()
-            .map(|record| {
-                TryInto::<Comment>::try_into(record).map(AuthorizationGuard::<Comment, Read>::from)
-            })
-            .collect()
     }
 
     #[tracing::instrument(skip(self))]

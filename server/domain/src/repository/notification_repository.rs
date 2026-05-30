@@ -5,11 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     notification::models::NotificationPreference,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard::{Create, Read, Update},
-    },
-    user::models::ActiveUser,
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 
 #[automock]
@@ -17,8 +13,7 @@ use crate::{
 pub trait NotificationRepository: Send + Sync + 'static {
     async fn create_notification_settings(
         &self,
-        actor: &ActiveUser,
-        notification_settings: &AuthorizationGuard<NotificationPreference, Create>,
+        notification_settings: Allowed<NotificationPreference, Create>,
     ) -> Result<(), Error>;
     async fn fetch_notification_settings(
         &self,
@@ -26,7 +21,6 @@ pub trait NotificationRepository: Send + Sync + 'static {
     ) -> Result<Option<AuthorizationGuard<NotificationPreference, Read>>, Error>;
     async fn update_notification_settings(
         &self,
-        actor: &ActiveUser,
-        notification_settings: AuthorizationGuard<NotificationPreference, Update>,
+        notification_settings: Allowed<NotificationPreference, Update>,
     ) -> Result<(), Error>;
 }

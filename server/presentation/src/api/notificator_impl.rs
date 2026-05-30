@@ -42,12 +42,12 @@ impl<R: Repositories> Notificator for DiscordNotificator<R> {
             .await?
             .ok_or(Error::from(UserNotFound))?;
 
-        let user = user_guard.try_read(&Actor::System)?;
+        let user = user_guard.try_read(Actor::System)?;
 
         let discord_user = self
             .repositories
             .user_repository()
-            .fetch_discord_user(user, &user_guard)
+            .fetch_discord_user(&user)
             .await?;
 
         if let Some(discord_user) = discord_user {

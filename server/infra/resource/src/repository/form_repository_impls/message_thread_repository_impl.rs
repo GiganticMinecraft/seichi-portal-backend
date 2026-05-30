@@ -2,11 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::{answer::models::AnswerId, message_thread::models::MessageThread},
     repository::form::message_thread_repository::MessageThreadRepository,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard::{Create, Read, Update},
-    },
-    user::models::Actor,
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 use errors::{Error, infra::InfraError};
 use std::collections::HashSet;
@@ -27,12 +23,8 @@ where
     Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
 {
     #[tracing::instrument(skip(self))]
-    async fn create(
-        &self,
-        message_thread: AuthorizationGuard<MessageThread, Create>,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        let thread = message_thread.try_into_create(actor, |t| t)?;
+    async fn create(&self, message_thread: Allowed<MessageThread, Create>) -> Result<(), Error> {
+        let thread = message_thread.into_inner();
         let answer_id = thread.answer_id().into_inner().to_string();
         let answer_author_id = thread.answer_author_id().to_string();
 
@@ -90,12 +82,8 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    async fn update(
-        &self,
-        message_thread: AuthorizationGuard<MessageThread, Update>,
-        actor: &Actor,
-    ) -> Result<(), Error> {
-        let thread = message_thread.try_into_update(actor, |t| t)?;
+    async fn update(&self, message_thread: Allowed<MessageThread, Update>) -> Result<(), Error> {
+        let thread = message_thread.into_inner();
 
         let existing = self
             .client

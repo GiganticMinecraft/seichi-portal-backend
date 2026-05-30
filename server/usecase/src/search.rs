@@ -71,7 +71,14 @@ impl<
                 self.active_form_repository
                     .get(form.form_id)
                     .await
-                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+                    .map(|guard| {
+                        guard.and_then(|guard| {
+                            guard
+                                .try_read(actor_ref.clone())
+                                .ok()
+                                .map(|form| form.into_inner())
+                        })
+                    })
             })
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
@@ -82,7 +89,14 @@ impl<
                 self.user_repository
                     .find_by(user.user_id.into_inner())
                     .await
-                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+                    .map(|guard| {
+                        guard.and_then(|guard| {
+                            guard
+                                .try_read(actor_ref.clone())
+                                .ok()
+                                .map(|user| user.into_inner())
+                        })
+                    })
             })
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
@@ -93,7 +107,14 @@ impl<
                 self.form_label_repository
                     .fetch_label(label.label_id)
                     .await
-                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+                    .map(|guard| {
+                        guard.and_then(|guard| {
+                            guard
+                                .try_read(actor_ref.clone())
+                                .ok()
+                                .map(|label| label.into_inner())
+                        })
+                    })
             })
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
@@ -104,7 +125,14 @@ impl<
                 self.form_answer_label_repository
                     .get_label_for_answers(label.label_id)
                     .await
-                    .map(|guard| guard.and_then(|guard| guard.try_into_read(actor_ref).ok()))
+                    .map(|guard| {
+                        guard.and_then(|guard| {
+                            guard
+                                .try_read(actor_ref.clone())
+                                .ok()
+                                .map(|label| label.into_inner())
+                        })
+                    })
             })
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
@@ -118,11 +146,12 @@ impl<
 
                 async move {
                     let Some((answer, form_id)) = all_sets.iter().find_map(|set_guard| {
-                        let answer_entry_set = set_guard.try_read(actor_ref).ok()?;
+                        let answer_entry_set =
+                            set_guard.clone().try_read(actor_ref.clone()).ok()?;
                         let answer = answer_entry_set
-                            .read_entry(entry.answer_id, actor_ref)
+                            .read_entry(entry.answer_id)
                             .ok()?
-                            .clone();
+                            .into_inner();
 
                         Some((answer, *answer_entry_set.form_id()))
                     }) else {
@@ -133,7 +162,7 @@ impl<
                         .active_form_repository
                         .get(form_id)
                         .await?
-                        .is_some_and(|form_guard| form_guard.try_read(actor_ref).is_ok());
+                        .is_some_and(|form_guard| form_guard.try_read(actor_ref.clone()).is_ok());
 
                     Ok::<_, Error>(is_form_visible.then_some(answer))
                 }
@@ -147,15 +176,26 @@ impl<
                 let all_sets = &all_sets;
 
                 async move {
-                    let Some((comment, form_id)) = all_sets.iter().find_map(|set_guard| {
-                        let answer_entry_set = set_guard.try_read(actor_ref).ok()?;
-                        let answer = answer_entry_set
-                            .read_entry(comment.answer_id, actor_ref)
-                            .ok()?;
-                        let comment = answer.find_comment(comment.comment_id)?.clone();
+                    let Some((answer, comment_id, form_id)) =
+                        all_sets.iter().find_map(|set_guard| {
+                            let answer_entry_set =
+                                set_guard.clone().try_read(actor_ref.clone()).ok()?;
+                            let answer = answer_entry_set.read_entry(comment.answer_id).ok()?;
 
-                        Some((comment, *answer_entry_set.form_id()))
-                    }) else {
+                            Some((answer, comment.comment_id, *answer_entry_set.form_id()))
+                        })
+                    else {
+                        return Ok::<_, Error>(None);
+                    };
+
+                    let Some(comment) = self
+                        .comment_repository
+                        .find_by_answer(&answer)
+                        .await?
+                        .into_iter()
+                        .find(|loaded| *loaded.value().comment_id() == comment_id)
+                        .map(|comment| comment.into_inner())
+                    else {
                         return Ok::<_, Error>(None);
                     };
 
@@ -163,7 +203,7 @@ impl<
                         .active_form_repository
                         .get(form_id)
                         .await?
-                        .is_some_and(|form_guard| form_guard.try_read(actor_ref).is_ok());
+                        .is_some_and(|form_guard| form_guard.try_read(actor_ref.clone()).is_ok());
 
                     Ok::<_, Error>(is_form_visible.then_some(comment))
                 }
@@ -246,7 +286,7 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let form = guard.try_into_read(&system)?;
+                                let form = guard.try_read(system.clone())?.into_inner();
 
                                 Ok((
                                     domain::search::models::SearchableFields::FormMetaData(
@@ -266,7 +306,12 @@ impl<
                             .list_all()
                             .await?
                             .into_iter()
-                            .map(|guard| guard.try_into_read(&system).map_err(Error::from))
+                            .map(|guard| {
+                                guard
+                                    .try_read(system.clone())
+                                    .map(|set| set.into_inner())
+                                    .map_err(Error::from)
+                            })
                             .collect::<Result<Vec<_>, errors::Error>>()?
                             .into_iter()
                             .flat_map(|set| {
@@ -296,26 +341,47 @@ impl<
                             })
                             .collect::<Vec<_>>();
 
-                        let comments = self
-                            .comment_repository
-                            .get_all()
-                            .await?
-                            .into_iter()
-                            .map(|guard| {
-                                let comment = guard.try_into_read(&system)?;
-
-                                Ok((
-                                    domain::search::models::SearchableFields::FormAnswerComments(
-                                        domain::search::models::FormAnswerComments {
-                                            id: comment.comment_id().to_owned(),
-                                            answer_id: comment.answer_id().to_owned(),
-                                            content: comment.content().to_owned().into_inner().into_inner(),
-                                        },
-                                    ),
-                                    Operation::Update,
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, errors::Error>>()?;
+                        let comments = stream::iter(
+                            self.answer_entry_set_repository
+                                .list_all()
+                                .await?
+                                .into_iter()
+                                .filter_map(|guard| guard.try_read(system.clone()).ok())
+                                .flat_map(|set| set.readable_entries())
+                                .collect::<Vec<_>>(),
+                        )
+                        .then(|answer| async move {
+                            self.comment_repository
+                                .find_by_answer(&answer)
+                                .await
+                                .map(|comments| {
+                                    comments
+                                        .into_iter()
+                                        .map(|comment| comment.into_inner())
+                                        .map(|comment| {
+                                            (
+                                                domain::search::models::SearchableFields::FormAnswerComments(
+                                                    domain::search::models::FormAnswerComments {
+                                                        id: comment.comment_id().to_owned(),
+                                                        answer_id: comment.answer_id().to_owned(),
+                                                        content: comment
+                                                            .content()
+                                                            .to_owned()
+                                                            .into_inner()
+                                                            .into_inner(),
+                                                    },
+                                                ),
+                                                Operation::Update,
+                                            )
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                        })
+                        .try_collect::<Vec<_>>()
+                        .await?
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>();
 
                         let labels_for_forms = self
                             .form_label_repository
@@ -323,7 +389,7 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let label = guard.try_into_read(&system)?;
+                                let label = guard.try_read(system.clone())?.into_inner();
 
                                 Ok((
                                     domain::search::models::SearchableFields::LabelForForms(
@@ -343,7 +409,7 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let label = guard.try_into_read(&system)?;
+                                let label = guard.try_read(system.clone())?.into_inner();
 
                                 Ok((
                                     domain::search::models::SearchableFields::LabelForFormAnswers(
@@ -363,7 +429,7 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                let user = guard.try_into_read(&system)?;
+                                let user = guard.try_read(system.clone())?.into_inner();
 
                                 Ok((
                                     domain::search::models::SearchableFields::Users(
