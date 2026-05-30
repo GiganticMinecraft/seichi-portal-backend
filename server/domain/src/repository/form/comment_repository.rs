@@ -39,6 +39,6 @@ pub trait CommentRepository: Send + Sync + 'static {
         comment: AuthorizationGuard<Comment, Delete>,
         actor: &Actor,
     ) -> Result<(), Error>;
-    async fn get_all(&self) -> Result<Vec<Comment>, Error>;
+    async fn get_all(&self) -> Result<Vec<AuthorizationGuard<Comment, Read>>, Error>;
     async fn size(&self) -> Result<u32, Error>;
 }

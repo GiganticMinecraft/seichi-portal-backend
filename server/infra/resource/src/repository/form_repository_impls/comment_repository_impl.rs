@@ -82,13 +82,15 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_all(&self) -> Result<Vec<Comment>, Error> {
+    async fn get_all(&self) -> Result<Vec<AuthorizationGuard<Comment, Read>>, Error> {
         self.client
             .form_comment()
             .get_all_comments()
             .await?
             .into_iter()
-            .map(TryInto::<Comment>::try_into)
+            .map(|record| {
+                TryInto::<Comment>::try_into(record).map(AuthorizationGuard::<Comment, Read>::from)
+            })
             .collect()
     }
 

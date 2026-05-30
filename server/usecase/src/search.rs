@@ -301,8 +301,10 @@ impl<
                             .get_all()
                             .await?
                             .into_iter()
-                            .map(|comment| {
-                                (
+                            .map(|guard| {
+                                let comment = guard.try_into_read(&system)?;
+
+                                Ok((
                                     domain::search::models::SearchableFields::FormAnswerComments(
                                         domain::search::models::FormAnswerComments {
                                             id: comment.comment_id().to_owned(),
@@ -311,9 +313,9 @@ impl<
                                         },
                                     ),
                                     Operation::Update,
-                                )
+                                ))
                             })
-                            .collect::<Vec<_>>();
+                            .collect::<Result<Vec<_>, errors::Error>>()?;
 
                         let labels_for_forms = self
                             .form_label_repository
