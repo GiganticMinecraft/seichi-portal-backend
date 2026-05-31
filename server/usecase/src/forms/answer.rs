@@ -14,7 +14,7 @@ use domain::{
         answer_label_repository::AnswerLabelRepository,
     },
     repository::user_repository::UserRepository,
-    types::authorization_guard::{Allowed, AuthorizationGuard, Read},
+    types::authorization_guard::{Allowed, Read},
     user::models::{ActiveUser, Actor, TemporaryUser, User},
 };
 use errors::{
@@ -317,25 +317,26 @@ impl<
 
         let form_answer = match title {
             Some(title) => {
-                let updated_set = answer_entry_set
-                    .value()
-                    .clone()
-                    .change_entry_title(answer_id, &actor_ref, title)?;
-                let updated_set_allowed =
-                    AuthorizationGuard::<_, Read>::from(updated_set).try_read(actor_ref.clone())?;
-                let form_answer =
-                    updated_set_allowed
-                        .read_entry(answer_id)
-                        .map_err(|error| match error {
-                            DomainError::NotFound => Error::from(AnswerNotFound),
-                            error => Error::from(error),
-                        })?;
+                let answer_entry_set = self
+                    .answer_entry_set_repository
+                    .get(form_id)
+                    .await?
+                    .ok_or(FormNotFound)?
+                    .into_update()
+                    .try_update(actor_ref.clone())?;
+                let form_answer = answer_entry_set.change_entry_title(answer_id, title)?;
 
                 self.answer_entry_set_repository
                     .update_entry(&answer_entry_set, &form_answer)
                     .await?;
 
-                form_answer
+                self.read_answer_entry_set(form_id, &actor_ref)
+                    .await?
+                    .read_entry(answer_id)
+                    .map_err(|error| match error {
+                        DomainError::NotFound => Error::from(AnswerNotFound),
+                        error => Error::from(error),
+                    })?
             }
             None => answer_entry_set
                 .read_entry(answer_id)

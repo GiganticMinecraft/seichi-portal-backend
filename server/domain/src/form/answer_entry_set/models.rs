@@ -17,7 +17,8 @@ use crate::{
         models::FormId,
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizesRead, Create, Read,
+        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizesRead,
+        AuthorizesUpdate, Create, Read, Update,
     },
     user::models::{Actor, Role::Administrator, User},
 };
@@ -167,28 +168,6 @@ impl AnswerEntrySet {
         self.entries.iter().find(|e| *e.id() == answer_id)
     }
 
-    pub fn change_entry_title(
-        self,
-        answer_id: AnswerId,
-        actor: &Actor,
-        title: AnswerTitle,
-    ) -> Result<Self, DomainError> {
-        let entry = self.find_entry(answer_id).ok_or(DomainError::NotFound)?;
-        self.check(actor, entry)?;
-        let entries = self
-            .entries
-            .into_iter()
-            .map(|entry| {
-                if *entry.id() == answer_id {
-                    entry.with_title(title.clone())
-                } else {
-                    entry
-                }
-            })
-            .collect();
-        Ok(Self { entries, ..self })
-    }
-
     pub fn try_accept_answer(
         &self,
         author: AnswerAuthor,
@@ -319,6 +298,23 @@ impl Allowed<AnswerEntry, Read> {
     }
 }
 
+impl Allowed<AnswerEntrySet, Update> {
+    pub fn change_entry_title(
+        &self,
+        answer_id: AnswerId,
+        title: AnswerTitle,
+    ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
+        let entry = self
+            .value()
+            .find_entry(answer_id)
+            .ok_or(DomainError::NotFound)?
+            .clone()
+            .with_title(title);
+
+        self.authorize_update(entry)
+    }
+}
+
 fn is_administrator(actor: &Actor) -> bool {
     matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Administrator)
 }
@@ -350,6 +346,25 @@ impl AuthorizesRead<AnswerEntry> for AnswerEntrySet {
         }
 
         if self.can_read_entry(entry, actor) {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl AuthorizesUpdate<AnswerEntry> for AnswerEntrySet {
+    fn check(&self, actor: &Actor, child: &AnswerEntry) -> Result<(), DomainError> {
+        if !self.can_update(actor) {
+            return Err(DomainError::Forbidden);
+        }
+
+        let entry = self.find_entry(*child.id()).ok_or(DomainError::NotFound)?;
+
+        if entry.author() == child.author()
+            && entry.timestamp() == child.timestamp()
+            && entry.contents() == child.contents()
+        {
             Ok(())
         } else {
             Err(DomainError::Forbidden)
@@ -552,6 +567,37 @@ mod tests {
             .try_read(Actor::from(other))
             .unwrap();
         assert!(set.read_entry(answer_id).is_ok());
+    }
+
+    #[test]
+    fn public_entry_cannot_be_updated_by_readable_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PUBLIC, vec![entry]);
+
+        let update_guard =
+            AuthorizationGuard::<_, Update>::from(set).try_update(Actor::from(other));
+
+        assert!(matches!(update_guard, Err(DomainError::Forbidden)));
+    }
+
+    #[test]
+    fn entry_title_can_be_updated_from_update_authorized_set() {
+        let author = active_user(Role::StandardUser);
+        let administrator = active_user(Role::Administrator);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
+        let new_title = AnswerTitle::new(Some("updated".to_string().try_into().unwrap()));
+
+        let updated_entry = AuthorizationGuard::<_, Update>::from(set)
+            .try_update(Actor::from(administrator))
+            .unwrap()
+            .change_entry_title(answer_id, new_title.clone())
+            .unwrap();
+
+        assert_eq!(updated_entry.title(), &new_title);
     }
 
     #[test]

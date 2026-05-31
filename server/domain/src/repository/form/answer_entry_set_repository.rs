@@ -25,8 +25,8 @@ pub trait AnswerEntrySetRepository: Send + Sync + 'static {
     ) -> Result<(), Error>;
     async fn update_entry(
         &self,
-        answer_entry_set: &Allowed<AnswerEntrySet, Read>,
-        answer_entry: &Allowed<AnswerEntry, Read>,
+        answer_entry_set: &Allowed<AnswerEntrySet, Update>,
+        answer_entry: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error>;
     async fn size_entries(&self) -> Result<u32, Error>;
 }

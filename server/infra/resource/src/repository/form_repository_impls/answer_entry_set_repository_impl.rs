@@ -78,11 +78,9 @@ where
     #[tracing::instrument(skip(self, answer_entry_set))]
     async fn update_entry(
         &self,
-        answer_entry_set: &Allowed<AnswerEntrySet, Read>,
-        answer_entry: &Allowed<AnswerEntry, Read>,
+        answer_entry_set: &Allowed<AnswerEntrySet, Update>,
+        answer_entry: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error> {
-        answer_entry_set.read_entry(*answer_entry.id())?;
-
         self.client
             .form_answer()
             .update_answer_entry(answer_entry.value(), *answer_entry_set.value().form_id())

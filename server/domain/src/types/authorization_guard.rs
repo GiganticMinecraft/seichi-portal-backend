@@ -117,6 +117,18 @@ where
             _phantom_data: PhantomData,
         }
     }
+
+    /// 更新認可済みの親要素から、子要素の更新認可済み値を作ります。
+    ///
+    /// 親要素が実装する [`AuthorizesUpdate`] で親子関係や変更可能な差分を確認し、
+    /// 成功した場合だけ同じ [`Actor`] の [`Allowed<C, Update>`] を返します。
+    pub fn authorize_update<C>(&self, child: C) -> Result<Allowed<C, Update>, DomainError>
+    where
+        T: AuthorizesUpdate<C>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
+    }
 }
 
 impl<T> Allowed<T, Read> {
@@ -137,6 +149,13 @@ impl<T> Allowed<T, Read> {
 ///
 /// 例えば回答が読める利用者に、その回答に紐づくコメントの読み取りも許可する場合に使います。
 pub trait AuthorizesRead<Child> {
+    fn check(&self, actor: &Actor, child: &Child) -> Result<(), DomainError>;
+}
+
+/// 更新認可済みの親要素が、子要素の更新も認可できることを表すトレイトです。
+///
+/// 例えば回答集合を更新できる利用者に、その集合に含まれる回答タイトルの更新も許可する場合に使います。
+pub trait AuthorizesUpdate<Child> {
     fn check(&self, actor: &Actor, child: &Child) -> Result<(), DomainError>;
 }
 
