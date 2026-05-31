@@ -173,27 +173,7 @@ impl AnswerEntrySet {
         !self.entries.is_empty()
     }
 
-    pub fn readable_entries(&self, actor: &Actor) -> Vec<&AnswerEntry> {
-        match actor {
-            Actor::User(User::ActiveUser(user)) if user.role() == &Administrator => {
-                self.entries.iter().collect()
-            }
-            Actor::User(User::ActiveUser(user)) => {
-                if self.visibility == AnswerVisibility::PUBLIC {
-                    self.entries.iter().collect()
-                } else {
-                    self.entries
-                        .iter()
-                        .filter(|e| e.author().authenticated_user_id() == Some(*user.id()))
-                        .collect()
-                }
-            }
-            Actor::System => self.entries.iter().collect(),
-            _ => Vec::new(),
-        }
-    }
-
-    pub(crate) fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
+    fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
         self.entries.iter().find(|e| *e.id() == answer_id)
     }
 
@@ -217,13 +197,6 @@ impl AnswerEntrySet {
             })
             .collect();
         Ok(Self { entries, ..self })
-    }
-
-    pub fn entries_as_system(&self, actor: &Actor) -> Result<&[AnswerEntry], DomainError> {
-        match actor {
-            Actor::System => Ok(&self.entries),
-            _ => Err(DomainError::Forbidden),
-        }
     }
 
     pub fn try_accept_answer(
@@ -293,9 +266,9 @@ impl AnswerEntrySet {
 impl Allowed<AnswerEntrySet, Read> {
     pub fn readable_entries(&self) -> Vec<Allowed<AnswerEntry, Read>> {
         self.value()
-            .readable_entries(self.actor())
-            .into_iter()
-            .filter_map(|entry| self.authorize_read(entry.clone()).ok())
+            .entries
+            .iter()
+            .filter_map(|entry| self.authorize_read(entry.to_owned()).ok())
             .collect()
     }
 
@@ -380,11 +353,13 @@ impl AuthorizationGuardDefinitions for AnswerEntrySet {
 
 impl AuthorizesRead<AnswerEntry> for AnswerEntrySet {
     fn check(&self, actor: &Actor, child: &AnswerEntry) -> Result<(), DomainError> {
-        if self.find_entry(*child.id()).is_none() {
-            return Err(DomainError::NotFound);
+        let entry = self.find_entry(*child.id()).ok_or(DomainError::NotFound)?;
+
+        if entry != child {
+            return Err(DomainError::Forbidden);
         }
 
-        if self.can_read_entry(child, actor) {
+        if self.can_read_entry(entry, actor) {
             Ok(())
         } else {
             Err(DomainError::Forbidden)

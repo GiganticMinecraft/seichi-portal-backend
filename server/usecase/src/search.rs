@@ -148,10 +148,7 @@ impl<
                     let Some((answer, form_id)) = all_sets.iter().find_map(|set_guard| {
                         let answer_entry_set =
                             set_guard.clone().try_read(actor_ref.clone()).ok()?;
-                        let answer = answer_entry_set
-                            .read_entry(entry.answer_id)
-                            .ok()?
-                            .into_inner();
+                        let answer = answer_entry_set.read_entry(entry.answer_id).ok()?;
 
                         Some((answer, *answer_entry_set.form_id()))
                     }) else {
@@ -164,7 +161,7 @@ impl<
                         .await?
                         .is_some_and(|form_guard| form_guard.try_read(actor_ref.clone()).is_ok());
 
-                    Ok::<_, Error>(is_form_visible.then_some(answer))
+                    Ok::<_, Error>(is_form_visible.then_some(answer.into_inner()))
                 }
             })
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
@@ -301,41 +298,35 @@ impl<
                             })
                             .collect::<Result<Vec<_>, errors::Error>>()?;
 
-                        let answers = self
+                        let answer_entry_sets = self
                             .answer_entry_set_repository
                             .list_all()
                             .await?
                             .into_iter()
                             .map(|guard| {
-                                guard
-                                    .try_read(system.clone())
-                                    .map(|set| set.into_inner())
-                                    .map_err(Error::from)
+                                guard.try_read(system.clone()).map_err(Error::from)
                             })
-                            .collect::<Result<Vec<_>, errors::Error>>()?
-                            .into_iter()
-                            .flat_map(|set| {
-                                set.entries_as_system(&system)
-                                    .into_iter()
-                                    .flat_map(|entries| entries.iter())
-                                    .flat_map(|entry| {
-                                        entry
-                                            .contents()
-                                            .iter()
-                                            .map(|content| {
-                                                (
-                                                    domain::search::models::SearchableFields::RealAnswers(
-                                                        domain::search::models::RealAnswers {
-                                                            id: content.id,
-                                                            answer_id: entry.id().to_owned(),
-                                                            question_id: content.question_id,
-                                                            answer: content.answer.to_owned(),
-                                                        },
-                                                    ),
-                                                    Operation::Update,
-                                                )
-                                            })
-                                            .collect::<Vec<_>>()
+                            .collect::<Result<Vec<_>, errors::Error>>()?;
+
+                        let answers = answer_entry_sets
+                            .iter()
+                            .flat_map(|set| set.readable_entries())
+                            .flat_map(|entry| {
+                                entry
+                                    .contents()
+                                    .iter()
+                                    .map(|content| {
+                                        (
+                                            domain::search::models::SearchableFields::RealAnswers(
+                                                domain::search::models::RealAnswers {
+                                                    id: content.id,
+                                                    answer_id: entry.id().to_owned(),
+                                                    question_id: content.question_id,
+                                                    answer: content.answer.to_owned(),
+                                                },
+                                            ),
+                                            Operation::Update,
+                                        )
                                     })
                                     .collect::<Vec<_>>()
                             })

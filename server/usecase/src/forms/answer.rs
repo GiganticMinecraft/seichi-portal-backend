@@ -81,7 +81,7 @@ impl<
         &self,
         actor: &ActiveUser,
         form_id: FormId,
-        form_answer: AnswerEntry,
+        form_answer: Allowed<AnswerEntry, Read>,
         labels: Vec<AnswerLabel>,
     ) -> Result<AnswerDetails, Error> {
         let user_ids = form_answer
@@ -106,7 +106,7 @@ impl<
 
         Ok(AnswerDetails {
             form_id,
-            form_answer,
+            form_answer: form_answer.into_inner(),
             author,
             labels,
         })
@@ -201,8 +201,7 @@ impl<
             .map_err(|error| match error {
                 DomainError::NotFound => Error::from(AnswerNotFound),
                 error => Error::from(error),
-            })?
-            .into_inner();
+            })?;
 
         let labels = self
             .answer_label_repository
@@ -228,11 +227,7 @@ impl<
         let actor_ref = Actor::from(actor.clone());
         let answer_entry_set = self.read_answer_entry_set(form_id, &actor_ref).await?;
 
-        let visible_answers: Vec<AnswerEntry> = answer_entry_set
-            .readable_entries()
-            .into_iter()
-            .map(|entry| entry.into_inner())
-            .collect();
+        let visible_answers = answer_entry_set.readable_entries();
 
         stream::iter(visible_answers)
             .then(|form_answer| async {
@@ -260,7 +255,7 @@ impl<
 
     pub async fn get_all_answers(&self, user: &ActiveUser) -> Result<Vec<AnswerDetails>, Error> {
         let actor_ref = Actor::from(user.clone());
-        let visible_answers: Vec<(FormId, AnswerEntry)> = self
+        let visible_answers: Vec<(FormId, Allowed<AnswerEntry, Read>)> = self
             .answer_entry_set_repository
             .list_all()
             .await?
@@ -272,7 +267,7 @@ impl<
                         let form_id = *set.value().form_id();
                         set.readable_entries()
                             .into_iter()
-                            .map(move |entry| (form_id, entry.into_inner()))
+                            .map(move |entry| (form_id, entry))
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default()
@@ -329,13 +324,13 @@ impl<
                     .change_entry_title(answer_id, &actor_ref, title)?;
                 let updated_set_allowed =
                     AuthorizationGuard::<_, Read>::from(updated_set).try_read(actor_ref.clone())?;
-                let form_answer = updated_set_allowed
-                    .read_entry(answer_id)
-                    .map_err(|error| match error {
-                        DomainError::NotFound => Error::from(AnswerNotFound),
-                        error => Error::from(error),
-                    })?
-                    .into_inner();
+                let form_answer =
+                    updated_set_allowed
+                        .read_entry(answer_id)
+                        .map_err(|error| match error {
+                            DomainError::NotFound => Error::from(AnswerNotFound),
+                            error => Error::from(error),
+                        })?;
 
                 self.answer_entry_set_repository
                     .update_entry(&answer_entry_set, &form_answer)
@@ -348,8 +343,7 @@ impl<
                 .map_err(|error| match error {
                     DomainError::NotFound => Error::from(AnswerNotFound),
                     error => Error::from(error),
-                })?
-                .into_inner(),
+                })?,
         };
 
         let labels = self

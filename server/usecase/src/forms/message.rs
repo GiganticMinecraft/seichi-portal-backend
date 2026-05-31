@@ -61,7 +61,7 @@ impl<
         actor: &Actor,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<(Allowed<AnswerEntrySet, Read>, AnswerEntry), Error> {
+    ) -> Result<(Allowed<AnswerEntrySet, Read>, Allowed<AnswerEntry, Read>), Error> {
         let form_guard = self
             .active_form_repository
             .get(form_id)
@@ -78,7 +78,6 @@ impl<
 
         let entry = answer_entry_set
             .read_entry(answer_id)
-            .map(|entry| entry.into_inner())
             .map_err(|error| match error {
                 DomainError::NotFound => Error::from(AnswerNotFound),
                 error => Error::from(error),
