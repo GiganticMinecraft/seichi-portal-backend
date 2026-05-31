@@ -29,9 +29,15 @@ mod private {
     impl Sealed for super::Delete {}
 }
 
-/// [`Actor`] による `guard_target` に対するアクセスを制御するための型です。
+/// 認可チェック前の値を、実行したい操作と一緒に保持する型です。
 ///
-/// Action 型パラメータにより、現在許可されている操作の種類を型レベルで表現します。
+/// リポジトリなどから取得した値や、これから保存したい値をまずこの型で包み、
+/// `try_create` / `try_read` / `try_update` / `try_delete` のいずれかで [`Actor`] に対する
+/// 認可条件を確認します。認可に成功した場合だけ [`Allowed`] が返るため、
+/// 永続化や子要素の取得など、認可済みの値だけを受け付けたい API では
+/// [`Allowed<T, A>`] を引数にすることでチェック漏れを型で防ぎます。
+///
+/// Action 型パラメータは、これから確認する操作の種類を型レベルで表します。
 // NOTE: Action の変換は以下のようにのみ行うことができます
 //    - Create -> Read
 //    - Create -> Update
@@ -51,7 +57,11 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions, A: Actions> {
     _phantom_data: PhantomData<A>,
 }
 
-/// 認可済みであることを型に残す証憑です。
+/// 指定した操作について認可済みであることを型で表す値です。
+///
+/// この型は [`AuthorizationGuard`] の `try_*` メソッドや、認可済みの親要素から
+/// 子要素を認可するメソッドだけが作成します。`value` と一緒に認可に使った
+/// [`Actor`] を保持するため、親子関係を使った追加の認可判定でも同じ利用者を引き継げます。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Allowed<T, A: Actions> {
     value: T,
@@ -68,14 +78,17 @@ impl<T, A: Actions> Allowed<T, A> {
         }
     }
 
+    /// 認可済みの値を参照します。
     pub fn value(&self) -> &T {
         &self.value
     }
 
+    /// 認可済みの値を取り出します。
     pub fn into_inner(self) -> T {
         self.value
     }
 
+    /// 認可に使った [`Actor`] を参照します。
     pub fn actor(&self) -> &Actor {
         &self.actor
     }
@@ -93,6 +106,7 @@ impl<T> Allowed<T, Update>
 where
     T: AuthorizationGuardDefinitions,
 {
+    /// 認可済みの値を更新し、同じ操作権限と [`Actor`] を引き継ぎます。
     pub fn map<F>(self, f: F) -> Self
     where
         F: FnOnce(T) -> T,
@@ -106,6 +120,10 @@ where
 }
 
 impl<T> Allowed<T, Read> {
+    /// 読み取り認可済みの親要素から、子要素の読み取り認可済み値を作ります。
+    ///
+    /// 親要素が実装する [`AuthorizesRead`] で親子関係や所有者などを確認し、
+    /// 成功した場合だけ同じ [`Actor`] の [`Allowed<C, Read>`] を返します。
     pub fn authorize_read<C>(&self, child: C) -> Result<Allowed<C, Read>, DomainError>
     where
         T: AuthorizesRead<C>,
@@ -115,6 +133,9 @@ impl<T> Allowed<T, Read> {
     }
 }
 
+/// 読み取り認可済みの親要素が、子要素の読み取りも認可できることを表すトレイトです。
+///
+/// 例えば回答が読める利用者に、その回答に紐づくコメントの読み取りも許可する場合に使います。
 pub trait AuthorizesRead<Child> {
     fn check(&self, actor: &Actor, child: &Child) -> Result<(), DomainError>;
 }
@@ -127,7 +148,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Create> {
         }
     }
 
-    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成証憑を鋳造します。
+    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作を認可します。
     pub fn try_create(self, actor: Actor) -> Result<Allowed<T, Create>, DomainError> {
         if self.guard_target.can_create(&actor) {
             Ok(Allowed::mint(self.guard_target, actor))
@@ -153,7 +174,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Create> {
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
-    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新証憑を鋳造します。
+    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作を認可します。
     pub fn try_update(self, actor: Actor) -> Result<Allowed<T, Update>, DomainError> {
         if self.guard_target.can_update(&actor) {
             Ok(Allowed::mint(self.guard_target, actor))
@@ -191,7 +212,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
-    /// [`AuthorizationGuardDefinitions::can_read`] の条件で読み取り証憑を鋳造します。
+    /// [`AuthorizationGuardDefinitions::can_read`] の条件で読み取り操作を認可します。
     pub fn try_read(self, actor: Actor) -> Result<Allowed<T, Read>, DomainError> {
         if self.guard_target.can_read(&actor) {
             Ok(Allowed::mint(self.guard_target, actor))
@@ -218,7 +239,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {
-    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除証憑を鋳造します。
+    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作を認可します。
     pub fn try_delete(self, actor: Actor) -> Result<Allowed<T, Delete>, DomainError> {
         if self.guard_target.can_delete(&actor) {
             Ok(Allowed::mint(self.guard_target, actor))

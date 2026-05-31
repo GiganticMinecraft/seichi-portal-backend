@@ -10,8 +10,8 @@ use crate::{
 /// [`Comment`] を集約ルートとして永続化するためのリポジトリ。
 ///
 /// [`Comment`] の生成は [`AnswerEntrySet::create_comment`](crate::form::answer_entry_set::models::AnswerEntrySet::create_comment)
-/// 経由でのみ行えるため、`create` には常に文脈ゲートを通過済みの
-/// [`AuthorizationGuard<Comment, Create>`] が渡される。
+/// 経由でのみ行えるため、`create` には作成操作の認可を通過した
+/// [`Allowed<Comment, Create>`] が渡される。
 #[automock]
 #[async_trait]
 pub trait CommentRepository: Send + Sync + 'static {
@@ -19,8 +19,8 @@ pub trait CommentRepository: Send + Sync + 'static {
     /// 閲覧可能であることが確認済みの [`AnswerEntry`] に紐づくコメントを取得する。
     ///
     /// コメントを読むには紐づく [`AnswerEntry`] が閲覧可能である必要があるため、
-    /// 引数の [`Allowed<AnswerEntry, Read>`] 証憑から各コメントの
-    /// [`Allowed<Comment, Read>`] 証憑を導出して返す。
+    /// 引数の [`Allowed<AnswerEntry, Read>`] から各コメントの
+    /// [`Allowed<Comment, Read>`] を導出して返す。
     async fn find_by_answer(
         &self,
         answer: &Allowed<AnswerEntry, Read>,
