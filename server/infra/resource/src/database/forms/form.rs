@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use domain::form::{
     answer::models::AnswerEntry,
     answer_entry_set::models::{
-        AnswerEntrySet, AnswerEntrySetId, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+        AnswerEntrySet, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
     },
     models::{FormLabelId, WebhookUrl},
     question::models::{Choice, Question, QuestionId, QuestionType},
@@ -44,7 +44,6 @@ struct FormRow {
     updated_at: DateTime<Utc>,
     webhook_url: Option<String>,
     visibility: String,
-    answer_entry_set_id: String,
 }
 
 struct ArchivedFormRow {
@@ -153,7 +152,6 @@ async fn active_form_record_from_row(
         questions: get_questions_txn_with_tables(txn, form_id, "form_questions", "form_choices")
             .await?,
         label_ids,
-        answer_entry_set_id: row.answer_entry_set_id,
     })
 }
 
@@ -190,7 +188,6 @@ async fn archived_form_record_from_row(
             )
             .await?,
             label_ids,
-            answer_entry_set_id: row.form.answer_entry_set_id,
         },
         archived_at: row.archived_at,
         archived_by_name: row.archived_by_name,
@@ -208,7 +205,6 @@ fn form_row_from_db_row(row: MySqlRow) -> Result<FormRow, InfraError> {
         updated_at: row.try_get("updated_at")?,
         webhook_url: row.try_get("webhook_url")?,
         visibility: row.try_get("visibility")?,
-        answer_entry_set_id: row.try_get("answer_entry_set_id")?,
     })
 }
 
@@ -222,7 +218,6 @@ fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, Infra
             updated_at: row.try_get("updated_at")?,
             webhook_url: row.try_get("webhook_url")?,
             visibility: row.try_get("visibility")?,
-            answer_entry_set_id: row.try_get("answer_entry_set_id")?,
         },
         archived_at: row.try_get("archived_at")?,
         archived_by_name: row.try_get("archived_by_name")?,
@@ -233,22 +228,11 @@ fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, Infra
 
 async fn fetch_answer_entries_for_entry_set(
     txn: &mut DatabaseTransaction,
-    answer_entry_set_id: AnswerEntrySetId,
+    form_id: FormId,
 ) -> Result<Vec<AnswerEntry>, InfraError> {
-    let answer_entry_set_id = answer_entry_set_id.into_inner().to_string();
-    let form_ids = sqlx::query("SELECT id FROM form_meta_data WHERE answer_entry_set_id = ?")
-        .bind(answer_entry_set_id)
-        .fetch_all(&mut **txn)
-        .await?
-        .into_iter()
-        .map(|row| row.try_get::<String, _>("id"))
-        .collect::<Result<Vec<_>, _>>()?;
+    let form_id = form_id.into_inner().to_string();
 
-    if form_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let sql = format!(
+    let answers = sqlx::query(
         r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
             users.name AS user_name, users.role AS user_role,
             temporary_user_id, temporary_users.name AS temporary_user_name,
@@ -256,16 +240,12 @@ async fn fetch_answer_entries_for_entry_set(
             timestamp FROM answers
             LEFT JOIN users ON answers.user = users.id
             LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-            WHERE form_id IN ({})
+            WHERE form_id = ?
             ORDER BY answers.timestamp",
-        std::iter::repeat_n("?", form_ids.len()).join(", ")
-    );
-
-    let answers = form_ids
-        .iter()
-        .fold(sqlx::query(&sql), |query, form_id| query.bind(form_id))
-        .fetch_all(&mut **txn)
-        .await?;
+    )
+    .bind(form_id)
+    .fetch_all(&mut **txn)
+    .await?;
 
     let form_answer_records = answers
         .into_iter()
@@ -308,9 +288,6 @@ async fn answer_entry_set_from_row(
         cause: e.to_string(),
     };
 
-    let id = AnswerEntrySetId::from(
-        Uuid::parse_str(&row.try_get::<String, _>("id")?).map_err(Into::<InfraError>::into)?,
-    );
     let form_id = FormId::from(
         Uuid::parse_str(&row.try_get::<String, _>("form_id")?).map_err(Into::<InfraError>::into)?,
     );
@@ -332,10 +309,9 @@ async fn answer_entry_set_from_row(
         row.try_get("response_period_end_at")?,
     )
     .map_err(map_domain_err)?;
-    let entries = fetch_answer_entries_for_entry_set(txn, id).await?;
+    let entries = fetch_answer_entries_for_entry_set(txn, form_id).await?;
 
     Ok(AnswerEntrySet::from_raw_parts(
-        id,
         form_id,
         default_answer_title,
         visibility,
@@ -351,7 +327,7 @@ async fn fetch_form_row(
 ) -> Result<Option<FormRow>, InfraError> {
     let row = sqlx::query(
         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.created_at, f.updated_at, w.url AS webhook_url, f.answer_entry_set_id
+            f.created_at, f.updated_at, w.url AS webhook_url
         FROM form_meta_data f
         LEFT JOIN form_webhooks w ON f.id = w.form_id
         WHERE f.id = ?",
@@ -369,7 +345,7 @@ async fn fetch_archived_form_row(
 ) -> Result<Option<ArchivedFormRow>, InfraError> {
     let row = sqlx::query(
         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.created_at, f.updated_at, w.url AS webhook_url, f.answer_entry_set_id,
+            f.created_at, f.updated_at, w.url AS webhook_url,
             f.archived_at, u.name AS archived_by_name,
             u.id AS archived_by_id, u.role AS archived_by_role
         FROM archived_form_meta_data f
@@ -393,16 +369,14 @@ async fn insert_form_root(
     let title = form.title().to_string();
     let description = form.description().to_owned().into_inner();
     let user_id = created_by.id().to_string();
-    let answer_entry_set_id = form.answer_entry_set_id().into_inner().to_string();
 
     sqlx::query(
-        r#"INSERT INTO form_meta_data (id, title, description, answer_entry_set_id, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?)"#,
+        r#"INSERT INTO form_meta_data (id, title, description, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?)"#,
     )
     .bind(form_id.clone())
     .bind(title)
     .bind(description)
-    .bind(answer_entry_set_id)
     .bind(user_id.clone())
     .bind(user_id)
     .execute(&mut **txn)
@@ -473,8 +447,8 @@ async fn copy_active_form_to_archive(
 
     sqlx::query(
         r"INSERT INTO archived_form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, answer_entry_set_id, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, answer_entry_set_id, created_at, created_by, updated_at, updated_by, ?, ?
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by, ?, ?
         FROM form_meta_data
         WHERE id = ?",
     )
@@ -486,10 +460,10 @@ async fn copy_active_form_to_archive(
 
     sqlx::query(
         r"INSERT INTO archived_answer_entry_sets
-        (id, answer_visibility, allow_temporary_answers, response_period_start_at, response_period_end_at, default_answer_title)
-        SELECT id, answer_visibility, allow_temporary_answers, response_period_start_at, response_period_end_at, default_answer_title
+        (form_id, answer_visibility, allow_temporary_answers, response_period_start_at, response_period_end_at, default_answer_title)
+        SELECT form_id, answer_visibility, allow_temporary_answers, response_period_start_at, response_period_end_at, default_answer_title
         FROM answer_entry_sets
-        WHERE id = ?
+        WHERE form_id = ?
         ON DUPLICATE KEY UPDATE
             answer_visibility = VALUES(answer_visibility),
             allow_temporary_answers = VALUES(allow_temporary_answers),
@@ -497,7 +471,7 @@ async fn copy_active_form_to_archive(
             response_period_end_at = VALUES(response_period_end_at),
             default_answer_title = VALUES(default_answer_title)",
     )
-    .bind(form.form().answer_entry_set_id().into_inner().to_string())
+    .bind(&form_id)
     .execute(&mut **txn)
     .await?;
 
@@ -621,29 +595,28 @@ async fn restore_archived_form_to_active(
     let form_id = form_id.into_inner().to_string();
 
     sqlx::query(
-        r"INSERT INTO answer_entry_sets
-        (id, answer_visibility, allow_temporary_answers, response_period_start_at, response_period_end_at, default_answer_title)
-        SELECT aes.id, aes.answer_visibility, aes.allow_temporary_answers, aes.response_period_start_at, aes.response_period_end_at, aes.default_answer_title
-        FROM archived_answer_entry_sets aes
-        INNER JOIN archived_form_meta_data f ON f.answer_entry_set_id = aes.id
-        WHERE f.id = ?
-        ON DUPLICATE KEY UPDATE
-            answer_visibility = VALUES(answer_visibility),
-            allow_temporary_answers = VALUES(allow_temporary_answers),
-            response_period_start_at = VALUES(response_period_start_at),
-            response_period_end_at = VALUES(response_period_end_at),
-            default_answer_title = VALUES(default_answer_title)",
+        r"INSERT INTO form_meta_data
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, created_at, created_by, updated_at, updated_by
+        FROM archived_form_meta_data
+        WHERE id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
     .await?;
 
     sqlx::query(
-        r"INSERT INTO form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, answer_entry_set_id, created_at, created_by, updated_at, updated_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, answer_entry_set_id, created_at, created_by, updated_at, updated_by
-        FROM archived_form_meta_data
-        WHERE id = ?",
+        r"INSERT INTO answer_entry_sets
+        (form_id, answer_visibility, allow_temporary_answers, response_period_start_at, response_period_end_at, default_answer_title)
+        SELECT aes.form_id, aes.answer_visibility, aes.allow_temporary_answers, aes.response_period_start_at, aes.response_period_end_at, aes.default_answer_title
+        FROM archived_answer_entry_sets aes
+        WHERE aes.form_id = ?
+        ON DUPLICATE KEY UPDATE
+            answer_visibility = VALUES(answer_visibility),
+            allow_temporary_answers = VALUES(allow_temporary_answers),
+            response_period_start_at = VALUES(response_period_start_at),
+            response_period_end_at = VALUES(response_period_end_at),
+            default_answer_title = VALUES(default_answer_title)",
     )
     .bind(&form_id)
     .execute(&mut **txn)
@@ -787,7 +760,7 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 let rows = sqlx::query(
                     r"SELECT f.id, f.title, f.description, f.visibility,
-                    f.created_at, f.updated_at, w.url AS webhook_url, f.answer_entry_set_id
+                    f.created_at, f.updated_at, w.url AS webhook_url
                     FROM form_meta_data f
                     LEFT JOIN form_webhooks w ON f.id = w.form_id
                     ORDER BY f.id
@@ -842,7 +815,7 @@ impl FormDatabase for ConnectionPool {
                     let like = format!("%{query_text}%");
                     sqlx::query(
                         r"SELECT f.id, f.title, f.description, f.visibility,
-                        f.created_at, f.updated_at, w.url AS webhook_url, f.answer_entry_set_id,
+                        f.created_at, f.updated_at, w.url AS webhook_url,
                         f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
@@ -861,7 +834,7 @@ impl FormDatabase for ConnectionPool {
                 } else {
                     sqlx::query(
                         r"SELECT f.id, f.title, f.description, f.visibility,
-                        f.created_at, f.updated_at, w.url AS webhook_url, f.answer_entry_set_id,
+                        f.created_at, f.updated_at, w.url AS webhook_url,
                         f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
@@ -994,7 +967,7 @@ impl FormDatabase for ConnectionPool {
         &self,
         answer_entry_set: &AnswerEntrySet,
     ) -> Result<(), InfraError> {
-        let id = answer_entry_set.id().into_inner().to_string();
+        let form_id = answer_entry_set.form_id().into_inner().to_string();
         let visibility = answer_entry_set.visibility().to_string();
         let allow_temporary_answers = *answer_entry_set.allow_temporary_answers();
         let default_answer_title = answer_entry_set
@@ -1009,10 +982,10 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 sqlx::query(
                     r#"INSERT INTO answer_entry_sets
-                    (id, answer_visibility, allow_temporary_answers, default_answer_title, response_period_start_at, response_period_end_at)
+                    (form_id, answer_visibility, allow_temporary_answers, default_answer_title, response_period_start_at, response_period_end_at)
                     VALUES (?, ?, ?, ?, ?, ?)"#,
                 )
-                .bind(id)
+                .bind(form_id)
                 .bind(visibility)
                 .bind(allow_temporary_answers)
                 .bind(default_answer_title)
@@ -1029,19 +1002,18 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn get_answer_entry_set(
         &self,
-        id: AnswerEntrySetId,
+        form_id: FormId,
     ) -> Result<Option<AnswerEntrySet>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let row = sqlx::query(
-                    r"SELECT aes.id, aes.answer_visibility, aes.allow_temporary_answers,
+                    r"SELECT aes.form_id, aes.answer_visibility, aes.allow_temporary_answers,
                         aes.default_answer_title, aes.response_period_start_at,
-                        aes.response_period_end_at, f.id AS form_id
+                        aes.response_period_end_at
                     FROM answer_entry_sets aes
-                    INNER JOIN form_meta_data f ON f.answer_entry_set_id = aes.id
-                    WHERE aes.id = ?",
+                    WHERE aes.form_id = ?",
                 )
-                .bind(id.into_inner().to_string())
+                .bind(form_id.into_inner().to_string())
                 .fetch_optional(&mut **txn)
                 .await?;
 
@@ -1059,12 +1031,11 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = sqlx::query(
-                    r"SELECT aes.id, aes.answer_visibility, aes.allow_temporary_answers,
+                    r"SELECT aes.form_id, aes.answer_visibility, aes.allow_temporary_answers,
                         aes.default_answer_title, aes.response_period_start_at,
-                        aes.response_period_end_at, f.id AS form_id
+                        aes.response_period_end_at
                     FROM answer_entry_sets aes
-                    INNER JOIN form_meta_data f ON f.answer_entry_set_id = aes.id
-                    ORDER BY aes.id",
+                    ORDER BY aes.form_id",
                 )
                 .fetch_all(&mut **txn)
                 .await?;
@@ -1090,7 +1061,7 @@ impl FormDatabase for ConnectionPool {
         &self,
         answer_entry_set: &AnswerEntrySet,
     ) -> Result<(), InfraError> {
-        let id = answer_entry_set.id().into_inner().to_string();
+        let form_id = answer_entry_set.form_id().into_inner().to_string();
         let visibility = answer_entry_set.visibility().to_string();
         let allow_temporary_answers = *answer_entry_set.allow_temporary_answers();
         let default_answer_title = answer_entry_set
@@ -1110,14 +1081,14 @@ impl FormDatabase for ConnectionPool {
                         default_answer_title = ?,
                         response_period_start_at = ?,
                         response_period_end_at = ?
-                    WHERE id = ?"#,
+                    WHERE form_id = ?"#,
                 )
                 .bind(visibility)
                 .bind(allow_temporary_answers)
                 .bind(default_answer_title)
                 .bind(start_at)
                 .bind(end_at)
-                .bind(id)
+                .bind(form_id)
                 .execute(&mut **txn)
                 .await?;
                 Ok::<_, InfraError>(())

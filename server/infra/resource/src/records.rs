@@ -4,7 +4,6 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::{
         answer::models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
-        answer_entry_set::models::AnswerEntrySetId,
         comment::models::{Comment, CommentContent},
         message::models::Message,
         models::{
@@ -107,7 +106,6 @@ pub struct ActiveFormRecord {
     pub visibility: String,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
-    pub answer_entry_set_id: String,
 }
 
 impl TryFrom<ActiveFormRecord> for ActiveForm {
@@ -124,7 +122,6 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             visibility,
             questions,
             label_ids,
-            answer_entry_set_id,
         }: ActiveFormRecord,
     ) -> Result<Self, Self::Error> {
         let questions = questions
@@ -144,9 +141,6 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             ),
             QuestionSet::try_new(questions)?,
             FormLabelIdSet::try_new(label_ids)?,
-            AnswerEntrySetId::from(
-                Uuid::parse_str(&answer_entry_set_id).map_err(Into::<InfraError>::into)?,
-            ),
         ))
     }
 }

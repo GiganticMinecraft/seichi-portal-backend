@@ -13,7 +13,7 @@ use domain::search::models::{
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
-        answer_entry_set::models::{AnswerEntrySet, AnswerEntrySetId},
+        answer_entry_set::models::AnswerEntrySet,
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
@@ -83,7 +83,7 @@ pub trait FormDatabase: Send + Sync {
     ) -> Result<(), InfraError>;
     async fn get_answer_entry_set(
         &self,
-        id: AnswerEntrySetId,
+        form_id: FormId,
     ) -> Result<Option<AnswerEntrySet>, InfraError>;
     async fn list_answer_entry_sets(&self) -> Result<Vec<AnswerEntrySet>, InfraError>;
     async fn update_answer_entry_set(

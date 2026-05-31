@@ -67,11 +67,11 @@ impl<
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
-        let form = form_guard.try_read(actor.clone())?;
+        form_guard.try_read(actor.clone())?;
 
         let set_guard = self
             .answer_entry_set_repository
-            .get(*form.answer_entry_set_id())
+            .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
         let answer_entry_set = set_guard.try_read(actor.clone())?;

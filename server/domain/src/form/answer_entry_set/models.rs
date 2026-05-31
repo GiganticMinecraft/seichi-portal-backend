@@ -92,11 +92,8 @@ impl ResponsePeriod {
     }
 }
 
-pub type AnswerEntrySetId = types::Id<AnswerEntrySet>;
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnswerEntrySet {
-    id: AnswerEntrySetId,
     form_id: FormId,
     default_answer_title: DefaultAnswerTitle,
     visibility: AnswerVisibility,
@@ -114,7 +111,6 @@ impl AnswerEntrySet {
         allow_temporary_answers: bool,
     ) -> Self {
         Self {
-            id: AnswerEntrySetId::new(),
             form_id,
             default_answer_title,
             visibility,
@@ -126,7 +122,6 @@ impl AnswerEntrySet {
 
     #[allow(clippy::too_many_arguments)]
     pub fn from_raw_parts(
-        id: AnswerEntrySetId,
         form_id: FormId,
         default_answer_title: DefaultAnswerTitle,
         visibility: AnswerVisibility,
@@ -135,7 +130,6 @@ impl AnswerEntrySet {
         entries: Vec<AnswerEntry>,
     ) -> Self {
         Self {
-            id,
             form_id,
             default_answer_title,
             visibility,
@@ -143,10 +137,6 @@ impl AnswerEntrySet {
             allow_temporary_answers,
             entries,
         }
-    }
-
-    pub fn id(&self) -> &AnswerEntrySetId {
-        &self.id
     }
 
     pub fn form_id(&self) -> &FormId {
@@ -417,7 +407,6 @@ mod tests {
         entries: Vec<AnswerEntry>,
     ) -> AnswerEntrySet {
         AnswerEntrySet::from_raw_parts(
-            AnswerEntrySetId::new(),
             FormId::new(),
             DefaultAnswerTitle::new(None),
             visibility,

@@ -1,9 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::{
-        answer::models::AnswerEntry,
-        answer_entry_set::models::{AnswerEntrySet, AnswerEntrySetId},
-    },
+    form::{answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::FormId},
     repository::form::answer_entry_set_repository::AnswerEntrySetRepository,
     types::{
         authorization_guard::{Allowed, AuthorizationGuard},
@@ -37,9 +34,9 @@ where
     #[tracing::instrument(skip(self))]
     async fn get(
         &self,
-        id: AnswerEntrySetId,
+        form_id: FormId,
     ) -> Result<Option<AuthorizationGuard<AnswerEntrySet, Read>>, Error> {
-        let record = self.client.form().get_answer_entry_set(id).await?;
+        let record = self.client.form().get_answer_entry_set(form_id).await?;
 
         Ok(record.map(|set| AuthorizationGuard::<AnswerEntrySet, Create>::from(set).into_read()))
     }

@@ -53,11 +53,11 @@ impl<
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
-        let form = form_guard.try_read(actor.clone())?;
+        form_guard.try_read(actor.clone())?;
 
         let set_guard = self
             .answer_entry_set_repository
-            .get(*form.value().answer_entry_set_id())
+            .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
 

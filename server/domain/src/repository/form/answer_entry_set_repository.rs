@@ -3,10 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::{
-        answer::models::AnswerEntry,
-        answer_entry_set::models::{AnswerEntrySet, AnswerEntrySetId},
-    },
+    form::{answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::FormId},
     types::authorization_guard::{Allowed, AuthorizationGuard},
     types::authorization_guard::{Create, Read, Update},
 };
@@ -17,7 +14,7 @@ pub trait AnswerEntrySetRepository: Send + Sync + 'static {
     async fn create(&self, answer_entry_set: Allowed<AnswerEntrySet, Create>) -> Result<(), Error>;
     async fn get(
         &self,
-        id: AnswerEntrySetId,
+        form_id: FormId,
     ) -> Result<Option<AuthorizationGuard<AnswerEntrySet, Read>>, Error>;
     async fn list_all(&self) -> Result<Vec<AuthorizationGuard<AnswerEntrySet, Read>>, Error>;
     async fn update(&self, answer_entry_set: Allowed<AnswerEntrySet, Update>) -> Result<(), Error>;

@@ -16,7 +16,6 @@ use types::non_empty_string::NonEmptyString;
 pub use crate::form::question::models::{Question, QuestionSet};
 
 use crate::{
-    form::answer_entry_set::models::AnswerEntrySetId,
     types::authorization_guard::AuthorizationGuardDefinitions,
     user::models::{Actor, Role::Administrator, User, UserId},
 };
@@ -228,17 +227,10 @@ pub struct ActiveForm {
     questions: QuestionSet,
     #[serde(default)]
     label_ids: FormLabelIdSet,
-    #[serde(default)]
-    answer_entry_set_id: AnswerEntrySetId,
 }
 
 impl ActiveForm {
-    pub fn new(
-        title: FormTitle,
-        description: FormDescription,
-        questions: QuestionSet,
-        answer_entry_set_id: AnswerEntrySetId,
-    ) -> Self {
+    pub fn new(title: FormTitle, description: FormDescription, questions: QuestionSet) -> Self {
         Self {
             id: FormId::new(),
             title,
@@ -247,7 +239,6 @@ impl ActiveForm {
             settings: FormSettings::new(),
             questions,
             label_ids: FormLabelIdSet::empty(),
-            answer_entry_set_id,
         }
     }
 
@@ -283,7 +274,6 @@ impl ActiveForm {
         settings: FormSettings,
         questions: QuestionSet,
         label_ids: FormLabelIdSet,
-        answer_entry_set_id: AnswerEntrySetId,
     ) -> Self {
         Self {
             id,
@@ -293,7 +283,6 @@ impl ActiveForm {
             settings,
             questions,
             label_ids,
-            answer_entry_set_id,
         }
     }
 
@@ -368,7 +357,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// };
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormTitle};
-    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -402,7 +390,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         ]).unwrap(),
     ///     ).unwrap(),
     ///     FormLabelIdSet::empty(),
-    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -426,8 +413,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::answer_entry_set::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
-    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{
     ///     FormDescription, FormId, FormMeta,
     ///     FormLabelIdSet, FormTitle, Visibility, WebhookUrl
@@ -469,7 +454,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     ),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
-    ///     AnswerEntrySetId::new(),
     /// );
     ///
     ///  let public_form = ActiveForm::from_raw_parts(
@@ -483,7 +467,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     ),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
-    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(private_form.can_read(&administrator));
@@ -510,7 +493,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -544,7 +526,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         ]).unwrap(),
     ///     ).unwrap(),
     ///     FormLabelIdSet::empty(),
-    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -567,7 +548,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::answer_entry_set::models::AnswerEntrySetId;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -601,7 +581,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         ]).unwrap(),
     ///     ).unwrap(),
     ///     FormLabelIdSet::empty(),
-    ///     AnswerEntrySetId::new(),
     /// );
     ///
     /// assert!(!form.can_delete(&administrator));
@@ -864,7 +843,6 @@ mod tests {
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             sample_question_set(),
-            AnswerEntrySetId::new(),
         );
 
         assert!(form.label_ids().as_slice().is_empty());
@@ -877,7 +855,6 @@ mod tests {
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             sample_question_set(),
-            AnswerEntrySetId::new(),
         )
         .replace_label_ids(FormLabelIdSet::try_new(vec![label_id]).unwrap());
 

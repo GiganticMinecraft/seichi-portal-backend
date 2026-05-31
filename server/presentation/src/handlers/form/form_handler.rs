@@ -169,7 +169,7 @@ async fn fetch_answer_entry_set(
 ) -> Result<AnswerEntrySet, Error> {
     repository
         .answer_entry_set_repository()
-        .get(*form.answer_entry_set_id())
+        .get(*form.id())
         .await?
         .ok_or(errors::usecase::UseCaseError::FormNotFound)?
         .try_read(actor.clone())

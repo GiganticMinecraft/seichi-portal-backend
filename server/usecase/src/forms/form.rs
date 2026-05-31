@@ -82,12 +82,6 @@ impl<
             None => answer_entry_set,
         };
 
-        let answer_entry_set_guard =
-            AuthorizationGuard::from(answer_entry_set.clone()).try_create(user_as_user.clone())?;
-        self.answer_entry_set_repository
-            .create(answer_entry_set_guard)
-            .await?;
-
         let form = ActiveForm::from_raw_parts(
             form_id,
             title,
@@ -96,7 +90,6 @@ impl<
             FormSettings::new(),
             QuestionSet::try_new(questions).map_err(Error::from)?,
             FormLabelIdSet::empty(),
-            *answer_entry_set.id(),
         );
 
         self.active_form_repository
@@ -104,6 +97,12 @@ impl<
                 user,
                 AuthorizationGuard::<_, Create>::from(form).try_create(user_as_user.clone())?,
             )
+            .await?;
+
+        let answer_entry_set_guard =
+            AuthorizationGuard::from(answer_entry_set).try_create(user_as_user.clone())?;
+        self.answer_entry_set_repository
+            .create(answer_entry_set_guard)
             .await?;
 
         self.active_form_repository
@@ -340,7 +339,6 @@ impl<
             .await?
             .ok_or(Error::from(FormNotFound))?;
         let current_form_read = current_form.try_read(actor_user.clone())?;
-        let answer_entry_set_id = *current_form_read.answer_entry_set_id();
         let current_questions = current_form_read.questions().as_slice().to_vec();
 
         if let Some(questions) = &questions {
@@ -361,7 +359,7 @@ impl<
 
             let answer_entry_set_guard = self
                 .answer_entry_set_repository
-                .get(answer_entry_set_id)
+                .get(form_id)
                 .await?
                 .ok_or(Error::from(FormNotFound))?;
             let answer_entry_set = answer_entry_set_guard.try_read(actor_user.clone())?;
@@ -378,7 +376,7 @@ impl<
         {
             let set_guard = self
                 .answer_entry_set_repository
-                .get(answer_entry_set_id)
+                .get(form_id)
                 .await?
                 .ok_or(Error::from(FormNotFound))?;
             let updated_set = set_guard.into_update().map(|set| {
@@ -640,7 +638,6 @@ mod tests {
     use super::*;
     use domain::{
         form::{
-            answer_entry_set::models::AnswerEntrySetId,
             models::{
                 ActiveForm, FormDescription, FormLabelIdSet, FormMeta, FormSettings, FormTitle,
             },
@@ -683,7 +680,6 @@ mod tests {
             FormSettings::new(),
             questions,
             FormLabelIdSet::empty(),
-            AnswerEntrySetId::new(),
         )
     }
 
