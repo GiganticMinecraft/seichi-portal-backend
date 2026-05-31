@@ -17,8 +17,8 @@ use crate::{
         models::FormId,
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizesRead,
-        AuthorizesUpdate, Create, Read, Update,
+        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Authorizes, Create, Read,
+        Update,
     },
     user::models::{Actor, Role::Administrator, User},
 };
@@ -337,7 +337,7 @@ impl AuthorizationGuardDefinitions for AnswerEntrySet {
     }
 }
 
-impl AuthorizesRead<AnswerEntry> for AnswerEntrySet {
+impl Authorizes<AnswerEntry, Read> for AnswerEntrySet {
     fn check(&self, actor: &Actor, child: &AnswerEntry) -> Result<(), DomainError> {
         let entry = self.find_entry(*child.id()).ok_or(DomainError::NotFound)?;
 
@@ -353,7 +353,7 @@ impl AuthorizesRead<AnswerEntry> for AnswerEntrySet {
     }
 }
 
-impl AuthorizesUpdate<AnswerEntry> for AnswerEntrySet {
+impl Authorizes<AnswerEntry, Update> for AnswerEntrySet {
     fn check(&self, actor: &Actor, child: &AnswerEntry) -> Result<(), DomainError> {
         if !self.can_update(actor) {
             return Err(DomainError::Forbidden);
@@ -372,7 +372,7 @@ impl AuthorizesUpdate<AnswerEntry> for AnswerEntrySet {
     }
 }
 
-impl AuthorizesRead<Comment> for AnswerEntry {
+impl Authorizes<Comment, Read> for AnswerEntry {
     fn check(&self, _actor: &Actor, child: &Comment) -> Result<(), DomainError> {
         if child.answer_id() == self.id() {
             Ok(())
