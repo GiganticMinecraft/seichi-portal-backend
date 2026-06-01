@@ -299,7 +299,14 @@ impl<
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
             .into_iter()
-            .filter(Result::is_ok)
+            .filter(|result| {
+                !matches!(
+                    result,
+                    Err(Error::Domain {
+                        source: DomainError::Forbidden
+                    })
+                )
+            })
             .collect()
     }
 
