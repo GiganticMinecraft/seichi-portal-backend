@@ -65,19 +65,14 @@ impl<
         answer_entry_sets: &[Allowed<AnswerEntrySet, Read>],
         answer_id: AnswerId,
     ) -> Result<Option<Allowed<AnswerEntry, Read>>, Error> {
-        for answer_entry_set in answer_entry_sets {
-            if answer_entry_set.find_entry(answer_id).is_none() {
-                continue;
-            }
-
-            let Some(form) = form_by_id.get(&answer_entry_set.form_id().into_inner()) else {
-                return Ok(None);
-            };
-
-            return Ok(form.read_entry(answer_entry_set, answer_id).ok());
-        }
-
-        Ok(None)
+        Ok(answer_entry_sets
+            .iter()
+            .find(|answer_entry_set| answer_entry_set.find_entry(answer_id).is_some())
+            .and_then(|answer_entry_set| {
+                form_by_id
+                    .get(&answer_entry_set.form_id().into_inner())
+                    .and_then(|form| form.read_entry(answer_entry_set, answer_id).ok())
+            }))
     }
 
     pub async fn cross_search(
