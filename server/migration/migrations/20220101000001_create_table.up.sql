@@ -72,15 +72,6 @@ CREATE TABLE IF NOT EXISTS form_choices(
     FOREIGN KEY fk_form_choices_question_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS response_period(
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    form_id CHAR(36) NOT NULL,
-    start_at DATETIME,
-    end_at DATETIME,
-    UNIQUE KEY uk_response_period_form_id(form_id),
-    FOREIGN KEY fk_response_period_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS form_webhooks(
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
@@ -113,14 +104,6 @@ CREATE TABLE IF NOT EXISTS real_answers(
     answer TEXT NOT NULL,
     FOREIGN KEY fk_real_answers_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
     FOREIGN KEY fk_real_answers_question_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS default_answer_titles(
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    form_id CHAR(36) NOT NULL,
-    title TEXT,
-    UNIQUE KEY uk_default_answer_titles_form_id(form_id),
-    FOREIGN KEY fk_default_answer_titles_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS form_answer_comments(
@@ -220,29 +203,12 @@ CREATE TABLE IF NOT EXISTS archived_form_choices(
     FOREIGN KEY fk_archived_form_choices_question_id(question_id) REFERENCES archived_form_questions(question_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS archived_response_period(
-    id INT NOT NULL PRIMARY KEY,
-    form_id CHAR(36) NOT NULL,
-    start_at DATETIME,
-    end_at DATETIME,
-    UNIQUE KEY uk_archived_response_period_form_id(form_id),
-    FOREIGN KEY fk_archived_response_period_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS archived_form_webhooks(
     id INT NOT NULL PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
     url TEXT,
     UNIQUE KEY uk_archived_form_webhooks_form_id(form_id),
     FOREIGN KEY fk_archived_form_webhooks_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS archived_default_answer_titles(
-    id INT NOT NULL PRIMARY KEY,
-    form_id CHAR(36) NOT NULL,
-    title TEXT,
-    UNIQUE KEY uk_archived_default_answer_titles_form_id(form_id),
-    FOREIGN KEY fk_archived_default_answer_titles_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS archived_answers(

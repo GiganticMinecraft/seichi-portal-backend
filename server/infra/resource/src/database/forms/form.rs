@@ -497,24 +497,8 @@ async fn copy_active_form_to_archive(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO archived_response_period (id, form_id, start_at, end_at)
-        SELECT id, form_id, start_at, end_at FROM response_period WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
-
-    sqlx::query(
         r"INSERT INTO archived_form_webhooks (id, form_id, url)
         SELECT id, form_id, url FROM form_webhooks WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
-
-    sqlx::query(
-        r"INSERT INTO archived_default_answer_titles (id, form_id, title)
-        SELECT id, form_id, title FROM default_answer_titles WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
@@ -645,24 +629,8 @@ async fn restore_archived_form_to_active(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO response_period (form_id, start_at, end_at)
-        SELECT form_id, start_at, end_at FROM archived_response_period WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
-
-    sqlx::query(
         r"INSERT INTO form_webhooks (form_id, url)
         SELECT form_id, url FROM archived_form_webhooks WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
-
-    sqlx::query(
-        r"INSERT INTO default_answer_titles (form_id, title)
-        SELECT form_id, title FROM archived_default_answer_titles WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
