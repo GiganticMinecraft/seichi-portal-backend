@@ -35,7 +35,11 @@ impl AnswerEntrySet {
         }
     }
 
-    pub fn from_raw_parts(form_id: FormId, entries: Vec<AnswerEntry>) -> Self {
+    /// [`AnswerEntrySet`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// `entries` が `form_id` に属することを永続化層などで検証済みの場合にのみ使用してください。
+    pub unsafe fn from_raw_parts(form_id: FormId, entries: Vec<AnswerEntry>) -> Self {
         Self { form_id, entries }
     }
 
@@ -103,7 +107,7 @@ mod tests {
         let author = active_user(Role::StandardUser);
         let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
         let answer_id = *entry.id();
-        let set = AnswerEntrySet::from_raw_parts(FormId::new(), vec![entry]);
+        let set = unsafe { AnswerEntrySet::from_raw_parts(FormId::new(), vec![entry]) };
 
         assert!(set.find_entry(answer_id).is_some());
         assert!(set.find_entry(AnswerId::new()).is_none());

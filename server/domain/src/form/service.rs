@@ -88,41 +88,43 @@ mod tests {
             )
             .unwrap(),
         ));
-        let questions = vec![
-            Question::from_raw_parts(
-                first_question_id,
-                "first".to_string().try_into().unwrap(),
-                0,
-                "First".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
-                None,
-                true,
-            )
-            .unwrap(),
-            Question::from_raw_parts(
-                second_question_id,
-                "second".to_string().try_into().unwrap(),
-                1,
-                "Second".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
-                None,
-                true,
-            )
-            .unwrap(),
-            Question::from_raw_parts(
-                third_question_id,
-                "third".to_string().try_into().unwrap(),
-                2,
-                "Third".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
-                None,
-                true,
-            )
-            .unwrap(),
-        ];
+        let questions = unsafe {
+            vec![
+                Question::from_raw_parts(
+                    first_question_id,
+                    "first".to_string().try_into().unwrap(),
+                    0,
+                    "First".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap(),
+                Question::from_raw_parts(
+                    second_question_id,
+                    "second".to_string().try_into().unwrap(),
+                    1,
+                    "Second".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap(),
+                Question::from_raw_parts(
+                    third_question_id,
+                    "third".to_string().try_into().unwrap(),
+                    2,
+                    "Third".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap(),
+            ]
+        };
         let answers = PostedAnswerContents::try_new(
             questions.as_slice(),
             vec![

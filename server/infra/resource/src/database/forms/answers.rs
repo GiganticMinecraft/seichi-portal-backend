@@ -46,13 +46,13 @@ pub(crate) fn author_from_row(row: &MySqlRow) -> Result<AnswerAuthorRecord, Infr
             Uuid::from_str(&row.try_get::<String, _>("user")?)?.into(),
             Role::from_str(&row.try_get::<String, _>("user_role")?)?,
         ))),
-        "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryUser(
+        "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryUser(unsafe {
             TemporaryUser::from_raw_parts(
                 Uuid::from_str(&row.try_get::<String, _>("temporary_user_id")?)?.into(),
                 row.try_get("temporary_user_name")?,
                 row.try_get("temporary_user_contact_text")?,
-            ),
-        )),
+            )
+        })),
         value => Err(InfraError::Unexpected {
             cause: format!("unknown answer author_type: {value}"),
         }),

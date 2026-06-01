@@ -220,7 +220,11 @@ impl AnswerLabel {
         }
     }
 
-    pub fn from_raw_parts(id: AnswerLabelId, name: NonEmptyString) -> Self {
+    /// [`AnswerLabel`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(id: AnswerLabelId, name: NonEmptyString) -> Self {
         Self { id, name }
     }
 
@@ -280,59 +284,65 @@ mod tests {
     }
 
     fn text_question() -> Question {
-        Question::from_raw_parts(
-            question_id("00000000-0000-7000-8000-000000000001"),
-            "name".to_string().try_into().unwrap(),
-            0,
-            "Name".to_string().try_into().unwrap(),
-            None,
-            crate::form::question::models::QuestionType::Text,
-            None,
-            true,
-        )
-        .unwrap()
+        unsafe {
+            Question::from_raw_parts(
+                question_id("00000000-0000-7000-8000-000000000001"),
+                "name".to_string().try_into().unwrap(),
+                0,
+                "Name".to_string().try_into().unwrap(),
+                None,
+                crate::form::question::models::QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap()
+        }
     }
 
     fn single_choice_question() -> Question {
-        Question::from_raw_parts(
-            question_id("00000000-0000-7000-8000-000000000002"),
-            "role".to_string().try_into().unwrap(),
-            1,
-            "Role".to_string().try_into().unwrap(),
-            None,
-            crate::form::question::models::QuestionType::SingleChoice,
-            NonEmptyVec::try_new(vec![
-                Choice::new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap()),
-                Choice::new(Some(2.into()), 1, "User".to_string().try_into().unwrap()),
-            ])
+        unsafe {
+            Question::from_raw_parts(
+                question_id("00000000-0000-7000-8000-000000000002"),
+                "role".to_string().try_into().unwrap(),
+                1,
+                "Role".to_string().try_into().unwrap(),
+                None,
+                crate::form::question::models::QuestionType::SingleChoice,
+                NonEmptyVec::try_new(vec![
+                    Choice::new(Some(1.into()), 0, "Admin".to_string().try_into().unwrap()),
+                    Choice::new(Some(2.into()), 1, "User".to_string().try_into().unwrap()),
+                ])
+                .unwrap()
+                .into(),
+                true,
+            )
             .unwrap()
-            .into(),
-            true,
-        )
-        .unwrap()
+        }
     }
 
     fn multiple_choice_question() -> Question {
-        Question::from_raw_parts(
-            question_id("00000000-0000-7000-8000-000000000003"),
-            "tags".to_string().try_into().unwrap(),
-            2,
-            "Tags".to_string().try_into().unwrap(),
-            None,
-            crate::form::question::models::QuestionType::MultipleChoice,
-            NonEmptyVec::try_new(vec![
-                Choice::new(
-                    Some(3.into()),
-                    0,
-                    "Admin, Owner".to_string().try_into().unwrap(),
-                ),
-                Choice::new(Some(4.into()), 1, "User".to_string().try_into().unwrap()),
-            ])
+        unsafe {
+            Question::from_raw_parts(
+                question_id("00000000-0000-7000-8000-000000000003"),
+                "tags".to_string().try_into().unwrap(),
+                2,
+                "Tags".to_string().try_into().unwrap(),
+                None,
+                crate::form::question::models::QuestionType::MultipleChoice,
+                NonEmptyVec::try_new(vec![
+                    Choice::new(
+                        Some(3.into()),
+                        0,
+                        "Admin, Owner".to_string().try_into().unwrap(),
+                    ),
+                    Choice::new(Some(4.into()), 1, "User".to_string().try_into().unwrap()),
+                ])
+                .unwrap()
+                .into(),
+                false,
+            )
             .unwrap()
-            .into(),
-            false,
-        )
-        .unwrap()
+        }
     }
 
     #[test]

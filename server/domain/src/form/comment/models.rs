@@ -51,7 +51,11 @@ impl Comment {
         Self { content, ..self }
     }
 
-    pub fn from_raw_parts(
+    /// [`Comment`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(
         answer_id: AnswerId,
         comment_id: CommentId,
         content: CommentContent,

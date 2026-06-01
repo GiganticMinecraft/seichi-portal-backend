@@ -98,7 +98,11 @@ impl FormSettings {
         Self { visibility, ..self }
     }
 
-    pub fn from_raw_parts(webhook_url: WebhookUrl, visibility: Visibility) -> Self {
+    /// [`FormSettings`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(webhook_url: WebhookUrl, visibility: Visibility) -> Self {
         Self {
             webhook_url,
             visibility,
@@ -330,7 +334,11 @@ impl FormMeta {
         }
     }
 
-    pub fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
+    /// [`FormMeta`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
         Self {
             created_at,
             updated_at,
@@ -450,8 +458,12 @@ impl ActiveForm {
         Self { label_ids, ..self }
     }
 
+    /// [`ActiveForm`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
     #[allow(clippy::too_many_arguments)]
-    pub fn from_raw_parts(
+    pub unsafe fn from_raw_parts(
         id: FormId,
         title: FormTitle,
         description: FormDescription,
@@ -694,14 +706,12 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
+    ///     form::models::ActiveForm,
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
     /// use domain::form::models::{FormDescription, FormTitle};
-    /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -716,13 +726,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// )).into();
     ///
     ///
-    /// let form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let form = ActiveForm::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::new(),
-    ///     AnswerSettings::default(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -734,7 +740,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -758,10 +763,8 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
     /// use domain::form::models::{
-    ///     FormDescription, FormId, FormMeta,
-    ///     FormLabelIdSet, FormTitle, Visibility, WebhookUrl
+    ///     FormDescription, FormTitle, Visibility
     /// };
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -789,33 +792,17 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     ]).unwrap(),
     /// ).unwrap();
     ///
-    /// let private_form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let private_form = ActiveForm::new(
     ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::from_raw_parts(
-    ///         WebhookUrl::try_new(None).unwrap(),
-    ///         Visibility::PRIVATE
-    ///     ),
-    ///     AnswerSettings::default(),
     ///     sample_questions(),
-    ///     FormLabelIdSet::empty(),
-    /// );
+    /// ).change_settings(FormSettings::new().change_visibility(Visibility::PRIVATE));
     ///
-    ///  let public_form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    ///  let public_form = ActiveForm::new(
     ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::from_raw_parts(
-    ///         WebhookUrl::try_new(None).unwrap(),
-    ///         Visibility::PUBLIC
-    ///     ),
-    ///     AnswerSettings::default(),
     ///     sample_questions(),
-    ///     FormLabelIdSet::empty(),
-    /// );
+    /// ).change_settings(FormSettings::new().change_visibility(Visibility::PUBLIC));
     ///
     /// assert!(private_form.can_read(&administrator));
     /// assert!(!private_form.can_read(&standard_user));
@@ -836,12 +823,11 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
+    ///     form::models::ActiveForm,
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -857,13 +843,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// )).into();
     ///
     ///
-    /// let form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let form = ActiveForm::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::new(),
-    ///     AnswerSettings::default(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -875,7 +857,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -893,12 +874,11 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
+    ///     form::models::ActiveForm,
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -914,13 +894,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// )).into();
     ///
     ///
-    /// let form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let form = ActiveForm::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::new(),
-    ///     AnswerSettings::default(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -932,7 +908,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(!form.can_delete(&administrator));
@@ -973,7 +948,11 @@ impl FormLabel {
         Self { id: self.id, name }
     }
 
-    pub fn from_raw_parts(id: FormLabelId, name: FormLabelName) -> Self {
+    /// [`FormLabel`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(id: FormLabelId, name: FormLabelName) -> Self {
         Self { id, name }
     }
 }
@@ -1145,7 +1124,7 @@ mod tests {
 
     fn sample_question_set() -> QuestionSet {
         QuestionSet::try_new(
-            NonEmptyVec::try_new(vec![
+            NonEmptyVec::try_new(vec![unsafe {
                 Question::from_raw_parts(
                     QuestionId::from(Uuid::new_v4()),
                     "body".to_string().try_into().unwrap(),
@@ -1156,8 +1135,8 @@ mod tests {
                     None,
                     true,
                 )
-                .unwrap(),
-            ])
+                .unwrap()
+            }])
             .unwrap(),
         )
         .unwrap()

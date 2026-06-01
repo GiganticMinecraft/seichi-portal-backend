@@ -128,7 +128,11 @@ impl TemporaryUser {
         }
     }
 
-    pub fn from_raw_parts(id: TemporaryUserId, name: String, contact_text: String) -> Self {
+    /// [`TemporaryUser`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(id: TemporaryUserId, name: String, contact_text: String) -> Self {
         Self {
             id,
             name,

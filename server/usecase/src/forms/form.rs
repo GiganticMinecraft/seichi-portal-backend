@@ -2,8 +2,8 @@ use chrono::Utc;
 use domain::{
     form::models::{
         ActiveForm, AnswerSettings, AnswerVisibility, ArchivedForm, DefaultAnswerTitle,
-        FormDescription, FormId, FormLabel, FormLabelId, FormLabelIdSet, FormMeta, FormSettings,
-        FormTitle, Question, QuestionSet, ResponsePeriod, Visibility, WebhookUrl,
+        FormDescription, FormId, FormLabel, FormLabelId, FormLabelIdSet, FormTitle, Question,
+        QuestionSet, ResponsePeriod, Visibility, WebhookUrl,
     },
     repository::{
         form::{
@@ -64,22 +64,18 @@ impl<
     ) -> Result<ActiveForm, Error> {
         let user_as_user = Actor::from(user.clone());
 
-        let form_id = FormId::new();
         let answer_settings = match allow_temporary_answers {
             Some(allow) => AnswerSettings::default().change_allow_temporary_answers(allow),
             None => AnswerSettings::default(),
         };
 
-        let form = ActiveForm::from_raw_parts(
-            form_id,
+        let form = ActiveForm::new(
             title,
             description,
-            FormMeta::new(),
-            FormSettings::new(),
-            answer_settings,
             QuestionSet::try_new(questions).map_err(Error::from)?,
-            FormLabelIdSet::empty(),
-        );
+        )
+        .change_answer_settings(answer_settings);
+        let form_id = *form.id();
 
         self.active_form_repository
             .create(
@@ -420,13 +416,30 @@ impl<
 
         let updated_form = match questions {
             Some(questions) => {
-                let questions = NonEmptyVec::try_new(
-                    questions
-                        .into_iter()
-                        .map(|question| question.question)
-                        .collect::<Vec<_>>(),
-                )
-                .map_err(Error::from)?;
+                let current_by_id = current_questions
+                    .iter()
+                    .cloned()
+                    .map(|question| (question.id().into_inner(), question))
+                    .collect::<HashMap<_, _>>();
+                let questions = questions
+                    .into_iter()
+                    .map(|question| match question.original_id {
+                        Some(original_id) => current_by_id
+                            .get(&original_id.into_inner())
+                            .cloned()
+                            .ok_or_else(|| DomainError::InvalidEntity {
+                                message: format!(
+                                    "question id {} does not belong to the form",
+                                    original_id
+                                ),
+                            })
+                            .and_then(|current_question| {
+                                current_question.update_preserving_id(question.question)
+                            }),
+                        None => Ok(question.question),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let questions = NonEmptyVec::try_new(questions).map_err(Error::from)?;
                 updated_form.map(|form| {
                     form.change_questions(QuestionSet::try_new(questions).expect("validated"))
                 })
@@ -474,7 +487,15 @@ fn validate_answered_form_question_update(
         .collect::<HashMap<_, _>>();
     let updated_by_id = updated_questions
         .iter()
-        .map(|question| (question.question.id().into_inner(), &question.question))
+        .map(|question| {
+            (
+                question
+                    .original_id
+                    .unwrap_or_else(|| question.question.id())
+                    .into_inner(),
+                &question.question,
+            )
+        })
         .collect::<HashMap<_, _>>();
 
     if let Some(error) = current_questions
@@ -640,30 +661,34 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        ActiveForm::from_raw_parts(
-            form_id,
-            FormTitle::new("Form".to_string().try_into().unwrap()),
-            FormDescription::new("description".to_string()),
-            FormMeta::new(),
-            FormSettings::new(),
-            AnswerSettings::default(),
-            questions,
-            FormLabelIdSet::empty(),
-        )
+        unsafe {
+            ActiveForm::from_raw_parts(
+                form_id,
+                FormTitle::new("Form".to_string().try_into().unwrap()),
+                FormDescription::new("description".to_string()),
+                FormMeta::new(),
+                FormSettings::new(),
+                AnswerSettings::default(),
+                questions,
+                FormLabelIdSet::empty(),
+            )
+        }
     }
 
     fn text_question(question_id: QuestionId, position: u16, template_key: &str) -> Question {
-        Question::from_raw_parts(
-            question_id,
-            template_key.to_string().try_into().unwrap(),
-            position,
-            template_key.to_string().try_into().unwrap(),
-            None,
-            QuestionType::Text,
-            None,
-            true,
-        )
-        .unwrap()
+        unsafe {
+            Question::from_raw_parts(
+                question_id,
+                template_key.to_string().try_into().unwrap(),
+                position,
+                template_key.to_string().try_into().unwrap(),
+                None,
+                QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap()
+        }
     }
 
     #[tokio::test]

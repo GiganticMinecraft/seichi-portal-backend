@@ -696,42 +696,30 @@ fn into_upsert_question_input(
     let (question_type, definition, choices) = question.into_parts();
     let original_id = definition.id;
     let choices = into_domain_choices(choices);
-    let question = match original_id {
-        Some(question_id) => Question::from_raw_parts(
-            question_id,
+    let question = match question_type {
+        QuestionType::Text => Question::new_text(
             definition.template_key,
             definition.position,
             definition.title,
             definition.description,
-            question_type,
-            choices,
             definition.is_required,
         )?,
-        None => match question_type {
-            QuestionType::Text => Question::new_text(
-                definition.template_key,
-                definition.position,
-                definition.title,
-                definition.description,
-                definition.is_required,
-            )?,
-            QuestionType::SingleChoice => Question::new_single_choice(
-                definition.template_key,
-                definition.position,
-                definition.title,
-                definition.description,
-                required_choices(choices)?,
-                definition.is_required,
-            )?,
-            QuestionType::MultipleChoice => Question::new_multiple_choice(
-                definition.template_key,
-                definition.position,
-                definition.title,
-                definition.description,
-                required_choices(choices)?,
-                definition.is_required,
-            )?,
-        },
+        QuestionType::SingleChoice => Question::new_single_choice(
+            definition.template_key,
+            definition.position,
+            definition.title,
+            definition.description,
+            required_choices(choices)?,
+            definition.is_required,
+        )?,
+        QuestionType::MultipleChoice => Question::new_multiple_choice(
+            definition.template_key,
+            definition.position,
+            definition.title,
+            definition.description,
+            required_choices(choices)?,
+            definition.is_required,
+        )?,
     };
 
     Ok(UpsertQuestionInput {

@@ -38,7 +38,10 @@ impl TryFrom<ChoiceRecord> for Choice {
             label,
         }: ChoiceRecord,
     ) -> Result<Self, Self::Error> {
-        Choice::from_raw_parts(id.map(Into::into), position, label.try_into()?).map_err(Into::into)
+        unsafe {
+            Choice::from_raw_parts(id.map(Into::into), position, label.try_into()?)
+                .map_err(Into::into)
+        }
     }
 }
 
@@ -80,19 +83,21 @@ impl TryFrom<QuestionRecord> for Question {
                     .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"))
             })?;
 
-        Question::from_raw_parts(
-            Uuid::from_str(&id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            template_key.try_into()?,
-            position,
-            title.try_into()?,
-            description.map(TryInto::try_into).transpose()?,
-            QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
-            choices,
-            is_required,
-        )
-        .map_err(Into::into)
+        unsafe {
+            Question::from_raw_parts(
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                template_key.try_into()?,
+                position,
+                title.try_into()?,
+                description.map(TryInto::try_into).transpose()?,
+                QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
+                choices,
+                is_required,
+            )
+            .map_err(Into::into)
+        }
     }
 }
 
@@ -151,19 +156,21 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             allow_temporary_answers,
         );
 
-        Ok(ActiveForm::from_raw_parts(
-            FormId::from(Uuid::parse_str(&id).map_err(Into::<InfraError>::into)?),
-            FormTitle::new(title.try_into()?),
-            FormDescription::new(description),
-            FormMeta::from_raw_parts(created_at, updated_at),
-            FormSettings::from_raw_parts(
-                WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
-                visibility.try_into()?,
-            ),
-            answer_settings,
-            QuestionSet::try_new(questions)?,
-            FormLabelIdSet::try_new(label_ids)?,
-        ))
+        Ok(unsafe {
+            ActiveForm::from_raw_parts(
+                FormId::from(Uuid::parse_str(&id).map_err(Into::<InfraError>::into)?),
+                FormTitle::new(title.try_into()?),
+                FormDescription::new(description),
+                FormMeta::from_raw_parts(created_at, updated_at),
+                FormSettings::from_raw_parts(
+                    WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
+                    visibility.try_into()?,
+                ),
+                answer_settings,
+                QuestionSet::try_new(questions)?,
+                FormLabelIdSet::try_new(label_ids)?,
+            )
+        })
     }
 }
 
@@ -253,19 +260,21 @@ impl TryFrom<CommentRecord> for Comment {
             commented_by_role: _,
         }: CommentRecord,
     ) -> Result<Self, Self::Error> {
-        Ok(Comment::from_raw_parts(
-            Uuid::from_str(&answer_id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            Uuid::from_str(&comment_id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            CommentContent::new(content.try_into()?),
-            timestamp,
-            Uuid::from_str(&commented_by_id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-        ))
+        Ok(unsafe {
+            Comment::from_raw_parts(
+                Uuid::from_str(&answer_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                Uuid::from_str(&comment_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                CommentContent::new(content.try_into()?),
+                timestamp,
+                Uuid::from_str(&commented_by_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+            )
+        })
     }
 }
 
@@ -330,12 +339,14 @@ impl TryFrom<AnswerLabelRecord> for AnswerLabel {
     type Error = Error;
 
     fn try_from(AnswerLabelRecord { id, name }: AnswerLabelRecord) -> Result<Self, Self::Error> {
-        Ok(AnswerLabel::from_raw_parts(
-            Uuid::from_str(&id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            NonEmptyString::try_new(name)?,
-        ))
+        Ok(unsafe {
+            AnswerLabel::from_raw_parts(
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                NonEmptyString::try_new(name)?,
+            )
+        })
     }
 }
 
@@ -348,12 +359,14 @@ impl TryFrom<FormLabelRecord> for FormLabel {
     type Error = Error;
 
     fn try_from(FormLabelRecord { id, name }: FormLabelRecord) -> Result<Self, Self::Error> {
-        Ok(FormLabel::from_raw_parts(
-            Uuid::from_str(&id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            FormLabelName::new(name.try_into()?),
-        ))
+        Ok(unsafe {
+            FormLabel::from_raw_parts(
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                FormLabelName::new(name.try_into()?),
+            )
+        })
     }
 }
 
@@ -409,12 +422,14 @@ impl TryFrom<NotificationSettingsRecord> for NotificationPreference {
             is_send_message_notification,
         }: NotificationSettingsRecord,
     ) -> Result<Self, Self::Error> {
-        Ok(NotificationPreference::from_raw_parts(
-            Uuid::from_str(&recipient.id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            is_send_message_notification,
-        ))
+        Ok(unsafe {
+            NotificationPreference::from_raw_parts(
+                Uuid::from_str(&recipient.id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                is_send_message_notification,
+            )
+        })
     }
 }
 

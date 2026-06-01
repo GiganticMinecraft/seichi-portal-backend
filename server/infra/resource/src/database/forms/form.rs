@@ -308,7 +308,7 @@ async fn answer_entry_set_for_form(
     form_id: FormId,
 ) -> Result<AnswerEntrySet, InfraError> {
     let entries = fetch_answer_entries_for_entry_set(txn, form_id).await?;
-    Ok(AnswerEntrySet::from_raw_parts(form_id, entries))
+    Ok(unsafe { AnswerEntrySet::from_raw_parts(form_id, entries) })
 }
 
 async fn fetch_form_row(

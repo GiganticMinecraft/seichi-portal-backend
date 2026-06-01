@@ -68,13 +68,15 @@ where
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        let thread = MessageThread::from_raw_parts(
-            answer_id,
-            Uuid::from_str(&answer_author_id_str)
-                .map_err(InfraError::from)?
-                .into(),
-            messages,
-        );
+        let thread = unsafe {
+            MessageThread::from_raw_parts(
+                answer_id,
+                Uuid::from_str(&answer_author_id_str)
+                    .map_err(InfraError::from)?
+                    .into(),
+                messages,
+            )
+        };
 
         Ok(Some(AuthorizationGuard::<MessageThread, Read>::from(
             thread,

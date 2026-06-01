@@ -25,7 +25,11 @@ impl MessageThread {
         }
     }
 
-    pub fn from_raw_parts(
+    /// [`MessageThread`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// `messages` が `answer_id` に属することを永続化層などで検証済みの場合にのみ使用してください。
+    pub unsafe fn from_raw_parts(
         answer_id: AnswerId,
         answer_author_id: UserId,
         messages: Vec<Message>,
