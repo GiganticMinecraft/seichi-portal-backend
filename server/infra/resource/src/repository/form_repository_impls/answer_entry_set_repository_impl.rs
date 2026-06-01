@@ -1,11 +1,10 @@
 use async_trait::async_trait;
 use domain::{
-    form::{answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::FormId},
-    repository::form::answer_entry_set_repository::AnswerEntrySetRepository,
-    types::{
-        authorization_guard::{Allowed, AuthorizationGuard},
-        authorization_guard::{Create, Read, Update},
+    form::{
+        answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::ActiveForm,
     },
+    repository::form::answer_entry_set_repository::AnswerEntrySetRepository,
+    types::authorization_guard::{Allowed, Read, Update},
 };
 use errors::Error;
 
@@ -23,46 +22,46 @@ where
     Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
 {
     #[tracing::instrument(skip(self))]
-    async fn create(&self, answer_entry_set: Allowed<AnswerEntrySet, Create>) -> Result<(), Error> {
-        self.client
-            .form()
-            .create_answer_entry_set(answer_entry_set.value())
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get(
+    async fn get_read(
         &self,
-        form_id: FormId,
-    ) -> Result<Option<AuthorizationGuard<AnswerEntrySet, Read>>, Error> {
-        let record = self.client.form().get_answer_entry_set(form_id).await?;
+        form: &Allowed<ActiveForm, Read>,
+    ) -> Result<Option<Allowed<AnswerEntrySet, Read>>, Error> {
+        let record = self.client.form().get_answer_entry_set(*form.id()).await?;
 
-        Ok(record.map(|set| AuthorizationGuard::<AnswerEntrySet, Create>::from(set).into_read()))
+        record
+            .map(|set| form.authorize_read(set).map_err(Into::into))
+            .transpose()
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn list_all(&self) -> Result<Vec<AuthorizationGuard<AnswerEntrySet, Read>>, Error> {
-        Ok(self
-            .client
-            .form()
-            .list_answer_entry_sets()
-            .await?
-            .into_iter()
-            .map(|set| AuthorizationGuard::<AnswerEntrySet, Create>::from(set).into_read())
-            .collect())
+    #[tracing::instrument(skip(self, form))]
+    async fn get_update(
+        &self,
+        form: &Allowed<ActiveForm, Update>,
+    ) -> Result<Option<Allowed<AnswerEntrySet, Update>>, Error> {
+        let record = self.client.form().get_answer_entry_set(*form.id()).await?;
+
+        record
+            .map(|set| form.authorize_update(set).map_err(Into::into))
+            .transpose()
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn update(&self, answer_entry_set: Allowed<AnswerEntrySet, Update>) -> Result<(), Error> {
-        self.client
-            .form()
-            .update_answer_entry_set(answer_entry_set.value())
-            .await?;
-        Ok(())
+    #[tracing::instrument(skip(self, forms))]
+    async fn list_read_by_forms(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+    ) -> Result<Vec<Allowed<AnswerEntrySet, Read>>, Error> {
+        let mut sets = Vec::with_capacity(forms.len());
+
+        for form in forms {
+            if let Some(set) = self.client.form().get_answer_entry_set(*form.id()).await? {
+                sets.push(form.authorize_read(set)?);
+            }
+        }
+
+        Ok(sets)
     }
 
-    #[tracing::instrument(skip(self, answer_entry_set))]
+    #[tracing::instrument(skip(self, answer_entry))]
     async fn add_entry(
         &self,
         answer_entry_set: &Allowed<AnswerEntrySet, Read>,
@@ -75,7 +74,7 @@ where
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, answer_entry_set))]
+    #[tracing::instrument(skip(self, answer_entry))]
     async fn update_entry(
         &self,
         answer_entry_set: &Allowed<AnswerEntrySet, Update>,

@@ -13,13 +13,10 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     form::{
         answer::models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
-        comment::models::{Comment, CommentContent},
+        comment::models::Comment,
         models::FormId,
     },
-    types::authorization_guard::{
-        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Authorizes, Create, Read,
-        Update,
-    },
+    types::authorization_guard::{Allowed, Authorizes, Read},
     user::models::{Actor, Role::Administrator, User},
 };
 
@@ -93,116 +90,35 @@ impl ResponsePeriod {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct AnswerEntrySet {
-    form_id: FormId,
+/// フォームの回答にまつわる設定をまとめた値オブジェクトです。
+///
+/// 回答の公開範囲・受付期間・仮回答可否・デフォルトタイトルといった「ポリシー」を保持し、
+/// [`AnswerEntry`] の閲覧可否 ([`Self::can_read_entry`]) や新規受理 ([`Self::try_accept_answer`])
+/// を判断します。この値オブジェクトは [`ActiveForm`] が所有し、回答の集合である
+/// [`AnswerEntrySet`] は構造（所属）のみを担います。
+///
+/// [`ActiveForm`]: crate::form::models::ActiveForm
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
+pub struct AnswerSettings {
     default_answer_title: DefaultAnswerTitle,
     visibility: AnswerVisibility,
     response_period: ResponsePeriod,
     allow_temporary_answers: bool,
-    entries: Vec<AnswerEntry>,
 }
 
-impl AnswerEntrySet {
+impl AnswerSettings {
     pub fn new(
-        form_id: FormId,
         default_answer_title: DefaultAnswerTitle,
         visibility: AnswerVisibility,
         response_period: ResponsePeriod,
         allow_temporary_answers: bool,
     ) -> Self {
         Self {
-            form_id,
             default_answer_title,
             visibility,
             response_period,
             allow_temporary_answers,
-            entries: Vec::new(),
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_raw_parts(
-        form_id: FormId,
-        default_answer_title: DefaultAnswerTitle,
-        visibility: AnswerVisibility,
-        response_period: ResponsePeriod,
-        allow_temporary_answers: bool,
-        entries: Vec<AnswerEntry>,
-    ) -> Self {
-        Self {
-            form_id,
-            default_answer_title,
-            visibility,
-            response_period,
-            allow_temporary_answers,
-            entries,
-        }
-    }
-
-    pub fn form_id(&self) -> &FormId {
-        &self.form_id
-    }
-
-    pub fn default_answer_title(&self) -> &DefaultAnswerTitle {
-        &self.default_answer_title
-    }
-
-    pub fn visibility(&self) -> &AnswerVisibility {
-        &self.visibility
-    }
-
-    pub fn response_period(&self) -> &ResponsePeriod {
-        &self.response_period
-    }
-
-    pub fn allow_temporary_answers(&self) -> &bool {
-        &self.allow_temporary_answers
-    }
-
-    pub fn has_entries(&self) -> bool {
-        !self.entries.is_empty()
-    }
-
-    fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
-        self.entries.iter().find(|e| *e.id() == answer_id)
-    }
-
-    pub fn try_accept_answer(
-        &self,
-        author: AnswerAuthor,
-        actor: &Actor,
-        title: AnswerTitle,
-        posted_answers: PostedAnswerContents,
-    ) -> Result<AnswerEntry, DomainError> {
-        let is_within_period = self.response_period.is_within_period(Utc::now());
-
-        let allowed = match (&author, actor) {
-            (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
-                *user_id == *user.id() && (is_within_period || user.role() == &Administrator)
-            }
-            (AnswerAuthor::TemporaryUser(_), Actor::User(User::TemporaryUser(_))) => {
-                self.allow_temporary_answers && is_within_period
-            }
-            _ => false,
-        };
-
-        if !allowed {
-            return Err(DomainError::Forbidden);
-        }
-
-        Ok(AnswerEntry::new(author, title, posted_answers))
-    }
-
-    fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
-        match actor {
-            Actor::User(User::ActiveUser(user)) => {
-                entry.author().authenticated_user_id() == Some(*user.id())
-                    || self.visibility == AnswerVisibility::PUBLIC
-                    || user.role() == &Administrator
-            }
-            Actor::System => true,
-            _ => false,
         }
     }
 
@@ -230,145 +146,92 @@ impl AnswerEntrySet {
             ..self
         }
     }
-}
 
-impl Allowed<AnswerEntrySet, Read> {
-    pub fn readable_entries(&self) -> Vec<Allowed<AnswerEntry, Read>> {
-        self.value()
-            .entries
-            .iter()
-            .filter_map(|entry| self.authorize_read(entry.to_owned()).ok())
-            .collect()
-    }
-
-    pub fn read_entry(
+    /// `author` / `actor` の組み合わせと受付期間・仮回答可否から、新しい [`AnswerEntry`] を
+    /// 受理してよいかを判断し、受理できる場合のみ [`AnswerEntry`] を生成します。
+    pub fn try_accept_answer(
         &self,
-        answer_id: AnswerId,
-    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
-        let entry = self
-            .value()
-            .find_entry(answer_id)
-            .ok_or(DomainError::NotFound)?
-            .clone();
-        self.authorize_read(entry)
-    }
+        author: AnswerAuthor,
+        actor: &Actor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<AnswerEntry, DomainError> {
+        let is_within_period = self.response_period.is_within_period(Utc::now());
 
-    pub fn read_entry_for_comment(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
-        let entry = self.read_entry(answer_id)?;
-        match self.actor() {
-            Actor::User(User::ActiveUser(_)) => Ok(entry),
-            _ => Err(DomainError::Forbidden),
-        }
-    }
-
-    /// 対象の [`AnswerEntry`] が `actor` から閲覧可能であることをゲートとして検証したうえで、
-    /// 新しい [`Comment`] の作成ガードを生成します。
-    ///
-    /// [`Comment`] はこのファクトリ経由でのみ生成できるため、文脈ゲートを通らない
-    /// コメントが作られることはありません。
-    pub fn create_comment(
-        &self,
-        answer_id: AnswerId,
-        content: CommentContent,
-    ) -> Result<AuthorizationGuard<Comment, Create>, DomainError> {
-        self.read_entry_for_comment(answer_id)?;
-
-        let commented_by = match self.actor() {
-            Actor::User(User::ActiveUser(user)) => *user.id(),
-            _ => return Err(DomainError::Forbidden),
+        let allowed = match (&author, actor) {
+            (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
+                *user_id == *user.id() && (is_within_period || user.role() == &Administrator)
+            }
+            (AnswerAuthor::TemporaryUser(_), Actor::User(User::TemporaryUser(_))) => {
+                self.allow_temporary_answers && is_within_period
+            }
+            _ => false,
         };
 
-        Ok(AuthorizationGuard::from(Comment::new(
-            answer_id,
-            content,
-            commented_by,
-        )))
-    }
-}
-
-impl Allowed<AnswerEntry, Read> {
-    pub fn authorize_comment(
-        &self,
-        comment: Comment,
-    ) -> Result<Allowed<Comment, Read>, DomainError> {
-        self.authorize_read(comment)
-    }
-}
-
-impl Allowed<AnswerEntrySet, Update> {
-    pub fn change_entry_title(
-        &self,
-        answer_id: AnswerId,
-        title: AnswerTitle,
-    ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
-        let entry = self
-            .value()
-            .find_entry(answer_id)
-            .ok_or(DomainError::NotFound)?
-            .clone()
-            .with_title(title);
-
-        self.authorize_update(entry)
-    }
-}
-
-fn is_administrator(actor: &Actor) -> bool {
-    matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Administrator)
-}
-
-impl AuthorizationGuardDefinitions for AnswerEntrySet {
-    fn can_create(&self, actor: &Actor) -> bool {
-        is_administrator(actor)
-    }
-
-    fn can_read(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::System | Actor::User(_))
-    }
-
-    fn can_update(&self, actor: &Actor) -> bool {
-        is_administrator(actor)
-    }
-
-    fn can_delete(&self, _actor: &Actor) -> bool {
-        false
-    }
-}
-
-impl Authorizes<AnswerEntry, Read> for AnswerEntrySet {
-    fn check(&self, actor: &Actor, child: &AnswerEntry) -> Result<(), DomainError> {
-        let entry = self.find_entry(*child.id()).ok_or(DomainError::NotFound)?;
-
-        if entry != child {
+        if !allowed {
             return Err(DomainError::Forbidden);
         }
 
-        if self.can_read_entry(entry, actor) {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
+        Ok(AnswerEntry::new(author, title, posted_answers))
+    }
+
+    /// `actor` が `entry` を閲覧できるかどうかを、回答の公開範囲をもとに判断します。
+    pub fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
+        match actor {
+            Actor::User(User::ActiveUser(user)) => {
+                entry.author().authenticated_user_id() == Some(*user.id())
+                    || self.visibility == AnswerVisibility::PUBLIC
+                    || user.role() == &Administrator
+            }
+            Actor::System => true,
+            _ => false,
         }
     }
 }
 
-impl Authorizes<AnswerEntry, Update> for AnswerEntrySet {
-    fn check(&self, actor: &Actor, child: &AnswerEntry) -> Result<(), DomainError> {
-        if !self.can_update(actor) {
-            return Err(DomainError::Forbidden);
-        }
+/// あるフォームに紐づく回答 ([`AnswerEntry`]) の集合です。
+///
+/// この集約は「どの回答がこのフォームに属するか」という**構造**のみを担い、
+/// 回答にまつわるポリシー（公開範囲・受付期間など）は持ちません。ポリシーは
+/// [`ActiveForm`] が保持する [`AnswerSettings`] が担当します。
+///
+/// 通常のリポジトリ取得では認可済みの [`ActiveForm`] から
+/// [`crate::types::authorization_guard::Allowed`] を導出し、フォームとの所属検証や
+/// 個々の回答の閲覧可否は [`ActiveForm`] のガードを起点とした連鎖で行われます。
+///
+/// [`ActiveForm`]: crate::form::models::ActiveForm
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnswerEntrySet {
+    form_id: FormId,
+    entries: Vec<AnswerEntry>,
+}
 
-        let entry = self.find_entry(*child.id()).ok_or(DomainError::NotFound)?;
-
-        if entry.author() == child.author()
-            && entry.timestamp() == child.timestamp()
-            && entry.contents() == child.contents()
-        {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
+impl AnswerEntrySet {
+    pub fn new(form_id: FormId) -> Self {
+        Self {
+            form_id,
+            entries: Vec::new(),
         }
+    }
+
+    pub fn from_raw_parts(form_id: FormId, entries: Vec<AnswerEntry>) -> Self {
+        Self { form_id, entries }
+    }
+
+    pub fn form_id(&self) -> &FormId {
+        &self.form_id
+    }
+
+    pub fn entries(&self) -> &[AnswerEntry] {
+        &self.entries
+    }
+
+    pub fn has_entries(&self) -> bool {
+        !self.entries.is_empty()
+    }
+
+    pub fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
+        self.entries.iter().find(|e| *e.id() == answer_id)
     }
 }
 
@@ -382,22 +245,30 @@ impl Authorizes<Comment, Read> for AnswerEntry {
     }
 }
 
+impl Allowed<AnswerEntry, Read> {
+    pub fn authorize_comment(
+        &self,
+        comment: Comment,
+    ) -> Result<Allowed<Comment, Read>, DomainError> {
+        self.authorize_read(comment)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
     use uuid::Uuid;
 
-    use crate::form::{answer::models::AnswerTitle, models::FormId};
+    use crate::form::answer::models::AnswerTitle;
     use crate::user::models::{ActiveUser, Actor, Role, UserId};
 
     use super::*;
 
-    fn answer_entry_set(
+    fn answer_settings(
         allow_temporary_answers: bool,
         response_period: ResponsePeriod,
-    ) -> AnswerEntrySet {
-        AnswerEntrySet::new(
-            FormId::new(),
+    ) -> AnswerSettings {
+        AnswerSettings::new(
             DefaultAnswerTitle::new(None),
             AnswerVisibility::PRIVATE,
             response_period,
@@ -417,27 +288,13 @@ mod tests {
         )
     }
 
-    fn answer_entry_set_with_visibility(
-        visibility: AnswerVisibility,
-        entries: Vec<AnswerEntry>,
-    ) -> AnswerEntrySet {
-        AnswerEntrySet::from_raw_parts(
-            FormId::new(),
-            DefaultAnswerTitle::new(None),
-            visibility,
-            ResponsePeriod::try_new(None, None).unwrap(),
-            false,
-            entries,
-        )
-    }
-
     fn empty_posted_answers() -> PostedAnswerContents {
         PostedAnswerContents::try_new(&[], vec![]).unwrap()
     }
 
     #[test]
     fn temporary_answer_creation_requires_allow_flag() {
-        let set = answer_entry_set(false, ResponsePeriod::try_new(None, None).unwrap());
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
         let author = AnswerAuthor::TemporaryUser(crate::user::models::TemporaryUser::new(
             "guest".to_string(),
             "contact".to_string(),
@@ -448,19 +305,20 @@ mod tests {
         ));
 
         assert!(
-            set.try_accept_answer(
-                author,
-                &actor,
-                AnswerTitle::new(None),
-                empty_posted_answers()
-            )
-            .is_err()
+            settings
+                .try_accept_answer(
+                    author,
+                    &actor,
+                    AnswerTitle::new(None),
+                    empty_posted_answers()
+                )
+                .is_err()
         );
     }
 
     #[test]
     fn temporary_answer_creation_succeeds_when_allowed_and_within_period() {
-        let set = answer_entry_set(true, ResponsePeriod::try_new(None, None).unwrap());
+        let settings = answer_settings(true, ResponsePeriod::try_new(None, None).unwrap());
         let author = AnswerAuthor::TemporaryUser(crate::user::models::TemporaryUser::new(
             "guest".to_string(),
             "contact".to_string(),
@@ -471,19 +329,20 @@ mod tests {
         ));
 
         assert!(
-            set.try_accept_answer(
-                author,
-                &actor,
-                AnswerTitle::new(None),
-                empty_posted_answers()
-            )
-            .is_ok()
+            settings
+                .try_accept_answer(
+                    author,
+                    &actor,
+                    AnswerTitle::new(None),
+                    empty_posted_answers()
+                )
+                .is_ok()
         );
     }
 
     #[test]
     fn temporary_answer_creation_respects_response_period() {
-        let set = answer_entry_set(
+        let settings = answer_settings(
             true,
             ResponsePeriod::try_new(
                 Some(Utc::now() - Duration::days(2)),
@@ -501,154 +360,69 @@ mod tests {
         ));
 
         assert!(
-            set.try_accept_answer(
-                author,
-                &actor,
-                AnswerTitle::new(None),
-                empty_posted_answers()
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn private_entry_can_be_read_by_its_author() {
-        let author = active_user(Role::StandardUser);
-        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let answer_id = *entry.id();
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
-
-        let set = AuthorizationGuard::<_, Read>::from(set)
-            .try_read(Actor::from(author))
-            .unwrap();
-        assert!(set.read_entry(answer_id).is_ok());
-    }
-
-    #[test]
-    fn private_entry_cannot_be_read_by_other_standard_user() {
-        let author = active_user(Role::StandardUser);
-        let other = active_user(Role::StandardUser);
-        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let answer_id = *entry.id();
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
-
-        let set = AuthorizationGuard::<_, Read>::from(set)
-            .try_read(Actor::from(other))
-            .unwrap();
-        assert!(matches!(
-            set.read_entry(answer_id),
-            Err(DomainError::Forbidden)
-        ));
-    }
-
-    #[test]
-    fn private_entry_can_be_read_by_administrator() {
-        let author = active_user(Role::StandardUser);
-        let administrator = active_user(Role::Administrator);
-        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let answer_id = *entry.id();
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
-
-        let set = AuthorizationGuard::<_, Read>::from(set)
-            .try_read(Actor::from(administrator))
-            .unwrap();
-        assert!(set.read_entry(answer_id).is_ok());
-    }
-
-    #[test]
-    fn public_entry_can_be_read_by_other_standard_user() {
-        let author = active_user(Role::StandardUser);
-        let other = active_user(Role::StandardUser);
-        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let answer_id = *entry.id();
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PUBLIC, vec![entry]);
-
-        let set = AuthorizationGuard::<_, Read>::from(set)
-            .try_read(Actor::from(other))
-            .unwrap();
-        assert!(set.read_entry(answer_id).is_ok());
-    }
-
-    #[test]
-    fn public_entry_cannot_be_updated_by_readable_standard_user() {
-        let author = active_user(Role::StandardUser);
-        let other = active_user(Role::StandardUser);
-        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PUBLIC, vec![entry]);
-
-        let update_guard =
-            AuthorizationGuard::<_, Update>::from(set).try_update(Actor::from(other));
-
-        assert!(matches!(update_guard, Err(DomainError::Forbidden)));
-    }
-
-    #[test]
-    fn entry_title_can_be_updated_from_update_authorized_set() {
-        let author = active_user(Role::StandardUser);
-        let administrator = active_user(Role::Administrator);
-        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let answer_id = *entry.id();
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
-        let new_title = AnswerTitle::new(Some("updated".to_string().try_into().unwrap()));
-
-        let updated_entry = AuthorizationGuard::<_, Update>::from(set)
-            .try_update(Actor::from(administrator))
-            .unwrap()
-            .change_entry_title(answer_id, new_title.clone())
-            .unwrap();
-
-        assert_eq!(updated_entry.title(), &new_title);
-    }
-
-    #[test]
-    fn comment_read_is_authorized_by_readable_answer_entry() {
-        let author = active_user(Role::StandardUser);
-        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let answer_id = *entry.id();
-        let comment = Comment::new(
-            answer_id,
-            CommentContent::new("comment".to_string().try_into().unwrap()),
-            *author.id(),
-        );
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
-
-        assert!(
-            AuthorizationGuard::<_, Read>::from(comment.clone())
-                .try_read(Actor::from(author.clone()))
+            settings
+                .try_accept_answer(
+                    author,
+                    &actor,
+                    AnswerTitle::new(None),
+                    empty_posted_answers()
+                )
                 .is_err()
         );
-
-        let entry = AuthorizationGuard::<_, Read>::from(set)
-            .try_read(Actor::from(author))
-            .unwrap()
-            .read_entry(answer_id)
-            .unwrap();
-
-        assert!(entry.authorize_comment(comment).is_ok());
     }
 
     #[test]
-    fn comment_read_delegation_rejects_answer_mismatch() {
+    fn private_entry_is_readable_by_its_author() {
         let author = active_user(Role::StandardUser);
         let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let entry_id = *entry.id();
-        let other_entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let other_entry_id = *other_entry.id();
-        let comment = Comment::new(
-            other_entry_id,
-            CommentContent::new("comment".to_string().try_into().unwrap()),
-            *author.id(),
-        );
-        let set = answer_entry_set_with_visibility(AnswerVisibility::PRIVATE, vec![entry]);
-        let entry = AuthorizationGuard::<_, Read>::from(set)
-            .try_read(Actor::from(author))
-            .unwrap()
-            .read_entry(entry_id)
-            .unwrap();
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
 
-        assert!(matches!(
-            entry.authorize_comment(comment),
-            Err(DomainError::Forbidden)
-        ));
+        assert!(settings.can_read_entry(&entry, &Actor::from(author)));
+    }
+
+    #[test]
+    fn private_entry_is_not_readable_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+
+        assert!(!settings.can_read_entry(&entry, &Actor::from(other)));
+    }
+
+    #[test]
+    fn private_entry_is_readable_by_administrator() {
+        let author = active_user(Role::StandardUser);
+        let administrator = active_user(Role::Administrator);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(administrator)));
+    }
+
+    #[test]
+    fn public_entry_is_readable_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = AnswerSettings::new(
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PUBLIC,
+            ResponsePeriod::try_new(None, None).unwrap(),
+            false,
+        );
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(other)));
+    }
+
+    #[test]
+    fn find_entry_locates_member() {
+        let author = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let set = AnswerEntrySet::from_raw_parts(FormId::new(), vec![entry]);
+
+        assert!(set.find_entry(answer_id).is_some());
+        assert!(set.find_entry(AnswerId::new()).is_none());
     }
 }

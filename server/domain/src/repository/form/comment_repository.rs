@@ -9,8 +9,8 @@ use crate::{
 
 /// [`Comment`] を集約ルートとして永続化するためのリポジトリ。
 ///
-/// [`Comment`] の生成は [`AnswerEntrySet::create_comment`](crate::form::answer_entry_set::models::AnswerEntrySet::create_comment)
-/// 経由でのみ行えるため、`create` には作成操作の認可を通過した
+/// [`Comment`] の生成は [`ActiveForm`](crate::form::models::ActiveForm) のガード経由
+/// (`Allowed<ActiveForm, Read>::create_comment`) でのみ行えるため、`create` には作成操作の認可を通過した
 /// [`Allowed<Comment, Create>`] が渡される。
 #[automock]
 #[async_trait]

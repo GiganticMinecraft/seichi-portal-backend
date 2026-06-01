@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use domain::{
     form::{
         answer::models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
+        answer_entry_set::models::{AnswerSettings, DefaultAnswerTitle, ResponsePeriod},
         comment::models::{Comment, CommentContent},
         message::models::Message,
         models::{
@@ -104,6 +105,11 @@ pub struct ActiveFormRecord {
     pub updated_at: DateTime<Utc>,
     pub webhook_url: Option<String>,
     pub visibility: String,
+    pub answer_visibility: String,
+    pub allow_temporary_answers: bool,
+    pub response_period_start_at: Option<DateTime<Utc>>,
+    pub response_period_end_at: Option<DateTime<Utc>>,
+    pub default_answer_title: Option<String>,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
 }
@@ -120,6 +126,11 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             updated_at,
             webhook_url,
             visibility,
+            answer_visibility,
+            allow_temporary_answers,
+            response_period_start_at,
+            response_period_end_at,
+            default_answer_title,
             questions,
             label_ids,
         }: ActiveFormRecord,
@@ -130,6 +141,17 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             .collect::<Result<Vec<_>, _>>()?;
         let questions = NonEmptyVec::try_new(questions).map_err(Error::from)?;
 
+        let answer_settings = AnswerSettings::new(
+            DefaultAnswerTitle::new(
+                default_answer_title
+                    .map(NonEmptyString::try_new)
+                    .transpose()?,
+            ),
+            answer_visibility.try_into()?,
+            ResponsePeriod::try_new(response_period_start_at, response_period_end_at)?,
+            allow_temporary_answers,
+        );
+
         Ok(ActiveForm::from_raw_parts(
             FormId::from(Uuid::parse_str(&id).map_err(Into::<InfraError>::into)?),
             FormTitle::new(title.try_into()?),
@@ -139,6 +161,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
                 WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
                 visibility.try_into()?,
             ),
+            answer_settings,
             QuestionSet::try_new(questions)?,
             FormLabelIdSet::try_new(label_ids)?,
         ))

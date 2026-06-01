@@ -3,21 +3,34 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::{answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::FormId},
-    types::authorization_guard::{Allowed, AuthorizationGuard},
-    types::authorization_guard::{Create, Read, Update},
+    form::{
+        answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::ActiveForm,
+    },
+    types::authorization_guard::{Allowed, Read, Update},
 };
 
+/// フォームに紐づく回答 ([`AnswerEntry`]) の集合 ([`AnswerEntrySet`]) を永続化するリポジトリ。
+///
+/// 回答にまつわるポリシー（公開範囲・受付期間など）は [`crate::form::models::ActiveForm`] が
+/// 保持するため、通常の取得は認可済みの [`ActiveForm`] を起点にし、フォームへの所属検証を
+/// 通過した [`Allowed<AnswerEntrySet, _>`] だけを返す。
+///
+/// [`ActiveForm`]: crate::form::models::ActiveForm
 #[automock]
 #[async_trait]
 pub trait AnswerEntrySetRepository: Send + Sync + 'static {
-    async fn create(&self, answer_entry_set: Allowed<AnswerEntrySet, Create>) -> Result<(), Error>;
-    async fn get(
+    async fn get_read(
         &self,
-        form_id: FormId,
-    ) -> Result<Option<AuthorizationGuard<AnswerEntrySet, Read>>, Error>;
-    async fn list_all(&self) -> Result<Vec<AuthorizationGuard<AnswerEntrySet, Read>>, Error>;
-    async fn update(&self, answer_entry_set: Allowed<AnswerEntrySet, Update>) -> Result<(), Error>;
+        form: &Allowed<ActiveForm, Read>,
+    ) -> Result<Option<Allowed<AnswerEntrySet, Read>>, Error>;
+    async fn get_update(
+        &self,
+        form: &Allowed<ActiveForm, Update>,
+    ) -> Result<Option<Allowed<AnswerEntrySet, Update>>, Error>;
+    async fn list_read_by_forms(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+    ) -> Result<Vec<Allowed<AnswerEntrySet, Read>>, Error>;
     async fn add_entry(
         &self,
         answer_entry_set: &Allowed<AnswerEntrySet, Read>,

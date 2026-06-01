@@ -6,7 +6,6 @@ use domain::notification::notificator::Notificator;
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId},
-        answer_entry_set::models::AnswerEntrySet,
         message::models::{Message, MessageId},
     },
     notification::models::NotificationPreference,
@@ -56,34 +55,30 @@ impl<
     R5: MessageThreadRepository,
 > MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
-    async fn read_answer_entry_set_guard_and_entry(
+    async fn read_answer_entry(
         &self,
         actor: &Actor,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<(Allowed<AnswerEntrySet, Read>, Allowed<AnswerEntry, Read>), Error> {
-        let form_guard = self
+    ) -> Result<Allowed<AnswerEntry, Read>, Error> {
+        let form = self
             .active_form_repository
             .get(form_id)
             .await?
-            .ok_or(FormNotFound)?;
-        form_guard.try_read(actor.clone())?;
+            .ok_or(FormNotFound)?
+            .try_read(actor.clone())?;
 
-        let set_guard = self
+        let answer_entry_set = self
             .answer_entry_set_repository
-            .get(form_id)
+            .get_read(&form)
             .await?
             .ok_or(FormNotFound)?;
-        let answer_entry_set = set_guard.try_read(actor.clone())?;
 
-        let entry = answer_entry_set
-            .read_entry(answer_id)
+        form.read_entry(&answer_entry_set, answer_id)
             .map_err(|error| match error {
                 DomainError::NotFound => Error::from(AnswerNotFound),
                 error => Error::from(error),
-            })?;
-
-        Ok((answer_entry_set, entry))
+            })
     }
 
     pub async fn post_message<N: Notificator>(
@@ -95,8 +90,8 @@ impl<
         notificator: &N,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (_set_guard, form_answer) = self
-            .read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
+        let form_answer = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         match Message::try_new(*actor.id(), message_body) {
@@ -199,7 +194,7 @@ impl<
         answer_id: AnswerId,
     ) -> Result<Vec<MessageWithSender>, Error> {
         let actor_user = Actor::from(actor.clone());
-        self.read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
+        self.read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         let messages = match self
@@ -238,7 +233,7 @@ impl<
         body: Option<String>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        self.read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
+        self.read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         let thread_guard = self
@@ -272,7 +267,7 @@ impl<
         message_id: &MessageId,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        self.read_answer_entry_set_guard_and_entry(&actor_user, form_id, answer_id)
+        self.read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         let thread_guard = self

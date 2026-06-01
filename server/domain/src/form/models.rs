@@ -16,7 +16,15 @@ use types::non_empty_string::NonEmptyString;
 pub use crate::form::question::models::{Question, QuestionSet};
 
 use crate::{
-    types::authorization_guard::AuthorizationGuardDefinitions,
+    form::{
+        answer::models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
+        answer_entry_set::models::{AnswerEntrySet, AnswerSettings},
+        comment::models::{Comment, CommentContent},
+    },
+    types::authorization_guard::{
+        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Authorizes, Create, Read,
+        Update,
+    },
     user::models::{Actor, Role::Administrator, User, UserId},
 };
 
@@ -224,6 +232,8 @@ pub struct ActiveForm {
     metadata: FormMeta,
     #[serde(default)]
     settings: FormSettings,
+    #[serde(default)]
+    answer_settings: AnswerSettings,
     questions: QuestionSet,
     #[serde(default)]
     label_ids: FormLabelIdSet,
@@ -237,6 +247,7 @@ impl ActiveForm {
             description,
             metadata: FormMeta::new(),
             settings: FormSettings::new(),
+            answer_settings: AnswerSettings::default(),
             questions,
             label_ids: FormLabelIdSet::empty(),
         }
@@ -257,6 +268,13 @@ impl ActiveForm {
         Self { settings, ..self }
     }
 
+    pub fn change_answer_settings(self, answer_settings: AnswerSettings) -> Self {
+        Self {
+            answer_settings,
+            ..self
+        }
+    }
+
     pub fn change_questions(self, questions: QuestionSet) -> Self {
         Self { questions, ..self }
     }
@@ -272,6 +290,7 @@ impl ActiveForm {
         description: FormDescription,
         metadata: FormMeta,
         settings: FormSettings,
+        answer_settings: AnswerSettings,
         questions: QuestionSet,
         label_ids: FormLabelIdSet,
     ) -> Self {
@@ -281,13 +300,170 @@ impl ActiveForm {
             description,
             metadata,
             settings,
+            answer_settings,
             questions,
             label_ids,
         }
     }
 
+    /// 回答にまつわるポリシー ([`AnswerSettings`]) に委譲して、新しい [`AnswerEntry`] を
+    /// 受理してよいかを判断します。
+    pub fn try_accept_answer(
+        &self,
+        author: AnswerAuthor,
+        actor: &Actor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<AnswerEntry, DomainError> {
+        self.answer_settings
+            .try_accept_answer(author, actor, title, posted_answers)
+    }
+
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: UserId) -> ArchivedForm {
         ArchivedForm::new(self, archived_at, archived_by)
+    }
+}
+
+/// [`ActiveForm`] のガードを起点とした、回答 ([`AnswerEntry`]) への認可の連鎖。
+///
+/// `Allowed<AnswerEntrySet, _>` は [`ActiveForm`] が [`AnswerEntrySet`] の所属
+/// (`form_id` 一致) を確認することでのみ生成でき、個々の [`AnswerEntry`] の閲覧可否は
+/// [`ActiveForm`] が保持する [`AnswerSettings`] のポリシーで判断される。所属検証と
+/// ポリシー判断のいずれもドメイン内で完結する。
+impl Authorizes<AnswerEntrySet, Read> for ActiveForm {
+    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> Result<(), DomainError> {
+        if set.form_id() == self.id() {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<AnswerEntrySet, Update> for ActiveForm {
+    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> Result<(), DomainError> {
+        if set.form_id() == self.id() {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<AnswerEntry, Read> for ActiveForm {
+    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> Result<(), DomainError> {
+        if self.answer_settings.can_read_entry(entry, actor) {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<AnswerEntry, Update> for ActiveForm {
+    fn check(&self, actor: &Actor, _entry: &AnswerEntry) -> Result<(), DomainError> {
+        if is_administrator(actor) {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Allowed<ActiveForm, Read> {
+    /// `set` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
+    pub fn readable_entries(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+    ) -> Vec<Allowed<AnswerEntry, Read>> {
+        if set.value().form_id() != self.value().id() {
+            return Vec::new();
+        }
+
+        set.value()
+            .entries()
+            .iter()
+            .filter_map(|entry| self.authorize_read(entry.to_owned()).ok())
+            .collect()
+    }
+
+    /// `set` に含まれる `answer_id` の [`AnswerEntry`] を、所属と公開範囲を検証したうえで
+    /// 認可済みで返します。
+    pub fn read_entry(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+        answer_id: AnswerId,
+    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
+        if set.value().form_id() != self.value().id() {
+            return Err(DomainError::Forbidden);
+        }
+
+        let entry = set
+            .value()
+            .find_entry(answer_id)
+            .ok_or(DomainError::NotFound)?
+            .clone();
+
+        self.authorize_read(entry)
+    }
+
+    fn read_entry_for_comment(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+        answer_id: AnswerId,
+    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
+        let entry = self.read_entry(set, answer_id)?;
+        match self.actor() {
+            Actor::User(User::ActiveUser(_)) => Ok(entry),
+            _ => Err(DomainError::Forbidden),
+        }
+    }
+
+    /// 対象の [`AnswerEntry`] が `actor` から閲覧可能であることをゲートとして検証したうえで、
+    /// 新しい [`Comment`] の作成ガードを生成します。
+    pub fn create_comment(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+        answer_id: AnswerId,
+        content: CommentContent,
+    ) -> Result<AuthorizationGuard<Comment, Create>, DomainError> {
+        self.read_entry_for_comment(set, answer_id)?;
+
+        let commented_by = match self.actor() {
+            Actor::User(User::ActiveUser(user)) => *user.id(),
+            _ => return Err(DomainError::Forbidden),
+        };
+
+        Ok(AuthorizationGuard::from(Comment::new(
+            answer_id,
+            content,
+            commented_by,
+        )))
+    }
+}
+
+impl Allowed<ActiveForm, Update> {
+    /// `set` に含まれる `answer_id` の [`AnswerEntry`] のタイトルだけを変更し、更新認可済みで
+    /// 返します。タイトル以外が変わらないことは [`AnswerEntry::with_title`] による構築で保証され、
+    /// 更新権限は [`ActiveForm`] のガード経由で保証される。
+    pub fn change_entry_title(
+        &self,
+        set: &Allowed<AnswerEntrySet, Update>,
+        answer_id: AnswerId,
+        title: AnswerTitle,
+    ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
+        if set.value().form_id() != self.value().id() {
+            return Err(DomainError::Forbidden);
+        }
+
+        let entry = set
+            .value()
+            .find_entry(answer_id)
+            .ok_or(DomainError::NotFound)?
+            .clone()
+            .with_title(title);
+
+        self.authorize_update(entry)
     }
 }
 
@@ -356,6 +532,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     /// use domain::form::models::{FormDescription, FormTitle};
     /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
@@ -378,6 +555,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     FormDescription::new(String::from("")),
     ///     FormMeta::new(),
     ///     FormSettings::new(),
+    ///     AnswerSettings::default(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -413,6 +591,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     /// use domain::form::models::{
     ///     FormDescription, FormId, FormMeta,
     ///     FormLabelIdSet, FormTitle, Visibility, WebhookUrl
@@ -452,6 +631,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         Visibility::PRIVATE
     ///     ),
+    ///     AnswerSettings::default(),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
     /// );
@@ -465,6 +645,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///         WebhookUrl::try_new(None).unwrap(),
     ///         Visibility::PUBLIC
     ///     ),
+    ///     AnswerSettings::default(),
     ///     sample_questions(),
     ///     FormLabelIdSet::empty(),
     /// );
@@ -493,6 +674,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -514,6 +696,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     FormDescription::new(String::from("")),
     ///     FormMeta::new(),
     ///     FormSettings::new(),
+    ///     AnswerSettings::default(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -548,6 +731,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -569,6 +753,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     FormDescription::new(String::from("")),
     ///     FormMeta::new(),
     ///     FormSettings::new(),
+    ///     AnswerSettings::default(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -640,6 +825,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -676,6 +862,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -714,6 +901,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -752,6 +940,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::answer_entry_set::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),

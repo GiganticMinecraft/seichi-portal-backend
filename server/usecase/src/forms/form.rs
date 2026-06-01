@@ -2,7 +2,7 @@ use chrono::Utc;
 use domain::{
     form::{
         answer_entry_set::models::{
-            AnswerEntrySet, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+            AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
         },
         models::{
             ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
@@ -70,16 +70,9 @@ impl<
         let user_as_user = Actor::from(user.clone());
 
         let form_id = FormId::new();
-        let answer_entry_set = AnswerEntrySet::new(
-            form_id,
-            DefaultAnswerTitle::new(None),
-            AnswerVisibility::PRIVATE,
-            ResponsePeriod::try_new(None, None)?,
-            false,
-        );
-        let answer_entry_set = match allow_temporary_answers {
-            Some(allow) => answer_entry_set.change_allow_temporary_answers(allow),
-            None => answer_entry_set,
+        let answer_settings = match allow_temporary_answers {
+            Some(allow) => AnswerSettings::default().change_allow_temporary_answers(allow),
+            None => AnswerSettings::default(),
         };
 
         let form = ActiveForm::from_raw_parts(
@@ -88,6 +81,7 @@ impl<
             description,
             FormMeta::new(),
             FormSettings::new(),
+            answer_settings,
             QuestionSet::try_new(questions).map_err(Error::from)?,
             FormLabelIdSet::empty(),
         );
@@ -97,12 +91,6 @@ impl<
                 user,
                 AuthorizationGuard::<_, Create>::from(form).try_create(user_as_user.clone())?,
             )
-            .await?;
-
-        let answer_entry_set_guard =
-            AuthorizationGuard::from(answer_entry_set).try_create(user_as_user.clone())?;
-        self.answer_entry_set_repository
-            .create(answer_entry_set_guard)
             .await?;
 
         self.active_form_repository
@@ -357,49 +345,14 @@ impl<
                 .into());
             }
 
-            let answer_entry_set_guard = self
+            let answer_entry_set = self
                 .answer_entry_set_repository
-                .get(form_id)
+                .get_read(&current_form_read)
                 .await?
                 .ok_or(Error::from(FormNotFound))?;
-            let answer_entry_set = answer_entry_set_guard.try_read(actor_user.clone())?;
-            let has_answers = answer_entry_set.has_entries();
-            if has_answers {
+            if answer_entry_set.has_entries() {
                 validate_answered_form_question_update(&current_questions, questions.as_slice())?;
             }
-        }
-
-        if response_period.is_some()
-            || default_answer_title.is_some()
-            || answer_visibility.is_some()
-            || allow_temporary_answers.is_some()
-        {
-            let set_guard = self
-                .answer_entry_set_repository
-                .get(form_id)
-                .await?
-                .ok_or(Error::from(FormNotFound))?;
-            let updated_set = set_guard.into_update().map(|set| {
-                let set = match answer_visibility {
-                    None => set,
-                    Some(v) => set.change_visibility(v),
-                };
-                let set = match default_answer_title {
-                    None => set,
-                    Some(t) => set.change_default_answer_title(t),
-                };
-                let set = match response_period {
-                    None => set,
-                    Some(p) => set.change_response_period(p),
-                };
-                match allow_temporary_answers {
-                    None => set,
-                    Some(a) => set.change_allow_temporary_answers(a),
-                }
-            });
-            self.answer_entry_set_repository
-                .update(updated_set.try_update(actor_user.clone())?)
-                .await?;
         }
 
         let label_ids = match label_ids {
@@ -434,6 +387,24 @@ impl<
                 Some(webhook) => updated_settings.change_webhook_url(webhook),
             };
 
+            let updated_answer_settings = form.answer_settings().to_owned();
+            let updated_answer_settings = match answer_visibility {
+                None => updated_answer_settings,
+                Some(v) => updated_answer_settings.change_visibility(v),
+            };
+            let updated_answer_settings = match default_answer_title {
+                None => updated_answer_settings,
+                Some(t) => updated_answer_settings.change_default_answer_title(t),
+            };
+            let updated_answer_settings = match response_period {
+                None => updated_answer_settings,
+                Some(p) => updated_answer_settings.change_response_period(p),
+            };
+            let updated_answer_settings = match allow_temporary_answers {
+                None => updated_answer_settings,
+                Some(a) => updated_answer_settings.change_allow_temporary_answers(a),
+            };
+
             let updated_form = match title {
                 None => form,
                 Some(title) => form.change_title(title),
@@ -442,7 +413,9 @@ impl<
                 None => updated_form,
                 Some(description) => updated_form.change_description(description),
             };
-            updated_form.change_settings(updated_settings)
+            updated_form
+                .change_settings(updated_settings)
+                .change_answer_settings(updated_answer_settings)
         });
 
         let updated_form = match label_ids {
@@ -678,6 +651,7 @@ mod tests {
             FormDescription::new("description".to_string()),
             FormMeta::new(),
             FormSettings::new(),
+            AnswerSettings::default(),
             questions,
             FormLabelIdSet::empty(),
         )
@@ -723,11 +697,7 @@ mod tests {
             .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
 
         let form_label_repository = MockFormLabelRepository::new();
-        let mut answer_entry_set_repository = MockAnswerEntrySetRepository::new();
-        answer_entry_set_repository
-            .expect_create()
-            .times(1)
-            .returning(|_| Ok(()));
+        let answer_entry_set_repository = MockAnswerEntrySetRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
         let user_repository = MockUserRepository::new();

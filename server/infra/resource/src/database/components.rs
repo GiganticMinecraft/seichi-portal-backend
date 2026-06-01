@@ -77,19 +77,11 @@ pub trait FormDatabase: Send + Sync {
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
-    async fn create_answer_entry_set(
-        &self,
-        answer_entry_set: &AnswerEntrySet,
-    ) -> Result<(), InfraError>;
     async fn get_answer_entry_set(
         &self,
         form_id: FormId,
     ) -> Result<Option<AnswerEntrySet>, InfraError>;
     async fn list_answer_entry_sets(&self) -> Result<Vec<AnswerEntrySet>, InfraError>;
-    async fn update_answer_entry_set(
-        &self,
-        answer_entry_set: &AnswerEntrySet,
-    ) -> Result<(), InfraError>;
 }
 
 #[automock]

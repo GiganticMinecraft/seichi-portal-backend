@@ -1,8 +1,7 @@
 use chrono::{DateTime, Utc};
 use domain::form::{
     answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
-    answer_entry_set::models::AnswerEntrySet,
-    answer_entry_set::models::DefaultAnswerTitle,
+    answer_entry_set::models::{AnswerSettings, DefaultAnswerTitle},
     models::{FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility},
     question::models::{Choice, Question, QuestionType},
 };
@@ -49,13 +48,13 @@ pub struct AnswerSettingsSchema {
 }
 
 impl AnswerSettingsSchema {
-    pub fn from_answer_entry_set(answer_entry_set: &AnswerEntrySet) -> Self {
+    pub fn from_answer_settings(answer_settings: &AnswerSettings) -> Self {
         Self {
-            default_answer_title: answer_entry_set.default_answer_title().to_owned(),
-            visibility: answer_entry_set.visibility().to_owned().into(),
+            default_answer_title: answer_settings.default_answer_title().to_owned(),
+            visibility: answer_settings.visibility().to_owned().into(),
             response_period: ResponsePeriodSchema {
-                start_at: answer_entry_set.response_period().start_at().to_owned(),
-                end_at: answer_entry_set.response_period().end_at().to_owned(),
+                start_at: answer_settings.response_period().start_at().to_owned(),
+                end_at: answer_settings.response_period().end_at().to_owned(),
             },
         }
     }
@@ -72,10 +71,10 @@ pub struct FormSettingsSchema {
 }
 
 impl FormSettingsSchema {
-    pub fn from_settings_and_entry_set(
+    pub fn from_settings_and_answer_settings(
         actor: &Actor,
         settings: &FormSettings,
-        answer_entry_set: &AnswerEntrySet,
+        answer_settings: &AnswerSettings,
     ) -> Self {
         FormSettingsSchema {
             webhook_url: settings
@@ -83,8 +82,8 @@ impl FormSettingsSchema {
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),
-            allow_temporary_answers: *answer_entry_set.allow_temporary_answers(),
-            answer_settings: AnswerSettingsSchema::from_answer_entry_set(answer_entry_set),
+            allow_temporary_answers: *answer_settings.allow_temporary_answers(),
+            answer_settings: AnswerSettingsSchema::from_answer_settings(answer_settings),
         }
     }
 }
