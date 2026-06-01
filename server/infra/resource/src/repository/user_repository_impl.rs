@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     repository::user_repository::UserRepository,
-    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
-    user::models::{ActiveUser, DiscordUser, DiscordUserId, DiscordUserName},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
+    user::models::{ActiveUser, DiscordAccountLink, DiscordUser, DiscordUserId, DiscordUserName},
 };
 use errors::{Error, infra::InfraError::Reqwest};
 use itertools::Itertools;
@@ -128,20 +128,22 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
 
     async fn link_discord_user(
         &self,
-        discord_user: &DiscordUser,
-        user: Allowed<ActiveUser, Update>,
+        link: Allowed<DiscordAccountLink, Update>,
     ) -> Result<(), Error> {
         self.client
             .user()
-            .link_discord_user(discord_user, user.value())
+            .link_discord_user(link.value())
             .await
             .map_err(Into::into)
     }
 
-    async fn unlink_discord_user(&self, user: Allowed<ActiveUser, Update>) -> Result<(), Error> {
+    async fn unlink_discord_user(
+        &self,
+        link: Allowed<DiscordAccountLink, Delete>,
+    ) -> Result<(), Error> {
         self.client
             .user()
-            .unlink_discord_user(user.value())
+            .unlink_discord_user(link.value())
             .await
             .map_err(Into::into)
     }

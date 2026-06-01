@@ -20,7 +20,7 @@ use domain::{
     },
     notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
-    user::models::{ActiveUser, DiscordUser, Role},
+    user::models::{ActiveUser, DiscordAccountLink, Role},
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -234,12 +234,8 @@ pub trait UserDatabase: Send + Sync {
         session_id: String,
     ) -> Result<Option<ActiveUser>, InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
-    async fn link_discord_user(
-        &self,
-        discord_user: &DiscordUser,
-        user: &ActiveUser,
-    ) -> Result<(), InfraError>;
-    async fn unlink_discord_user(&self, user: &ActiveUser) -> Result<(), InfraError>;
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
+    async fn unlink_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
     async fn fetch_discord_user(
         &self,
         user: &ActiveUser,

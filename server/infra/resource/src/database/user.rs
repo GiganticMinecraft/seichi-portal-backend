@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::user::models::{ActiveUser, DiscordUser, Role};
+use domain::user::models::{ActiveUser, DiscordAccountLink, Role};
 use errors::infra::InfraError;
 use itertools::Itertools;
 use redis::Commands;
@@ -187,14 +187,15 @@ impl UserDatabase for ConnectionPool {
         Ok(())
     }
 
-    async fn link_discord_user(
-        &self,
-        discord_user: &DiscordUser,
-        user: &ActiveUser,
-    ) -> Result<(), InfraError> {
-        let user_id = user.id().to_string();
-        let discord_user_id = discord_user.id().to_owned().into_inner();
-        let discord_username = discord_user.name().to_owned().into_inner().to_owned();
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError> {
+        let user_id = link.user_id().to_string();
+        let discord_user_id = link.discord_user().id().to_owned().into_inner();
+        let discord_username = link
+            .discord_user()
+            .name()
+            .to_owned()
+            .into_inner()
+            .to_owned();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -218,8 +219,8 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
-    async fn unlink_discord_user(&self, user: &ActiveUser) -> Result<(), InfraError> {
-        let user_id = user.id().to_string();
+    async fn unlink_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError> {
+        let user_id = link.user_id().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {

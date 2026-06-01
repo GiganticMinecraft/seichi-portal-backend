@@ -1,7 +1,7 @@
 use domain::{
     repository::user_repository::UserRepository,
-    types::authorization_guard::{AuthorizationGuard, Create, Update},
-    user::models::{ActiveUser, Actor, Role},
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
+    user::models::{ActiveUser, Actor, DiscordAccountLink, Role},
 };
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
@@ -156,20 +156,29 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::DiscordLinkFailed))?;
 
+        let link = DiscordAccountLink::new(*user.id(), discord_user);
+
         self.repository
             .link_discord_user(
-                &discord_user,
-                AuthorizationGuard::<_, Update>::from(user.clone())
-                    .try_update(Actor::from(user))?,
+                AuthorizationGuard::<_, Update>::from(link).try_update(Actor::from(user))?,
             )
             .await
     }
 
     pub async fn unlink_discord_user(&self, user: ActiveUser) -> Result<(), Error> {
+        let allowed_user = AuthorizationGuard::<_, Read>::from(user.clone())
+            .try_read(Actor::from(user.clone()))?;
+        let discord_user = self.repository.fetch_discord_user(&allowed_user).await?;
+
+        let Some(discord_user) = discord_user else {
+            return Ok(());
+        };
+
+        let link = DiscordAccountLink::new(*user.id(), discord_user);
+
         self.repository
             .unlink_discord_user(
-                AuthorizationGuard::<_, Update>::from(user.clone())
-                    .try_update(Actor::from(user))?,
+                AuthorizationGuard::<_, Delete>::from(link).try_delete(Actor::from(user))?,
             )
             .await
     }

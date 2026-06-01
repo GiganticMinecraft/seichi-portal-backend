@@ -4,8 +4,8 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
-    user::models::{ActiveUser, DiscordUser},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
+    user::models::{ActiveUser, DiscordAccountLink, DiscordUser},
 };
 
 #[automock]
@@ -36,10 +36,12 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn end_user_session(&self, session_id: String) -> Result<(), Error>;
     async fn link_discord_user(
         &self,
-        discord_user: &DiscordUser,
-        user: Allowed<ActiveUser, Update>,
+        link: Allowed<DiscordAccountLink, Update>,
     ) -> Result<(), Error>;
-    async fn unlink_discord_user(&self, user: Allowed<ActiveUser, Update>) -> Result<(), Error>;
+    async fn unlink_discord_user(
+        &self,
+        link: Allowed<DiscordAccountLink, Delete>,
+    ) -> Result<(), Error>;
     async fn fetch_discord_user(
         &self,
         user: &Allowed<ActiveUser, Read>,

@@ -172,7 +172,7 @@ pub struct UserSessionExpires {
     pub expires: u32,
 }
 
-#[derive(DerivingVia, Debug)]
+#[derive(DerivingVia, Debug, PartialEq, Eq)]
 #[deriving(From, Into, IntoInner, Clone)]
 pub struct DiscordUserId(String);
 
@@ -189,7 +189,7 @@ impl DiscordUserId {
     }
 }
 
-#[derive(DerivingVia, Debug)]
+#[derive(DerivingVia, Debug, PartialEq, Eq)]
 #[deriving(From, Into, IntoInner, Clone)]
 pub struct DiscordUserName(String);
 
@@ -206,7 +206,7 @@ impl DiscordUserName {
     }
 }
 
-#[derive(Getters, Debug)]
+#[derive(Getters, Debug, Clone, PartialEq, Eq)]
 pub struct DiscordUser {
     id: DiscordUserId,
     name: DiscordUserName,
@@ -215,5 +215,38 @@ pub struct DiscordUser {
 impl DiscordUser {
     pub fn new(id: DiscordUserId, name: DiscordUserName) -> Self {
         Self { id, name }
+    }
+}
+
+#[derive(Getters, Debug, Clone, PartialEq, Eq)]
+pub struct DiscordAccountLink {
+    user_id: UserId,
+    discord_user: DiscordUser,
+}
+
+impl DiscordAccountLink {
+    pub fn new(user_id: UserId, discord_user: DiscordUser) -> Self {
+        Self {
+            user_id,
+            discord_user,
+        }
+    }
+}
+
+impl AuthorizationGuardDefinitions for DiscordAccountLink {
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
+    }
+
+    fn can_read(&self, _actor: &Actor) -> bool {
+        true
+    }
+
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
+    }
+
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
     }
 }
