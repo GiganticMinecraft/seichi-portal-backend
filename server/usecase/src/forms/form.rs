@@ -1,14 +1,9 @@
 use chrono::Utc;
 use domain::{
-    form::{
-        answer_entry_set::models::{
-            AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
-        },
-        models::{
-            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
-            FormLabelIdSet, FormMeta, FormSettings, FormTitle, Question, QuestionSet, Visibility,
-            WebhookUrl,
-        },
+    form::models::{
+        ActiveForm, AnswerSettings, AnswerVisibility, ArchivedForm, DefaultAnswerTitle,
+        FormDescription, FormId, FormLabel, FormLabelId, FormLabelIdSet, FormMeta, FormSettings,
+        FormTitle, Question, QuestionSet, ResponsePeriod, Visibility, WebhookUrl,
     },
     repository::{
         form::{

@@ -1,8 +1,10 @@
 use domain::form::question::models::{ChoiceId, QuestionId, QuestionType};
 use domain::form::{
     answer::models::{AnswerLabelId, AnswerTitle},
-    answer_entry_set::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-    models::{FormLabelId, FormTitle, Visibility, WebhookUrl},
+    models::{
+        AnswerVisibility, DefaultAnswerTitle, FormLabelId, FormTitle, ResponsePeriod, Visibility,
+        WebhookUrl,
+    },
 };
 use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;

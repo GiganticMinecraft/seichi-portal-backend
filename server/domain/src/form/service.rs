@@ -5,8 +5,7 @@ use std::sync::OnceLock;
 
 use crate::form::{
     answer::models::{AnswerTitle, PostedAnswerContents},
-    answer_entry_set::models::DefaultAnswerTitle,
-    models::Question,
+    models::{DefaultAnswerTitle, Question},
 };
 
 pub struct DefaultAnswerTitleDomainService;
