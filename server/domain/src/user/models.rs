@@ -147,7 +147,7 @@ impl AuthorizationGuardDefinitions for ActiveUser {
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role == Role::Administrator)
     }
 
     fn can_delete(&self, actor: &Actor) -> bool {
