@@ -168,11 +168,6 @@ pub enum Role {
 }
 
 #[derive(Deserialize)]
-pub struct RoleQuery {
-    pub role: Role,
-}
-
-#[derive(Deserialize)]
 pub struct UserSessionExpires {
     pub expires: u32,
 }
