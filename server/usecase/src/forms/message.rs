@@ -20,7 +20,7 @@ use domain::{
     },
     types::{
         authorization_guard::{Allowed, AuthorizationGuard},
-        authorization_guard::{Create, Read, Update},
+        authorization_guard::{Create, Read},
     },
     user::models::{ActiveUser, Actor},
 };
@@ -109,12 +109,9 @@ impl<
                     .await?
                 {
                     Some(thread_guard) => {
-                        let thread = thread_guard.try_read(actor_user.clone())?;
-                        let updated = thread.value().clone().add_message(message);
-                        let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
-                        self.message_thread_repository
-                            .update(guard.try_update(actor_user.clone())?)
-                            .await
+                        let thread = thread_guard.into_update().try_update(actor_user.clone())?;
+                        let updated = thread.map(|t| t.add_message(message));
+                        self.message_thread_repository.update(updated).await
                     }
                     None => {
                         let answer_author_id = form_answer
@@ -236,24 +233,17 @@ impl<
         self.read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        let thread_guard = self
-            .message_thread_repository
-            .get_by_answer_id(answer_id)
-            .await?
-            .ok_or(Error::from(MessageNotFound))?;
-
-        let thread = thread_guard.try_read(actor_user.clone())?;
-
         if let Some(body) = body {
-            let updated =
-                thread
-                    .value()
-                    .clone()
-                    .update_message_body(*message_id, &actor_user, body)?;
-            let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
-            self.message_thread_repository
-                .update(guard.try_update(actor_user.clone())?)
-                .await?;
+            let thread = self
+                .message_thread_repository
+                .get_by_answer_id(answer_id)
+                .await?
+                .ok_or(Error::from(MessageNotFound))?
+                .into_update()
+                .try_update(actor_user)?;
+
+            let updated = thread.update_message_body(*message_id, body)?;
+            self.message_thread_repository.update(updated).await?;
         }
 
         Ok(())
@@ -270,21 +260,16 @@ impl<
         self.read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        let thread_guard = self
+        let thread = self
             .message_thread_repository
             .get_by_answer_id(answer_id)
             .await?
-            .ok_or(Error::from(MessageNotFound))?;
+            .ok_or(Error::from(MessageNotFound))?
+            .into_update()
+            .try_update(actor_user)?;
 
-        let thread = thread_guard.try_read(actor_user.clone())?;
-
-        let updated = thread
-            .value()
-            .clone()
-            .remove_message(*message_id, &actor_user)?;
-        let guard = AuthorizationGuard::<MessageThread, Update>::from(updated);
-        self.message_thread_repository
-            .update(guard.try_update(actor_user.clone())?)
-            .await
+        let message = thread.authorize_message_delete(*message_id)?;
+        let updated = thread.remove_message(message);
+        self.message_thread_repository.update(updated).await
     }
 }

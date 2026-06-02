@@ -117,6 +117,18 @@ where
             _phantom_data: PhantomData,
         }
     }
+
+    /// 認可済みの値に対して失敗しうる更新を行い、同じ操作権限と [`Actor`] を引き継ぎます。
+    pub fn try_map<F>(self, f: F) -> Result<Self, DomainError>
+    where
+        F: FnOnce(T) -> Result<T, DomainError>,
+    {
+        Ok(Self {
+            value: f(self.value)?,
+            actor: self.actor,
+            _phantom_data: PhantomData,
+        })
+    }
 }
 
 impl<T, A: Actions> Allowed<T, A> {
@@ -140,6 +152,18 @@ impl<T> Allowed<T, Update> {
         T: Authorizes<C, Update>,
     {
         self.authorize(child)
+    }
+
+    /// 更新認可済みの親要素から、子要素の削除認可済み値を作ります。
+    ///
+    /// Action ライフサイクル上 Update → Delete は有効な遷移であるため、
+    /// 更新認可済みの親が子要素の削除を認可できます。
+    pub fn authorize_delete<C>(&self, child: C) -> Result<Allowed<C, Delete>, DomainError>
+    where
+        T: Authorizes<C, Delete>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
     }
 }
 

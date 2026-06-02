@@ -5,7 +5,9 @@ use crate::{
         answer::models::AnswerId,
         message::models::{Message, MessageId},
     },
-    types::authorization_guard::AuthorizationGuardDefinitions,
+    types::authorization_guard::{
+        Allowed, AuthorizationGuardDefinitions, Authorizes, Delete, Update,
+    },
     user::models::{Actor, Role::Administrator, User, UserId},
 };
 
@@ -64,17 +66,11 @@ impl MessageThread {
         self.messages.iter().find(|m| *m.id() == message_id)
     }
 
-    pub fn update_message_body(
+    fn apply_message_update(
         self,
         message_id: MessageId,
-        actor: &Actor,
         new_body: String,
     ) -> Result<Self, DomainError> {
-        let message = self.find_message(message_id).ok_or(DomainError::NotFound)?;
-        match actor {
-            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id() => {}
-            _ => return Err(DomainError::Forbidden),
-        }
         let messages = self
             .messages
             .into_iter()
@@ -89,18 +85,69 @@ impl MessageThread {
         Ok(Self { messages, ..self })
     }
 
-    pub fn remove_message(self, message_id: MessageId, actor: &Actor) -> Result<Self, DomainError> {
-        let message = self.find_message(message_id).ok_or(DomainError::NotFound)?;
-        match actor {
-            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id() => {}
-            _ => return Err(DomainError::Forbidden),
+    fn apply_message_removal(self, message_id: MessageId) -> Self {
+        Self {
+            messages: self
+                .messages
+                .into_iter()
+                .filter(|m| *m.id() != message_id)
+                .collect(),
+            ..self
         }
-        let messages = self
-            .messages
-            .into_iter()
-            .filter(|m| *m.id() != message_id)
-            .collect();
-        Ok(Self { messages, ..self })
+    }
+}
+
+impl Authorizes<Message, Update> for MessageThread {
+    fn check(&self, actor: &Actor, message: &Message) -> Result<(), DomainError> {
+        match actor {
+            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id() => Ok(()),
+            _ => Err(DomainError::Forbidden),
+        }
+    }
+}
+
+impl Authorizes<Message, Delete> for MessageThread {
+    fn check(&self, actor: &Actor, message: &Message) -> Result<(), DomainError> {
+        match actor {
+            Actor::User(User::ActiveUser(user))
+                if message.sender_id() == user.id() || user.role() == &Administrator =>
+            {
+                Ok(())
+            }
+            _ => Err(DomainError::Forbidden),
+        }
+    }
+}
+
+impl Allowed<MessageThread, Update> {
+    pub fn update_message_body(
+        self,
+        message_id: MessageId,
+        new_body: String,
+    ) -> Result<Self, DomainError> {
+        let message = self
+            .value()
+            .find_message(message_id)
+            .ok_or(DomainError::NotFound)?
+            .clone();
+        self.authorize_update(message)?;
+        self.try_map(|thread| thread.apply_message_update(message_id, new_body))
+    }
+
+    pub fn authorize_message_delete(
+        &self,
+        message_id: MessageId,
+    ) -> Result<Allowed<Message, Delete>, DomainError> {
+        let message = self
+            .value()
+            .find_message(message_id)
+            .ok_or(DomainError::NotFound)?
+            .clone();
+        self.authorize_delete(message)
+    }
+
+    pub fn remove_message(self, message: Allowed<Message, Delete>) -> Self {
+        self.map(|thread| thread.apply_message_removal(*message.value().id()))
     }
 }
 
