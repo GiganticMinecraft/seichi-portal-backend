@@ -6,17 +6,21 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use domain::search::models::{NumberOfRecordsPerAggregate, RealAnswers};
+use domain::search::models::{
+    AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
+    NumberOfRecordsPerAggregate, UserSearchHit,
+};
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
+        answer_entry_set::models::AnswerEntrySet,
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
     },
     notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
-    user::models::{ActiveUser, DiscordUser, Role},
+    user::models::{ActiveUser, DiscordAccountLink, Role},
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -28,6 +32,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormAnswerDatabase: FormAnswerDatabase;
     type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
     type ConcreteFormMessageDatabase: FormMessageDatabase;
+    type ConcreteFormMessageThreadDatabase: FormMessageThreadDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
     type ConcreteUserDatabase: UserDatabase;
@@ -41,6 +46,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
+    fn form_message_thread(&self) -> &Self::ConcreteFormMessageThreadDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
@@ -71,26 +77,30 @@ pub trait FormDatabase: Send + Sync {
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
+    async fn get_answer_entry_set(
+        &self,
+        form_id: FormId,
+    ) -> Result<Option<AnswerEntrySet>, InfraError>;
+    async fn list_answer_entry_sets(&self) -> Result<Vec<AnswerEntrySet>, InfraError>;
 }
 
 #[automock]
 #[async_trait]
 pub trait FormAnswerDatabase: Send + Sync {
-    async fn post_answer(&self, answer: &AnswerEntry) -> Result<(), InfraError>;
+    async fn post_answer(&self, answer: &AnswerEntry, form_id: FormId) -> Result<(), InfraError>;
     async fn get_answers(
         &self,
         answer_id: AnswerId,
     ) -> Result<Option<FormAnswerRecord>, InfraError>;
-    async fn get_answers_by_form_id(
-        &self,
-        form_id: FormId,
-    ) -> Result<Vec<FormAnswerRecord>, InfraError>;
-    async fn get_all_answers(&self) -> Result<Vec<FormAnswerRecord>, InfraError>;
     async fn get_answers_by_answer_ids(
         &self,
         answer_ids: Vec<AnswerId>,
     ) -> Result<Vec<FormAnswerRecord>, InfraError>;
-    async fn update_answer_entry(&self, answer_entry: &AnswerEntry) -> Result<(), InfraError>;
+    async fn update_answer_entry(
+        &self,
+        answer_entry: &AnswerEntry,
+        form_id: FormId,
+    ) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
 
@@ -123,7 +133,7 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
 
 #[async_trait]
 pub trait FormMessageDatabase: Send + Sync {
-    async fn post_message(&self, message: &Message) -> Result<(), InfraError>;
+    async fn post_message(&self, message: &Message, answer_id: AnswerId) -> Result<(), InfraError>;
     async fn update_message_body(
         &self,
         message_id: MessageId,
@@ -133,11 +143,29 @@ pub trait FormMessageDatabase: Send + Sync {
         &self,
         answers: &AnswerEntry,
     ) -> Result<Vec<MessageRecord>, InfraError>;
+    async fn fetch_messages_by_answer_id(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<MessageRecord>, InfraError>;
     async fn fetch_message(
         &self,
         message_id: &MessageId,
     ) -> Result<Option<MessageRecord>, InfraError>;
     async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormMessageThreadDatabase: Send + Sync {
+    async fn create_message_thread(
+        &self,
+        answer_id: &str,
+        answer_author_id: &str,
+    ) -> Result<(), InfraError>;
+    async fn get_thread_author_by_answer_id(
+        &self,
+        answer_id: &str,
+    ) -> Result<Option<String>, InfraError>;
 }
 
 #[automock]
@@ -198,12 +226,8 @@ pub trait UserDatabase: Send + Sync {
         session_id: String,
     ) -> Result<Option<ActiveUser>, InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
-    async fn link_discord_user(
-        &self,
-        discord_user: &DiscordUser,
-        user: &ActiveUser,
-    ) -> Result<(), InfraError>;
-    async fn unlink_discord_user(&self, user: &ActiveUser) -> Result<(), InfraError>;
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
+    async fn unlink_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
     async fn fetch_discord_user(
         &self,
         user: &ActiveUser,
@@ -214,12 +238,18 @@ pub trait UserDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait SearchDatabase: Send + Sync {
-    async fn search_users(&self, query: &str) -> Result<Vec<ActiveUser>, InfraError>;
-    async fn search_forms(&self, query: &str) -> Result<Vec<ActiveForm>, InfraError>;
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError>;
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<RealAnswers>, InfraError>;
-    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError>;
+    async fn search_users(&self, query: &str) -> Result<Vec<UserSearchHit>, InfraError>;
+    async fn search_forms(&self, query: &str) -> Result<Vec<FormSearchHit>, InfraError>;
+    async fn search_labels_for_forms(
+        &self,
+        query: &str,
+    ) -> Result<Vec<FormLabelSearchHit>, InfraError>;
+    async fn search_labels_for_answers(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AnswerLabelSearchHit>, InfraError>;
+    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, InfraError>;
+    async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError>;
     async fn sync_search_engine(
         &self,
         data: &[SearchableFieldsWithOperation],

@@ -3,21 +3,20 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use domain::{
     form::{
-        answer::{
-            models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
-            settings::models::{DefaultAnswerTitle, ResponsePeriod},
-        },
-        comment::models::CommentContent,
+        answer::models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
+        comment::models::{Comment, CommentContent},
+        message::models::Message,
         models::{
-            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
-            FormLabelIdSet, FormLabelName, FormMeta, FormSettings, FormTitle, QuestionSet,
-            WebhookUrl,
+            ActiveForm, AnswerSettings, ArchivedForm, DefaultAnswerTitle, FormDescription, FormId,
+            FormLabel, FormLabelId, FormLabelIdSet, FormLabelName, FormMeta, FormSettings,
+            FormTitle, QuestionSet, ResponsePeriod, WebhookUrl,
         },
         question::models::{Choice, Question, QuestionType},
     },
-    user::models::{ActiveUser, Role, TemporaryUser},
+    notification::models::NotificationPreference,
+    user::models::{ActiveUser, DiscordUser, DiscordUserId, DiscordUserName, Role, TemporaryUser},
 };
-use errors::infra::InfraError;
+use errors::{Error, infra::InfraError};
 use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
@@ -30,7 +29,7 @@ pub struct ChoiceRecord {
 }
 
 impl TryFrom<ChoiceRecord> for Choice {
-    type Error = errors::Error;
+    type Error = Error;
 
     fn try_from(
         ChoiceRecord {
@@ -39,7 +38,10 @@ impl TryFrom<ChoiceRecord> for Choice {
             label,
         }: ChoiceRecord,
     ) -> Result<Self, Self::Error> {
-        Choice::from_raw_parts(id.map(Into::into), position, label.try_into()?).map_err(Into::into)
+        unsafe {
+            Choice::from_raw_parts(id.map(Into::into), position, label.try_into()?)
+                .map_err(Into::into)
+        }
     }
 }
 
@@ -57,7 +59,7 @@ pub struct QuestionRecord {
 }
 
 impl TryFrom<QuestionRecord> for Question {
-    type Error = errors::Error;
+    type Error = Error;
 
     fn try_from(
         QuestionRecord {
@@ -81,19 +83,21 @@ impl TryFrom<QuestionRecord> for Question {
                     .then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"))
             })?;
 
-        Question::from_raw_parts(
-            Uuid::from_str(&id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            template_key.try_into()?,
-            position,
-            title.try_into()?,
-            description.map(TryInto::try_into).transpose()?,
-            QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
-            choices,
-            is_required,
-        )
-        .map_err(Into::into)
+        unsafe {
+            Question::from_raw_parts(
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                template_key.try_into()?,
+                position,
+                title.try_into()?,
+                description.map(TryInto::try_into).transpose()?,
+                QuestionType::from_str(&question_type).map_err(Into::<InfraError>::into)?,
+                choices,
+                is_required,
+            )
+            .map_err(Into::into)
+        }
     }
 }
 
@@ -103,19 +107,19 @@ pub struct ActiveFormRecord {
     pub description: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub start_at: Option<DateTime<Utc>>,
-    pub end_at: Option<DateTime<Utc>>,
     pub webhook_url: Option<String>,
-    pub default_answer_title: Option<String>,
     pub visibility: String,
-    pub allow_temporary_answers: bool,
     pub answer_visibility: String,
+    pub allow_temporary_answers: bool,
+    pub response_period_start_at: Option<DateTime<Utc>>,
+    pub response_period_end_at: Option<DateTime<Utc>>,
+    pub default_answer_title: Option<String>,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
 }
 
 impl TryFrom<ActiveFormRecord> for ActiveForm {
-    type Error = errors::Error;
+    type Error = Error;
 
     fn try_from(
         ActiveFormRecord {
@@ -124,13 +128,13 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             description,
             created_at,
             updated_at,
-            start_at,
-            end_at,
             webhook_url,
-            default_answer_title,
             visibility,
-            allow_temporary_answers,
             answer_visibility,
+            allow_temporary_answers,
+            response_period_start_at,
+            response_period_end_at,
+            default_answer_title,
             questions,
             label_ids,
         }: ActiveFormRecord,
@@ -139,28 +143,34 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
-        let questions = NonEmptyVec::try_new(questions).map_err(errors::Error::from)?;
+        let questions = NonEmptyVec::try_new(questions).map_err(Error::from)?;
 
-        Ok(ActiveForm::from_raw_parts(
-            FormId::from(Uuid::parse_str(&id).map_err(Into::<InfraError>::into)?),
-            FormTitle::new(title.try_into()?),
-            FormDescription::new(description),
-            FormMeta::from_raw_parts(created_at, updated_at),
-            FormSettings::from_raw_parts(
-                ResponsePeriod::try_new(start_at, end_at)?,
-                WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
-                DefaultAnswerTitle::new(
-                    default_answer_title
-                        .map(NonEmptyString::try_new)
-                        .transpose()?,
-                ),
-                visibility.try_into()?,
-                allow_temporary_answers,
-                answer_visibility.try_into()?,
+        let answer_settings = AnswerSettings::new(
+            DefaultAnswerTitle::new(
+                default_answer_title
+                    .map(NonEmptyString::try_new)
+                    .transpose()?,
             ),
-            QuestionSet::try_new(questions)?,
-            FormLabelIdSet::try_new(label_ids)?,
-        ))
+            answer_visibility.try_into()?,
+            ResponsePeriod::try_new(response_period_start_at, response_period_end_at)?,
+            allow_temporary_answers,
+        );
+
+        Ok(unsafe {
+            ActiveForm::from_raw_parts(
+                FormId::from(Uuid::parse_str(&id).map_err(Into::<InfraError>::into)?),
+                FormTitle::new(title.try_into()?),
+                FormDescription::new(description),
+                FormMeta::from_raw_parts(created_at, updated_at),
+                FormSettings::from_raw_parts(
+                    WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
+                    visibility.try_into()?,
+                ),
+                answer_settings,
+                QuestionSet::try_new(questions)?,
+                FormLabelIdSet::try_new(label_ids)?,
+            )
+        })
     }
 }
 
@@ -173,7 +183,7 @@ pub struct ArchivedFormRecord {
 }
 
 impl TryFrom<ArchivedFormRecord> for ArchivedForm {
-    type Error = errors::Error;
+    type Error = Error;
 
     fn try_from(value: ArchivedFormRecord) -> Result<Self, Self::Error> {
         Ok(ArchivedForm::from_persisted(
@@ -218,13 +228,14 @@ pub struct UserRecord {
 }
 
 impl TryFrom<UserRecord> for ActiveUser {
-    type Error = errors::infra::InfraError;
+    type Error = InfraError;
 
     fn try_from(UserRecord { name, id, role }: UserRecord) -> Result<Self, Self::Error> {
         Ok(ActiveUser::new(name, Uuid::from_str(&id)?.into(), role))
     }
 }
 
+#[derive(Clone)]
 pub struct CommentRecord {
     pub answer_id: String,
     pub comment_id: String,
@@ -235,8 +246,8 @@ pub struct CommentRecord {
     pub commented_by_role: String,
 }
 
-impl TryFrom<CommentRecord> for domain::form::comment::models::Comment {
-    type Error = errors::Error;
+impl TryFrom<CommentRecord> for Comment {
+    type Error = Error;
 
     fn try_from(
         CommentRecord {
@@ -249,19 +260,21 @@ impl TryFrom<CommentRecord> for domain::form::comment::models::Comment {
             commented_by_role: _,
         }: CommentRecord,
     ) -> Result<Self, Self::Error> {
-        Ok(domain::form::comment::models::Comment::from_raw_parts(
-            Uuid::from_str(&answer_id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            Uuid::from_str(&comment_id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            CommentContent::new(content.try_into()?),
-            timestamp,
-            Uuid::from_str(&commented_by_id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-        ))
+        Ok(unsafe {
+            Comment::from_raw_parts(
+                Uuid::from_str(&answer_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                Uuid::from_str(&comment_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                CommentContent::new(content.try_into()?),
+                timestamp,
+                Uuid::from_str(&commented_by_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+            )
+        })
     }
 }
 
@@ -272,6 +285,7 @@ pub struct FormAnswerRecord {
     pub form_id: String,
     pub title: Option<String>,
     pub contents: Vec<FormAnswerContentRecord>,
+    pub messages: Vec<MessageRecord>,
 }
 
 pub enum AnswerAuthorRecord {
@@ -280,16 +294,17 @@ pub enum AnswerAuthorRecord {
 }
 
 impl TryFrom<FormAnswerRecord> for AnswerEntry {
-    type Error = errors::Error;
+    type Error = Error;
 
     fn try_from(
         FormAnswerRecord {
             id,
             author,
             timestamp,
-            form_id,
+            form_id: _,
             title,
             contents,
+            messages: _,
         }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
         let author = match author {
@@ -305,7 +320,6 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                     .into(),
                 author,
                 timestamp,
-                FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
                 contents
                     .into_iter()
@@ -322,15 +336,17 @@ pub struct AnswerLabelRecord {
 }
 
 impl TryFrom<AnswerLabelRecord> for AnswerLabel {
-    type Error = errors::Error;
+    type Error = Error;
 
     fn try_from(AnswerLabelRecord { id, name }: AnswerLabelRecord) -> Result<Self, Self::Error> {
-        Ok(AnswerLabel::from_raw_parts(
-            Uuid::from_str(&id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            NonEmptyString::try_new(name)?,
-        ))
+        Ok(unsafe {
+            AnswerLabel::from_raw_parts(
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                NonEmptyString::try_new(name)?,
+            )
+        })
     }
 }
 
@@ -340,21 +356,23 @@ pub struct FormLabelRecord {
 }
 
 impl TryFrom<FormLabelRecord> for FormLabel {
-    type Error = errors::Error;
+    type Error = Error;
 
     fn try_from(FormLabelRecord { id, name }: FormLabelRecord) -> Result<Self, Self::Error> {
-        Ok(FormLabel::from_raw_parts(
-            Uuid::from_str(&id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-            FormLabelName::new(name.try_into()?),
-        ))
+        Ok(unsafe {
+            FormLabel::from_raw_parts(
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                FormLabelName::new(name.try_into()?),
+            )
+        })
     }
 }
 
+#[derive(Clone)]
 pub struct MessageRecord {
     pub id: String,
-    pub related_answer: String,
     pub sender_name: String,
     pub sender_id: String,
     pub sender_role: String,
@@ -362,13 +380,12 @@ pub struct MessageRecord {
     pub timestamp: DateTime<Utc>,
 }
 
-impl TryFrom<MessageRecord> for domain::form::message::models::Message {
-    type Error = errors::Error;
+impl TryFrom<MessageRecord> for Message {
+    type Error = Error;
 
     fn try_from(
         MessageRecord {
             id,
-            related_answer,
             sender_name: _,
             sender_id,
             sender_role: _,
@@ -377,11 +394,8 @@ impl TryFrom<MessageRecord> for domain::form::message::models::Message {
         }: MessageRecord,
     ) -> Result<Self, Self::Error> {
         unsafe {
-            Ok(domain::form::message::models::Message::from_raw_parts(
+            Ok(Message::from_raw_parts(
                 Uuid::from_str(&id)
-                    .map_err(Into::<InfraError>::into)?
-                    .into(),
-                Uuid::from_str(&related_answer)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
                 Uuid::from_str(&sender_id)
@@ -399,8 +413,8 @@ pub struct NotificationSettingsRecord {
     pub is_send_message_notification: bool,
 }
 
-impl TryFrom<NotificationSettingsRecord> for domain::notification::models::NotificationPreference {
-    type Error = errors::Error;
+impl TryFrom<NotificationSettingsRecord> for NotificationPreference {
+    type Error = Error;
 
     fn try_from(
         NotificationSettingsRecord {
@@ -408,14 +422,14 @@ impl TryFrom<NotificationSettingsRecord> for domain::notification::models::Notif
             is_send_message_notification,
         }: NotificationSettingsRecord,
     ) -> Result<Self, Self::Error> {
-        Ok(
-            domain::notification::models::NotificationPreference::from_raw_parts(
+        Ok(unsafe {
+            NotificationPreference::from_raw_parts(
                 Uuid::from_str(&recipient.id)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
                 is_send_message_notification,
-            ),
-        )
+            )
+        })
     }
 }
 
@@ -424,12 +438,9 @@ pub struct DiscordUserRecord {
     pub username: String,
 }
 
-impl From<DiscordUserRecord> for domain::user::models::DiscordUser {
+impl From<DiscordUserRecord> for DiscordUser {
     fn from(DiscordUserRecord { user_id, username }: DiscordUserRecord) -> Self {
-        domain::user::models::DiscordUser::new(
-            domain::user::models::DiscordUserId::new(user_id),
-            domain::user::models::DiscordUserName::new(username),
-        )
+        DiscordUser::new(DiscordUserId::new(user_id), DiscordUserName::new(username))
     }
 }
 

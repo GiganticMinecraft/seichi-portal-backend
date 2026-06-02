@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 #[cfg(test)]
-use common::test_utils::arbitrary_date_time;
+use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use errors::domain::DomainError;
@@ -16,10 +16,15 @@ use types::non_empty_string::NonEmptyString;
 pub use crate::form::question::models::{Question, QuestionSet};
 
 use crate::{
-    form::answer::settings::models::{
-        AnswerSettings, AnswerVisibility, DefaultAnswerTitle, ResponsePeriod,
+    form::{
+        answer::models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
+        answer_entry_set::models::AnswerEntrySet,
+        comment::models::{Comment, CommentContent},
     },
-    types::authorization_guard::AuthorizationGuardDefinitions,
+    types::authorization_guard::{
+        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Authorizes, Create, Read,
+        Update,
+    },
     user::models::{Actor, Role::Administrator, User, UserId},
 };
 
@@ -60,9 +65,6 @@ pub struct FormSettings {
     webhook_url: WebhookUrl,
     #[serde(default)]
     visibility: Visibility,
-    #[serde(default)]
-    allow_temporary_answers: bool,
-    answer_settings: AnswerSettings,
 }
 
 impl FormSettings {
@@ -70,12 +72,6 @@ impl FormSettings {
         Self {
             webhook_url: WebhookUrl::try_new(None).unwrap(),
             visibility: Visibility::PUBLIC,
-            allow_temporary_answers: false,
-            answer_settings: AnswerSettings::new(
-                DefaultAnswerTitle::new(None),
-                AnswerVisibility::PRIVATE,
-                ResponsePeriod::try_new(None, None).unwrap(),
-            ),
         }
     }
 
@@ -91,14 +87,6 @@ impl FormSettings {
         &self.visibility
     }
 
-    pub fn answer_settings(&self) -> &AnswerSettings {
-        &self.answer_settings
-    }
-
-    pub fn allow_temporary_answers(&self) -> bool {
-        self.allow_temporary_answers
-    }
-
     pub fn change_webhook_url(self, webhook_url: WebhookUrl) -> Self {
         Self {
             webhook_url,
@@ -110,37 +98,14 @@ impl FormSettings {
         Self { visibility, ..self }
     }
 
-    pub fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
-        Self {
-            allow_temporary_answers,
-            ..self
-        }
-    }
-
-    pub fn change_answer_settings(self, answer_settings: AnswerSettings) -> Self {
-        Self {
-            answer_settings,
-            ..self
-        }
-    }
-
-    pub fn from_raw_parts(
-        response_period: ResponsePeriod,
-        webhook_url: WebhookUrl,
-        default_answer_title: DefaultAnswerTitle,
-        visibility: Visibility,
-        allow_temporary_answers: bool,
-        answer_visibility: AnswerVisibility,
-    ) -> Self {
+    /// [`FormSettings`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(webhook_url: WebhookUrl, visibility: Visibility) -> Self {
         Self {
             webhook_url,
             visibility,
-            allow_temporary_answers,
-            answer_settings: AnswerSettings::new(
-                default_answer_title,
-                answer_visibility,
-                response_period,
-            ),
         }
     }
 }
@@ -184,6 +149,173 @@ impl TryFrom<String> for Visibility {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
+#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
+))]
+pub struct DefaultAnswerTitle(Option<NonEmptyString>);
+
+impl DefaultAnswerTitle {
+    pub fn new(title: Option<NonEmptyString>) -> Self {
+        Self(title)
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(
+    Serialize, Deserialize, Debug, EnumString, Display, Copy, Clone, Default, PartialOrd, PartialEq,
+)]
+pub enum AnswerVisibility {
+    PUBLIC,
+    #[default]
+    PRIVATE,
+}
+
+impl TryFrom<String> for AnswerVisibility {
+    type Error = DomainError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        use std::str::FromStr;
+        Self::from_str(&value).map_err(Into::into)
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
+pub struct ResponsePeriod {
+    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
+    start_at: Option<DateTime<Utc>>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
+    #[serde(default)]
+    end_at: Option<DateTime<Utc>>,
+}
+
+impl ResponsePeriod {
+    pub fn try_new(
+        start_at: Option<DateTime<Utc>>,
+        end_at: Option<DateTime<Utc>>,
+    ) -> Result<Self, DomainError> {
+        match (start_at, end_at) {
+            (Some(start_at), Some(end_at)) if start_at > end_at => {
+                Err(DomainError::InvalidResponsePeriod)
+            }
+            _ => Ok(Self { start_at, end_at }),
+        }
+    }
+
+    pub fn is_within_period(&self, now: DateTime<Utc>) -> bool {
+        if let Some(start_at) = self.start_at
+            && start_at > now
+        {
+            return false;
+        }
+        if let Some(end_at) = self.end_at
+            && end_at < now
+        {
+            return false;
+        }
+        true
+    }
+}
+
+/// フォームの回答にまつわる設定をまとめた値オブジェクトです。
+///
+/// 回答の公開範囲・受付期間・仮回答可否・デフォルトタイトルといった「ポリシー」を保持し、
+/// [`AnswerEntry`] の閲覧可否 ([`Self::can_read_entry`]) や新規受理 ([`Self::try_accept_answer`])
+/// を判断します。この値オブジェクトは [`ActiveForm`] が所有し、回答の集合である
+/// [`AnswerEntrySet`] は構造（所属）のみを担います。
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
+pub struct AnswerSettings {
+    default_answer_title: DefaultAnswerTitle,
+    visibility: AnswerVisibility,
+    response_period: ResponsePeriod,
+    allow_temporary_answers: bool,
+}
+
+impl AnswerSettings {
+    pub fn new(
+        default_answer_title: DefaultAnswerTitle,
+        visibility: AnswerVisibility,
+        response_period: ResponsePeriod,
+        allow_temporary_answers: bool,
+    ) -> Self {
+        Self {
+            default_answer_title,
+            visibility,
+            response_period,
+            allow_temporary_answers,
+        }
+    }
+
+    pub fn change_default_answer_title(self, default_answer_title: DefaultAnswerTitle) -> Self {
+        Self {
+            default_answer_title,
+            ..self
+        }
+    }
+
+    pub fn change_visibility(self, visibility: AnswerVisibility) -> Self {
+        Self { visibility, ..self }
+    }
+
+    pub fn change_response_period(self, response_period: ResponsePeriod) -> Self {
+        Self {
+            response_period,
+            ..self
+        }
+    }
+
+    pub fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
+        Self {
+            allow_temporary_answers,
+            ..self
+        }
+    }
+
+    /// `author` / `actor` の組み合わせと受付期間・仮回答可否から、新しい [`AnswerEntry`] を
+    /// 受理してよいかを判断し、受理できる場合のみ [`AnswerEntry`] を生成します。
+    pub fn try_accept_answer(
+        &self,
+        author: AnswerAuthor,
+        actor: &Actor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<AnswerEntry, DomainError> {
+        let is_within_period = self.response_period.is_within_period(Utc::now());
+
+        let allowed = match (&author, actor) {
+            (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
+                *user_id == *user.id() && (is_within_period || user.role() == &Administrator)
+            }
+            (AnswerAuthor::TemporaryUser(_), Actor::User(User::TemporaryUser(_))) => {
+                self.allow_temporary_answers && is_within_period
+            }
+            _ => false,
+        };
+
+        if !allowed {
+            return Err(DomainError::Forbidden);
+        }
+
+        Ok(AnswerEntry::new(author, title, posted_answers))
+    }
+
+    /// `actor` が `entry` を閲覧できるかどうかを、回答の公開範囲をもとに判断します。
+    pub fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
+        match actor {
+            Actor::User(User::ActiveUser(user)) => {
+                entry.author().authenticated_user_id() == Some(*user.id())
+                    || self.visibility == AnswerVisibility::PUBLIC
+                    || user.role() == &Administrator
+            }
+            Actor::System => true,
+            _ => false,
+        }
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
@@ -202,7 +334,11 @@ impl FormMeta {
         }
     }
 
-    pub fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
+    /// [`FormMeta`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
         Self {
             created_at,
             updated_at,
@@ -271,6 +407,8 @@ pub struct ActiveForm {
     metadata: FormMeta,
     #[serde(default)]
     settings: FormSettings,
+    #[serde(default)]
+    answer_settings: AnswerSettings,
     questions: QuestionSet,
     #[serde(default)]
     label_ids: FormLabelIdSet,
@@ -284,6 +422,7 @@ impl ActiveForm {
             description,
             metadata: FormMeta::new(),
             settings: FormSettings::new(),
+            answer_settings: AnswerSettings::default(),
             questions,
             label_ids: FormLabelIdSet::empty(),
         }
@@ -304,6 +443,13 @@ impl ActiveForm {
         Self { settings, ..self }
     }
 
+    pub fn change_answer_settings(self, answer_settings: AnswerSettings) -> Self {
+        Self {
+            answer_settings,
+            ..self
+        }
+    }
+
     pub fn change_questions(self, questions: QuestionSet) -> Self {
         Self { questions, ..self }
     }
@@ -312,12 +458,18 @@ impl ActiveForm {
         Self { label_ids, ..self }
     }
 
-    pub fn from_raw_parts(
+    /// [`ActiveForm`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn from_raw_parts(
         id: FormId,
         title: FormTitle,
         description: FormDescription,
         metadata: FormMeta,
         settings: FormSettings,
+        answer_settings: AnswerSettings,
         questions: QuestionSet,
         label_ids: FormLabelIdSet,
     ) -> Self {
@@ -327,6 +479,7 @@ impl ActiveForm {
             description,
             metadata,
             settings,
+            answer_settings,
             questions,
             label_ids,
         }
@@ -334,6 +487,166 @@ impl ActiveForm {
 
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: UserId) -> ArchivedForm {
         ArchivedForm::new(self, archived_at, archived_by)
+    }
+}
+
+/// [`ActiveForm`] のガードを起点とした、回答 ([`AnswerEntry`]) への認可の連鎖。
+///
+/// `Allowed<AnswerEntrySet, _>` は [`ActiveForm`] が [`AnswerEntrySet`] の所属
+/// (`form_id` 一致) を確認することでのみ生成でき、個々の [`AnswerEntry`] の閲覧可否は
+/// [`ActiveForm`] が保持する [`AnswerSettings`] のポリシーで判断される。所属検証と
+/// ポリシー判断のいずれもドメイン内で完結する。
+impl Authorizes<AnswerEntrySet, Read> for ActiveForm {
+    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> Result<(), DomainError> {
+        if set.form_id() == self.id() {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<AnswerEntrySet, Update> for ActiveForm {
+    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> Result<(), DomainError> {
+        if set.form_id() == self.id() {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<AnswerEntry, Read> for ActiveForm {
+    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> Result<(), DomainError> {
+        if self.answer_settings.can_read_entry(entry, actor) {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<AnswerEntry, Update> for ActiveForm {
+    fn check(&self, actor: &Actor, _entry: &AnswerEntry) -> Result<(), DomainError> {
+        if is_administrator(actor) {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Allowed<ActiveForm, Read> {
+    /// 回答にまつわるポリシー ([`AnswerSettings`]) に委譲して、新しい [`AnswerEntry`] を
+    /// 受理してよいかを判断し、認可済みの [`Allowed<AnswerEntry, Create>`] を返します。
+    pub fn try_accept_answer(
+        &self,
+        author: AnswerAuthor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
+        let entry = self.value().answer_settings.try_accept_answer(
+            author,
+            self.actor(),
+            title,
+            posted_answers,
+        )?;
+        Ok(Allowed::mint(entry, self.actor().clone()))
+    }
+
+    /// `set` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
+    pub fn readable_entries(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+    ) -> Vec<Allowed<AnswerEntry, Read>> {
+        if set.value().form_id() != self.value().id() {
+            return Vec::new();
+        }
+
+        set.value()
+            .entries()
+            .iter()
+            .filter_map(|entry| self.authorize_read(entry.to_owned()).ok())
+            .collect()
+    }
+
+    /// `set` に含まれる `answer_id` の [`AnswerEntry`] を、所属と公開範囲を検証したうえで
+    /// 認可済みで返します。
+    pub fn read_entry(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+        answer_id: AnswerId,
+    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
+        if set.value().form_id() != self.value().id() {
+            return Err(DomainError::Forbidden);
+        }
+
+        let entry = set
+            .value()
+            .find_entry(answer_id)
+            .ok_or(DomainError::NotFound)?
+            .clone();
+
+        self.authorize_read(entry)
+    }
+
+    fn read_entry_for_comment(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+        answer_id: AnswerId,
+    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
+        let entry = self.read_entry(set, answer_id)?;
+        match self.actor() {
+            Actor::User(User::ActiveUser(_)) => Ok(entry),
+            _ => Err(DomainError::Forbidden),
+        }
+    }
+
+    /// 対象の [`AnswerEntry`] が `actor` から閲覧可能であることをゲートとして検証したうえで、
+    /// 新しい [`Comment`] の作成ガードを生成します。
+    pub fn create_comment(
+        &self,
+        set: &Allowed<AnswerEntrySet, Read>,
+        answer_id: AnswerId,
+        content: CommentContent,
+    ) -> Result<AuthorizationGuard<Comment, Create>, DomainError> {
+        self.read_entry_for_comment(set, answer_id)?;
+
+        let commented_by = match self.actor() {
+            Actor::User(User::ActiveUser(user)) => *user.id(),
+            _ => return Err(DomainError::Forbidden),
+        };
+
+        Ok(AuthorizationGuard::from(Comment::new(
+            answer_id,
+            content,
+            commented_by,
+        )))
+    }
+}
+
+impl Allowed<ActiveForm, Update> {
+    /// `set` に含まれる `answer_id` の [`AnswerEntry`] のタイトルだけを変更し、更新認可済みで
+    /// 返します。タイトル以外が変わらないことは [`AnswerEntry::with_title`] による構築で保証され、
+    /// 更新権限は [`ActiveForm`] のガード経由で保証される。
+    pub fn change_entry_title(
+        &self,
+        set: &Allowed<AnswerEntrySet, Update>,
+        answer_id: AnswerId,
+        title: AnswerTitle,
+    ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
+        if set.value().form_id() != self.value().id() {
+            return Err(DomainError::Forbidden);
+        }
+
+        let entry = set
+            .value()
+            .find_entry(answer_id)
+            .ok_or(DomainError::NotFound)?
+            .clone()
+            .with_title(title);
+
+        self.authorize_update(entry)
     }
 }
 
@@ -397,14 +710,12 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
+    ///     form::models::ActiveForm,
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
     /// use domain::form::models::{FormDescription, FormTitle};
-    /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
-    /// use domain::form::models::{FormLabelIdSet, Visibility, WebhookUrl};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -419,12 +730,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// )).into();
     ///
     ///
-    /// let form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let form = ActiveForm::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::new(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -436,7 +744,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_create(&administrator));
@@ -460,10 +767,8 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod};
     /// use domain::form::models::{
-    ///     FormDescription, FormId, FormMeta,
-    ///     FormLabelIdSet, FormTitle, Visibility, WebhookUrl
+    ///     FormDescription, FormTitle, Visibility
     /// };
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
@@ -491,39 +796,17 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     ]).unwrap(),
     /// ).unwrap();
     ///
-    /// let private_form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let private_form = ActiveForm::new(
     ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::from_raw_parts(
-    ///         ResponsePeriod::try_new(None, None).unwrap(),
-    ///         WebhookUrl::try_new(None).unwrap(),
-    ///         DefaultAnswerTitle::new(None),
-    ///         Visibility::PRIVATE,
-    ///         false,
-    ///         AnswerVisibility::PRIVATE
-    ///     ),
     ///     sample_questions(),
-    ///     FormLabelIdSet::empty(),
-    /// );
+    /// ).change_settings(FormSettings::new().change_visibility(Visibility::PRIVATE));
     ///
-    ///  let public_form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    ///  let public_form = ActiveForm::new(
     ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::from_raw_parts(
-    ///         ResponsePeriod::try_new(None, None).unwrap(),
-    ///         WebhookUrl::try_new(None).unwrap(),
-    ///         DefaultAnswerTitle::new(None),
-    ///         Visibility::PUBLIC,
-    ///         false,
-    ///         AnswerVisibility::PRIVATE
-    ///     ),
     ///     sample_questions(),
-    ///     FormLabelIdSet::empty(),
-    /// );
+    /// ).change_settings(FormSettings::new().change_visibility(Visibility::PUBLIC));
     ///
     /// assert!(private_form.can_read(&administrator));
     /// assert!(!private_form.can_read(&standard_user));
@@ -544,7 +827,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
+    ///     form::models::ActiveForm,
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
@@ -564,12 +847,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// )).into();
     ///
     ///
-    /// let form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let form = ActiveForm::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::new(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -581,7 +861,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(form.can_update(&administrator));
@@ -599,7 +878,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// # Examples
     /// ```
     /// use domain::{
-    ///     form::models::{ActiveForm, FormId, FormMeta, FormSettings},
+    ///     form::models::ActiveForm,
     ///     types::authorization_guard::AuthorizationGuardDefinitions,
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
@@ -619,12 +898,9 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// )).into();
     ///
     ///
-    /// let form = ActiveForm::from_raw_parts(
-    ///     FormId::new(),
+    /// let form = ActiveForm::new(
     ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
     ///     FormDescription::new(String::from("")),
-    ///     FormMeta::new(),
-    ///     FormSettings::new(),
     ///     domain::form::models::QuestionSet::try_new(
     ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
     ///             domain::form::question::models::Question::new_text(
@@ -636,7 +912,6 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///             ).unwrap(),
     ///         ]).unwrap(),
     ///     ).unwrap(),
-    ///     FormLabelIdSet::empty(),
     /// );
     ///
     /// assert!(!form.can_delete(&administrator));
@@ -677,7 +952,11 @@ impl FormLabel {
         Self { id: self.id, name }
     }
 
-    pub fn from_raw_parts(id: FormLabelId, name: FormLabelName) -> Self {
+    /// [`FormLabel`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(id: FormLabelId, name: FormLabelName) -> Self {
         Self { id, name }
     }
 }
@@ -696,6 +975,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -732,6 +1012,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -770,6 +1051,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -808,6 +1090,7 @@ impl AuthorizationGuardDefinitions for FormLabel {
     /// };
     /// use types::non_empty_string::NonEmptyString;
     /// use uuid::Uuid;
+    /// use domain::form::models::AnswerSettings;
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -835,14 +1118,17 @@ impl AuthorizationGuardDefinitions for FormLabel {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Duration;
+
     use super::*;
     use crate::form::question::models::{Question, QuestionId, QuestionType};
+    use crate::user::models::Role;
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
     fn sample_question_set() -> QuestionSet {
         QuestionSet::try_new(
-            NonEmptyVec::try_new(vec![
+            NonEmptyVec::try_new(vec![unsafe {
                 Question::from_raw_parts(
                     QuestionId::from(Uuid::new_v4()),
                     "body".to_string().try_into().unwrap(),
@@ -853,11 +1139,162 @@ mod tests {
                     None,
                     true,
                 )
-                .unwrap(),
-            ])
+                .unwrap()
+            }])
             .unwrap(),
         )
         .unwrap()
+    }
+
+    fn answer_settings(
+        allow_temporary_answers: bool,
+        response_period: ResponsePeriod,
+    ) -> AnswerSettings {
+        AnswerSettings::new(
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PRIVATE,
+            response_period,
+            allow_temporary_answers,
+        )
+    }
+
+    fn active_user(role: Role) -> crate::user::models::ActiveUser {
+        crate::user::models::ActiveUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
+        AnswerEntry::new(
+            author,
+            AnswerTitle::new(None),
+            PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
+        )
+    }
+
+    fn empty_posted_answers() -> PostedAnswerContents {
+        PostedAnswerContents::try_new(&[], vec![]).unwrap()
+    }
+
+    #[test]
+    fn temporary_answer_creation_requires_allow_flag() {
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+        let author = AnswerAuthor::TemporaryUser(crate::user::models::TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+        let actor = Actor::from(crate::user::models::TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+
+        assert!(
+            settings
+                .try_accept_answer(
+                    author,
+                    &actor,
+                    AnswerTitle::new(None),
+                    empty_posted_answers()
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn temporary_answer_creation_succeeds_when_allowed_and_within_period() {
+        let settings = answer_settings(true, ResponsePeriod::try_new(None, None).unwrap());
+        let author = AnswerAuthor::TemporaryUser(crate::user::models::TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+        let actor = Actor::from(crate::user::models::TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+
+        assert!(
+            settings
+                .try_accept_answer(
+                    author,
+                    &actor,
+                    AnswerTitle::new(None),
+                    empty_posted_answers()
+                )
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn temporary_answer_creation_respects_response_period() {
+        let settings = answer_settings(
+            true,
+            ResponsePeriod::try_new(
+                Some(Utc::now() - Duration::days(2)),
+                Some(Utc::now() - Duration::days(1)),
+            )
+            .unwrap(),
+        );
+        let author = AnswerAuthor::TemporaryUser(crate::user::models::TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+        let actor = Actor::from(crate::user::models::TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+
+        assert!(
+            settings
+                .try_accept_answer(
+                    author,
+                    &actor,
+                    AnswerTitle::new(None),
+                    empty_posted_answers()
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn private_entry_is_readable_by_its_author() {
+        let author = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(author)));
+    }
+
+    #[test]
+    fn private_entry_is_not_readable_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+
+        assert!(!settings.can_read_entry(&entry, &Actor::from(other)));
+    }
+
+    #[test]
+    fn private_entry_is_readable_by_administrator() {
+        let author = active_user(Role::StandardUser);
+        let administrator = active_user(Role::Administrator);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(administrator)));
+    }
+
+    #[test]
+    fn public_entry_is_readable_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = AnswerSettings::new(
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PUBLIC,
+            ResponsePeriod::try_new(None, None).unwrap(),
+            false,
+        );
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(other)));
     }
 
     #[test]

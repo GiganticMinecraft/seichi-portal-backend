@@ -35,7 +35,11 @@ impl Choice {
         }
     }
 
-    pub fn from_raw_parts(
+    /// [`Choice`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(
         id: Option<ChoiceId>,
         position: u16,
         label: NonEmptyString,
@@ -244,8 +248,12 @@ impl Question {
         )?))
     }
 
+    /// [`Question`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
     #[allow(clippy::too_many_arguments)]
-    pub fn from_raw_parts(
+    pub unsafe fn from_raw_parts(
         id: QuestionId,
         template_key: NonEmptyString,
         position: u16,
@@ -337,6 +345,29 @@ impl Question {
             }
         }
     }
+
+    pub fn update_preserving_id(self, updated: Question) -> Result<Self, DomainError> {
+        let definition = QuestionDefinition::new(
+            self.id(),
+            updated.template_key().clone(),
+            updated.position(),
+            updated.title().clone(),
+            updated.description().cloned(),
+            updated.is_required(),
+        );
+
+        match updated {
+            Self::Text(_) => Ok(Self::Text(TextQuestion::new(definition))),
+            Self::SingleChoice(question) => Ok(Self::SingleChoice(SelectQuestion::try_new(
+                definition,
+                question.choices,
+            )?)),
+            Self::MultipleChoice(question) => Ok(Self::MultipleChoice(SelectQuestion::try_new(
+                definition,
+                question.choices,
+            )?)),
+        }
+    }
 }
 
 impl AuthorizationGuardDefinitions for Question {
@@ -421,23 +452,25 @@ mod test {
 
     #[test]
     fn text_question_rejects_choices() {
-        let result = Question::from_raw_parts(
-            Uuid::nil().into(),
-            "template".to_string().try_into().unwrap(),
-            0,
-            "Question".to_string().try_into().unwrap(),
-            None,
-            QuestionType::Text,
-            Some(
-                NonEmptyVec::try_new(vec![Choice::new(
-                    None,
-                    0,
-                    "A".to_string().try_into().unwrap(),
-                )])
-                .unwrap(),
-            ),
-            true,
-        );
+        let result = unsafe {
+            Question::from_raw_parts(
+                Uuid::nil().into(),
+                "template".to_string().try_into().unwrap(),
+                0,
+                "Question".to_string().try_into().unwrap(),
+                None,
+                QuestionType::Text,
+                Some(
+                    NonEmptyVec::try_new(vec![Choice::new(
+                        None,
+                        0,
+                        "A".to_string().try_into().unwrap(),
+                    )])
+                    .unwrap(),
+                ),
+                true,
+            )
+        };
 
         assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
     }

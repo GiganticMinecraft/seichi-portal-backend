@@ -4,3 +4,4 @@ pub mod comment;
 pub mod form;
 pub mod form_label;
 pub mod message;
+pub mod message_thread;

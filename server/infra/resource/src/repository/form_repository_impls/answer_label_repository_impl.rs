@@ -2,11 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
-    types::{
-        authorization_guard::AuthorizationGuard,
-        authorization_guard_with_context::{Create, Delete, Read, Update},
-    },
-    user::models::{ActiveUser, Actor},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 use errors::Error;
 use itertools::Itertools;
@@ -21,16 +17,11 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     #[tracing::instrument(skip(self))]
     async fn create_label_for_answers(
         &self,
-        actor: &ActiveUser,
-        label: AuthorizationGuard<AnswerLabel, Create>,
+        label: Allowed<AnswerLabel, Create>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        label
-            .try_create(&actor_user, |label| {
-                self.client
-                    .form_answer_label()
-                    .create_label_for_answers(label)
-            })?
+        self.client
+            .form_answer_label()
+            .create_label_for_answers(label.value())
             .await
             .map_err(Into::into)
     }
@@ -97,16 +88,11 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     #[tracing::instrument(skip(self))]
     async fn delete_label_for_answers(
         &self,
-        actor: &ActiveUser,
-        label: AuthorizationGuard<AnswerLabel, Delete>,
+        label: Allowed<AnswerLabel, Delete>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        label
-            .try_delete(&actor_user, |label| {
-                self.client
-                    .form_answer_label()
-                    .delete_label_for_answers(*label.id())
-            })?
+        self.client
+            .form_answer_label()
+            .delete_label_for_answers(*label.value().id())
             .await
             .map_err(Into::into)
     }
@@ -114,16 +100,11 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     #[tracing::instrument(skip(self))]
     async fn edit_label_for_answers(
         &self,
-        actor: &ActiveUser,
-        label: AuthorizationGuard<AnswerLabel, Update>,
+        label: Allowed<AnswerLabel, Update>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        label
-            .try_update(&actor_user, |label| {
-                self.client
-                    .form_answer_label()
-                    .edit_label_for_answers(label)
-            })?
+        self.client
+            .form_answer_label()
+            .edit_label_for_answers(label.value())
             .await
             .map_err(Into::into)
     }
@@ -131,15 +112,13 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
     #[tracing::instrument(skip(self))]
     async fn replace_answer_labels(
         &self,
-        actor: &ActiveUser,
         answer_id: AnswerId,
-        labels: Vec<AuthorizationGuard<AnswerLabel, Update>>,
+        labels: Vec<Allowed<AnswerLabel, Update>>,
     ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
         let label_ids = labels
             .into_iter()
-            .map(|guard| guard.try_into_update(&actor_user, |label| *label.id()))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|label| *label.value().id())
+            .collect::<Vec<_>>();
 
         self.client
             .form_answer_label()

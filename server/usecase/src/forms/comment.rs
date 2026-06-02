@@ -1,23 +1,23 @@
 use domain::form::comment::models::CommentContent;
-use domain::form::models::FormId;
+use domain::form::models::{ActiveForm, FormId};
 use domain::{
     form::{
-        answer::{models::AnswerId, service::AnswerEntryAuthorizationContext},
-        comment::{
-            models::{Comment, CommentId},
-            service::CommentAuthorizationContext,
-        },
+        answer::models::AnswerId,
+        answer_entry_set::models::AnswerEntrySet,
+        comment::models::{Comment, CommentId},
     },
     repository::form::{
-        active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository,
+        active_form_repository::ActiveFormRepository,
+        answer_entry_set_repository::AnswerEntrySetRepository,
         comment_repository::CommentRepository,
     },
     repository::user_repository::UserRepository,
-    types::authorization_guard_with_context::AuthorizationGuardWithContext,
+    types::authorization_guard::{Allowed, Read},
     user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
+    domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound, UserNotFound},
 };
 
@@ -25,20 +25,45 @@ use crate::{models::CommentWithAuthor, user_reference_resolver::resolve_user_ref
 
 pub struct CommentUseCase<
     'a,
-    CommentRepo: CommentRepository,
-    AnswerRepo: AnswerRepository,
     FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
+    AnswerEntrySetRepo: AnswerEntrySetRepository,
+    CommentRepo: CommentRepository,
 > {
-    pub comment_repository: &'a CommentRepo,
-    pub answer_repository: &'a AnswerRepo,
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
+    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub comment_repository: &'a CommentRepo,
 }
 
-impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: UserRepository>
-    CommentUseCase<'_, R1, R2, R3, R4>
+impl<
+    R1: ActiveFormRepository,
+    R2: UserRepository,
+    R3: AnswerEntrySetRepository,
+    R4: CommentRepository,
+> CommentUseCase<'_, R1, R2, R3, R4>
 {
+    async fn read_form_and_entry_set(
+        &self,
+        actor: &Actor,
+        form_id: FormId,
+    ) -> Result<(Allowed<ActiveForm, Read>, Allowed<AnswerEntrySet, Read>), Error> {
+        let form = self
+            .active_form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?
+            .try_read(actor.clone())?;
+
+        let answer_entry_set = self
+            .answer_entry_set_repository
+            .get_read(&form)
+            .await?
+            .ok_or(FormNotFound)?;
+
+        Ok((form, answer_entry_set))
+    }
+
     async fn build_comments_with_authors(
         &self,
         actor: &ActiveUser,
@@ -69,34 +94,22 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         answer_id: AnswerId,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
         let actor_user = Actor::from(actor.clone());
-        let answer_guard = self
-            .answer_repository
-            .get_answer(answer_id)
+        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
+
+        let entry = form
+            .read_entry(&answer_entry_set, answer_id)
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })?;
+
+        let comments = self
+            .comment_repository
+            .find_by_answer(&entry)
             .await?
-            .ok_or(Error::from(AnswerNotFound))?;
-
-        let form_guard = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?;
-
-        let form = form_guard.try_read(&actor_user)?;
-        let answer_entry_context =
-            AnswerEntryAuthorizationContext::from_form_settings(form.settings());
-
-        let comment_context = CommentAuthorizationContext {
-            related_answer_entry_guard: answer_guard,
-            related_answer_entry_guard_context: answer_entry_context,
-        };
-
-        let comments = self.comment_repository.get_comments(answer_id).await?;
-
-        let comments = comments
             .into_iter()
-            .map(|guard| guard.try_into_read(&actor_user, &comment_context))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Error::from)?;
+            .map(|comment| comment.into_inner())
+            .collect::<Vec<_>>();
 
         self.build_comments_with_authors(actor, comments).await
     }
@@ -106,35 +119,16 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         actor: &ActiveUser,
         form_id: FormId,
         answer_id: AnswerId,
-        comment: Comment,
+        content: CommentContent,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let answer_guard = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(Error::from(AnswerNotFound))?;
+        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
 
-        let form_guard = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?;
+        let comment = form
+            .create_comment(&answer_entry_set, answer_id, content)?
+            .try_create(actor_user.clone())?;
 
-        let form = form_guard.try_read(&actor_user)?;
-        let answer_entry_context =
-            AnswerEntryAuthorizationContext::from_form_settings(form.settings());
-
-        let comment_context = CommentAuthorizationContext {
-            related_answer_entry_guard: answer_guard,
-            related_answer_entry_guard_context: answer_entry_context,
-        };
-
-        let comment_guard = AuthorizationGuardWithContext::new(comment);
-
-        self.comment_repository
-            .create_comment(answer_id, &comment_context, actor, comment_guard)
-            .await
+        self.comment_repository.create(comment).await
     }
 
     pub async fn update_comment(
@@ -146,41 +140,26 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         content: Option<CommentContent>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let answer_guard = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(Error::from(AnswerNotFound))?;
-
-        let form_guard = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?;
-
-        let form = form_guard.try_read(&actor_user)?;
-        let answer_entry_context =
-            AnswerEntryAuthorizationContext::from_form_settings(form.settings());
-
-        let comment_context = CommentAuthorizationContext {
-            related_answer_entry_guard: answer_guard,
-            related_answer_entry_guard_context: answer_entry_context,
-        };
-
-        let current_comment_guard = self
+        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
+        let entry = form
+            .read_entry(&answer_entry_set, answer_id)
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })?;
+        let current_comment = self
             .comment_repository
-            .get_comment(comment_id)
+            .find_by_answer(&entry)
             .await?
-            .ok_or(CommentNotFound)?;
+            .into_iter()
+            .find(|comment| *comment.value().comment_id() == comment_id)
+            .ok_or(Error::from(CommentNotFound))?;
 
         if let Some(content) = content {
-            let updated_comment = current_comment_guard
-                .into_update()
-                .map(|comment| comment.with_updated_content(content));
-
-            self.comment_repository
-                .update_comment(answer_id, &comment_context, actor, updated_comment)
-                .await?;
+            let updated = current_comment
+                .try_into_update()?
+                .map(|c| c.with_updated_content(content));
+            self.comment_repository.update(updated).await?;
         }
 
         Ok(())
@@ -194,36 +173,23 @@ impl<R1: CommentRepository, R2: AnswerRepository, R3: ActiveFormRepository, R4: 
         comment_id: CommentId,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let comment_guard = self
+        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
+        let entry = form
+            .read_entry(&answer_entry_set, answer_id)
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })?;
+        let comment = self
             .comment_repository
-            .get_comment(comment_id)
+            .find_by_answer(&entry)
             .await?
-            .ok_or(Error::from(CommentNotFound))?
-            .into_delete();
+            .into_iter()
+            .find(|comment| *comment.value().comment_id() == comment_id)
+            .ok_or(Error::from(CommentNotFound))?;
 
-        let form_guard = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?;
+        let comment = comment.try_into_delete()?;
 
-        let form = form_guard.try_read(&actor_user)?;
-        let answer_entry_context =
-            AnswerEntryAuthorizationContext::from_form_settings(form.settings());
-
-        let answer_guard = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(Error::from(AnswerNotFound))?;
-
-        let comment_context = CommentAuthorizationContext {
-            related_answer_entry_guard: answer_guard,
-            related_answer_entry_guard_context: answer_entry_context,
-        };
-
-        self.comment_repository
-            .delete_comment(comment_context, actor, comment_guard)
-            .await
+        self.comment_repository.delete(comment).await
     }
 }

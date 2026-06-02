@@ -2,17 +2,18 @@ use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerLabel},
         comment::models::Comment,
-        models::{ActiveForm, ArchivedForm, FormLabel},
+        message::models::Message,
+        models::{ActiveForm, ArchivedForm, FormId, FormLabel},
         question::models::{Question, QuestionId},
     },
     user::models::{ActiveUser, DiscordUser, User},
 };
 
 pub struct AnswerDetails {
+    pub form_id: FormId,
     pub form_answer: AnswerEntry,
     pub author: User,
     pub labels: Vec<AnswerLabel>,
-    pub comments: Vec<CommentWithAuthor>,
 }
 
 pub struct ActiveFormWithLabels {
@@ -32,7 +33,7 @@ pub struct CommentWithAuthor {
 }
 
 pub struct MessageWithSender {
-    pub message: domain::form::message::models::Message,
+    pub message: Message,
     pub sender: ActiveUser,
 }
 

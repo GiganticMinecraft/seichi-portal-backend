@@ -1,71 +1,88 @@
 use domain::{
     form::{
-        answer::{
-            models::{
-                AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, FormAnswerContent,
-                PostedAnswerContents,
-            },
-            service::AnswerEntryAuthorizationContext,
+        answer::models::{
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
+            PostedAnswerContents,
         },
-        comment::service::CommentAuthorizationContext,
-        models::FormId,
+        answer_entry_set::models::AnswerEntrySet,
+        models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
     },
     repository::form::{
         active_form_repository::ActiveFormRepository,
-        answer_label_repository::AnswerLabelRepository, answer_repository::AnswerRepository,
-        comment_repository::CommentRepository,
+        answer_entry_set_repository::AnswerEntrySetRepository,
+        answer_label_repository::AnswerLabelRepository,
     },
     repository::user_repository::UserRepository,
-    types::authorization_guard_with_context::AuthorizationGuardWithContext,
+    types::authorization_guard::{Allowed, Read},
     user::models::{ActiveUser, Actor, TemporaryUser, User},
 };
 use errors::{
     Error,
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound, UserNotFound},
+    domain::DomainError,
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
-use futures::{StreamExt, stream, try_join};
+use futures::{StreamExt, TryStreamExt, stream};
+use std::collections::HashMap;
 
-use crate::{
-    models::{AnswerDetails, CommentWithAuthor},
-    user_reference_resolver::resolve_user_references,
-};
+use crate::{models::AnswerDetails, user_reference_resolver::resolve_user_references};
 
 pub struct AnswerUseCase<
     'a,
-    AnswerRepo: AnswerRepository,
     FormRepo: ActiveFormRepository,
-    CommentRepo: CommentRepository,
     AnswerLabelRepo: AnswerLabelRepository,
     UserRepo: UserRepository,
+    AnswerEntrySetRepo: AnswerEntrySetRepository,
 > {
-    pub answer_repository: &'a AnswerRepo,
     pub active_form_repository: &'a FormRepo,
-    pub comment_repository: &'a CommentRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
+    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
 }
 
 impl<
-    R1: AnswerRepository,
-    R2: ActiveFormRepository,
-    R3: CommentRepository,
-    R4: AnswerLabelRepository,
-    R5: UserRepository,
-> AnswerUseCase<'_, R1, R2, R3, R4, R5>
+    R1: ActiveFormRepository,
+    R2: AnswerLabelRepository,
+    R3: UserRepository,
+    R4: AnswerEntrySetRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4>
 {
+    /// フォームのガードと、それに紐づく回答集合のガードを取得する。
+    ///
+    /// フォームの読み取り認可を通過したうえで [`AnswerEntrySet`] の所属を検証し、
+    /// 個々の回答の認可は返り値の [`Allowed<ActiveForm, Read>`] を起点に行う。
+    async fn read_form_and_entry_set(
+        &self,
+        form_id: FormId,
+        actor: &Actor,
+    ) -> Result<(Allowed<ActiveForm, Read>, Allowed<AnswerEntrySet, Read>), Error> {
+        let form = self
+            .active_form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?
+            .try_read(actor.clone())?;
+
+        let answer_entry_set = self
+            .answer_entry_set_repository
+            .get_read(&form)
+            .await?
+            .ok_or(FormNotFound)?;
+
+        Ok((form, answer_entry_set))
+    }
+
     async fn build_answer_details(
         &self,
         actor: &ActiveUser,
-        form_answer: AnswerEntry,
-        labels: Vec<domain::form::answer::models::AnswerLabel>,
-        comments: Vec<domain::form::comment::models::Comment>,
+        form_id: FormId,
+        form_answer: Allowed<AnswerEntry, Read>,
+        labels: Vec<AnswerLabel>,
     ) -> Result<AnswerDetails, Error> {
         let user_ids = form_answer
             .author()
             .authenticated_user_id()
             .into_iter()
-            .chain(comments.iter().map(|comment| *comment.commented_by()))
             .collect();
 
         let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
@@ -75,32 +92,18 @@ impl<
                 users
                     .get(user_id)
                     .cloned()
-                    .ok_or(Error::from(UserNotFound))?,
+                    .ok_or(Error::from(errors::usecase::UseCaseError::UserNotFound))?,
             ),
             AnswerAuthor::TemporaryUser(temporary_user) => {
                 User::TemporaryUser(temporary_user.clone())
             }
         };
 
-        let comments = comments
-            .into_iter()
-            .map(|comment| {
-                let commented_by = users
-                    .get(comment.commented_by())
-                    .cloned()
-                    .ok_or(Error::from(UserNotFound))?;
-                Ok::<_, Error>(CommentWithAuthor {
-                    comment,
-                    commented_by,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
         Ok(AnswerDetails {
-            form_answer,
+            form_id,
+            form_answer: form_answer.into_inner(),
             author,
             labels,
-            comments,
         })
     }
 
@@ -110,15 +113,19 @@ impl<
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let form = self.active_form_repository.get(form_id).await?;
+        let actor = Actor::from(user.clone());
 
-        let form = form
-            .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&Actor::from(user.clone()))?;
-        let questions = form.questions().as_slice().to_vec();
+        let form_guard = self
+            .active_form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+        let form = form_guard.try_read(actor.clone())?;
+        let questions = form.value().questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
-        let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
-            form.settings()
+
+        let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
+            form.value()
                 .answer_settings()
                 .default_answer_title()
                 .to_owned(),
@@ -127,19 +134,17 @@ impl<
             user.name(),
         )?;
 
-        let answer_entry = AnswerEntry::new(
-            AnswerAuthor::AuthenticatedUser(*user.id()),
-            form_id,
-            title,
-            posted_answers,
-        );
-        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
+        let author = AnswerAuthor::AuthenticatedUser(*user.id());
+        let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
 
-        let guard = AuthorizationGuardWithContext::new(answer_entry);
-        let actor = Actor::from(user);
+        let answer_entry_set = self
+            .answer_entry_set_repository
+            .get_read(&form)
+            .await?
+            .ok_or(FormNotFound)?;
 
-        self.answer_repository
-            .post_answer(&context, guard, &actor)
+        self.answer_entry_set_repository
+            .add_entry(&answer_entry_set, &answer_entry)
             .await
     }
 
@@ -149,14 +154,19 @@ impl<
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
-        let form = self.active_form_repository.get(form_id).await?;
+        let actor = Actor::from(temporary_user.clone());
 
-        let form_guard = form.ok_or(Error::from(FormNotFound))?;
-        let form = form_guard.try_into_read(&Actor::from(User::Anonymous))?;
-        let questions = form.questions().as_slice().to_vec();
+        let form_guard = self
+            .active_form_repository
+            .get(form_id)
+            .await?
+            .ok_or(FormNotFound)?;
+        let form = form_guard.try_read(actor.clone())?;
+        let questions = form.value().questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
-        let title = DefaultAnswerTitleDomainService::<R2>::to_answer_title_from_questions(
-            form.settings()
+
+        let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
+            form.value()
                 .answer_settings()
                 .default_answer_title()
                 .to_owned(),
@@ -165,19 +175,17 @@ impl<
             temporary_user.name(),
         )?;
 
-        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
+        let author = AnswerAuthor::TemporaryUser(temporary_user);
+        let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
 
-        let actor = Actor::from(temporary_user.clone());
-        let answer_entry = AnswerEntry::new(
-            AnswerAuthor::TemporaryUser(temporary_user),
-            form_id,
-            title,
-            posted_answers,
-        );
-        let guard = AuthorizationGuardWithContext::new(answer_entry);
+        let answer_entry_set = self
+            .answer_entry_set_repository
+            .get_read(&form)
+            .await?
+            .ok_or(FormNotFound)?;
 
-        self.answer_repository
-            .post_answer(&context, guard, &actor)
+        self.answer_entry_set_repository
+            .add_entry(&answer_entry_set, &answer_entry)
             .await
     }
 
@@ -187,51 +195,30 @@ impl<
         answer_id: AnswerId,
         user: &ActiveUser,
     ) -> Result<AnswerDetails, Error> {
-        if let Some(form_answer_guard) = self.answer_repository.get_answer(answer_id).await? {
-            let form_guard = self
-                .active_form_repository
-                .get(form_id)
-                .await?
-                .ok_or(FormNotFound)?;
+        let actor = Actor::from(user.clone());
+        let (form, answer_entry_set) = self.read_form_and_entry_set(form_id, &actor).await?;
 
-            let user_ref = Actor::from(user.clone());
-            let form = form_guard.try_read(&user_ref)?;
+        let form_answer =
+            form.read_entry(&answer_entry_set, answer_id)
+                .map_err(|error| match error {
+                    DomainError::NotFound => Error::from(AnswerNotFound),
+                    error => Error::from(error),
+                })?;
 
-            let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
-            let fetch_labels = self
-                .answer_label_repository
-                .get_labels_for_answers_by_answer_id(answer_id);
-            let fetch_comments = self.comment_repository.get_comments(answer_id);
+        let labels = self
+            .answer_label_repository
+            .get_labels_for_answers_by_answer_id(answer_id)
+            .await?
+            .into_iter()
+            .map(|label| {
+                label
+                    .try_read(actor.clone())
+                    .map(|label| label.into_inner())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-            let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
-
-            let comment_authorization_context = CommentAuthorizationContext {
-                related_answer_entry_guard: form_answer_guard,
-                related_answer_entry_guard_context: context,
-            };
-
-            let comments = comments
-                .into_iter()
-                .map(|comment| comment.try_into_read(&user_ref, &comment_authorization_context))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let form_answer = comment_authorization_context
-                .related_answer_entry_guard
-                .try_into_read(
-                    &user_ref,
-                    &comment_authorization_context.related_answer_entry_guard_context,
-                )?;
-
-            let labels = labels
-                .into_iter()
-                .map(|label| label.try_into_read(&user_ref))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            self.build_answer_details(user, form_answer, labels, comments)
-                .await
-        } else {
-            Err(Error::from(AnswerNotFound))
-        }
+        self.build_answer_details(user, form_id, form_answer, labels)
+            .await
     }
 
     pub async fn get_answers_by_form_id(
@@ -239,131 +226,111 @@ impl<
         form_id: FormId,
         actor: &ActiveUser,
     ) -> Result<Vec<AnswerDetails>, Error> {
-        let form = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(FormNotFound)?;
-
         let actor_ref = Actor::from(actor.clone());
-        let form = form.try_read(&actor_ref)?;
+        let (form, answer_entry_set) = self.read_form_and_entry_set(form_id, &actor_ref).await?;
 
-        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
-        stream::iter(
-            self.answer_repository
-                .get_answers_by_form_id(form_id)
-                .await?,
-        )
-        .then(|form_answer_guard| async {
-            let form_answer = form_answer_guard.try_read(&actor_ref, &context)?;
+        let visible_answers = form.readable_entries(&answer_entry_set);
 
-            let fetch_labels = self
-                .answer_label_repository
-                .get_labels_for_answers_by_answer_id(*form_answer.id());
-            let fetch_comments = self.comment_repository.get_comments(*form_answer.id());
+        stream::iter(visible_answers)
+            .then(|form_answer| async {
+                let answer_id = *form_answer.id();
+                let labels = self
+                    .answer_label_repository
+                    .get_labels_for_answers_by_answer_id(answer_id)
+                    .await?
+                    .into_iter()
+                    .map(|label| {
+                        label
+                            .try_read(actor_ref.clone())
+                            .map(|label| label.into_inner())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
-
-            let comment_authorization_context = CommentAuthorizationContext {
-                related_answer_entry_guard: form_answer_guard,
-                related_answer_entry_guard_context:
-                    AnswerEntryAuthorizationContext::from_form_settings(form.settings()),
-            };
-
-            let comments = comments
-                .into_iter()
-                .map(|comment| comment.try_into_read(&actor_ref, &comment_authorization_context))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let form_answer = comment_authorization_context
-                .related_answer_entry_guard
-                .try_into_read(
-                    &actor_ref,
-                    &comment_authorization_context.related_answer_entry_guard_context,
-                )?;
-
-            let labels = labels
-                .into_iter()
-                .map(|label| label.try_into_read(&actor_ref))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            self.build_answer_details(actor, form_answer, labels, comments)
-                .await
-        })
-        .collect::<Vec<Result<AnswerDetails, Error>>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
+                self.build_answer_details(actor, form_id, form_answer, labels)
+                    .await
+            })
+            .collect::<Vec<Result<AnswerDetails, Error>>>()
+            .await
+            .into_iter()
+            .collect()
     }
 
     pub async fn get_all_answers(&self, user: &ActiveUser) -> Result<Vec<AnswerDetails>, Error> {
-        stream::iter(self.answer_repository.get_all_answers().await?)
-            .then(|form_answer_guard| {
+        let actor_ref = Actor::from(user.clone());
+        let forms = self
+            .active_form_repository
+            .list(None, None)
+            .await?
+            .into_iter()
+            .filter_map(|form| form.try_read(actor_ref.clone()).ok())
+            .collect::<Vec<_>>();
+        let answer_entry_sets = self
+            .answer_entry_set_repository
+            .list_read_by_forms(&forms)
+            .await?;
+        let form_by_id = forms
+            .into_iter()
+            .map(|form| (form.value().id().into_inner(), form))
+            .collect::<HashMap<_, _>>();
+
+        let visible_answers: Vec<(FormId, Allowed<AnswerEntry, Read>)> =
+            stream::iter(answer_entry_sets)
+                .then(|answer_entry_set| {
+                    let form_by_id = &form_by_id;
+                    async move {
+                        let form_id = *answer_entry_set.form_id();
+                        let Some(form) = form_by_id.get(&form_id.into_inner()) else {
+                            return Ok::<_, Error>(Vec::new());
+                        };
+
+                        Ok(form
+                            .readable_entries(&answer_entry_set)
+                            .into_iter()
+                            .map(|entry| (form_id, entry))
+                            .collect::<Vec<_>>())
+                    }
+                })
+                .try_collect::<Vec<Vec<_>>>()
+                .await?
+                .into_iter()
+                .flatten()
+                .collect();
+
+        stream::iter(visible_answers)
+            .then(|(form_id, form_answer)| {
                 let user = user.clone();
                 async move {
-                    let user_ref = Actor::from(user.clone());
-                    let context_user = user_ref.clone();
-                    let context = form_answer_guard
-                        .create_context(move |entry| {
-                            let form_id = entry.form_id().to_owned();
-                            let user = context_user.clone();
+                    let actor_ref = Actor::from(user.clone());
 
-                            async move {
-                                let guard = self
-                                    .active_form_repository
-                                    .get(form_id)
-                                    .await?
-                                    .ok_or(FormNotFound)?;
-
-                                let form = guard.try_read(&user)?;
-
-                                Ok(AnswerEntryAuthorizationContext::from_form_settings(
-                                    form.settings(),
-                                ))
-                            }
-                        })
-                        .await?;
-
-                    let form_answer = form_answer_guard.try_read(&user_ref, &context)?;
-                    let fetch_labels = self
+                    let answer_id = *form_answer.id();
+                    let labels = self
                         .answer_label_repository
-                        .get_labels_for_answers_by_answer_id(*form_answer.id());
-                    let fetch_comments = self.comment_repository.get_comments(*form_answer.id());
-
-                    let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
-
-                    let comment_authorization_context = CommentAuthorizationContext {
-                        related_answer_entry_guard: form_answer_guard,
-                        related_answer_entry_guard_context: context,
-                    };
-
-                    let comments = comments
+                        .get_labels_for_answers_by_answer_id(answer_id)
+                        .await?
                         .into_iter()
-                        .map(|comment| {
-                            comment.try_into_read(&user_ref, &comment_authorization_context)
+                        .map(|label| {
+                            label
+                                .try_read(actor_ref.clone())
+                                .map(|label| label.into_inner())
                         })
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    let form_answer = comment_authorization_context
-                        .related_answer_entry_guard
-                        .try_into_read(
-                            &user_ref,
-                            &comment_authorization_context.related_answer_entry_guard_context,
-                        )?;
-
-                    let labels = labels
-                        .into_iter()
-                        .map(|label| label.try_into_read(&user_ref))
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                    self.build_answer_details(&user, form_answer, labels, comments)
+                    self.build_answer_details(&user, form_id, form_answer, labels)
                         .await
                 }
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
             .into_iter()
-            .collect::<Result<Vec<_>, _>>()
+            .filter(|result| {
+                !matches!(
+                    result,
+                    Err(Error::Domain {
+                        source: DomainError::Forbidden
+                    })
+                )
+            })
+            .collect()
     }
 
     pub async fn update_answer_meta(
@@ -373,66 +340,58 @@ impl<
         actor: &ActiveUser,
         title: Option<AnswerTitle>,
     ) -> Result<AnswerDetails, Error> {
-        let form_guard = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(FormNotFound)?;
-
         let actor_ref = Actor::from(actor.clone());
-        let form = form_guard.try_read(&actor_ref)?;
+        let (form, answer_entry_set) = self.read_form_and_entry_set(form_id, &actor_ref).await?;
 
-        let context = AnswerEntryAuthorizationContext::from_form_settings(form.settings());
-        if let Some(title) = title {
-            let answer_entry = self
-                .answer_repository
-                .get_answer(answer_id)
-                .await?
-                .ok_or(Error::from(AnswerNotFound))?
-                .into_update()
-                .map(|entry| entry.with_title(title));
+        let form_answer = match title {
+            Some(title) => {
+                let form_update = self
+                    .active_form_repository
+                    .get(form_id)
+                    .await?
+                    .ok_or(FormNotFound)?
+                    .into_update()
+                    .try_update(actor_ref.clone())?;
+                let set_update = self
+                    .answer_entry_set_repository
+                    .get_update(&form_update)
+                    .await?
+                    .ok_or(FormNotFound)?;
+                let form_answer = form_update.change_entry_title(&set_update, answer_id, title)?;
 
-            self.answer_repository
-                .update_answer_entry(actor, &context, answer_entry)
-                .await?;
-        }
+                self.answer_entry_set_repository
+                    .update_entry(&set_update, &form_answer)
+                    .await?;
 
-        let answer_guard = self
-            .answer_repository
-            .get_answer(answer_id)
-            .await?
-            .ok_or(Error::from(AnswerNotFound))?;
-
-        let fetch_labels = self
-            .answer_label_repository
-            .get_labels_for_answers_by_answer_id(answer_id);
-        let fetch_comments = self.comment_repository.get_comments(answer_id);
-
-        let (labels, comments) = try_join!(fetch_labels, fetch_comments)?;
-
-        let labels = labels
-            .into_iter()
-            .map(|label| label.try_into_read(&actor_ref))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let comment_authorization_context = CommentAuthorizationContext {
-            related_answer_entry_guard: answer_guard,
-            related_answer_entry_guard_context: context,
+                let (form, answer_entry_set) =
+                    self.read_form_and_entry_set(form_id, &actor_ref).await?;
+                form.read_entry(&answer_entry_set, answer_id)
+                    .map_err(|error| match error {
+                        DomainError::NotFound => Error::from(AnswerNotFound),
+                        error => Error::from(error),
+                    })?
+            }
+            None => form
+                .read_entry(&answer_entry_set, answer_id)
+                .map_err(|error| match error {
+                    DomainError::NotFound => Error::from(AnswerNotFound),
+                    error => Error::from(error),
+                })?,
         };
 
-        let comments = comments
+        let labels = self
+            .answer_label_repository
+            .get_labels_for_answers_by_answer_id(answer_id)
+            .await?
             .into_iter()
-            .map(|comment| comment.try_into_read(&actor_ref, &comment_authorization_context))
+            .map(|label| {
+                label
+                    .try_read(actor_ref.clone())
+                    .map(|label| label.into_inner())
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let form_answer = comment_authorization_context
-            .related_answer_entry_guard
-            .try_into_read(
-                &actor_ref,
-                &comment_authorization_context.related_answer_entry_guard_context,
-            )?;
-
-        self.build_answer_details(actor, form_answer, labels, comments)
+        self.build_answer_details(actor, form_id, form_answer, labels)
             .await
     }
 }

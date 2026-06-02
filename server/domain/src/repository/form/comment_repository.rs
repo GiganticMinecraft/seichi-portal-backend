@@ -2,63 +2,30 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::types::authorization_guard_with_context::Update;
 use crate::{
-    form::{
-        answer::models::AnswerId,
-        comment::{
-            models::{Comment, CommentId},
-            service::CommentAuthorizationContext,
-        },
-    },
-    types::authorization_guard_with_context::{
-        AuthorizationGuardWithContext, Create, Delete, Read,
-    },
-    user::models::ActiveUser,
+    form::{answer::models::AnswerEntry, comment::models::Comment},
+    types::authorization_guard::{Allowed, Create, Delete, Read, Update},
 };
 
+/// [`Comment`] を集約ルートとして永続化するためのリポジトリ。
+///
+/// [`Comment`] の生成は [`ActiveForm`](crate::form::models::ActiveForm) のガード経由
+/// (`Allowed<ActiveForm, Read>::create_comment`) でのみ行えるため、`create` には作成操作の認可を通過した
+/// [`Allowed<Comment, Create>`] が渡される。
 #[automock]
 #[async_trait]
 pub trait CommentRepository: Send + Sync + 'static {
-    async fn get_comments(
+    async fn create(&self, comment: Allowed<Comment, Create>) -> Result<(), Error>;
+    /// 閲覧可能であることが確認済みの [`AnswerEntry`] に紐づくコメントを取得する。
+    ///
+    /// コメントを読むには紐づく [`AnswerEntry`] が閲覧可能である必要があるため、
+    /// 引数の [`Allowed<AnswerEntry, Read>`] から各コメントの
+    /// [`Allowed<Comment, Read>`] を導出して返す。
+    async fn find_by_answer(
         &self,
-        answer_id: AnswerId,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    >;
-    async fn get_all_comments(
-        &self,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    >;
-    async fn get_comment(
-        &self,
-        comment_id: CommentId,
-    ) -> Result<
-        Option<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    >;
-    async fn create_comment(
-        &self,
-        answer_id: AnswerId,
-        context: &CommentAuthorizationContext<Read>,
-        actor: &ActiveUser,
-        comment: AuthorizationGuardWithContext<Comment, Create, CommentAuthorizationContext<Read>>,
-    ) -> Result<(), Error>;
-    async fn update_comment(
-        &self,
-        answer_id: AnswerId,
-        context: &CommentAuthorizationContext<Read>,
-        actor: &ActiveUser,
-        comment: AuthorizationGuardWithContext<Comment, Update, CommentAuthorizationContext<Read>>,
-    ) -> Result<(), Error>;
-    async fn delete_comment(
-        &self,
-        context: CommentAuthorizationContext<Read>,
-        actor: &ActiveUser,
-        comment: AuthorizationGuardWithContext<Comment, Delete, CommentAuthorizationContext<Read>>,
-    ) -> Result<(), Error>;
+        answer: &Allowed<AnswerEntry, Read>,
+    ) -> Result<Vec<Allowed<Comment, Read>>, Error>;
+    async fn update(&self, comment: Allowed<Comment, Update>) -> Result<(), Error>;
+    async fn delete(&self, comment: Allowed<Comment, Delete>) -> Result<(), Error>;
     async fn size(&self) -> Result<u32, Error>;
 }

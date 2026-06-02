@@ -65,11 +65,11 @@ impl<
 {
     type ConcreteActiveFormRepository = Repository<Client>;
     type ConcreteArchivedFormRepository = Repository<Client>;
+    type ConcreteAnswerEntrySetRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
-    type ConcreteFormAnswerRepository = Repository<Client>;
-    type ConcreteFormCommentRepository = Repository<Client>;
+    type ConcreteCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
-    type ConcreteFormMessageRepository = Repository<Client>;
+    type ConcreteMessageThreadRepository = Repository<Client>;
     type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
     type ConcreteUserRepository = Repository<Client>;
@@ -79,19 +79,7 @@ impl<
         &self.db
     }
 
-    fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository {
-        &self.db
-    }
-
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository {
-        &self.db
-    }
-
-    fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository {
-        &self.db
-    }
-
-    fn form_comment_repository(&self) -> &Self::ConcreteFormCommentRepository {
         &self.db
     }
 
@@ -116,6 +104,18 @@ impl<
     }
 
     fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository {
+        &self.db
+    }
+
+    fn answer_entry_set_repository(&self) -> &Self::ConcreteAnswerEntrySetRepository {
+        &self.db
+    }
+
+    fn comment_repository(&self) -> &Self::ConcreteCommentRepository {
+        &self.db
+    }
+
+    fn message_thread_repository(&self) -> &Self::ConcreteMessageThreadRepository {
         &self.db
     }
 }

@@ -7,10 +7,10 @@ pub mod user_repository;
 pub trait Repositories: Send + Sync {
     type ConcreteActiveFormRepository: form::active_form_repository::ActiveFormRepository;
     type ConcreteArchivedFormRepository: form::archived_form_repository::ArchivedFormRepository;
-    type ConcreteFormAnswerRepository: form::answer_repository::AnswerRepository;
+    type ConcreteAnswerEntrySetRepository: form::answer_entry_set_repository::AnswerEntrySetRepository;
     type ConcreteAnswerLabelRepository: form::answer_label_repository::AnswerLabelRepository;
-    type ConcreteFormMessageRepository: form::message_repository::MessageRepository;
-    type ConcreteFormCommentRepository: form::comment_repository::CommentRepository;
+    type ConcreteCommentRepository: form::comment_repository::CommentRepository;
+    type ConcreteMessageThreadRepository: form::message_thread_repository::MessageThreadRepository;
     type ConcreteFormLabelRepository: form::form_label_repository::FormLabelRepository;
     type ConcreteUserRepository: user_repository::UserRepository;
     type ConcreteSearchRepository: search_repository::SearchRepository;
@@ -18,10 +18,10 @@ pub trait Repositories: Send + Sync {
     type ConcreteHealthCheckRepository: health_check_repository::HealthCheckRepository;
     fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository;
     fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository;
-    fn form_answer_repository(&self) -> &Self::ConcreteFormAnswerRepository;
+    fn answer_entry_set_repository(&self) -> &Self::ConcreteAnswerEntrySetRepository;
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository;
-    fn form_message_repository(&self) -> &Self::ConcreteFormMessageRepository;
-    fn form_comment_repository(&self) -> &Self::ConcreteFormCommentRepository;
+    fn comment_repository(&self) -> &Self::ConcreteCommentRepository;
+    fn message_thread_repository(&self) -> &Self::ConcreteMessageThreadRepository;
     fn form_label_repository(&self) -> &Self::ConcreteFormLabelRepository;
     fn user_repository(&self) -> &Self::ConcreteUserRepository;
     fn search_repository(&self) -> &Self::ConcreteSearchRepository;

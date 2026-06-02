@@ -1,6 +1,7 @@
 use domain::{
     form::models::{FormLabel, FormLabelId, FormLabelName},
     repository::form::form_label_repository::FormLabelRepository,
+    types::authorization_guard::{AuthorizationGuard, Create},
     user::models::{ActiveUser, Actor},
 };
 use errors::{Error, usecase::UseCaseError};
@@ -20,14 +21,17 @@ impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
         let label_id = label.id().to_owned();
 
         self.form_label_repository
-            .create_label_for_forms(label.into(), actor)
+            .create_label_for_forms(
+                AuthorizationGuard::<_, Create>::from(label).try_create(actor_user.clone())?,
+            )
             .await?;
 
         self.form_label_repository
             .fetch_label(label_id)
             .await?
             .ok_or(Error::from(UseCaseError::LabelNotFound))?
-            .try_into_read(&actor_user)
+            .try_read(actor_user.clone())
+            .map(|label| label.into_inner())
             .map_err(Into::into)
     }
 
@@ -37,7 +41,11 @@ impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
             .fetch_labels()
             .await?
             .into_iter()
-            .map(|label| label.try_into_read(&actor_user))
+            .map(|label| {
+                label
+                    .try_read(actor_user.clone())
+                    .map(|label| label.into_inner())
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
@@ -55,7 +63,7 @@ impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
             .into_delete();
 
         self.form_label_repository
-            .delete_label_for_forms(label, actor)
+            .delete_label_for_forms(label.try_delete(Actor::from(actor.clone()))?)
             .await
     }
 
@@ -75,7 +83,7 @@ impl<R: FormLabelRepository> FormLabelUseCase<'_, R> {
             let renamed_label = current_label.into_update().map(|label| label.renamed(name));
 
             self.form_label_repository
-                .edit_label_for_forms(id, renamed_label, actor)
+                .edit_label_for_forms(id, renamed_label.try_update(Actor::from(actor.clone()))?)
                 .await?;
         }
 

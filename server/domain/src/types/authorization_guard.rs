@@ -1,80 +1,255 @@
 use errors::domain::DomainError;
+use std::marker::PhantomData;
+use std::ops::Deref;
 
-use crate::{
-    types::authorization_guard_with_context::{
-        Actions, AuthorizationGuardWithContext, AuthorizationGuardWithContextDefinitions, Create,
-        Delete, Read, Update,
-    },
-    user::models::Actor,
-};
+use crate::user::models::Actor;
 
-/// [`Actor`] による `guard_target` に対するアクセスを制御するための定義を提供します。
+pub trait Actions: private::Sealed {}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Create;
+#[derive(Debug, Clone, Copy)]
+pub struct Read;
+#[derive(Debug, Clone, Copy)]
+pub struct Update;
+#[derive(Debug, Clone, Copy)]
+pub struct Delete;
+
+impl Actions for Create {}
+impl Actions for Read {}
+impl Actions for Update {}
+impl Actions for Delete {}
+
+mod private {
+    pub trait Sealed {}
+
+    impl Sealed for super::Create {}
+    impl Sealed for super::Read {}
+    impl Sealed for super::Update {}
+    impl Sealed for super::Delete {}
+}
+
+/// 認可チェック前の値を、実行したい操作と一緒に保持する型です。
 ///
-/// [`AuthorizationGuard`] は、Context を必要としない [`AuthorizationGuardWithContext`] であり、
-/// [`AuthorizationGuardWithContext<T, A, ()>`] と同等の機能を提供します。
-#[derive(Debug)]
+/// リポジトリなどから取得した値や、これから保存したい値をまずこの型で包み、
+/// `try_create` / `try_read` / `try_update` / `try_delete` のいずれかで [`Actor`] に対する
+/// 認可条件を確認します。認可に成功した場合だけ [`Allowed`] が返るため、
+/// 永続化や子要素の取得など、認可済みの値だけを受け付けたい API では
+/// [`Allowed<T, A>`] を引数にすることでチェック漏れを型で防ぎます。
+///
+/// Action 型パラメータは、これから確認する操作の種類を型レベルで表します。
+// NOTE: Action の変換は以下のようにのみ行うことができます
+//    - Create -> Read
+//    - Create -> Update
+//    - Update <-> Read
+//    - Update または Read -> Delete
+//  これは、データのライフサイクルを考えた時に
+//    - データの新規作成(Create) -> データ読み取り(Read) <-> データ更新(Update) -> データ削除(Delete)
+//  という順序のみ操作が行われるはずであるからです。
+//
+//  仮に Delete から Read へ変換することができるとすると、データの削除操作の実装において
+//  Read 権限を保持しているかつ Delete 権限を持たないユーザーが居る場合に
+//  AuthorizationGuard<T, Delete> から誤って `.into_read()` を呼び出すことで
+//  Read 権限を持つユーザーによってデータが削除されるという事故が発生する可能性があります。
+#[derive(Debug, Clone)]
 pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions, A: Actions> {
-    authorization_guard_with_context: AuthorizationGuardWithContext<T, A, ()>,
+    guard_target: T,
+    _phantom_data: PhantomData<A>,
+}
+
+/// 指定した操作について認可済みであることを型で表す値です。
+///
+/// この型は [`AuthorizationGuard`] の `try_*` メソッドや、認可済みの親要素から
+/// 子要素を認可するメソッドだけが作成します。`value` と一緒に認可に使った
+/// [`Actor`] を保持するため、親子関係を使った追加の認可判定でも同じ利用者を引き継げます。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Allowed<T, A: Actions> {
+    value: T,
+    actor: Actor,
+    _phantom_data: PhantomData<A>,
+}
+
+impl<T, A: Actions> Allowed<T, A> {
+    pub(crate) fn mint(value: T, actor: Actor) -> Self {
+        Self {
+            value,
+            actor,
+            _phantom_data: PhantomData,
+        }
+    }
+
+    /// 認可済みの値を参照します。
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+
+    /// 認可済みの値を取り出します。
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+
+    /// 認可に使った [`Actor`] を参照します。
+    pub fn actor(&self) -> &Actor {
+        &self.actor
+    }
+}
+
+impl<T, A: Actions> Deref for Allowed<T, A> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> Allowed<T, Update>
+where
+    T: AuthorizationGuardDefinitions,
+{
+    /// 認可済みの値を更新し、同じ操作権限と [`Actor`] を引き継ぎます。
+    pub fn map<F>(self, f: F) -> Self
+    where
+        F: FnOnce(T) -> T,
+    {
+        Self {
+            value: f(self.value),
+            actor: self.actor,
+            _phantom_data: PhantomData,
+        }
+    }
+
+    /// 認可済みの値に対して失敗しうる更新を行い、同じ操作権限と [`Actor`] を引き継ぎます。
+    pub fn try_map<F>(self, f: F) -> Result<Self, DomainError>
+    where
+        F: FnOnce(T) -> Result<T, DomainError>,
+    {
+        Ok(Self {
+            value: f(self.value)?,
+            actor: self.actor,
+            _phantom_data: PhantomData,
+        })
+    }
+}
+
+impl<T, A: Actions> Allowed<T, A> {
+    /// 認可済みの親要素から、子要素の同じ操作に対する認可済み値を作ります。
+    ///
+    /// 親要素が実装する [`Authorizes`] で親子関係や所有者などを確認し、
+    /// 成功した場合だけ同じ [`Actor`] の [`Allowed<C, A>`] を返します。
+    pub fn authorize<C>(&self, child: C) -> Result<Allowed<C, A>, DomainError>
+    where
+        T: Authorizes<C, A>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
+    }
+}
+
+impl<T> Allowed<T, Update> {
+    /// 更新認可済みの親要素から、子要素の更新認可済み値を作ります。
+    pub fn authorize_update<C>(&self, child: C) -> Result<Allowed<C, Update>, DomainError>
+    where
+        T: Authorizes<C, Update>,
+    {
+        self.authorize(child)
+    }
+
+    /// 更新認可済みの親要素から、子要素の削除認可済み値を作ります。
+    ///
+    /// Action ライフサイクル上 Update → Delete は有効な遷移であるため、
+    /// 更新認可済みの親が子要素の削除を認可できます。
+    pub fn authorize_delete<C>(&self, child: C) -> Result<Allowed<C, Delete>, DomainError>
+    where
+        T: Authorizes<C, Delete>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
+    }
+}
+
+impl<T> Allowed<T, Read> {
+    /// 読み取り認可済みの親要素から、子要素の読み取り認可済み値を作ります。
+    pub fn authorize_read<C>(&self, child: C) -> Result<Allowed<C, Read>, DomainError>
+    where
+        T: Authorizes<C, Read>,
+    {
+        self.authorize(child)
+    }
+
+    /// 読み取り認可済みの値を、同じ [`Actor`] で更新認可に昇格します。
+    pub fn try_into_update(self) -> Result<Allowed<T, Update>, DomainError>
+    where
+        T: AuthorizationGuardDefinitions,
+    {
+        if self.value.can_update(&self.actor) {
+            Ok(Allowed::mint(self.value, self.actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
+    /// 読み取り認可済みの値を、同じ [`Actor`] で削除認可に昇格します。
+    pub fn try_into_delete(self) -> Result<Allowed<T, Delete>, DomainError>
+    where
+        T: AuthorizationGuardDefinitions,
+    {
+        if self.value.can_delete(&self.actor) {
+            Ok(Allowed::mint(self.value, self.actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+/// 認可済みの親要素が、子要素の同じ操作も認可できることを表すトレイトです。
+///
+/// 例えば回答が読める利用者に、その回答に紐づくコメントの読み取りも許可する場合に使います。
+/// 例えば回答集合を更新できる利用者に、その集合に含まれる回答タイトルの更新も許可する場合に使います。
+pub trait Authorizes<Child, A: Actions> {
+    fn check(&self, actor: &Actor, child: &Child) -> Result<(), DomainError>;
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Create> {
     pub(crate) fn new(guard_target: T) -> Self {
         Self {
-            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target),
+            guard_target,
+            _phantom_data: PhantomData,
         }
     }
 
-    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作 `f` を試みます。
-    pub fn try_create<'a, R, F>(&'a self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(&'a T) -> R,
-    {
-        self.authorization_guard_with_context
-            .try_create(actor, f, &())
-    }
-
-    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作 `f` を試みます。
-    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
-    pub fn try_into_create<R, F>(self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(T) -> R,
-    {
-        self.authorization_guard_with_context
-            .try_into_create(actor, f, &())
+    /// [`AuthorizationGuardDefinitions::can_create`] の条件で作成操作を認可します。
+    pub fn try_create(self, actor: Actor) -> Result<Allowed<T, Create>, DomainError> {
+        if self.guard_target.can_create(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.into_read(),
+            guard_target: self.guard_target,
+            _phantom_data: PhantomData,
         }
     }
 
     pub fn into_update(self) -> AuthorizationGuard<T, Update> {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.into_update(),
+            guard_target: self.guard_target,
+            _phantom_data: PhantomData,
         }
     }
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
-    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
-    pub fn try_update<'a, R, F>(&'a self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(&'a T) -> R,
-    {
-        self.authorization_guard_with_context
-            .try_update(actor, f, &())
-    }
-
-    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作 `f` を試みます。
-    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
-    pub fn try_into_update<R, F>(self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(T) -> R,
-    {
-        self.authorization_guard_with_context
-            .try_into_update(actor, f, &())
+    /// [`AuthorizationGuardDefinitions::can_update`] の条件で更新操作を認可します。
+    pub fn try_update(self, actor: Actor) -> Result<Allowed<T, Update>, DomainError> {
+        if self.guard_target.can_update(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
     }
 
     /// [`T`] の値に対して map 相当の操作を行います。
@@ -83,70 +258,63 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Update> {
         F: FnOnce(T) -> T,
     {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.map(f),
+            guard_target: f(self.guard_target),
+            _phantom_data: PhantomData,
         }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Read`] に変換します。
     pub fn into_read(self) -> AuthorizationGuard<T, Read> {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.into_read(),
+            guard_target: self.guard_target,
+            _phantom_data: PhantomData,
         }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Delete`] に変換します。
     pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.into_delete(),
+            guard_target: self.guard_target,
+            _phantom_data: PhantomData,
         }
     }
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Read> {
-    /// `actor` が `guard_target` の参照を取得することを試みます。
-    pub fn try_read(&self, actor: &Actor) -> Result<&T, DomainError> {
-        self.authorization_guard_with_context.try_read(actor, &())
-    }
-
-    /// `actor` が `guard_target` を取得することを試みます。
-    pub fn try_into_read(self, actor: &Actor) -> Result<T, DomainError> {
-        self.authorization_guard_with_context
-            .try_into_read(actor, &())
+    /// [`AuthorizationGuardDefinitions::can_read`] の条件で読み取り操作を認可します。
+    pub fn try_read(self, actor: Actor) -> Result<Allowed<T, Read>, DomainError> {
+        if self.guard_target.can_read(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Update`] に変換します。
     pub fn into_update(self) -> AuthorizationGuard<T, Update> {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.into_update(),
+            guard_target: self.guard_target,
+            _phantom_data: PhantomData,
         }
     }
 
     /// [`AuthorizationGuard`] の Action を [`Delete`] に変換します。
     pub fn into_delete(self) -> AuthorizationGuard<T, Delete> {
         AuthorizationGuard {
-            authorization_guard_with_context: self.authorization_guard_with_context.into_delete(),
+            guard_target: self.guard_target,
+            _phantom_data: PhantomData,
         }
     }
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {
-    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
-    pub fn try_delete<'a, R, F>(&'a self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(&'a T) -> R,
-    {
-        self.authorization_guard_with_context
-            .try_delete(actor, f, &())
-    }
-
-    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作 `f` を試みます。
-    /// この関数は、`guard_target` を所有権を持つ形で操作を行います。
-    pub fn try_into_delete<R, F>(self, actor: &Actor, f: F) -> Result<R, DomainError>
-    where
-        F: FnOnce(T) -> R,
-    {
-        self.authorization_guard_with_context
-            .try_into_delete(actor, f, &())
+    /// [`AuthorizationGuardDefinitions::can_delete`] の条件で削除操作を認可します。
+    pub fn try_delete(self, actor: Actor) -> Result<Allowed<T, Delete>, DomainError> {
+        if self.guard_target.can_delete(&actor) {
+            Ok(Allowed::mint(self.guard_target, actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
     }
 }
 
@@ -189,27 +357,6 @@ pub trait AuthorizationGuardDefinitions {
     fn can_delete(&self, actor: &Actor) -> bool;
 }
 
-impl<T> AuthorizationGuardWithContextDefinitions<()> for T
-where
-    T: AuthorizationGuardDefinitions,
-{
-    fn can_create(&self, actor: &Actor, _context: &()) -> bool {
-        self.can_create(actor)
-    }
-
-    fn can_read(&self, actor: &Actor, _context: &()) -> bool {
-        self.can_read(actor)
-    }
-
-    fn can_update(&self, actor: &Actor, _context: &()) -> bool {
-        self.can_update(actor)
-    }
-
-    fn can_delete(&self, actor: &Actor, _context: &()) -> bool {
-        self.can_delete(actor)
-    }
-}
-
 impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Create> {
     fn from(guard_target: T) -> Self {
         AuthorizationGuard::new(guard_target)
@@ -219,8 +366,8 @@ impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Create>
 impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Read> {
     fn from(guard_target: T) -> Self {
         Self {
-            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target)
-                .into_read(),
+            guard_target,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -228,8 +375,8 @@ impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Read> {
 impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Update> {
     fn from(guard_target: T) -> Self {
         Self {
-            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target)
-                .into_update(),
+            guard_target,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -237,9 +384,8 @@ impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Update>
 impl<T: AuthorizationGuardDefinitions> From<T> for AuthorizationGuard<T, Delete> {
     fn from(guard_target: T) -> Self {
         Self {
-            authorization_guard_with_context: AuthorizationGuardWithContext::new(guard_target)
-                .into_read()
-                .into_delete(),
+            guard_target,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -249,7 +395,9 @@ mod test {
     use uuid::Uuid;
 
     use crate::{
-        types::authorization_guard::{AuthorizationGuard, AuthorizationGuardDefinitions},
+        types::authorization_guard::{
+            Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Delete,
+        },
         user::models::{ActiveUser, Actor, Role, User},
     };
 
@@ -301,24 +449,32 @@ mod test {
             _value: "test".to_string(),
         });
 
-        assert!(&guard.try_create(&admin, |_| {}).is_ok());
-        assert!(&guard.try_create(&standard_user, |_| {}).is_err());
+        assert!(&guard.clone().try_create(admin.clone()).is_ok());
+        assert!(&guard.try_create(standard_user.clone()).is_err());
 
-        let guard = guard.into_read();
-        assert!(&guard.try_read(&admin).is_ok());
-        assert!(&guard.try_read(&standard_user).is_ok());
+        let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        })
+        .into_read();
+        assert!(&guard.clone().try_read(admin.clone()).is_ok());
+        assert!(&guard.try_read(standard_user.clone()).is_ok());
 
-        let guard = guard.into_update();
-        assert!(&guard.try_update(&admin, |_| {}).is_ok());
-        assert!(&guard.try_update(&standard_user, |_| {}).is_err());
+        let guard = AuthorizationGuard::new(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        })
+        .into_update();
+        assert!(&guard.clone().try_update(admin.clone()).is_ok());
+        assert!(&guard.try_update(standard_user.clone()).is_err());
 
-        let guard = guard.into_delete();
-        assert!(&guard.try_delete(&admin, |_| {}).is_ok());
-        assert!(&guard.try_delete(&standard_user, |_| {}).is_err());
+        let guard = AuthorizationGuard::<_, Delete>::from(AuthorizationGuardTestStruct {
+            _value: "test".to_string(),
+        });
+        assert!(&guard.clone().try_delete(admin.clone()).is_ok());
+        assert!(&guard.try_delete(standard_user.clone()).is_err());
     }
 
     #[test]
-    fn verify_same_data_for_try_read_and_try_into_read() {
+    fn allowed_can_borrow_and_unwrap_value() {
         let user: Actor = ActiveUser::new(
             "user".to_string(),
             Uuid::new_v4().into(),
@@ -332,12 +488,12 @@ mod test {
 
         let read_guard = guard.into_read();
 
-        let from_into_read = read_guard.try_read(&user);
+        let from_into_read = read_guard.clone().try_read(user.clone());
         assert!(from_into_read.is_ok());
 
-        let from_into_read = from_into_read.unwrap().to_owned();
+        let from_into_read = from_into_read.unwrap().into_inner();
 
-        let read_into = read_guard.try_into_read(&user);
+        let read_into = read_guard.try_read(user.clone()).map(Allowed::into_inner);
 
         assert!(read_into.is_ok());
 

@@ -4347,7 +4347,6 @@
           "form_id",
           "timestamp",
           "answers",
-          "comments",
           "labels"
         ],
         "properties": {
@@ -4359,12 +4358,6 @@
           },
           "author": {
             "$ref": "#/components/schemas/AnswerAuthor"
-          },
-          "comments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AnswerComment"
-            }
           },
           "form_id": {
             "type": "string",

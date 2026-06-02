@@ -1,13 +1,17 @@
 use chrono::{DateTime, Utc};
-use domain::form::answer::settings::models::AnswerSettings;
 use domain::form::{
-    answer::settings::models::DefaultAnswerTitle,
-    models::{FormDescription, FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility},
-    question::models::Choice,
+    answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
+    models::{
+        AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
+        FormSettings, FormTitle, Visibility,
+    },
+    question::models::{Choice, Question, QuestionType},
 };
+use domain::user::models::{ActiveUser, Actor};
 use itertools::Itertools;
 use serde::Serialize;
 use types::non_empty_string::NonEmptyString;
+use usecase::models::CommentWithAuthor;
 use uuid::Uuid;
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -24,15 +28,11 @@ pub enum AnswerVisibility {
     Private,
 }
 
-impl From<domain::form::answer::settings::models::AnswerVisibility> for AnswerVisibility {
-    fn from(val: domain::form::answer::settings::models::AnswerVisibility) -> Self {
+impl From<domain::form::models::AnswerVisibility> for AnswerVisibility {
+    fn from(val: domain::form::models::AnswerVisibility) -> Self {
         match val {
-            domain::form::answer::settings::models::AnswerVisibility::PUBLIC => {
-                AnswerVisibility::Public
-            }
-            domain::form::answer::settings::models::AnswerVisibility::PRIVATE => {
-                AnswerVisibility::Private
-            }
+            domain::form::models::AnswerVisibility::PUBLIC => AnswerVisibility::Public,
+            domain::form::models::AnswerVisibility::PRIVATE => AnswerVisibility::Private,
         }
     }
 }
@@ -46,7 +46,7 @@ pub struct AnswerSettingsSchema {
 }
 
 impl AnswerSettingsSchema {
-    pub fn from_answer_settings_ref(answer_settings: &AnswerSettings) -> Self {
+    pub fn from_answer_settings(answer_settings: &AnswerSettings) -> Self {
         Self {
             default_answer_title: answer_settings.default_answer_title().to_owned(),
             visibility: answer_settings.visibility().to_owned().into(),
@@ -69,17 +69,19 @@ pub struct FormSettingsSchema {
 }
 
 impl FormSettingsSchema {
-    pub fn from_settings_ref(actor: &domain::user::models::Actor, settings: &FormSettings) -> Self {
+    pub fn from_settings_and_answer_settings(
+        actor: &Actor,
+        settings: &FormSettings,
+        answer_settings: &AnswerSettings,
+    ) -> Self {
         FormSettingsSchema {
             webhook_url: settings
                 .webhook_url(actor)
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),
-            allow_temporary_answers: settings.allow_temporary_answers(),
-            answer_settings: AnswerSettingsSchema::from_answer_settings_ref(
-                settings.answer_settings(),
-            ),
+            allow_temporary_answers: *answer_settings.allow_temporary_answers(),
+            answer_settings: AnswerSettingsSchema::from_answer_settings(answer_settings),
         }
     }
 }
@@ -126,7 +128,7 @@ pub struct ArchivedFormSchema {
     pub metadata: FormMetaSchema,
     pub archived_at: DateTime<Utc>,
     #[schema(value_type = serde_json::Value)]
-    pub archived_by: domain::user::models::ActiveUser,
+    pub archived_by: ActiveUser,
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
@@ -164,8 +166,8 @@ pub enum QuestionResponseSchema {
     MultipleChoice(SelectQuestionResponseSchema),
 }
 
-impl From<domain::form::question::models::Question> for QuestionResponseSchema {
-    fn from(val: domain::form::question::models::Question) -> Self {
+impl From<Question> for QuestionResponseSchema {
+    fn from(val: Question) -> Self {
         let definition = QuestionDefinitionResponseSchema {
             id: val.id().into_inner().to_string(),
             template_key: val.template_key().to_owned().into_inner(),
@@ -176,10 +178,8 @@ impl From<domain::form::question::models::Question> for QuestionResponseSchema {
         };
 
         match val.question_type() {
-            domain::form::question::models::QuestionType::Text => {
-                Self::Text(TextQuestionResponseSchema { definition })
-            }
-            domain::form::question::models::QuestionType::SingleChoice => {
+            QuestionType::Text => Self::Text(TextQuestionResponseSchema { definition }),
+            QuestionType::SingleChoice => {
                 let choices = val
                     .choices()
                     .cloned()
@@ -193,7 +193,7 @@ impl From<domain::form::question::models::Question> for QuestionResponseSchema {
                     choices,
                 })
             }
-            domain::form::question::models::QuestionType::MultipleChoice => {
+            QuestionType::MultipleChoice => {
                 let choices = val
                     .choices()
                     .cloned()
@@ -234,8 +234,8 @@ pub struct FormLabelResponseSchema {
     pub name: String,
 }
 
-impl From<domain::form::models::FormLabel> for FormLabelResponseSchema {
-    fn from(val: domain::form::models::FormLabel) -> Self {
+impl From<FormLabel> for FormLabelResponseSchema {
+    fn from(val: FormLabel) -> Self {
         FormLabelResponseSchema {
             id: val.id().to_owned().into_inner().to_string(),
             name: val.name().to_string(),
@@ -249,8 +249,8 @@ pub struct AnswerLabelResponseSchema {
     pub name: String,
 }
 
-impl From<domain::form::answer::models::AnswerLabel> for AnswerLabelResponseSchema {
-    fn from(val: domain::form::answer::models::AnswerLabel) -> Self {
+impl From<AnswerLabel> for AnswerLabelResponseSchema {
+    fn from(val: AnswerLabel) -> Self {
         AnswerLabelResponseSchema {
             id: val.id().to_owned().into_inner().to_string(),
             name: val.name().to_string(),
@@ -326,8 +326,8 @@ impl From<domain::user::models::User> for AnswerAuthor {
     }
 }
 
-impl From<domain::user::models::ActiveUser> for User {
-    fn from(val: domain::user::models::ActiveUser) -> Self {
+impl From<ActiveUser> for User {
+    fn from(val: ActiveUser) -> Self {
         User {
             uuid: val.id().to_string(),
             name: val.name().to_owned(),
@@ -344,7 +344,7 @@ pub struct AnswerContent {
 }
 
 impl AnswerContent {
-    pub fn from_ref(val: &domain::form::answer::models::FormAnswerContent) -> Self {
+    pub fn from_ref(val: &FormAnswerContent) -> Self {
         AnswerContent {
             question_id: val.question_id.into_inner().to_string(),
             answer: val.answer.to_string(),
@@ -359,8 +359,8 @@ pub struct AnswerComment {
     commented_by: User,
 }
 
-impl From<usecase::models::CommentWithAuthor> for AnswerComment {
-    fn from(val: usecase::models::CommentWithAuthor) -> Self {
+impl From<CommentWithAuthor> for AnswerComment {
+    fn from(val: CommentWithAuthor) -> Self {
         AnswerComment {
             content: val.comment.content().to_string(),
             timestamp: val.comment.timestamp().to_owned(),
@@ -375,8 +375,8 @@ pub struct AnswerLabels {
     name: String,
 }
 
-impl From<domain::form::answer::models::AnswerLabel> for AnswerLabels {
-    fn from(val: domain::form::answer::models::AnswerLabel) -> Self {
+impl From<AnswerLabel> for AnswerLabels {
+    fn from(val: AnswerLabel) -> Self {
         AnswerLabels {
             id: val.id().to_owned().into(),
             name: val.name().to_string(),
@@ -392,21 +392,20 @@ pub struct FormAnswer {
     timestamp: DateTime<Utc>,
     title: Option<String>,
     answers: Vec<AnswerContent>,
-    comments: Vec<AnswerComment>,
     labels: Vec<AnswerLabels>,
 }
 
 impl FormAnswer {
     pub fn new(
-        answer: domain::form::answer::models::AnswerEntry,
+        answer: AnswerEntry,
+        form_id: FormId,
         author: domain::user::models::User,
-        comments: Vec<usecase::models::CommentWithAuthor>,
-        labels: Vec<domain::form::answer::models::AnswerLabel>,
+        labels: Vec<AnswerLabel>,
     ) -> Self {
         FormAnswer {
             id: answer.id().to_owned().into(),
             author: author.into(),
-            form_id: answer.form_id().into_inner(),
+            form_id: form_id.into_inner(),
             timestamp: answer.timestamp().to_owned(),
             title: answer
                 .title()
@@ -418,7 +417,6 @@ impl FormAnswer {
                 .iter()
                 .map(AnswerContent::from_ref)
                 .collect_vec(),
-            comments: comments.into_iter().map(Into::into).collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
         }
     }

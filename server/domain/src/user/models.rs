@@ -128,7 +128,11 @@ impl TemporaryUser {
         }
     }
 
-    pub fn from_raw_parts(id: TemporaryUserId, name: String, contact_text: String) -> Self {
+    /// [`TemporaryUser`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
+    pub unsafe fn from_raw_parts(id: TemporaryUserId, name: String, contact_text: String) -> Self {
         Self {
             id,
             name,
@@ -147,7 +151,7 @@ impl AuthorizationGuardDefinitions for ActiveUser {
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role == Role::Administrator)
     }
 
     fn can_delete(&self, actor: &Actor) -> bool {
@@ -168,16 +172,11 @@ pub enum Role {
 }
 
 #[derive(Deserialize)]
-pub struct RoleQuery {
-    pub role: Role,
-}
-
-#[derive(Deserialize)]
 pub struct UserSessionExpires {
     pub expires: u32,
 }
 
-#[derive(DerivingVia, Debug)]
+#[derive(DerivingVia, Debug, PartialEq, Eq)]
 #[deriving(From, Into, IntoInner, Clone)]
 pub struct DiscordUserId(String);
 
@@ -194,7 +193,7 @@ impl DiscordUserId {
     }
 }
 
-#[derive(DerivingVia, Debug)]
+#[derive(DerivingVia, Debug, PartialEq, Eq)]
 #[deriving(From, Into, IntoInner, Clone)]
 pub struct DiscordUserName(String);
 
@@ -211,7 +210,7 @@ impl DiscordUserName {
     }
 }
 
-#[derive(Getters, Debug)]
+#[derive(Getters, Debug, Clone, PartialEq, Eq)]
 pub struct DiscordUser {
     id: DiscordUserId,
     name: DiscordUserName,
@@ -220,5 +219,38 @@ pub struct DiscordUser {
 impl DiscordUser {
     pub fn new(id: DiscordUserId, name: DiscordUserName) -> Self {
         Self { id, name }
+    }
+}
+
+#[derive(Getters, Debug, Clone, PartialEq, Eq)]
+pub struct DiscordAccountLink {
+    user_id: UserId,
+    discord_user: DiscordUser,
+}
+
+impl DiscordAccountLink {
+    pub fn new(user_id: UserId, discord_user: DiscordUser) -> Self {
+        Self {
+            user_id,
+            discord_user,
+        }
+    }
+}
+
+impl AuthorizationGuardDefinitions for DiscordAccountLink {
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
+    }
+
+    fn can_read(&self, _actor: &Actor) -> bool {
+        true
+    }
+
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
+    }
+
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
     }
 }

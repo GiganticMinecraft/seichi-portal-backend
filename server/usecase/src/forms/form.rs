@@ -1,21 +1,21 @@
 use chrono::Utc;
 use domain::{
-    form::{
-        answer::settings::models::{AnswerVisibility, DefaultAnswerTitle, ResponsePeriod},
-        models::{
-            ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel, FormLabelId,
-            FormLabelIdSet, FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
-        },
+    form::models::{
+        ActiveForm, AnswerSettings, AnswerVisibility, ArchivedForm, DefaultAnswerTitle,
+        FormDescription, FormId, FormLabel, FormLabelId, FormLabelIdSet, FormTitle, Question,
+        QuestionSet, ResponsePeriod, Visibility, WebhookUrl,
     },
     repository::{
         form::{
-            active_form_repository::ActiveFormRepository, answer_repository::AnswerRepository,
+            active_form_repository::ActiveFormRepository,
+            answer_entry_set_repository::AnswerEntrySetRepository,
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
         },
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
+    types::authorization_guard::{AuthorizationGuard, Create},
     user::models::{ActiveUser, Actor},
 };
 use errors::{
@@ -34,14 +34,14 @@ pub struct FormUseCase<
     ArchivedFormRepo: ArchivedFormRepository,
     NotificationRepo: NotificationRepository,
     FormLabelRepo: FormLabelRepository,
-    AnswerRepo: AnswerRepository,
+    AnswerEntrySetRepo: AnswerEntrySetRepository,
     UserRepo: UserRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub archived_form_repository: &'a ArchivedFormRepo,
     pub notification_repository: &'a NotificationRepo,
     pub form_label_repository: &'a FormLabelRepo,
-    pub answer_repository: &'a AnswerRepo,
+    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
     pub user_repository: &'a UserRepo,
 }
 
@@ -50,7 +50,7 @@ impl<
     R2: ArchivedFormRepository,
     R3: NotificationRepository,
     R4: FormLabelRepository,
-    R5: AnswerRepository,
+    R5: AnswerEntrySetRepository,
     R6: UserRepository,
 > FormUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
@@ -62,30 +62,34 @@ impl<
         allow_temporary_answers: Option<bool>,
         user: &ActiveUser,
     ) -> Result<ActiveForm, Error> {
-        let mut form = ActiveForm::new(
+        let user_as_user = Actor::from(user.clone());
+
+        let answer_settings = match allow_temporary_answers {
+            Some(allow) => AnswerSettings::default().change_allow_temporary_answers(allow),
+            None => AnswerSettings::default(),
+        };
+
+        let form = ActiveForm::new(
             title,
             description,
             QuestionSet::try_new(questions).map_err(Error::from)?,
-        );
-        if let Some(allow_temporary_answers) = allow_temporary_answers {
-            let settings = form
-                .settings()
-                .to_owned()
-                .change_allow_temporary_answers(allow_temporary_answers);
-            form = form.change_settings(settings);
-        }
+        )
+        .change_answer_settings(answer_settings);
         let form_id = *form.id();
-        let user_as_user = Actor::from(user.clone());
 
         self.active_form_repository
-            .create(user, form.into())
+            .create(
+                user,
+                AuthorizationGuard::<_, Create>::from(form).try_create(user_as_user.clone())?,
+            )
             .await?;
 
         self.active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&user_as_user)
+            .try_read(user_as_user.clone())
+            .map(|form| form.into_inner())
             .map_err(Error::from)
     }
 
@@ -101,7 +105,7 @@ impl<
             .list(offset, limit)
             .await?
             .into_iter()
-            .flat_map(|form| form.try_into_read(actor))
+            .flat_map(|form| form.try_read(actor.clone()).map(|form| form.into_inner()))
             .collect::<Vec<_>>();
 
         let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
@@ -117,7 +121,11 @@ impl<
                     form,
                     labels
                         .into_iter()
-                        .map(|guard| guard.try_into_read(actor))
+                        .map(|guard| {
+                            guard
+                                .try_read(actor.clone())
+                                .map(|label| label.into_inner())
+                        })
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             })
@@ -136,13 +144,18 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(actor)?;
+            .try_read(actor.clone())?
+            .into_inner();
         let labels = self
             .form_label_repository
             .fetch_labels_by_form_id(form_id)
             .await?
             .into_iter()
-            .map(|label| label.try_into_read(actor))
+            .map(|label| {
+                label
+                    .try_read(actor.clone())
+                    .map(|label| label.into_inner())
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ActiveFormWithLabels { form, labels })
@@ -161,7 +174,10 @@ impl<
             .list(offset, limit, query)
             .await?
             .into_iter()
-            .flat_map(|form| form.try_into_read(&actor_user))
+            .flat_map(|form| {
+                form.try_read(actor_user.clone())
+                    .map(|form| form.into_inner())
+            })
             .collect::<Vec<_>>();
 
         let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
@@ -181,13 +197,18 @@ impl<
                         .find_by(form.archived_by().into_inner())
                         .await?
                         .ok_or(Error::from(UserNotFound))?
-                        .try_into_read(&actor_user)?;
+                        .try_read(actor_user.clone())?
+                        .into_inner();
                     Ok::<_, Error>(ArchivedFormDetails {
                         archived_by,
                         form,
                         labels: labels
                             .into_iter()
-                            .map(|label| label.try_into_read(&actor_user))
+                            .map(|label| {
+                                label
+                                    .try_read(actor_user.clone())
+                                    .map(|label| label.into_inner())
+                            })
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }
@@ -208,13 +229,18 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&actor_user)?;
+            .try_read(actor_user.clone())?
+            .into_inner();
         let labels = self
             .form_label_repository
             .fetch_labels_by_form_id(form.form().id().to_owned())
             .await?
             .into_iter()
-            .map(|label| label.try_into_read(&actor_user))
+            .map(|label| {
+                label
+                    .try_read(actor_user.clone())
+                    .map(|label| label.into_inner())
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let archived_by = self
@@ -222,7 +248,8 @@ impl<
             .find_by(form.archived_by().into_inner())
             .await?
             .ok_or(Error::from(UserNotFound))?
-            .try_into_read(&actor_user)?;
+            .try_read(actor_user.clone())?
+            .into_inner();
 
         Ok(ArchivedFormDetails {
             form,
@@ -243,13 +270,17 @@ impl<
             .await?
             .ok_or(Error::from(FormNotFound))?;
         let form = form
-            .try_into_read(&actor_user)?
+            .try_read(actor_user.clone())?
+            .into_inner()
             .archive(Utc::now(), *actor.id());
         let archived_form = self
             .archived_form_repository
-            .archive(actor, form.into())
+            .archive(AuthorizationGuard::<_, Create>::from(form).try_create(actor_user.clone())?)
             .await?;
-        archived_form.try_into_read(&actor_user).map_err(Into::into)
+        archived_form
+            .try_read(actor_user.clone())
+            .map(|form| form.into_inner())
+            .map_err(Into::into)
     }
 
     pub async fn restore_form(&self, actor: &ActiveUser, form_id: FormId) -> Result<(), Error> {
@@ -260,7 +291,7 @@ impl<
             .ok_or(Error::from(FormNotFound))?;
 
         self.archived_form_repository
-            .restore(actor, form.into_update())
+            .restore(form.into_update().try_update(Actor::from(actor.clone()))?)
             .await
     }
 
@@ -286,15 +317,8 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
-        let current_questions = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&actor_user)?
-            .questions()
-            .as_slice()
-            .to_vec();
+        let current_form_read = current_form.try_read(actor_user.clone())?;
+        let current_questions = current_form_read.questions().as_slice().to_vec();
 
         if let Some(questions) = &questions {
             let existing_question_ids = current_questions
@@ -312,12 +336,12 @@ impl<
                 .into());
             }
 
-            let has_answers = !self
-                .answer_repository
-                .get_answers_by_form_id(form_id)
+            let answer_entry_set = self
+                .answer_entry_set_repository
+                .get_read(&current_form_read)
                 .await?
-                .is_empty();
-            if has_answers {
+                .ok_or(Error::from(FormNotFound))?;
+            if answer_entry_set.has_entries() {
                 validate_answered_form_question_update(&current_questions, questions.as_slice())?;
             }
         }
@@ -337,41 +361,40 @@ impl<
             None => None,
         };
 
-        let updated_form = current_form.into_update().map(|form| {
-            let current_answer_settings = form.settings().answer_settings().to_owned();
-            let updated_answer_settings = match answer_visibility {
-                None => current_answer_settings,
-                Some(visibility) => current_answer_settings.change_visibility(visibility),
-            };
-            let updated_answer_settings = match default_answer_title {
-                None => updated_answer_settings,
-                Some(default_answer_title) => {
-                    updated_answer_settings.change_default_answer_title(default_answer_title)
-                }
-            };
-            let updated_answer_settings = match response_period {
-                None => updated_answer_settings,
-                Some(response_period) => {
-                    updated_answer_settings.change_response_period(response_period)
-                }
-            };
+        let current_form = self
+            .active_form_repository
+            .get(form_id)
+            .await?
+            .ok_or(Error::from(FormNotFound))?;
 
+        let updated_form = current_form.into_update().map(|form| {
             let current_settings = form.settings().to_owned();
             let updated_settings = match visibility {
                 None => current_settings,
                 Some(visibility) => current_settings.change_visibility(visibility),
             };
-            let updated_settings = match allow_temporary_answers {
-                None => updated_settings,
-                Some(allow_temporary_answers) => {
-                    updated_settings.change_allow_temporary_answers(allow_temporary_answers)
-                }
-            };
             let updated_settings = match webhook {
                 None => updated_settings,
                 Some(webhook) => updated_settings.change_webhook_url(webhook),
             };
-            let updated_settings = updated_settings.change_answer_settings(updated_answer_settings);
+
+            let updated_answer_settings = form.answer_settings().to_owned();
+            let updated_answer_settings = match answer_visibility {
+                None => updated_answer_settings,
+                Some(v) => updated_answer_settings.change_visibility(v),
+            };
+            let updated_answer_settings = match default_answer_title {
+                None => updated_answer_settings,
+                Some(t) => updated_answer_settings.change_default_answer_title(t),
+            };
+            let updated_answer_settings = match response_period {
+                None => updated_answer_settings,
+                Some(p) => updated_answer_settings.change_response_period(p),
+            };
+            let updated_answer_settings = match allow_temporary_answers {
+                None => updated_answer_settings,
+                Some(a) => updated_answer_settings.change_allow_temporary_answers(a),
+            };
 
             let updated_form = match title {
                 None => form,
@@ -381,7 +404,9 @@ impl<
                 None => updated_form,
                 Some(description) => updated_form.change_description(description),
             };
-            updated_form.change_settings(updated_settings)
+            updated_form
+                .change_settings(updated_settings)
+                .change_answer_settings(updated_answer_settings)
         });
 
         let updated_form = match label_ids {
@@ -391,13 +416,30 @@ impl<
 
         let updated_form = match questions {
             Some(questions) => {
-                let questions = NonEmptyVec::try_new(
-                    questions
-                        .into_iter()
-                        .map(|question| question.question)
-                        .collect::<Vec<_>>(),
-                )
-                .map_err(Error::from)?;
+                let current_by_id = current_questions
+                    .iter()
+                    .cloned()
+                    .map(|question| (question.id().into_inner(), question))
+                    .collect::<HashMap<_, _>>();
+                let questions = questions
+                    .into_iter()
+                    .map(|question| match question.original_id {
+                        Some(original_id) => current_by_id
+                            .get(&original_id.into_inner())
+                            .cloned()
+                            .ok_or_else(|| DomainError::InvalidEntity {
+                                message: format!(
+                                    "question id {} does not belong to the form",
+                                    original_id
+                                ),
+                            })
+                            .and_then(|current_question| {
+                                current_question.update_preserving_id(question.question)
+                            }),
+                        None => Ok(question.question),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let questions = NonEmptyVec::try_new(questions).map_err(Error::from)?;
                 updated_form.map(|form| {
                     form.change_questions(QuestionSet::try_new(questions).expect("validated"))
                 })
@@ -406,7 +448,7 @@ impl<
         };
 
         self.active_form_repository
-            .update_form(actor, updated_form)
+            .update_form(actor, updated_form.try_update(actor_user.clone())?)
             .await?;
 
         let updated_form = self
@@ -414,7 +456,8 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
-            .try_into_read(&actor_user)
+            .try_read(actor_user.clone())
+            .map(|form| form.into_inner())
             .map_err(|_| Error::from(FormNotFound))?;
 
         let label_guards = self
@@ -423,7 +466,11 @@ impl<
             .await?;
         let labels = label_guards
             .into_iter()
-            .map(|label| label.try_into_read(&actor_user))
+            .map(|label| {
+                label
+                    .try_read(actor_user.clone())
+                    .map(|label| label.into_inner())
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok((updated_form, labels))
@@ -440,7 +487,15 @@ fn validate_answered_form_question_update(
         .collect::<HashMap<_, _>>();
     let updated_by_id = updated_questions
         .iter()
-        .map(|question| (question.question.id().into_inner(), &question.question))
+        .map(|question| {
+            (
+                question
+                    .original_id
+                    .unwrap_or_else(|| question.question.id())
+                    .into_inner(),
+                &question.question,
+            )
+        })
         .collect::<HashMap<_, _>>();
 
     if let Some(error) = current_questions
@@ -580,7 +635,7 @@ mod tests {
         repository::{
             form::{
                 active_form_repository::MockActiveFormRepository,
-                answer_repository::MockAnswerRepository,
+                answer_entry_set_repository::MockAnswerEntrySetRepository,
                 archived_form_repository::MockArchivedFormRepository,
                 form_label_repository::MockFormLabelRepository,
             },
@@ -606,29 +661,34 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        ActiveForm::from_raw_parts(
-            form_id,
-            FormTitle::new("Form".to_string().try_into().unwrap()),
-            FormDescription::new("description".to_string()),
-            FormMeta::new(),
-            FormSettings::new(),
-            questions,
-            FormLabelIdSet::empty(),
-        )
+        unsafe {
+            ActiveForm::from_raw_parts(
+                form_id,
+                FormTitle::new("Form".to_string().try_into().unwrap()),
+                FormDescription::new("description".to_string()),
+                FormMeta::new(),
+                FormSettings::new(),
+                AnswerSettings::default(),
+                questions,
+                FormLabelIdSet::empty(),
+            )
+        }
     }
 
     fn text_question(question_id: QuestionId, position: u16, template_key: &str) -> Question {
-        Question::from_raw_parts(
-            question_id,
-            template_key.to_string().try_into().unwrap(),
-            position,
-            template_key.to_string().try_into().unwrap(),
-            None,
-            QuestionType::Text,
-            None,
-            true,
-        )
-        .unwrap()
+        unsafe {
+            Question::from_raw_parts(
+                question_id,
+                template_key.to_string().try_into().unwrap(),
+                position,
+                template_key.to_string().try_into().unwrap(),
+                None,
+                QuestionType::Text,
+                None,
+                true,
+            )
+            .unwrap()
+        }
     }
 
     #[tokio::test]
@@ -657,7 +717,7 @@ mod tests {
             .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
 
         let form_label_repository = MockFormLabelRepository::new();
-        let answer_repository = MockAnswerRepository::new();
+        let answer_entry_set_repository = MockAnswerEntrySetRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
         let user_repository = MockUserRepository::new();
@@ -667,7 +727,7 @@ mod tests {
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
-            answer_repository: &answer_repository,
+            answer_entry_set_repository: &answer_entry_set_repository,
             user_repository: &user_repository,
         };
 
@@ -706,7 +766,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(vec![]));
 
-        let answer_repository = MockAnswerRepository::new();
+        let answer_entry_set_repository = MockAnswerEntrySetRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
         let user_repository = MockUserRepository::new();
@@ -716,7 +776,7 @@ mod tests {
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
-            answer_repository: &answer_repository,
+            answer_entry_set_repository: &answer_entry_set_repository,
             user_repository: &user_repository,
         };
 

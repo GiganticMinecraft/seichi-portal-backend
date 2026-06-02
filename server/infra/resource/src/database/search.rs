@@ -2,15 +2,14 @@ use crate::database::config::{MEILISEARCH, MeiliSearch};
 use crate::database::meilisearch_schemas::MeilisearchStatsSchema;
 use crate::database::{components::SearchDatabase, connection::ConnectionPool};
 use async_trait::async_trait;
-use domain::search::models::{NumberOfRecordsPerAggregate, RealAnswers};
+use domain::search::models::{
+    AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormAnswerComments,
+    FormLabelSearchHit, FormMetaData, FormSearchHit, LabelForFormAnswers, LabelForForms,
+    NumberOfRecordsPerAggregate, RealAnswers, UserSearchHit, Users,
+};
 use domain::{
-    form::{
-        answer::models::AnswerLabel,
-        comment::models::Comment,
-        models::{ActiveForm, FormLabel},
-    },
     search::models::{Operation, SearchableFields, SearchableFieldsWithOperation},
-    user::models::ActiveUser,
+    user::models::UserId,
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -19,71 +18,85 @@ use meilisearch_sdk::search::Selectors;
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn search_users(&self, query: &str) -> Result<Vec<ActiveUser>, InfraError> {
+    async fn search_users(&self, query: &str) -> Result<Vec<UserSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("users")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<ActiveUser>()
+            .execute::<Users>()
             .await?
             .hits
             .into_iter()
-            .map(|hit| hit.result)
+            .map(|hit| UserSearchHit {
+                user_id: UserId::from(hit.result.id),
+            })
             .collect_vec())
     }
 
     #[tracing::instrument]
-    async fn search_forms(&self, query: &str) -> Result<Vec<ActiveForm>, InfraError> {
+    async fn search_forms(&self, query: &str) -> Result<Vec<FormSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("form_meta_data")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<ActiveForm>()
+            .execute::<FormMetaData>()
             .await?
             .hits
             .into_iter()
-            .map(|hit| hit.result)
+            .map(|hit| FormSearchHit {
+                form_id: hit.result.id,
+            })
             .collect_vec())
     }
 
     #[tracing::instrument]
-    async fn search_labels_for_forms(&self, query: &str) -> Result<Vec<FormLabel>, InfraError> {
+    async fn search_labels_for_forms(
+        &self,
+        query: &str,
+    ) -> Result<Vec<FormLabelSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("label_for_forms")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<FormLabel>()
+            .execute::<LabelForForms>()
             .await?
             .hits
             .into_iter()
-            .map(|hit| hit.result)
+            .map(|hit| FormLabelSearchHit {
+                label_id: hit.result.id,
+            })
             .collect_vec())
     }
 
     #[tracing::instrument]
-    async fn search_labels_for_answers(&self, query: &str) -> Result<Vec<AnswerLabel>, InfraError> {
+    async fn search_labels_for_answers(
+        &self,
+        query: &str,
+    ) -> Result<Vec<AnswerLabelSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("label_for_form_answers")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<AnswerLabel>()
+            .execute::<LabelForFormAnswers>()
             .await?
             .hits
             .into_iter()
-            .map(|hit| hit.result)
+            .map(|hit| AnswerLabelSearchHit {
+                label_id: hit.result.id,
+            })
             .collect_vec())
     }
 
     #[tracing::instrument]
-    async fn search_answers(&self, query: &str) -> Result<Vec<RealAnswers>, InfraError> {
+    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("real_answers")
@@ -94,23 +107,29 @@ impl SearchDatabase for ConnectionPool {
             .await?
             .hits
             .into_iter()
-            .map(|hit| hit.result)
+            .map(|hit| AnswerSearchHit {
+                answer_id: hit.result.answer_id,
+            })
+            .unique_by(|hit| hit.answer_id.to_string())
             .collect_vec())
     }
 
     #[tracing::instrument]
-    async fn search_comments(&self, query: &str) -> Result<Vec<Comment>, InfraError> {
+    async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
             .index("form_answer_comments")
             .search()
             .with_query(query)
             .with_attributes_to_highlight(Selectors::All)
-            .execute::<Comment>()
+            .execute::<FormAnswerComments>()
             .await?
             .hits
             .into_iter()
-            .map(|hit| hit.result)
+            .map(|hit| CommentSearchHit {
+                comment_id: hit.result.id,
+                answer_id: hit.result.answer_id,
+            })
             .collect_vec())
     }
 

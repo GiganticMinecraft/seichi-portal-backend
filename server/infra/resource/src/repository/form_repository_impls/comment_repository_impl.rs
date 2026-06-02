@@ -1,147 +1,72 @@
-use crate::{
-    database::components::{DatabaseComponents, FormCommentDatabase},
-    repository::Repository,
-};
 use async_trait::async_trait;
-use domain::types::authorization_guard_with_context::Update;
 use domain::{
-    form::{
-        answer::models::AnswerId,
-        comment::{
-            models::{Comment, CommentId},
-            service::CommentAuthorizationContext,
-        },
-    },
+    form::{answer::models::AnswerEntry, comment::models::Comment},
     repository::form::comment_repository::CommentRepository,
-    types::authorization_guard_with_context::{
-        AuthorizationGuardWithContext, Create, Delete, Read,
-    },
-    user::models::{ActiveUser, Actor},
+    types::authorization_guard::{Allowed, Create, Delete, Read, Update},
 };
 use errors::Error;
-use itertools::Itertools;
+
+use crate::{
+    database::{
+        components::{DatabaseComponents, FormCommentDatabase},
+        connection::DatabaseTransaction,
+    },
+    repository::Repository,
+};
 
 #[async_trait]
-impl<Client: DatabaseComponents + 'static> CommentRepository for Repository<Client> {
-    #[tracing::instrument(skip(self))]
-    async fn get_comments(
-        &self,
-        answer_id: AnswerId,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    > {
+impl<Client> CommentRepository for Repository<Client>
+where
+    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+{
+    #[tracing::instrument(skip(self, comment))]
+    async fn create(&self, comment: Allowed<Comment, Create>) -> Result<(), Error> {
+        let comment = comment.into_inner();
+
         self.client
             .form_comment()
-            .get_comments(answer_id)
-            .await?
-            .into_iter()
-            .map(TryInto::<Comment>::try_into)
-            .map_ok(|comment| AuthorizationGuardWithContext::new(comment).into_read())
-            .collect::<Result<Vec<_>, _>>()
+            .upsert_comment(*comment.answer_id(), &comment)
+            .await?;
+        Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn get_all_comments(
+    #[tracing::instrument(skip(self, answer))]
+    async fn find_by_answer(
         &self,
-    ) -> Result<
-        Vec<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    > {
+        answer: &Allowed<AnswerEntry, Read>,
+    ) -> Result<Vec<Allowed<Comment, Read>>, Error> {
         self.client
             .form_comment()
-            .get_all_comments()
+            .get_comments(*answer.value().id())
             .await?
             .into_iter()
-            .map(TryInto::<Comment>::try_into)
-            .map_ok(|comment| AuthorizationGuardWithContext::new(comment).into_read())
-            .collect::<Result<Vec<_>, _>>()
+            .map(|record| {
+                let comment = TryInto::<Comment>::try_into(record)?;
+                answer.authorize_comment(comment).map_err(Error::from)
+            })
+            .collect()
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn get_comment(
-        &self,
-        comment_id: CommentId,
-    ) -> Result<
-        Option<AuthorizationGuardWithContext<Comment, Read, CommentAuthorizationContext<Read>>>,
-        Error,
-    > {
-        Ok(self
-            .client
+    #[tracing::instrument(skip(self, comment))]
+    async fn update(&self, comment: Allowed<Comment, Update>) -> Result<(), Error> {
+        let comment = comment.into_inner();
+
+        self.client
             .form_comment()
-            .get_comment(comment_id)
-            .await?
-            .map(TryInto::<Comment>::try_into)
-            .transpose()?
-            .map(|comment| AuthorizationGuardWithContext::new(comment).into_read()))
+            .upsert_comment(*comment.answer_id(), &comment)
+            .await?;
+        Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn create_comment(
-        &self,
-        answer_id: AnswerId,
-        context: &CommentAuthorizationContext<Read>,
-        actor: &ActiveUser,
-        comment: AuthorizationGuardWithContext<Comment, Create, CommentAuthorizationContext<Read>>,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        comment
-            .try_create(
-                &actor_user,
-                |comment| {
-                    self.client
-                        .form_comment()
-                        .upsert_comment(answer_id, comment)
-                },
-                context,
-            )?
-            .await
-            .map_err(Into::into)
-    }
+    #[tracing::instrument(skip(self, comment))]
+    async fn delete(&self, comment: Allowed<Comment, Delete>) -> Result<(), Error> {
+        let comment = comment.into_inner();
 
-    #[tracing::instrument(skip(self))]
-    async fn update_comment(
-        &self,
-        answer_id: AnswerId,
-        context: &CommentAuthorizationContext<Read>,
-        actor: &ActiveUser,
-        comment: AuthorizationGuardWithContext<Comment, Update, CommentAuthorizationContext<Read>>,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        comment
-            .try_update(
-                &actor_user,
-                |comment| {
-                    self.client
-                        .form_comment()
-                        .upsert_comment(answer_id, comment)
-                },
-                context,
-            )?
-            .await
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn delete_comment(
-        &self,
-        context: CommentAuthorizationContext<Read>,
-        actor: &ActiveUser,
-        comment: AuthorizationGuardWithContext<Comment, Delete, CommentAuthorizationContext<Read>>,
-    ) -> Result<(), Error> {
-        let actor_user = Actor::from(actor.clone());
-        comment
-            .try_delete(
-                &actor_user,
-                |comment| {
-                    self.client
-                        .form_comment()
-                        .delete_comment(comment.comment_id().to_owned())
-                },
-                &context,
-            )?
-            .await
-            .map_err(Into::into)
+        self.client
+            .form_comment()
+            .delete_comment(*comment.comment_id())
+            .await?;
+        Ok(())
     }
 
     #[tracing::instrument(skip(self))]

@@ -1,4 +1,5 @@
 use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::PathRejection;
 use axum::response::Response;
 use axum::{
     Extension, Json,
@@ -7,30 +8,39 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
-    form::{models::FormId, question::models::QuestionSet},
+    form::{
+        models::{ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel},
+        question::models::{Choice, Question, QuestionSet, QuestionType},
+    },
     repository::Repositories,
     user::models::{ActiveUser, Actor, User},
 };
-use itertools::Itertools;
-use resource::repository::RealInfrastructureRepository;
+use errors::{ErrorExtra, domain::DomainError};
+use resource::{
+    database::connection::ConnectionPool,
+    repository::{RealInfrastructureRepository, Repository},
+};
 use serde_json::json;
+use types::non_empty_vec::NonEmptyVec;
 use usecase::{
     forms::form::FormUseCase,
     models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput},
 };
 
 use crate::handlers::error_handler::handle_error;
-use crate::schemas::error_responses::*;
-use crate::schemas::form::{
-    form_request_schemas::{FormCreateSchema, FormUpdateSchema, OffsetAndLimit, QuestionSchema},
-    form_response_schemas::{
-        ArchivedFormSchema, FormMetaSchema, FormSchema, FormSettingsSchema, QuestionResponseSchema,
+use crate::schemas::{
+    error_responses::*,
+    form::{
+        form_request_schemas::{
+            ChoiceSchema, FormCreateSchema, FormUpdateSchema, OffsetAndLimit, QuestionSchema,
+        },
+        form_response_schemas::{
+            ArchivedFormSchema, FormMetaSchema, FormSchema, FormSettingsSchema,
+            QuestionResponseSchema,
+        },
     },
+    search_schemas::SearchQuery,
 };
-use axum::extract::rejection::PathRejection;
-use domain::form::models::FormDescription;
-use errors::ErrorExtra;
-use types::non_empty_vec::NonEmptyVec;
 
 #[derive(utoipa::IntoResponses)]
 pub enum CreateFormResponse {
@@ -128,8 +138,7 @@ impl IntoResponse for ArchivedFormResponse {
     }
 }
 
-type ResourceRepository =
-    resource::repository::Repository<resource::database::connection::ConnectionPool>;
+type ResourceRepository = Repository<ConnectionPool>;
 type ResourceFormUseCase<'a> = FormUseCase<
     'a,
     ResourceRepository,
@@ -146,22 +155,47 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
         archived_form_repository: repository.archived_form_repository(),
         notification_repository: repository.notification_repository(),
         form_label_repository: repository.form_label_repository(),
-        answer_repository: repository.form_answer_repository(),
+        answer_entry_set_repository: repository.answer_entry_set_repository(),
         user_repository: repository.user_repository(),
+    }
+}
+
+fn form_schema(actor: &Actor, form: &ActiveForm, labels: Vec<FormLabel>) -> FormSchema {
+    FormSchema {
+        id: form.id().to_owned(),
+        title: form.title().to_owned(),
+        description: form.description().to_owned(),
+        settings: FormSettingsSchema::from_settings_and_answer_settings(
+            actor,
+            form.settings(),
+            form.answer_settings(),
+        ),
+        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+        questions: form
+            .questions()
+            .iter()
+            .cloned()
+            .map(QuestionResponseSchema::from)
+            .collect(),
+        labels,
     }
 }
 
 fn archived_form_schema_from_parts(
     actor: &Actor,
-    form: domain::form::models::ArchivedForm,
+    form: ArchivedForm,
     archived_by: ActiveUser,
-    labels: Vec<domain::form::models::FormLabel>,
+    labels: Vec<FormLabel>,
 ) -> ArchivedFormSchema {
     ArchivedFormSchema {
         id: form.form().id().to_owned(),
         title: form.form().title().to_owned(),
         description: form.form().description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(actor, form.form().settings()),
+        settings: FormSettingsSchema::from_settings_and_answer_settings(
+            actor,
+            form.form().settings(),
+            form.form().answer_settings(),
+        ),
         metadata: FormMetaSchema::from_meta_ref(form.form().metadata()),
         archived_at: *form.archived_at(),
         archived_by,
@@ -223,23 +257,13 @@ pub async fn create_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(CreateFormResponse::Created(FormSchema {
-        id: form.id().to_owned(),
-        title: form.title().to_owned(),
-        description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(
-            &Actor::from(user.clone()),
-            form.settings(),
-        ),
-        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
-        labels: vec![],
-    }))
+    let actor = Actor::from(user.clone());
+
+    Ok(CreateFormResponse::Created(form_schema(
+        &actor,
+        &form,
+        vec![],
+    )))
 }
 
 #[utoipa::path(
@@ -276,26 +300,11 @@ pub async fn form_list_handler(
         .await
         .map_err(handle_error)?;
 
+    let actor = Actor::from(user.clone());
     let response_schema = forms
         .into_iter()
-        .map(|(form, labels)| FormSchema {
-            id: form.id().to_owned(),
-            title: form.title().to_owned(),
-            description: form.description().to_owned(),
-            settings: FormSettingsSchema::from_settings_ref(
-                &Actor::from(user.clone()),
-                form.settings(),
-            ),
-            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-            questions: form
-                .questions()
-                .iter()
-                .cloned()
-                .map(QuestionResponseSchema::from)
-                .collect(),
-            labels,
-        })
-        .collect_vec();
+        .map(|(form, labels)| form_schema(&actor, &form, labels))
+        .collect::<Vec<_>>();
 
     Ok(FormListResponse::Ok(response_schema))
 }
@@ -332,23 +341,9 @@ pub async fn get_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(GetFormResponse::Ok(FormSchema {
-        id: form.id().to_owned(),
-        title: form.title().to_owned(),
-        description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(
-            &Actor::from(user.clone()),
-            form.settings(),
-        ),
-        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
-        labels,
-    }))
+    let actor = Actor::from(user.clone());
+
+    Ok(GetFormResponse::Ok(form_schema(&actor, &form, labels)))
 }
 
 #[utoipa::path(
@@ -382,11 +377,12 @@ pub async fn archive_form_handler(
         .archive_form(&user, form_id)
         .await
         .map_err(handle_error)?;
+    let actor = Actor::from(user.clone());
 
     Ok((
         StatusCode::OK,
         Json(archived_form_schema_from_parts(
-            &Actor::from(user.clone()),
+            &actor,
             archived_form,
             user,
             vec![],
@@ -482,23 +478,13 @@ pub async fn update_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(UpdateFormResponse::Ok(FormSchema {
-        id: updated_form.id().to_owned(),
-        title: updated_form.title().to_owned(),
-        description: updated_form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_ref(
-            &Actor::from(user.clone()),
-            updated_form.settings(),
-        ),
-        metadata: FormMetaSchema::from_meta_ref(updated_form.metadata()),
-        questions: updated_form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
+    let actor = Actor::from(user.clone());
+
+    Ok(UpdateFormResponse::Ok(form_schema(
+        &actor,
+        &updated_form,
         labels,
-    }))
+    )))
 }
 
 #[utoipa::path(
@@ -524,10 +510,7 @@ pub async fn archived_form_list_handler(
     Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
-    query: Result<
-        Query<crate::schemas::search_schemas::SearchQuery>,
-        axum::extract::rejection::QueryRejection,
-    >,
+    query: Result<Query<SearchQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Result<ArchivedFormListResponse, Response> {
     let form_use_case = build_form_use_case(&repository);
     let query = query
@@ -547,19 +530,19 @@ pub async fn archived_form_list_handler(
         .map_err(handle_error)?;
 
     let actor = Actor::from(user);
-    Ok(ArchivedFormListResponse::Ok(
-        forms
-            .into_iter()
-            .map(|details| {
-                archived_form_schema_from_parts(
-                    &actor,
-                    details.form,
-                    details.archived_by,
-                    details.labels,
-                )
-            })
-            .collect(),
-    ))
+    let response_schema = forms
+        .into_iter()
+        .map(|details| {
+            archived_form_schema_from_parts(
+                &actor,
+                details.form,
+                details.archived_by,
+                details.labels,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    Ok(ArchivedFormListResponse::Ok(response_schema))
 }
 
 #[utoipa::path(
@@ -597,8 +580,10 @@ pub async fn get_archived_form_handler(
         .await
         .map_err(handle_error)?;
 
+    let actor = Actor::from(user.clone());
+
     Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
-        &Actor::from(user.clone()),
+        &actor,
         form,
         archived_by,
         labels,
@@ -663,7 +648,7 @@ fn into_upsert_question_inputs(
 
 fn into_create_questions(
     questions: NonEmptyVec<QuestionSchema>,
-) -> Result<NonEmptyVec<domain::form::question::models::Question>, errors::domain::DomainError> {
+) -> Result<NonEmptyVec<Question>, DomainError> {
     let questions = questions
         .into_inner()
         .into_iter()
@@ -675,93 +660,66 @@ fn into_create_questions(
     Ok(QuestionSet::try_new(questions)?.into_inner())
 }
 
-fn into_create_question(
-    position: u16,
-    question: QuestionSchema,
-) -> Result<domain::form::question::models::Question, errors::domain::DomainError> {
+fn into_create_question(position: u16, question: QuestionSchema) -> Result<Question, DomainError> {
     let (question_type, definition, choices) = question.into_parts();
 
     match question_type {
-        domain::form::question::models::QuestionType::Text => {
-            domain::form::question::models::Question::new_text(
-                definition.template_key,
-                position,
-                definition.title,
-                definition.description,
-                definition.is_required,
-            )
-        }
-        domain::form::question::models::QuestionType::SingleChoice => {
-            domain::form::question::models::Question::new_single_choice(
-                definition.template_key,
-                position,
-                definition.title,
-                definition.description,
-                required_choices(into_domain_choices(choices))?,
-                definition.is_required,
-            )
-        }
-        domain::form::question::models::QuestionType::MultipleChoice => {
-            domain::form::question::models::Question::new_multiple_choice(
-                definition.template_key,
-                position,
-                definition.title,
-                definition.description,
-                required_choices(into_domain_choices(choices))?,
-                definition.is_required,
-            )
-        }
+        QuestionType::Text => Question::new_text(
+            definition.template_key,
+            position,
+            definition.title,
+            definition.description,
+            definition.is_required,
+        ),
+        QuestionType::SingleChoice => Question::new_single_choice(
+            definition.template_key,
+            position,
+            definition.title,
+            definition.description,
+            required_choices(into_domain_choices(choices))?,
+            definition.is_required,
+        ),
+        QuestionType::MultipleChoice => Question::new_multiple_choice(
+            definition.template_key,
+            position,
+            definition.title,
+            definition.description,
+            required_choices(into_domain_choices(choices))?,
+            definition.is_required,
+        ),
     }
 }
 
 fn into_upsert_question_input(
     question: QuestionSchema,
-) -> Result<UpsertQuestionInput, errors::domain::DomainError> {
+) -> Result<UpsertQuestionInput, DomainError> {
     let (question_type, definition, choices) = question.into_parts();
     let original_id = definition.id;
     let choices = into_domain_choices(choices);
-    let question = match original_id {
-        Some(question_id) => domain::form::question::models::Question::from_raw_parts(
-            question_id,
+    let question = match question_type {
+        QuestionType::Text => Question::new_text(
             definition.template_key,
             definition.position,
             definition.title,
             definition.description,
-            question_type,
-            choices,
             definition.is_required,
         )?,
-        None => match question_type {
-            domain::form::question::models::QuestionType::Text => {
-                domain::form::question::models::Question::new_text(
-                    definition.template_key,
-                    definition.position,
-                    definition.title,
-                    definition.description,
-                    definition.is_required,
-                )?
-            }
-            domain::form::question::models::QuestionType::SingleChoice => {
-                domain::form::question::models::Question::new_single_choice(
-                    definition.template_key,
-                    definition.position,
-                    definition.title,
-                    definition.description,
-                    required_choices(choices)?,
-                    definition.is_required,
-                )?
-            }
-            domain::form::question::models::QuestionType::MultipleChoice => {
-                domain::form::question::models::Question::new_multiple_choice(
-                    definition.template_key,
-                    definition.position,
-                    definition.title,
-                    definition.description,
-                    required_choices(choices)?,
-                    definition.is_required,
-                )?
-            }
-        },
+        QuestionType::SingleChoice => Question::new_single_choice(
+            definition.template_key,
+            definition.position,
+            definition.title,
+            definition.description,
+            required_choices(choices)?,
+            definition.is_required,
+        )?,
+        QuestionType::MultipleChoice => Question::new_multiple_choice(
+            definition.template_key,
+            definition.position,
+            definition.title,
+            definition.description,
+            required_choices(choices)?,
+            definition.is_required,
+        )?,
     };
 
     Ok(UpsertQuestionInput {
@@ -770,18 +728,16 @@ fn into_upsert_question_input(
     })
 }
 
-fn into_domain_choices(
-    choices: Option<Vec<crate::schemas::form::form_request_schemas::ChoiceSchema>>,
-) -> Option<NonEmptyVec<domain::form::question::models::Choice>> {
+fn into_domain_choices(choices: Option<Vec<ChoiceSchema>>) -> Option<NonEmptyVec<Choice>> {
     let choices = choices?;
     let choices = choices.into_iter().map(Into::into).collect::<Vec<_>>();
     (!choices.is_empty()).then(|| NonEmptyVec::try_new(choices).expect("non-empty choices"))
 }
 
 fn required_choices(
-    choices: Option<NonEmptyVec<domain::form::question::models::Choice>>,
-) -> Result<NonEmptyVec<domain::form::question::models::Choice>, errors::domain::DomainError> {
-    choices.ok_or_else(|| errors::domain::DomainError::InvalidEntity {
+    choices: Option<NonEmptyVec<Choice>>,
+) -> Result<NonEmptyVec<Choice>, DomainError> {
+    choices.ok_or_else(|| DomainError::InvalidEntity {
         message: "choice question must have at least one choice".to_string(),
     })
 }
@@ -789,6 +745,7 @@ fn required_choices(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use errors::Error;
     use serde_json::json;
 
     #[test]
@@ -821,10 +778,7 @@ mod tests {
 
         let result = into_upsert_question_input(question);
 
-        assert!(matches!(
-            result,
-            Err(errors::domain::DomainError::InvalidEntity { .. })
-        ));
+        assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
     }
 
     #[test]
@@ -875,10 +829,7 @@ mod tests {
 
         let result = into_create_questions(questions);
 
-        assert!(matches!(
-            result,
-            Err(errors::domain::DomainError::InvalidEntity { .. })
-        ));
+        assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
     }
 
     #[test]
@@ -905,8 +856,8 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(errors::Error::Domain {
-                source: errors::domain::DomainError::InvalidEntity { .. }
+            Err(Error::Domain {
+                source: DomainError::InvalidEntity { .. }
             })
         ));
     }

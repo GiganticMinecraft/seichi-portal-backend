@@ -1,6 +1,7 @@
 use domain::{
     repository::user_repository::UserRepository,
-    user::models::{ActiveUser, Actor, Role},
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
+    user::models::{ActiveUser, Actor, DiscordAccountLink, Role},
 };
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
@@ -17,7 +18,11 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         self.repository
             .find_by(uuid)
             .await?
-            .map(|guard| guard.try_into_read(&actor_ref))
+            .map(|guard| {
+                guard
+                    .try_read(actor_ref.clone())
+                    .map(|user| user.into_inner())
+            })
             .transpose()?
             .ok_or(Error::from(UseCaseError::UserNotFound))
     }
@@ -28,7 +33,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         upsert_target: ActiveUser,
     ) -> Result<(), Error> {
         self.repository
-            .upsert_user(actor, upsert_target.into())
+            .upsert_user(
+                AuthorizationGuard::<_, Create>::from(upsert_target)
+                    .try_create(Actor::from(actor.clone()))?,
+            )
             .await
     }
 
@@ -45,12 +53,15 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        let current_user = current_user_guard.try_into_read(&actor_ref)?;
+        let current_user = current_user_guard.try_read(actor_ref.clone())?.into_inner();
         let new_role_user =
             ActiveUser::new(current_user.name().to_owned(), *current_user.id(), role);
 
         self.repository
-            .patch_user_role(actor, new_role_user.into())
+            .patch_user_role(
+                AuthorizationGuard::<_, Update>::from(new_role_user)
+                    .try_update(actor_ref.clone())?,
+            )
             .await?;
 
         let updated_user_guard = self
@@ -60,7 +71,8 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
         updated_user_guard
-            .try_into_read(&actor_ref)
+            .try_read(actor_ref.clone())
+            .map(|user| user.into_inner())
             .map_err(Into::into)
     }
 
@@ -70,7 +82,11 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .fetch_all_users()
             .await?
             .into_iter()
-            .map(|guard| guard.try_into_read(&actor_ref))
+            .map(|guard| {
+                guard
+                    .try_read(actor_ref.clone())
+                    .map(|user| user.into_inner())
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
@@ -83,15 +99,23 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
         match fetched_user {
             Some(user) => {
-                let guard = user.to_owned().into();
                 let user_ref = Actor::from(user.clone());
-                self.repository.upsert_user(&user, guard).await?;
+                self.repository
+                    .upsert_user(
+                        AuthorizationGuard::<_, Create>::from(user.to_owned())
+                            .try_create(user_ref.clone())?,
+                    )
+                    .await?;
                 // NOTE: リクエスト時点では token しかわからないので
                 //  token で検索したユーザーが操作者であるとする
                 self.repository
                     .find_by(user.id().into_inner())
                     .await?
-                    .map(|guard| guard.try_into_read(&user_ref))
+                    .map(|guard| {
+                        guard
+                            .try_read(user_ref.clone())
+                            .map(|user| user.into_inner())
+                    })
                     .transpose()
                     .map_err(Into::into)
             }
@@ -132,14 +156,30 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::DiscordLinkFailed))?;
 
+        let link = DiscordAccountLink::new(*user.id(), discord_user);
+
         self.repository
-            .link_discord_user(&user.clone(), &discord_user, user.into())
+            .link_discord_user(
+                AuthorizationGuard::<_, Update>::from(link).try_update(Actor::from(user))?,
+            )
             .await
     }
 
     pub async fn unlink_discord_user(&self, user: ActiveUser) -> Result<(), Error> {
+        let allowed_user = AuthorizationGuard::<_, Read>::from(user.clone())
+            .try_read(Actor::from(user.clone()))?;
+        let discord_user = self.repository.fetch_discord_user(&allowed_user).await?;
+
+        let Some(discord_user) = discord_user else {
+            return Ok(());
+        };
+
+        let link = DiscordAccountLink::new(*user.id(), discord_user);
+
         self.repository
-            .unlink_discord_user(&user.clone(), user.into())
+            .unlink_discord_user(
+                AuthorizationGuard::<_, Delete>::from(link).try_delete(Actor::from(user))?,
+            )
             .await
     }
 
@@ -154,10 +194,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        let actor_ref = Actor::from(actor.clone());
-        let discord_user = self.repository.fetch_discord_user(actor, &guard).await?;
+        let allowed = guard.try_read(Actor::from(actor.clone()))?;
+        let discord_user = self.repository.fetch_discord_user(&allowed).await?;
 
-        let user = guard.try_into_read(&actor_ref)?;
+        let user = allowed.into_inner();
 
         Ok(UserProfile { user, discord_user })
     }

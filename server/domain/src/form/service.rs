@@ -1,25 +1,16 @@
-use errors::{Error, domain::DomainError};
+use errors::Error;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::{
-    form::{
-        answer::{
-            models::{AnswerTitle, PostedAnswerContents},
-            settings::models::DefaultAnswerTitle,
-        },
-        models::{FormId, Question},
-    },
-    repository::form::active_form_repository::ActiveFormRepository,
-    user::models::{Actor, User},
+use crate::form::{
+    answer::models::{AnswerTitle, PostedAnswerContents},
+    models::{DefaultAnswerTitle, Question},
 };
 
-pub struct DefaultAnswerTitleDomainService<'a, FormRepo: ActiveFormRepository> {
-    pub form_repo: &'a FormRepo,
-}
+pub struct DefaultAnswerTitleDomainService;
 
-impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRepo> {
+impl DefaultAnswerTitleDomainService {
     pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
         questions: &[Question],
@@ -60,37 +51,6 @@ impl<FormRepo: ActiveFormRepository> DefaultAnswerTitleDomainService<'_, FormRep
             None => Ok(AnswerTitle::new(None)),
         }
     }
-
-    pub async fn to_answer_title(
-        &self,
-        actor: &Actor,
-        form_id: FormId,
-        answers: &PostedAnswerContents,
-    ) -> Result<AnswerTitle, Error> {
-        let form = self
-            .form_repo
-            .get(form_id)
-            .await?
-            .ok_or(DomainError::NotFound)?
-            .try_into_read(actor)?;
-        let default_answer_title = form
-            .settings()
-            .answer_settings()
-            .default_answer_title()
-            .to_owned();
-        let questions = form.questions().as_slice().to_vec();
-
-        Self::to_answer_title_from_questions(
-            default_answer_title,
-            &questions,
-            answers,
-            match actor {
-                Actor::User(User::ActiveUser(actor)) => actor.name(),
-                Actor::User(User::TemporaryUser(actor)) => actor.name(),
-                _ => unreachable!("Only authenticated and temporary users can submit answers"),
-            },
-        )
-    }
 }
 
 fn question_placeholder_regex() -> &'static Regex {
@@ -109,6 +69,7 @@ mod tests {
         answer::models::FormAnswerContent,
         question::models::{QuestionId, QuestionType},
     };
+    use crate::user::models::User;
 
     fn question_id(seed: &str) -> QuestionId {
         Uuid::parse_str(seed).unwrap().into()
@@ -127,41 +88,43 @@ mod tests {
             )
             .unwrap(),
         ));
-        let questions = vec![
-            Question::from_raw_parts(
-                first_question_id,
-                "first".to_string().try_into().unwrap(),
-                0,
-                "First".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
-                None,
-                true,
-            )
-            .unwrap(),
-            Question::from_raw_parts(
-                second_question_id,
-                "second".to_string().try_into().unwrap(),
-                1,
-                "Second".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
-                None,
-                true,
-            )
-            .unwrap(),
-            Question::from_raw_parts(
-                third_question_id,
-                "third".to_string().try_into().unwrap(),
-                2,
-                "Third".to_string().try_into().unwrap(),
-                None,
-                QuestionType::Text,
-                None,
-                true,
-            )
-            .unwrap(),
-        ];
+        let questions = unsafe {
+            vec![
+                Question::from_raw_parts(
+                    first_question_id,
+                    "first".to_string().try_into().unwrap(),
+                    0,
+                    "First".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap(),
+                Question::from_raw_parts(
+                    second_question_id,
+                    "second".to_string().try_into().unwrap(),
+                    1,
+                    "Second".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap(),
+                Question::from_raw_parts(
+                    third_question_id,
+                    "third".to_string().try_into().unwrap(),
+                    2,
+                    "Third".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap(),
+            ]
+        };
         let answers = PostedAnswerContents::try_new(
             questions.as_slice(),
             vec![
@@ -190,9 +153,7 @@ mod tests {
             Default::default(),
         ));
 
-        let result = DefaultAnswerTitleDomainService::<
-            crate::repository::form::active_form_repository::MockActiveFormRepository,
-        >::to_answer_title_from_questions(
+        let result = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             default_answer_title,
             questions.as_slice(),
             &answers,

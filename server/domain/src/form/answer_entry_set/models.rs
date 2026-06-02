@@ -1,0 +1,115 @@
+use errors::domain::DomainError;
+
+use crate::{
+    form::{
+        answer::models::{AnswerEntry, AnswerId},
+        comment::models::Comment,
+        models::FormId,
+    },
+    types::authorization_guard::{Allowed, Authorizes, Read},
+    user::models::Actor,
+};
+
+/// あるフォームに紐づく回答 ([`AnswerEntry`]) の集合です。
+///
+/// この集約は「どの回答がこのフォームに属するか」という**構造**のみを担い、
+/// 回答にまつわるポリシー（公開範囲・受付期間など）は持ちません。ポリシーは
+/// [`ActiveForm`] が保持する [`crate::form::models::AnswerSettings`] が担当します。
+///
+/// 通常のリポジトリ取得では認可済みの [`ActiveForm`] から
+/// [`crate::types::authorization_guard::Allowed`] を導出し、フォームとの所属検証や
+/// 個々の回答の閲覧可否は [`ActiveForm`] のガードを起点とした連鎖で行われます。
+///
+/// [`ActiveForm`]: crate::form::models::ActiveForm
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnswerEntrySet {
+    form_id: FormId,
+    entries: Vec<AnswerEntry>,
+}
+
+impl AnswerEntrySet {
+    pub fn new(form_id: FormId) -> Self {
+        Self {
+            form_id,
+            entries: Vec::new(),
+        }
+    }
+
+    /// [`AnswerEntrySet`] を永続化済みのフィールド値から復元します。
+    ///
+    /// # Safety
+    /// `entries` が `form_id` に属することを永続化層などで検証済みの場合にのみ使用してください。
+    pub unsafe fn from_raw_parts(form_id: FormId, entries: Vec<AnswerEntry>) -> Self {
+        Self { form_id, entries }
+    }
+
+    pub fn form_id(&self) -> &FormId {
+        &self.form_id
+    }
+
+    pub fn entries(&self) -> &[AnswerEntry] {
+        &self.entries
+    }
+
+    pub fn has_entries(&self) -> bool {
+        !self.entries.is_empty()
+    }
+
+    pub fn find_entry(&self, answer_id: AnswerId) -> Option<&AnswerEntry> {
+        self.entries.iter().find(|e| *e.id() == answer_id)
+    }
+}
+
+impl Authorizes<Comment, Read> for AnswerEntry {
+    fn check(&self, _actor: &Actor, child: &Comment) -> Result<(), DomainError> {
+        if child.answer_id() == self.id() {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Allowed<AnswerEntry, Read> {
+    pub fn authorize_comment(
+        &self,
+        comment: Comment,
+    ) -> Result<Allowed<Comment, Read>, DomainError> {
+        self.authorize_read(comment)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Uuid;
+
+    use crate::{
+        form::answer::models::{AnswerAuthor, AnswerTitle, PostedAnswerContents},
+        user::models::{ActiveUser, Role, UserId},
+    };
+
+    use super::*;
+
+    fn active_user(role: Role) -> ActiveUser {
+        ActiveUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
+        AnswerEntry::new(
+            author,
+            AnswerTitle::new(None),
+            PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
+        )
+    }
+
+    #[test]
+    fn find_entry_locates_member() {
+        let author = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let answer_id = *entry.id();
+        let set = unsafe { AnswerEntrySet::from_raw_parts(FormId::new(), vec![entry]) };
+
+        assert!(set.find_entry(answer_id).is_some());
+        assert!(set.find_entry(AnswerId::new()).is_none());
+    }
+}
