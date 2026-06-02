@@ -70,7 +70,7 @@ pub struct Allowed<T, A: Actions> {
 }
 
 impl<T, A: Actions> Allowed<T, A> {
-    fn mint(value: T, actor: Actor) -> Self {
+    pub(crate) fn mint(value: T, actor: Actor) -> Self {
         Self {
             value,
             actor,
@@ -174,6 +174,30 @@ impl<T> Allowed<T, Read> {
         T: Authorizes<C, Read>,
     {
         self.authorize(child)
+    }
+
+    /// 読み取り認可済みの値を、同じ [`Actor`] で更新認可に昇格します。
+    pub fn try_into_update(self) -> Result<Allowed<T, Update>, DomainError>
+    where
+        T: AuthorizationGuardDefinitions,
+    {
+        if self.value.can_update(&self.actor) {
+            Ok(Allowed::mint(self.value, self.actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+
+    /// 読み取り認可済みの値を、同じ [`Actor`] で削除認可に昇格します。
+    pub fn try_into_delete(self) -> Result<Allowed<T, Delete>, DomainError>
+    where
+        T: AuthorizationGuardDefinitions,
+    {
+        if self.value.can_delete(&self.actor) {
+            Ok(Allowed::mint(self.value, self.actor))
+        } else {
+            Err(DomainError::Forbidden)
+        }
     }
 }
 

@@ -12,7 +12,7 @@ use domain::{
         comment_repository::CommentRepository,
     },
     repository::user_repository::UserRepository,
-    types::authorization_guard::{Allowed, AuthorizationGuard, Delete, Read, Update},
+    types::authorization_guard::{Allowed, Read},
     user::models::{ActiveUser, Actor},
 };
 use errors::{
@@ -156,10 +156,9 @@ impl<
             .ok_or(Error::from(CommentNotFound))?;
 
         if let Some(content) = content {
-            let updated = AuthorizationGuard::<_, Update>::from(
-                current_comment.into_inner().with_updated_content(content),
-            )
-            .try_update(actor_user.clone())?;
+            let updated = current_comment
+                .try_into_update()?
+                .map(|c| c.with_updated_content(content));
             self.comment_repository.update(updated).await?;
         }
 
@@ -189,8 +188,7 @@ impl<
             .find(|comment| *comment.value().comment_id() == comment_id)
             .ok_or(Error::from(CommentNotFound))?;
 
-        let comment =
-            AuthorizationGuard::<_, Delete>::from(comment.into_inner()).try_delete(actor_user)?;
+        let comment = comment.try_into_delete()?;
 
         self.comment_repository.delete(comment).await
     }

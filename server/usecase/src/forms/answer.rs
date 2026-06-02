@@ -135,9 +135,7 @@ impl<
         )?;
 
         let author = AnswerAuthor::AuthenticatedUser(*user.id());
-        let answer_entry = form
-            .value()
-            .try_accept_answer(author, &actor, title, posted_answers)?;
+        let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
 
         let answer_entry_set = self
             .answer_entry_set_repository
@@ -163,7 +161,7 @@ impl<
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?;
-        let form = form_guard.try_read(Actor::from(User::Anonymous))?;
+        let form = form_guard.try_read(actor.clone())?;
         let questions = form.value().questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
 
@@ -178,9 +176,7 @@ impl<
         )?;
 
         let author = AnswerAuthor::TemporaryUser(temporary_user);
-        let answer_entry = form
-            .value()
-            .try_accept_answer(author, &actor, title, posted_answers)?;
+        let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
 
         let answer_entry_set = self
             .answer_entry_set_repository

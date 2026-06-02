@@ -485,19 +485,6 @@ impl ActiveForm {
         }
     }
 
-    /// 回答にまつわるポリシー ([`AnswerSettings`]) に委譲して、新しい [`AnswerEntry`] を
-    /// 受理してよいかを判断します。
-    pub fn try_accept_answer(
-        &self,
-        author: AnswerAuthor,
-        actor: &Actor,
-        title: AnswerTitle,
-        posted_answers: PostedAnswerContents,
-    ) -> Result<AnswerEntry, DomainError> {
-        self.answer_settings
-            .try_accept_answer(author, actor, title, posted_answers)
-    }
-
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: UserId) -> ArchivedForm {
         ArchivedForm::new(self, archived_at, archived_by)
     }
@@ -550,6 +537,23 @@ impl Authorizes<AnswerEntry, Update> for ActiveForm {
 }
 
 impl Allowed<ActiveForm, Read> {
+    /// 回答にまつわるポリシー ([`AnswerSettings`]) に委譲して、新しい [`AnswerEntry`] を
+    /// 受理してよいかを判断し、認可済みの [`Allowed<AnswerEntry, Create>`] を返します。
+    pub fn try_accept_answer(
+        &self,
+        author: AnswerAuthor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
+        let entry = self.value().answer_settings.try_accept_answer(
+            author,
+            self.actor(),
+            title,
+            posted_answers,
+        )?;
+        Ok(Allowed::mint(entry, self.actor().clone()))
+    }
+
     /// `set` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
     pub fn readable_entries(
         &self,

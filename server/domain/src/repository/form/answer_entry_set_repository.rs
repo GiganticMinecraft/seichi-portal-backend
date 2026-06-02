@@ -6,7 +6,7 @@ use crate::{
     form::{
         answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::ActiveForm,
     },
-    types::authorization_guard::{Allowed, Read, Update},
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
 
 /// フォームに紐づく回答 ([`AnswerEntry`]) の集合 ([`AnswerEntrySet`]) を永続化するリポジトリ。
@@ -34,7 +34,7 @@ pub trait AnswerEntrySetRepository: Send + Sync + 'static {
     async fn add_entry(
         &self,
         answer_entry_set: &Allowed<AnswerEntrySet, Read>,
-        answer_entry: &AnswerEntry,
+        answer_entry: &Allowed<AnswerEntry, Create>,
     ) -> Result<(), Error>;
     async fn update_entry(
         &self,

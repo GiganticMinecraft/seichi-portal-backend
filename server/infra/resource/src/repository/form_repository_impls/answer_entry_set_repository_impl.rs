@@ -4,7 +4,7 @@ use domain::{
         answer::models::AnswerEntry, answer_entry_set::models::AnswerEntrySet, models::ActiveForm,
     },
     repository::form::answer_entry_set_repository::AnswerEntrySetRepository,
-    types::authorization_guard::{Allowed, Read, Update},
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
 use errors::Error;
 
@@ -65,11 +65,11 @@ where
     async fn add_entry(
         &self,
         answer_entry_set: &Allowed<AnswerEntrySet, Read>,
-        answer_entry: &AnswerEntry,
+        answer_entry: &Allowed<AnswerEntry, Create>,
     ) -> Result<(), Error> {
         self.client
             .form_answer()
-            .post_answer(answer_entry, *answer_entry_set.value().form_id())
+            .post_answer(answer_entry.value(), *answer_entry_set.value().form_id())
             .await?;
         Ok(())
     }
