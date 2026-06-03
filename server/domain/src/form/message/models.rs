@@ -3,9 +3,16 @@ use derive_getters::Getters;
 use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 
-use crate::user::models::UserId;
+use crate::{
+    types::authorization_guard::{AuthorizationRole, ParentGuarded},
+    user::models::UserId,
+};
 
 pub type MessageId = types::Id<Message>;
+
+impl AuthorizationRole for Message {
+    type Role = ParentGuarded;
+}
 
 #[derive(Getters, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Message {

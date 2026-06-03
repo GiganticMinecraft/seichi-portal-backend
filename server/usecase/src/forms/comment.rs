@@ -124,9 +124,14 @@ impl<
         let actor_user = Actor::from(actor.clone());
         let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
 
-        let comment = form
-            .create_comment(&answer_entry_set, answer_id, content)?
-            .try_create(actor_user.clone())?;
+        let entry = form
+            .read_entry(&answer_entry_set, answer_id)
+            .map_err(|error| match error {
+                DomainError::NotFound => Error::from(AnswerNotFound),
+                error => Error::from(error),
+            })?;
+
+        let comment = entry.create_comment(content)?;
 
         self.comment_repository.create(comment).await
     }
@@ -156,9 +161,8 @@ impl<
             .ok_or(Error::from(CommentNotFound))?;
 
         if let Some(content) = content {
-            let updated = current_comment
-                .try_into_update()?
-                .map(|c| c.with_updated_content(content));
+            let updated = entry
+                .authorize_update(current_comment.into_inner().with_updated_content(content))?;
             self.comment_repository.update(updated).await?;
         }
 
@@ -188,7 +192,7 @@ impl<
             .find(|comment| *comment.value().comment_id() == comment_id)
             .ok_or(Error::from(CommentNotFound))?;
 
-        let comment = comment.try_into_delete()?;
+        let comment = entry.authorize_delete(comment.into_inner())?;
 
         self.comment_repository.delete(comment).await
     }

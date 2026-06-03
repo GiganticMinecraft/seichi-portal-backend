@@ -27,6 +27,34 @@ mod private {
     impl Sealed for super::Read {}
     impl Sealed for super::Update {}
     impl Sealed for super::Delete {}
+
+    pub trait SealedRole {}
+
+    impl SealedRole for super::SelfGuarded {}
+    impl SealedRole for super::ParentGuarded {}
+}
+
+/// 認可対象がどの方式で認可されるかを型レベルで表すマーカー ([`AuthorizationRole::Role`])。
+///
+/// [`SelfGuarded`] は [`AuthorizationGuard`] で自分自身を直接ガードするルート集約、
+/// [`ParentGuarded`] は親要素の [`Allowed`] を起点とした [`Authorizes`] 経由でのみ
+/// 認可される子要素を表します。
+#[derive(Debug, Clone, Copy)]
+pub struct SelfGuarded;
+#[derive(Debug, Clone, Copy)]
+pub struct ParentGuarded;
+
+/// 認可対象が「自己ガードするルート集約 ([`SelfGuarded`])」か
+/// 「親に認可を委譲する子要素 ([`ParentGuarded`])」かを、型ごとに一意な関連型で宣言します。
+///
+/// 関連型は型ごとに一意であるため、この宣言はそのまま両方式の**排他**を表します。
+/// [`AuthorizationGuardDefinitions`] は `Role = SelfGuarded` を、[`Authorizes`] の対象 (子) は
+/// `Role = ParentGuarded` をそれぞれ要求するので、ひとつの型で自己ガードと親委譲を
+/// 同時に成立させることはできません (両立させようとするとコンパイルエラーになります)。
+/// これにより、親ゲートを通すべき子要素が誤って自己ガードを実装し、[`AuthorizationGuard`]
+/// 経由で前提検証をスキップする、という事故を型レベルで防ぎます。
+pub trait AuthorizationRole {
+    type Role: private::SealedRole;
 }
 
 /// 認可チェック前の値を、実行したい操作と一緒に保持する型です。
@@ -70,7 +98,7 @@ pub struct Allowed<T, A: Actions> {
 }
 
 impl<T, A: Actions> Allowed<T, A> {
-    pub(crate) fn mint(value: T, actor: Actor) -> Self {
+    fn mint(value: T, actor: Actor) -> Self {
         Self {
             value,
             actor,
@@ -139,6 +167,7 @@ impl<T, A: Actions> Allowed<T, A> {
     pub fn authorize<C>(&self, child: C) -> Result<Allowed<C, A>, DomainError>
     where
         T: Authorizes<C, A>,
+        C: AuthorizationRole<Role = ParentGuarded>,
     {
         self.value.check(&self.actor, &child)?;
         Ok(Allowed::mint(child, self.actor.clone()))
@@ -150,6 +179,7 @@ impl<T> Allowed<T, Update> {
     pub fn authorize_update<C>(&self, child: C) -> Result<Allowed<C, Update>, DomainError>
     where
         T: Authorizes<C, Update>,
+        C: AuthorizationRole<Role = ParentGuarded>,
     {
         self.authorize(child)
     }
@@ -161,6 +191,7 @@ impl<T> Allowed<T, Update> {
     pub fn authorize_delete<C>(&self, child: C) -> Result<Allowed<C, Delete>, DomainError>
     where
         T: Authorizes<C, Delete>,
+        C: AuthorizationRole<Role = ParentGuarded>,
     {
         self.value.check(&self.actor, &child)?;
         Ok(Allowed::mint(child, self.actor.clone()))
@@ -172,8 +203,47 @@ impl<T> Allowed<T, Read> {
     pub fn authorize_read<C>(&self, child: C) -> Result<Allowed<C, Read>, DomainError>
     where
         T: Authorizes<C, Read>,
+        C: AuthorizationRole<Role = ParentGuarded>,
     {
         self.authorize(child)
+    }
+
+    /// 読み取り認可済みの親要素から、子要素の作成認可済み値を作ります。
+    ///
+    /// 親要素を読める利用者に、その配下の子要素の作成を許可する場合に使います。
+    /// 親要素が実装する [`Authorizes`] で所属や所有者などを検証し、成功した場合だけ
+    /// 同じ [`Actor`] の [`Allowed<C, Create>`] を返します。
+    pub fn authorize_create<C>(&self, child: C) -> Result<Allowed<C, Create>, DomainError>
+    where
+        T: Authorizes<C, Create>,
+        C: AuthorizationRole<Role = ParentGuarded>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
+    }
+
+    /// 読み取り認可済みの親要素から、子要素の更新認可済み値を作ります。
+    ///
+    /// 親要素を読める利用者に、その配下の子要素の更新を許可する場合に使います。
+    pub fn authorize_update<C>(&self, child: C) -> Result<Allowed<C, Update>, DomainError>
+    where
+        T: Authorizes<C, Update>,
+        C: AuthorizationRole<Role = ParentGuarded>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
+    }
+
+    /// 読み取り認可済みの親要素から、子要素の削除認可済み値を作ります。
+    ///
+    /// 親要素を読める利用者に、その配下の子要素の削除を許可する場合に使います。
+    pub fn authorize_delete<C>(&self, child: C) -> Result<Allowed<C, Delete>, DomainError>
+    where
+        T: Authorizes<C, Delete>,
+        C: AuthorizationRole<Role = ParentGuarded>,
+    {
+        self.value.check(&self.actor, &child)?;
+        Ok(Allowed::mint(child, self.actor.clone()))
     }
 
     /// 読み取り認可済みの値を、同じ [`Actor`] で更新認可に昇格します。
@@ -205,7 +275,7 @@ impl<T> Allowed<T, Read> {
 ///
 /// 例えば回答が読める利用者に、その回答に紐づくコメントの読み取りも許可する場合に使います。
 /// 例えば回答集合を更新できる利用者に、その集合に含まれる回答タイトルの更新も許可する場合に使います。
-pub trait Authorizes<Child, A: Actions> {
+pub trait Authorizes<Child: AuthorizationRole<Role = ParentGuarded>, A: Actions> {
     fn check(&self, actor: &Actor, child: &Child) -> Result<(), DomainError>;
 }
 
@@ -323,13 +393,19 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {
 /// # Examples
 /// ```
 /// use domain::{
-///     types::authorization_guard::AuthorizationGuardDefinitions,
+///     types::authorization_guard::{
+///         AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded,
+///     },
 ///     user::models::{Actor, Role, User, UserId},
 /// };
 /// use uuid::Uuid;
 ///
 /// struct GuardTarget {
 ///     pub user_id: UserId,
+/// }
+///
+/// impl AuthorizationRole for GuardTarget {
+///     type Role = SelfGuarded;
 /// }
 ///
 /// impl AuthorizationGuardDefinitions for GuardTarget {
@@ -350,7 +426,7 @@ impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Delete> {
 ///     }
 /// }
 /// ```
-pub trait AuthorizationGuardDefinitions {
+pub trait AuthorizationGuardDefinitions: AuthorizationRole<Role = SelfGuarded> {
     fn can_create(&self, actor: &Actor) -> bool;
     fn can_read(&self, actor: &Actor) -> bool;
     fn can_update(&self, actor: &Actor) -> bool;
@@ -396,7 +472,8 @@ mod test {
 
     use crate::{
         types::authorization_guard::{
-            Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Delete,
+            Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizationRole, Delete,
+            SelfGuarded,
         },
         user::models::{ActiveUser, Actor, Role, User},
     };
@@ -404,6 +481,10 @@ mod test {
     #[derive(Clone, PartialEq, Debug)]
     struct AuthorizationGuardTestStruct {
         pub _value: String,
+    }
+
+    impl AuthorizationRole for AuthorizationGuardTestStruct {
+        type Role = SelfGuarded;
     }
 
     impl AuthorizationGuardDefinitions for AuthorizationGuardTestStruct {

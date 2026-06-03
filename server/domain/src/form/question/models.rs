@@ -9,7 +9,7 @@ use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 
 use crate::{
-    types::authorization_guard::AuthorizationGuardDefinitions,
+    types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
     user::models::Actor,
     user::models::{Role, User},
 };
@@ -368,6 +368,10 @@ impl Question {
             )?)),
         }
     }
+}
+
+impl AuthorizationRole for Question {
+    type Role = SelfGuarded;
 }
 
 impl AuthorizationGuardDefinitions for Question {
