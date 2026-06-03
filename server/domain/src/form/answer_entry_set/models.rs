@@ -83,7 +83,7 @@ impl Authorizes<Comment, Create> for AnswerEntry {
         }
 
         match actor {
-            Actor::User(User::ActiveUser(_)) => Ok(()),
+            Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by() => Ok(()),
             _ => Err(DomainError::Forbidden),
         }
     }
