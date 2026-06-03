@@ -19,11 +19,10 @@ use crate::{
     form::{
         answer::models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
         answer_entry_set::models::AnswerEntrySet,
-        comment::models::{Comment, CommentContent},
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Authorizes, Create, Read,
-        Update,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Authorizes, Create, Read,
+        SelfGuarded, Update,
     },
     user::models::{Actor, Role::Administrator, User, UserId},
 };
@@ -275,16 +274,11 @@ impl AnswerSettings {
 
     /// `author` / `actor` の組み合わせと受付期間・仮回答可否から、新しい [`AnswerEntry`] を
     /// 受理してよいかを判断し、受理できる場合のみ [`AnswerEntry`] を生成します。
-    pub fn try_accept_answer(
-        &self,
-        author: AnswerAuthor,
-        actor: &Actor,
-        title: AnswerTitle,
-        posted_answers: PostedAnswerContents,
-    ) -> Result<AnswerEntry, DomainError> {
+    /// `actor` が `author` として回答を作成してよいかを、受付期間と一時回答の可否から判定する。
+    fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
         let is_within_period = self.response_period.is_within_period(Utc::now());
 
-        let allowed = match (&author, actor) {
+        match (author, actor) {
             (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
                 *user_id == *user.id() && (is_within_period || user.role() == &Administrator)
             }
@@ -292,9 +286,17 @@ impl AnswerSettings {
                 self.allow_temporary_answers && is_within_period
             }
             _ => false,
-        };
+        }
+    }
 
-        if !allowed {
+    pub fn try_accept_answer(
+        &self,
+        author: AnswerAuthor,
+        actor: &Actor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<AnswerEntry, DomainError> {
+        if !self.can_accept_answer(&author, actor) {
             return Err(DomainError::Forbidden);
         }
 
@@ -536,6 +538,19 @@ impl Authorizes<AnswerEntry, Update> for ActiveForm {
     }
 }
 
+impl Authorizes<AnswerEntry, Create> for ActiveForm {
+    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> Result<(), DomainError> {
+        if self
+            .answer_settings
+            .can_accept_answer(entry.author(), actor)
+        {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
 impl Allowed<ActiveForm, Read> {
     /// 回答にまつわるポリシー ([`AnswerSettings`]) に委譲して、新しい [`AnswerEntry`] を
     /// 受理してよいかを判断し、認可済みの [`Allowed<AnswerEntry, Create>`] を返します。
@@ -551,7 +566,7 @@ impl Allowed<ActiveForm, Read> {
             title,
             posted_answers,
         )?;
-        Ok(Allowed::mint(entry, self.actor().clone()))
+        self.authorize_create(entry)
     }
 
     /// `set` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
@@ -588,40 +603,6 @@ impl Allowed<ActiveForm, Read> {
             .clone();
 
         self.authorize_read(entry)
-    }
-
-    fn read_entry_for_comment(
-        &self,
-        set: &Allowed<AnswerEntrySet, Read>,
-        answer_id: AnswerId,
-    ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
-        let entry = self.read_entry(set, answer_id)?;
-        match self.actor() {
-            Actor::User(User::ActiveUser(_)) => Ok(entry),
-            _ => Err(DomainError::Forbidden),
-        }
-    }
-
-    /// 対象の [`AnswerEntry`] が `actor` から閲覧可能であることをゲートとして検証したうえで、
-    /// 新しい [`Comment`] の作成ガードを生成します。
-    pub fn create_comment(
-        &self,
-        set: &Allowed<AnswerEntrySet, Read>,
-        answer_id: AnswerId,
-        content: CommentContent,
-    ) -> Result<AuthorizationGuard<Comment, Create>, DomainError> {
-        self.read_entry_for_comment(set, answer_id)?;
-
-        let commented_by = match self.actor() {
-            Actor::User(User::ActiveUser(user)) => *user.id(),
-            _ => return Err(DomainError::Forbidden),
-        };
-
-        Ok(AuthorizationGuard::from(Comment::new(
-            answer_id,
-            content,
-            commented_by,
-        )))
     }
 }
 
@@ -683,6 +664,10 @@ impl ArchivedForm {
     }
 }
 
+impl AuthorizationRole for ArchivedForm {
+    type Role = SelfGuarded;
+}
+
 impl AuthorizationGuardDefinitions for ArchivedForm {
     fn can_create(&self, actor: &Actor) -> bool {
         is_administrator(actor)
@@ -699,6 +684,10 @@ impl AuthorizationGuardDefinitions for ArchivedForm {
     fn can_delete(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
+}
+
+impl AuthorizationRole for ActiveForm {
+    type Role = SelfGuarded;
 }
 
 impl AuthorizationGuardDefinitions for ActiveForm {
@@ -959,6 +948,10 @@ impl FormLabel {
     pub unsafe fn from_raw_parts(id: FormLabelId, name: FormLabelName) -> Self {
         Self { id, name }
     }
+}
+
+impl AuthorizationRole for FormLabel {
+    type Role = SelfGuarded;
 }
 
 impl AuthorizationGuardDefinitions for FormLabel {

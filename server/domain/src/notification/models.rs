@@ -1,7 +1,7 @@
 use derive_getters::Getters;
 
 use crate::{
-    types::authorization_guard::AuthorizationGuardDefinitions,
+    types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
     user::models::{Actor, Role, User, UserId},
 };
 
@@ -64,6 +64,10 @@ impl NotificationPreference {
             NotificationType::MessageReceived => self.is_send_message_notification,
         }
     }
+}
+
+impl AuthorizationRole for NotificationPreference {
+    type Role = SelfGuarded;
 }
 
 impl AuthorizationGuardDefinitions for NotificationPreference {

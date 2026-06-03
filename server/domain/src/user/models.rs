@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-use crate::types::authorization_guard::AuthorizationGuardDefinitions;
+use crate::types::authorization_guard::{
+    AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded,
+};
 
 #[derive(DerivingVia, Debug, PartialOrd, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(Arbitrary))]
@@ -141,6 +143,10 @@ impl TemporaryUser {
     }
 }
 
+impl AuthorizationRole for ActiveUser {
+    type Role = SelfGuarded;
+}
+
 impl AuthorizationGuardDefinitions for ActiveUser {
     fn can_create(&self, actor: &Actor) -> bool {
         matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
@@ -235,6 +241,10 @@ impl DiscordAccountLink {
             discord_user,
         }
     }
+}
+
+impl AuthorizationRole for DiscordAccountLink {
+    type Role = SelfGuarded;
 }
 
 impl AuthorizationGuardDefinitions for DiscordAccountLink {

@@ -6,7 +6,8 @@ use crate::{
         message::models::{Message, MessageId},
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuardDefinitions, Authorizes, Delete, Update,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Authorizes, Delete, SelfGuarded,
+        Update,
     },
     user::models::{Actor, Role::Administrator, User, UserId},
 };
@@ -158,6 +159,10 @@ fn is_answer_author_or_administrator(actor: &Actor, answer_author_id: &UserId) -
             if user.role() == &Administrator
                 || *user.id() == *answer_author_id
     )
+}
+
+impl AuthorizationRole for MessageThread {
+    type Role = SelfGuarded;
 }
 
 impl AuthorizationGuardDefinitions for MessageThread {

@@ -3,11 +3,13 @@ use errors::domain::DomainError;
 use crate::{
     form::{
         answer::models::{AnswerEntry, AnswerId},
-        comment::models::Comment,
+        comment::models::{Comment, CommentContent},
         models::FormId,
     },
-    types::authorization_guard::{Allowed, Authorizes, Read},
-    user::models::Actor,
+    types::authorization_guard::{
+        Allowed, AuthorizationRole, Authorizes, Create, Delete, ParentGuarded, Read, Update,
+    },
+    user::models::{Actor, Role, User},
 };
 
 /// あるフォームに紐づく回答 ([`AnswerEntry`]) の集合です。
@@ -60,9 +62,59 @@ impl AnswerEntrySet {
     }
 }
 
+impl AuthorizationRole for AnswerEntrySet {
+    type Role = ParentGuarded;
+}
+
 impl Authorizes<Comment, Read> for AnswerEntry {
     fn check(&self, _actor: &Actor, child: &Comment) -> Result<(), DomainError> {
         if child.answer_id() == self.id() {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<Comment, Create> for AnswerEntry {
+    fn check(&self, actor: &Actor, child: &Comment) -> Result<(), DomainError> {
+        if child.answer_id() != self.id() {
+            return Err(DomainError::Forbidden);
+        }
+
+        match actor {
+            Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by() => Ok(()),
+            _ => Err(DomainError::Forbidden),
+        }
+    }
+}
+
+impl Authorizes<Comment, Update> for AnswerEntry {
+    fn check(&self, actor: &Actor, child: &Comment) -> Result<(), DomainError> {
+        if child.answer_id() != self.id() {
+            return Err(DomainError::Forbidden);
+        }
+
+        if matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
+        {
+            Ok(())
+        } else {
+            Err(DomainError::Forbidden)
+        }
+    }
+}
+
+impl Authorizes<Comment, Delete> for AnswerEntry {
+    fn check(&self, actor: &Actor, child: &Comment) -> Result<(), DomainError> {
+        if child.answer_id() != self.id() {
+            return Err(DomainError::Forbidden);
+        }
+
+        if matches!(
+            actor,
+            Actor::User(User::ActiveUser(user))
+                if user.id() == child.commented_by() || user.role() == &Role::Administrator
+        ) {
             Ok(())
         } else {
             Err(DomainError::Forbidden)
@@ -76,6 +128,20 @@ impl Allowed<AnswerEntry, Read> {
         comment: Comment,
     ) -> Result<Allowed<Comment, Read>, DomainError> {
         self.authorize_read(comment)
+    }
+
+    pub fn create_comment(
+        &self,
+        content: CommentContent,
+    ) -> Result<Allowed<Comment, Create>, DomainError> {
+        let commented_by = match self.actor() {
+            Actor::User(User::ActiveUser(user)) => *user.id(),
+            _ => return Err(DomainError::Forbidden),
+        };
+
+        let comment = Comment::new(*self.value().id(), content, commented_by);
+
+        self.authorize_create(comment)
     }
 }
 

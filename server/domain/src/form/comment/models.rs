@@ -6,8 +6,8 @@ use types::non_empty_string::NonEmptyString;
 
 use crate::{
     form::answer::models::AnswerId,
-    types::authorization_guard::AuthorizationGuardDefinitions,
-    user::models::{Actor, Role::Administrator, User, UserId},
+    types::authorization_guard::{AuthorizationRole, ParentGuarded},
+    user::models::UserId,
 };
 
 pub type CommentId = types::Id<Comment>;
@@ -72,28 +72,12 @@ impl Comment {
     }
 }
 
-/// [`Comment`] 自身で完結する認可のみをここで定義します。
-///
-/// 「紐づく [`AnswerEntry`](crate::form::answer::models::AnswerEntry) が閲覧可能か」
-/// という文脈依存の判定は AnswerEntry 側のゲートが担うため、ここには含めません。
-impl AuthorizationGuardDefinitions for Comment {
-    fn can_create(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if *user.id() == self.commented_by)
-    }
+// [`Comment`] は自己ガード ([`crate::types::authorization_guard::AuthorizationGuardDefinitions`])
+// を実装しない。コメントは親である
+// [`AnswerEntry`](crate::form::answer::models::AnswerEntry) のガードを起点としてのみ
+// 認可され、その条件 (閲覧・作成・更新・削除) は
+// [`crate::form::answer_entry_set::models`] の `Authorizes<Comment, _>` が担う。
 
-    fn can_read(&self, _actor: &Actor) -> bool {
-        false
-    }
-
-    fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if *user.id() == self.commented_by)
-    }
-
-    fn can_delete(&self, actor: &Actor) -> bool {
-        matches!(
-            actor,
-            Actor::User(User::ActiveUser(user))
-                if *user.id() == self.commented_by || user.role() == &Administrator
-        )
-    }
+impl AuthorizationRole for Comment {
+    type Role = ParentGuarded;
 }

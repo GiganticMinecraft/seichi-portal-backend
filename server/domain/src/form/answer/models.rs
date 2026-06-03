@@ -10,7 +10,9 @@ use types::non_empty_string::NonEmptyString;
 
 use crate::{
     form::question::models::{Question, QuestionId},
-    types::authorization_guard::AuthorizationGuardDefinitions,
+    types::authorization_guard::{
+        AuthorizationGuardDefinitions, AuthorizationRole, ParentGuarded, SelfGuarded,
+    },
     user::models::{Actor, Role, TemporaryUser, User, UserId},
 };
 
@@ -203,6 +205,10 @@ impl AnswerEntry {
     }
 }
 
+impl AuthorizationRole for AnswerEntry {
+    type Role = ParentGuarded;
+}
+
 pub type AnswerLabelId = types::Id<AnswerLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -231,6 +237,10 @@ impl AnswerLabel {
     pub fn renamed(self, name: NonEmptyString) -> Self {
         Self { name, ..self }
     }
+}
+
+impl AuthorizationRole for AnswerLabel {
+    type Role = SelfGuarded;
 }
 
 impl AuthorizationGuardDefinitions for AnswerLabel {
