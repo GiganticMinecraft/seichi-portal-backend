@@ -169,6 +169,20 @@ impl<T, A: Actions> Allowed<T, A> {
         T: Authorizes<C, A>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
+        self.authorize_any(child)
+    }
+
+    /// 親要素が実装する [`Authorizes`] で子要素を検証し、成功した場合だけ
+    /// 同じ [`Actor`] の [`Allowed<C, TargetAction>`] を作る共通処理です。
+    fn authorize_any<C, TargetAction>(
+        &self,
+        child: C,
+    ) -> Result<Allowed<C, TargetAction>, DomainError>
+    where
+        T: Authorizes<C, TargetAction>,
+        C: AuthorizationRole<Role = ParentGuarded>,
+        TargetAction: Actions,
+    {
         if self.value.check(&self.actor, &child) {
             Ok(Allowed::mint(child, self.actor.clone()))
         } else {
@@ -196,11 +210,7 @@ impl<T> Allowed<T, Update> {
         T: Authorizes<C, Delete>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        if self.value.check(&self.actor, &child) {
-            Ok(Allowed::mint(child, self.actor.clone()))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorize_any(child)
     }
 }
 
@@ -224,11 +234,7 @@ impl<T> Allowed<T, Read> {
         T: Authorizes<C, Create>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        if self.value.check(&self.actor, &child) {
-            Ok(Allowed::mint(child, self.actor.clone()))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorize_any(child)
     }
 
     /// 読み取り認可済みの親要素から、子要素の更新認可済み値を作ります。
@@ -239,11 +245,7 @@ impl<T> Allowed<T, Read> {
         T: Authorizes<C, Update>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        if self.value.check(&self.actor, &child) {
-            Ok(Allowed::mint(child, self.actor.clone()))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorize_any(child)
     }
 
     /// 読み取り認可済みの親要素から、子要素の削除認可済み値を作ります。
@@ -254,11 +256,7 @@ impl<T> Allowed<T, Read> {
         T: Authorizes<C, Delete>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        if self.value.check(&self.actor, &child) {
-            Ok(Allowed::mint(child, self.actor.clone()))
-        } else {
-            Err(DomainError::Forbidden)
-        }
+        self.authorize_any(child)
     }
 
     /// 読み取り認可済みの値を、同じ [`Actor`] で更新認可に昇格します。
