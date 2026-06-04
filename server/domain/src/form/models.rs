@@ -451,55 +451,33 @@ impl ActiveForm {
 /// [`ActiveForm`] が保持する [`AnswerSettings`] のポリシーで判断される。所属検証と
 /// ポリシー判断のいずれもドメイン内で完結する。
 impl Authorizes<AnswerEntrySet, Read> for ActiveForm {
-    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> Result<(), DomainError> {
-        if set.form_id() == self.id() {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
+    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> bool {
+        set.form_id() == self.id()
     }
 }
 
 impl Authorizes<AnswerEntrySet, Update> for ActiveForm {
-    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> Result<(), DomainError> {
-        if set.form_id() == self.id() {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
+    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> bool {
+        set.form_id() == self.id()
     }
 }
 
 impl Authorizes<AnswerEntry, Read> for ActiveForm {
-    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> Result<(), DomainError> {
-        if self.answer_settings.can_read_entry(entry, actor) {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
+    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
+        self.answer_settings.can_read_entry(entry, actor)
     }
 }
 
 impl Authorizes<AnswerEntry, Update> for ActiveForm {
-    fn check(&self, actor: &Actor, _entry: &AnswerEntry) -> Result<(), DomainError> {
-        if is_administrator(actor) {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
+    fn check(&self, actor: &Actor, _entry: &AnswerEntry) -> bool {
+        is_administrator(actor)
     }
 }
 
 impl Authorizes<AnswerEntry, Create> for ActiveForm {
-    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> Result<(), DomainError> {
-        if self
-            .answer_settings
+    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
+        self.answer_settings
             .can_accept_answer(entry.author(), actor)
-        {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
     }
 }
 
