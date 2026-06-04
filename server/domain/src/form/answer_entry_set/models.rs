@@ -60,58 +60,33 @@ impl AuthorizationRole for AnswerEntrySet {
 }
 
 impl Authorizes<Comment, Read> for AnswerEntry {
-    fn check(&self, _actor: &Actor, child: &Comment) -> Result<(), DomainError> {
-        if child.answer_id() == self.id() {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
+    fn check(&self, _actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
     }
 }
 
 impl Authorizes<Comment, Create> for AnswerEntry {
-    fn check(&self, actor: &Actor, child: &Comment) -> Result<(), DomainError> {
-        if child.answer_id() != self.id() {
-            return Err(DomainError::Forbidden);
-        }
-
-        match actor {
-            Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by() => Ok(()),
-            _ => Err(DomainError::Forbidden),
-        }
+    fn check(&self, actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
+            && matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
     }
 }
 
 impl Authorizes<Comment, Update> for AnswerEntry {
-    fn check(&self, actor: &Actor, child: &Comment) -> Result<(), DomainError> {
-        if child.answer_id() != self.id() {
-            return Err(DomainError::Forbidden);
-        }
-
-        if matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
-        {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
+    fn check(&self, actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
+            && matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
     }
 }
 
 impl Authorizes<Comment, Delete> for AnswerEntry {
-    fn check(&self, actor: &Actor, child: &Comment) -> Result<(), DomainError> {
-        if child.answer_id() != self.id() {
-            return Err(DomainError::Forbidden);
-        }
-
-        if matches!(
-            actor,
-            Actor::User(User::ActiveUser(user))
-                if user.id() == child.commented_by() || user.role() == &Role::Administrator
-        ) {
-            Ok(())
-        } else {
-            Err(DomainError::Forbidden)
-        }
+    fn check(&self, actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
+            && matches!(
+                actor,
+                Actor::User(User::ActiveUser(user))
+                    if user.id() == child.commented_by() || user.role() == &Role::Administrator
+            )
     }
 }
 

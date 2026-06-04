@@ -84,24 +84,18 @@ impl MessageThread {
 }
 
 impl Authorizes<Message, Update> for MessageThread {
-    fn check(&self, actor: &Actor, message: &Message) -> Result<(), DomainError> {
-        match actor {
-            Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id() => Ok(()),
-            _ => Err(DomainError::Forbidden),
-        }
+    fn check(&self, actor: &Actor, message: &Message) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id())
     }
 }
 
 impl Authorizes<Message, Delete> for MessageThread {
-    fn check(&self, actor: &Actor, message: &Message) -> Result<(), DomainError> {
-        match actor {
+    fn check(&self, actor: &Actor, message: &Message) -> bool {
+        matches!(
+            actor,
             Actor::User(User::ActiveUser(user))
-                if message.sender_id() == user.id() || user.role() == &Administrator =>
-            {
-                Ok(())
-            }
-            _ => Err(DomainError::Forbidden),
-        }
+                if message.sender_id() == user.id() || user.role() == &Administrator
+        )
     }
 }
 

@@ -169,8 +169,25 @@ impl<T, A: Actions> Allowed<T, A> {
         T: Authorizes<C, A>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        self.value.check(&self.actor, &child)?;
-        Ok(Allowed::mint(child, self.actor.clone()))
+        self.authorize_any(child)
+    }
+
+    /// 親要素が実装する [`Authorizes`] で子要素を検証し、成功した場合だけ
+    /// 同じ [`Actor`] の [`Allowed<C, TargetAction>`] を作る共通処理です。
+    fn authorize_any<C, TargetAction>(
+        &self,
+        child: C,
+    ) -> Result<Allowed<C, TargetAction>, DomainError>
+    where
+        T: Authorizes<C, TargetAction>,
+        C: AuthorizationRole<Role = ParentGuarded>,
+        TargetAction: Actions,
+    {
+        if self.value.check(&self.actor, &child) {
+            Ok(Allowed::mint(child, self.actor.clone()))
+        } else {
+            Err(DomainError::Forbidden)
+        }
     }
 }
 
@@ -193,8 +210,7 @@ impl<T> Allowed<T, Update> {
         T: Authorizes<C, Delete>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        self.value.check(&self.actor, &child)?;
-        Ok(Allowed::mint(child, self.actor.clone()))
+        self.authorize_any(child)
     }
 }
 
@@ -218,8 +234,7 @@ impl<T> Allowed<T, Read> {
         T: Authorizes<C, Create>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        self.value.check(&self.actor, &child)?;
-        Ok(Allowed::mint(child, self.actor.clone()))
+        self.authorize_any(child)
     }
 
     /// 読み取り認可済みの親要素から、子要素の更新認可済み値を作ります。
@@ -230,8 +245,7 @@ impl<T> Allowed<T, Read> {
         T: Authorizes<C, Update>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        self.value.check(&self.actor, &child)?;
-        Ok(Allowed::mint(child, self.actor.clone()))
+        self.authorize_any(child)
     }
 
     /// 読み取り認可済みの親要素から、子要素の削除認可済み値を作ります。
@@ -242,8 +256,7 @@ impl<T> Allowed<T, Read> {
         T: Authorizes<C, Delete>,
         C: AuthorizationRole<Role = ParentGuarded>,
     {
-        self.value.check(&self.actor, &child)?;
-        Ok(Allowed::mint(child, self.actor.clone()))
+        self.authorize_any(child)
     }
 
     /// 読み取り認可済みの値を、同じ [`Actor`] で更新認可に昇格します。
@@ -272,11 +285,8 @@ impl<T> Allowed<T, Read> {
 }
 
 /// 認可済みの親要素が、子要素の同じ操作も認可できることを表すトレイトです。
-///
-/// 例えば回答が読める利用者に、その回答に紐づくコメントの読み取りも許可する場合に使います。
-/// 例えば回答集合を更新できる利用者に、その集合に含まれる回答タイトルの更新も許可する場合に使います。
 pub trait Authorizes<Child: AuthorizationRole<Role = ParentGuarded>, A: Actions> {
-    fn check(&self, actor: &Actor, child: &Child) -> Result<(), DomainError>;
+    fn check(&self, actor: &Actor, child: &Child) -> bool;
 }
 
 impl<T: AuthorizationGuardDefinitions> AuthorizationGuard<T, Create> {
