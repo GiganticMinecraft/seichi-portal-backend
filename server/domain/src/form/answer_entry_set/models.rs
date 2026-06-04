@@ -1,3 +1,4 @@
+use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
 
 use crate::{
@@ -23,7 +24,7 @@ use crate::{
 /// 個々の回答の閲覧可否は [`ActiveForm`] のガードを起点とした連鎖で行われます。
 ///
 /// [`ActiveForm`]: crate::form::models::ActiveForm
-#[derive(Clone, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Clone, Debug, PartialEq)]
 pub struct AnswerEntrySet {
     form_id: FormId,
     entries: Vec<AnswerEntry>,
@@ -35,14 +36,6 @@ impl AnswerEntrySet {
             form_id,
             entries: Vec::new(),
         }
-    }
-
-    /// [`AnswerEntrySet`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// `entries` が `form_id` に属することを永続化層などで検証済みの場合にのみ使用してください。
-    pub unsafe fn from_raw_parts(form_id: FormId, entries: Vec<AnswerEntry>) -> Self {
-        Self { form_id, entries }
     }
 
     pub fn form_id(&self) -> &FormId {

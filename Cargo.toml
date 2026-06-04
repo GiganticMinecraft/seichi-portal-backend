@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "server/common",
     "server/domain",
+    "server/domain-derive",
     "server/entrypoint",
     "server/errors",
     "server/infra/resource",

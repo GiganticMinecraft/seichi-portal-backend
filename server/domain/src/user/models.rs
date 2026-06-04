@@ -2,6 +2,7 @@
 use common::test_utils::arbitrary_uuid_v4;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
+use domain_derive::UnsafeFromRawParts;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
@@ -114,7 +115,7 @@ pub struct TemporaryUserId(#[underlying] Uuid);
 /// `name` と `contact_text` は、管理者や回答閲覧者が回答者を識別し、必要に応じて
 /// 連絡するための入力値である。権限判定上は回答の作成主体としてだけ使われ、
 /// 通常の `User` と同じ閲覧・更新権限は持たない。
-#[derive(Serialize, Deserialize, Getters, Debug, Clone, PartialEq, Eq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Debug, Clone, PartialEq, Eq)]
 pub struct TemporaryUser {
     id: TemporaryUserId,
     name: String,
@@ -125,18 +126,6 @@ impl TemporaryUser {
     pub fn new(name: String, contact_text: String) -> Self {
         Self {
             id: TemporaryUserId::from(Uuid::new_v4()),
-            name,
-            contact_text,
-        }
-    }
-
-    /// [`TemporaryUser`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    pub unsafe fn from_raw_parts(id: TemporaryUserId, name: String, contact_text: String) -> Self {
-        Self {
-            id,
             name,
             contact_text,
         }

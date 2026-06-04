@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
+use domain_derive::UnsafeFromRawParts;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
@@ -22,7 +23,7 @@ impl CommentContent {
     }
 }
 
-#[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct Comment {
     answer_id: AnswerId,
     comment_id: CommentId,
@@ -49,26 +50,6 @@ impl Comment {
 
     pub fn with_updated_content(self, content: CommentContent) -> Self {
         Self { content, ..self }
-    }
-
-    /// [`Comment`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    pub unsafe fn from_raw_parts(
-        answer_id: AnswerId,
-        comment_id: CommentId,
-        content: CommentContent,
-        timestamp: DateTime<Utc>,
-        commented_by: UserId,
-    ) -> Self {
-        Self {
-            answer_id,
-            comment_id,
-            content,
-            timestamp,
-            commented_by,
-        }
     }
 }
 

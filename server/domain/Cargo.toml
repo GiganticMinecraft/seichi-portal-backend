@@ -7,6 +7,7 @@ edition = "2024"
 async-trait = { workspace = true }
 chrono = { workspace = true }
 derive-getters = "0.5.0"
+domain-derive = { path = "../domain-derive" }
 deriving_via = { workspace = true }
 errors = { path = "../errors" }
 mockall = { workspace = true }
