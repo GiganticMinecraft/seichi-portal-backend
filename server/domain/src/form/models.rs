@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use common::test_utils::{arbitrary_date_time, arbitrary_opt_date_time};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
+use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
 #[cfg(test)]
 use proptest::{collection::SizeRange, prelude::*, strategy::BoxedStrategy};
@@ -58,7 +59,7 @@ impl FormDescription {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct FormSettings {
     #[serde(default)]
     webhook_url: WebhookUrl,
@@ -95,17 +96,6 @@ impl FormSettings {
 
     pub fn change_visibility(self, visibility: Visibility) -> Self {
         Self { visibility, ..self }
-    }
-
-    /// [`FormSettings`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    pub unsafe fn from_raw_parts(webhook_url: WebhookUrl, visibility: Visibility) -> Self {
-        Self {
-            webhook_url,
-            visibility,
-        }
     }
 }
 
@@ -318,7 +308,7 @@ impl AnswerSettings {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct FormMeta {
     #[cfg_attr(test, proptest(strategy = "arbitrary_date_time()"))]
     #[serde(default = "chrono::Utc::now")]
@@ -333,17 +323,6 @@ impl FormMeta {
         Self {
             created_at: Utc::now(),
             updated_at: Utc::now(),
-        }
-    }
-
-    /// [`FormMeta`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    pub unsafe fn from_raw_parts(created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
-        Self {
-            created_at,
-            updated_at,
         }
     }
 }
@@ -398,7 +377,7 @@ impl Arbitrary for FormLabelIdSet {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct ActiveForm {
     #[serde(default)]
     id: FormId,
@@ -458,33 +437,6 @@ impl ActiveForm {
 
     pub fn replace_label_ids(self, label_ids: FormLabelIdSet) -> Self {
         Self { label_ids, ..self }
-    }
-
-    /// [`ActiveForm`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn from_raw_parts(
-        id: FormId,
-        title: FormTitle,
-        description: FormDescription,
-        metadata: FormMeta,
-        settings: FormSettings,
-        answer_settings: AnswerSettings,
-        questions: QuestionSet,
-        label_ids: FormLabelIdSet,
-    ) -> Self {
-        Self {
-            id,
-            title,
-            description,
-            metadata,
-            settings,
-            answer_settings,
-            questions,
-            label_ids,
-        }
     }
 
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: UserId) -> ArchivedForm {
@@ -923,7 +875,7 @@ impl FormLabelName {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct FormLabel {
     id: FormLabelId,
     name: FormLabelName,
@@ -939,14 +891,6 @@ impl FormLabel {
 
     pub fn renamed(&self, name: FormLabelName) -> Self {
         Self { id: self.id, name }
-    }
-
-    /// [`FormLabel`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    pub unsafe fn from_raw_parts(id: FormLabelId, name: FormLabelName) -> Self {
-        Self { id, name }
     }
 }
 

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
+use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +15,7 @@ impl AuthorizationRole for Message {
     type Role = ParentGuarded;
 }
 
-#[derive(Getters, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(UnsafeFromRawParts, Getters, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Message {
     id: MessageId,
     sender_id: UserId,
@@ -63,46 +64,5 @@ impl Message {
         }
 
         Ok(Self { body, ..self })
-    }
-
-    /// [`Message`] の各フィールドの値を受け取り、[`Message`] を生成します。
-    ///
-    /// # Examples
-    /// ```
-    /// use chrono::Utc;
-    /// use domain::{
-    ///     form::message::models::{Message, MessageId},
-    ///     user::models::UserId,
-    /// };
-    /// use uuid::Uuid;
-    ///
-    /// let user_id: UserId = Uuid::new_v4().into();
-    ///
-    /// unsafe {
-    ///     let message = Message::from_raw_parts(
-    ///         MessageId::new(),
-    ///         user_id,
-    ///         "test message".to_string(),
-    ///         Utc::now(),
-    ///     );
-    /// }
-    /// ```
-    ///
-    /// # Safety
-    /// この関数は [`Message`] のバリデーションをスキップするため、
-    /// データベースからすでにバリデーションされているデータを読み出すときなど、
-    /// データの信頼性が保証されている場合にのみ使用してください。
-    pub unsafe fn from_raw_parts(
-        id: MessageId,
-        sender_id: UserId,
-        body: String,
-        timestamp: DateTime<Utc>,
-    ) -> Self {
-        Self {
-            id,
-            sender_id,
-            body,
-            timestamp,
-        }
     }
 }

@@ -1013,6 +1013,7 @@ dependencies = [
  "common",
  "derive-getters",
  "deriving_via",
+ "domain-derive",
  "errors",
  "mockall",
  "proptest",
@@ -1026,6 +1027,15 @@ dependencies = [
  "tracing",
  "types",
  "uuid",
+]
+
+[[package]]
+name = "domain-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

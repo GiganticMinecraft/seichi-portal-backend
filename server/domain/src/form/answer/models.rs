@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
+use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
@@ -157,7 +158,7 @@ impl PostedAnswerContents {
     }
 }
 
-#[derive(Serialize, Deserialize, Getters, Clone, PartialEq, Debug)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, PartialEq, Debug)]
 pub struct AnswerEntry {
     id: AnswerId,
     author: AnswerAuthor,
@@ -178,28 +179,6 @@ impl AnswerEntry {
         }
     }
 
-    /// [`AnswerEntry`] の各フィールドを指定して新しく作成します。
-    ///
-    /// # Safety
-    /// この関数はオブジェクトを新しく作成しない場合
-    /// (例えば、データベースから取得した場合)にのみ使用してください。
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn from_raw_parts(
-        id: AnswerId,
-        author: AnswerAuthor,
-        timestamp: DateTime<Utc>,
-        title: AnswerTitle,
-        contents: Vec<FormAnswerContent>,
-    ) -> Self {
-        Self {
-            id,
-            author,
-            timestamp,
-            title,
-            contents,
-        }
-    }
-
     pub fn with_title(self, title: AnswerTitle) -> Self {
         Self { title, ..self }
     }
@@ -212,7 +191,7 @@ impl AuthorizationRole for AnswerEntry {
 pub type AnswerLabelId = types::Id<AnswerLabel>;
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Debug, PartialEq)]
 pub struct AnswerLabel {
     id: AnswerLabelId,
     name: NonEmptyString,
@@ -224,14 +203,6 @@ impl AnswerLabel {
             id: AnswerLabelId::new(),
             name,
         }
-    }
-
-    /// [`AnswerLabel`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    pub unsafe fn from_raw_parts(id: AnswerLabelId, name: NonEmptyString) -> Self {
-        Self { id, name }
     }
 
     pub fn renamed(self, name: NonEmptyString) -> Self {

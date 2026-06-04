@@ -1,4 +1,5 @@
 use derive_getters::Getters;
+use domain_derive::UnsafeFromRawParts;
 
 use crate::{
     types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
@@ -25,7 +26,7 @@ impl NotificationContent {
     }
 }
 
-#[derive(Getters, Debug, Clone)]
+#[derive(UnsafeFromRawParts, Getters, Debug, Clone)]
 pub struct NotificationPreference {
     recipient_id: UserId,
     is_send_message_notification: bool,
@@ -43,17 +44,6 @@ impl NotificationPreference {
         Self {
             is_send_message_notification,
             ..self
-        }
-    }
-
-    /// [`NotificationPreference`] を永続化済みのフィールド値から復元します。
-    ///
-    /// # Safety
-    /// 新規作成ではなく、データベースなど信頼できる永続化済みデータの復元にのみ使用してください。
-    pub unsafe fn from_raw_parts(recipient_id: UserId, is_send_message_notification: bool) -> Self {
-        Self {
-            recipient_id,
-            is_send_message_notification,
         }
     }
 }
