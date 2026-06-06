@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::form::models::{FormId, FormLabel, FormLabelId, FormLabelName};
 use errors::infra::InfraError;
 use itertools::Itertools;
-use sqlx::{Row, query};
+use sqlx::{AssertSqlSafe, Row, query};
 
 use crate::{
     database::{components::FormLabelDatabase, connection::ConnectionPool, count::count_as_u32},
@@ -76,7 +76,9 @@ impl FormLabelDatabase for ConnectionPool {
                 );
                 let labels_rs = label_ids
                     .iter()
-                    .fold(query(&sql), |query, label_id| query.bind(label_id))
+                    .fold(query(AssertSqlSafe(&*sql)), |query, label_id| {
+                        query.bind(label_id)
+                    })
                     .fetch_all(&mut **txn)
                     .await?;
 

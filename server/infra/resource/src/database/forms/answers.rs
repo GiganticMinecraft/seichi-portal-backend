@@ -10,7 +10,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
-use sqlx::{Row, mysql::MySqlRow, query};
+use sqlx::{AssertSqlSafe, Row, mysql::MySqlRow, query};
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
@@ -77,7 +77,7 @@ where
 
     answer_ids
         .iter()
-        .fold(query(&sql), |query, answer_id| {
+        .fold(query(AssertSqlSafe(&*sql)), |query, answer_id| {
             query.bind(answer_id.as_ref())
         })
         .fetch_all(&mut **txn)
@@ -148,7 +148,7 @@ where
 
     answer_ids
         .iter()
-        .fold(query(&sql), |query, answer_id| {
+        .fold(query(AssertSqlSafe(&*sql)), |query, answer_id| {
             query.bind(answer_id.as_ref())
         })
         .fetch_all(&mut **txn)
@@ -267,7 +267,7 @@ impl FormAnswerDatabase for ConnectionPool {
                         .flat_map(|(id, answer_id, question_id, answer)| {
                             [id, answer_id, question_id, answer]
                         })
-                        .fold(query(&sql), |query, value| query.bind(value))
+                        .fold(query(AssertSqlSafe(&*sql)), |query, value| query.bind(value))
                         .execute(&mut **txn)
                         .await?;
                 }
@@ -364,7 +364,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 );
                 let answers = ids
                     .iter()
-                    .fold(query(&sql), |query, id| query.bind(id))
+                    .fold(query(AssertSqlSafe(&*sql)), |query, id| query.bind(id))
                     .fetch_all(&mut **txn)
                     .await?;
 

@@ -12,7 +12,7 @@ use domain::{
 use errors::{Error, infra::InfraError};
 use futures::{TryStreamExt, stream};
 use itertools::Itertools;
-use sqlx::{MySqlConnection, Row, mysql::MySqlRow, query};
+use sqlx::{AssertSqlSafe, MySqlConnection, Row, mysql::MySqlRow, query};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use types::non_empty_string::NonEmptyString;
@@ -77,12 +77,12 @@ async fn get_questions_txn_with_tables(
         ORDER BY c.position ASC, c.id ASC"
     );
 
-    let questions_rs = sqlx::query(&questions_sql)
+    let questions_rs = sqlx::query(AssertSqlSafe(&*questions_sql))
         .bind(form_id.clone())
         .fetch_all(&mut **txn)
         .await?;
 
-    let choices_by_question_id = sqlx::query(&choices_sql)
+    let choices_by_question_id = sqlx::query(AssertSqlSafe(&*choices_sql))
         .bind(form_id)
         .fetch_all(&mut **txn)
         .await?
@@ -266,7 +266,7 @@ async fn fetch_answer_entries(
         None => format!("{base_query} ORDER BY answers.timestamp"),
     };
 
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(AssertSqlSafe(&*sql));
     if let Some(form_id) = form_id {
         query = query.bind(form_id.into_inner().to_string());
     }
@@ -977,7 +977,9 @@ async fn sync_label_ids(
     label_ids
         .into_iter()
         .flat_map(|label_id| [form_id.clone(), label_id])
-        .fold(query(&sql), |query, value| query.bind(value))
+        .fold(query(AssertSqlSafe(&*sql)), |query, value| {
+            query.bind(value)
+        })
         .execute(&mut **txn)
         .await?;
 
@@ -1139,7 +1141,7 @@ async fn persist_questions(
 
     questions
         .iter()
-        .fold(query(&sql), |query, question| {
+        .fold(query(AssertSqlSafe(&*sql)), |query, question| {
             query
                 .bind(question.id().into_inner().to_string())
                 .bind(&form_id_string)
@@ -1175,7 +1177,7 @@ async fn delete_questions(
     );
     question_ids
         .iter()
-        .fold(query(&sql), |query, question_id| {
+        .fold(query(AssertSqlSafe(&*sql)), |query, question_id| {
             query.bind(question_id.to_string())
         })
         .execute(&mut *txn)
@@ -1267,7 +1269,7 @@ async fn fetch_existing_choices(
 
     let rows = question_ids
         .iter()
-        .fold(sqlx::query(&sql), |query, question_id| {
+        .fold(sqlx::query(AssertSqlSafe(&*sql)), |query, question_id| {
             query.bind(question_id.into_inner().to_string())
         })
         .fetch_all(&mut *txn)
@@ -1294,7 +1296,9 @@ async fn delete_choices(txn: &mut MySqlConnection, choice_ids: Vec<i32>) -> Resu
     );
     choice_ids
         .iter()
-        .fold(query(&sql), |query, choice_id| query.bind(choice_id))
+        .fold(query(AssertSqlSafe(&*sql)), |query, choice_id| {
+            query.bind(choice_id)
+        })
         .execute(&mut *txn)
         .await?;
 
@@ -1320,7 +1324,7 @@ async fn upsert_existing_choices(
     choices
         .iter()
         .fold(
-            query(&sql),
+            query(AssertSqlSafe(&*sql)),
             |query, (choice_id, question_id, position, label)| {
                 query
                     .bind(choice_id)
@@ -1349,12 +1353,15 @@ async fn insert_new_choices(
     );
     choices
         .iter()
-        .fold(query(&sql), |query, (question_id, position, label)| {
-            query
-                .bind(question_id.into_inner().to_string())
-                .bind(position)
-                .bind(label)
-        })
+        .fold(
+            query(AssertSqlSafe(&*sql)),
+            |query, (question_id, position, label)| {
+                query
+                    .bind(question_id.into_inner().to_string())
+                    .bind(position)
+                    .bind(label)
+            },
+        )
         .execute(&mut *txn)
         .await?;
 
