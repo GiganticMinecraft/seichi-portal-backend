@@ -1,15 +1,13 @@
 use domain::form::comment::models::CommentContent;
-use domain::form::models::{ActiveForm, FormId};
+use domain::form::models::FormId;
 use domain::{
     form::{
-        answer::models::AnswerId,
-        answer_entry_set::models::AnswerEntrySet,
+        answer::models::{AnswerEntry, AnswerId},
         comment::models::{Comment, CommentId},
     },
     repository::form::{
         active_form_repository::ActiveFormRepository,
-        answer_entry_set_repository::AnswerEntrySetRepository,
-        comment_repository::CommentRepository,
+        answer_entry_repository::AnswerEntryRepository, comment_repository::CommentRepository,
     },
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, Read},
@@ -17,7 +15,6 @@ use domain::{
 };
 use errors::{
     Error,
-    domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, CommentNotFound, FormNotFound, UserNotFound},
 };
 
@@ -27,27 +24,25 @@ pub struct CommentUseCase<
     'a,
     FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
-    AnswerEntrySetRepo: AnswerEntrySetRepository,
+    AnswerEntryRepo: AnswerEntryRepository,
     CommentRepo: CommentRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
-    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub answer_entry_repository: &'a AnswerEntryRepo,
     pub comment_repository: &'a CommentRepo,
 }
 
-impl<
-    R1: ActiveFormRepository,
-    R2: UserRepository,
-    R3: AnswerEntrySetRepository,
-    R4: CommentRepository,
-> CommentUseCase<'_, R1, R2, R3, R4>
+impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4: CommentRepository>
+    CommentUseCase<'_, R1, R2, R3, R4>
 {
-    async fn read_form_and_entry_set(
+    /// フォームと回答の読み取り認可を通過した [`AnswerEntry`] のガードを取得する。
+    async fn read_answer_entry(
         &self,
         actor: &Actor,
         form_id: FormId,
-    ) -> Result<(Allowed<ActiveForm, Read>, Allowed<AnswerEntrySet, Read>), Error> {
+        answer_id: AnswerId,
+    ) -> Result<Allowed<AnswerEntry, Read>, Error> {
         let form = self
             .active_form_repository
             .get(form_id)
@@ -55,13 +50,11 @@ impl<
             .ok_or(FormNotFound)?
             .try_read(actor.clone())?;
 
-        let answer_entry_set = self
-            .answer_entry_set_repository
-            .get_read(&form)
+        self.answer_entry_repository
+            .get(&form, answer_id)
             .await?
-            .ok_or(FormNotFound)?;
-
-        Ok((form, answer_entry_set))
+            .ok_or(AnswerNotFound)
+            .map_err(Into::into)
     }
 
     async fn build_comments_with_authors(
@@ -94,14 +87,9 @@ impl<
         answer_id: AnswerId,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
         let actor_user = Actor::from(actor.clone());
-        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
-
-        let entry = form
-            .read_entry(&answer_entry_set, answer_id)
-            .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
-                error => Error::from(error),
-            })?;
+        let entry = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
+            .await?;
 
         let comments = self
             .comment_repository
@@ -122,14 +110,9 @@ impl<
         content: CommentContent,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
-
-        let entry = form
-            .read_entry(&answer_entry_set, answer_id)
-            .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
-                error => Error::from(error),
-            })?;
+        let entry = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
+            .await?;
 
         let comment = entry.create_comment(content)?;
 
@@ -145,13 +128,9 @@ impl<
         content: Option<CommentContent>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
-        let entry = form
-            .read_entry(&answer_entry_set, answer_id)
-            .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
-                error => Error::from(error),
-            })?;
+        let entry = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
+            .await?;
         let current_comment = self
             .comment_repository
             .find_by_answer(&entry)
@@ -177,13 +156,9 @@ impl<
         comment_id: CommentId,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (form, answer_entry_set) = self.read_form_and_entry_set(&actor_user, form_id).await?;
-        let entry = form
-            .read_entry(&answer_entry_set, answer_id)
-            .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
-                error => Error::from(error),
-            })?;
+        let entry = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
+            .await?;
         let comment = self
             .comment_repository
             .find_by_answer(&entry)

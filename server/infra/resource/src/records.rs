@@ -301,7 +301,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             id,
             author,
             timestamp,
-            form_id: _,
+            form_id,
             title,
             contents,
             messages: _,
@@ -318,6 +318,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                 Uuid::from_str(&id)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
+                FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
                 author,
                 timestamp,
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),

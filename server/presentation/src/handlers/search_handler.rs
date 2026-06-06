@@ -66,7 +66,7 @@ pub async fn cross_search(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
     };
 
@@ -102,7 +102,7 @@ pub async fn start_sync(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
     };
 
@@ -121,7 +121,7 @@ pub async fn start_watch_out_of_sync(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
     };
 
@@ -139,7 +139,7 @@ pub async fn initialize_search_engine(
         form_answer_label_repository: repository.answer_label_repository(),
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
     };
 

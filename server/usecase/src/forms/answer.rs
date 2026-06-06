@@ -4,13 +4,12 @@ use domain::{
             AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
             PostedAnswerContents,
         },
-        answer_entry_set::models::AnswerEntrySet,
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
     },
     repository::form::{
         active_form_repository::ActiveFormRepository,
-        answer_entry_set_repository::AnswerEntrySetRepository,
+        answer_entry_repository::AnswerEntryRepository,
         answer_label_repository::AnswerLabelRepository,
     },
     repository::user_repository::UserRepository,
@@ -22,8 +21,7 @@ use errors::{
     domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound},
 };
-use futures::{StreamExt, TryStreamExt, stream};
-use std::collections::HashMap;
+use futures::{StreamExt, stream};
 
 use crate::{models::AnswerDetails, user_reference_resolver::resolve_user_references};
 
@@ -32,44 +30,32 @@ pub struct AnswerUseCase<
     FormRepo: ActiveFormRepository,
     AnswerLabelRepo: AnswerLabelRepository,
     UserRepo: UserRepository,
-    AnswerEntrySetRepo: AnswerEntrySetRepository,
+    AnswerEntryRepo: AnswerEntryRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
-    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub answer_entry_repository: &'a AnswerEntryRepo,
 }
 
 impl<
     R1: ActiveFormRepository,
     R2: AnswerLabelRepository,
     R3: UserRepository,
-    R4: AnswerEntrySetRepository,
+    R4: AnswerEntryRepository,
 > AnswerUseCase<'_, R1, R2, R3, R4>
 {
-    /// フォームのガードと、それに紐づく回答集合のガードを取得する。
-    ///
-    /// フォームの読み取り認可を通過したうえで [`AnswerEntrySet`] の所属を検証し、
-    /// 個々の回答の認可は返り値の [`Allowed<ActiveForm, Read>`] を起点に行う。
-    async fn read_form_and_entry_set(
+    async fn read_form(
         &self,
         form_id: FormId,
         actor: &Actor,
-    ) -> Result<(Allowed<ActiveForm, Read>, Allowed<AnswerEntrySet, Read>), Error> {
-        let form = self
-            .active_form_repository
+    ) -> Result<Allowed<ActiveForm, Read>, Error> {
+        self.active_form_repository
             .get(form_id)
             .await?
             .ok_or(FormNotFound)?
-            .try_read(actor.clone())?;
-
-        let answer_entry_set = self
-            .answer_entry_set_repository
-            .get_read(&form)
-            .await?
-            .ok_or(FormNotFound)?;
-
-        Ok((form, answer_entry_set))
+            .try_read(actor.clone())
+            .map_err(Into::into)
     }
 
     async fn build_answer_details(
@@ -137,14 +123,8 @@ impl<
         let author = AnswerAuthor::AuthenticatedUser(*user.id());
         let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
 
-        let answer_entry_set = self
-            .answer_entry_set_repository
-            .get_read(&form)
-            .await?
-            .ok_or(FormNotFound)?;
-
-        self.answer_entry_set_repository
-            .add_entry(&answer_entry_set, &answer_entry)
+        self.answer_entry_repository
+            .post(&form, &answer_entry)
             .await
     }
 
@@ -178,14 +158,8 @@ impl<
         let author = AnswerAuthor::TemporaryUser(temporary_user);
         let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
 
-        let answer_entry_set = self
-            .answer_entry_set_repository
-            .get_read(&form)
-            .await?
-            .ok_or(FormNotFound)?;
-
-        self.answer_entry_set_repository
-            .add_entry(&answer_entry_set, &answer_entry)
+        self.answer_entry_repository
+            .post(&form, &answer_entry)
             .await
     }
 
@@ -196,14 +170,13 @@ impl<
         user: &ActiveUser,
     ) -> Result<AnswerDetails, Error> {
         let actor = Actor::from(user.clone());
-        let (form, answer_entry_set) = self.read_form_and_entry_set(form_id, &actor).await?;
+        let form = self.read_form(form_id, &actor).await?;
 
-        let form_answer =
-            form.read_entry(&answer_entry_set, answer_id)
-                .map_err(|error| match error {
-                    DomainError::NotFound => Error::from(AnswerNotFound),
-                    error => Error::from(error),
-                })?;
+        let form_answer = self
+            .answer_entry_repository
+            .get(&form, answer_id)
+            .await?
+            .ok_or(AnswerNotFound)?;
 
         let labels = self
             .answer_label_repository
@@ -227,9 +200,9 @@ impl<
         actor: &ActiveUser,
     ) -> Result<Vec<AnswerDetails>, Error> {
         let actor_ref = Actor::from(actor.clone());
-        let (form, answer_entry_set) = self.read_form_and_entry_set(form_id, &actor_ref).await?;
+        let form = self.read_form(form_id, &actor_ref).await?;
 
-        let visible_answers = form.readable_entries(&answer_entry_set);
+        let visible_answers = self.answer_entry_repository.list_by_form(&form).await?;
 
         stream::iter(visible_answers)
             .then(|form_answer| async {
@@ -257,44 +230,21 @@ impl<
 
     pub async fn get_all_answers(&self, user: &ActiveUser) -> Result<Vec<AnswerDetails>, Error> {
         let actor_ref = Actor::from(user.clone());
-        let forms = self
+        let readable_forms = self
             .active_form_repository
             .list(None, None)
             .await?
             .into_iter()
             .filter_map(|form| form.try_read(actor_ref.clone()).ok())
             .collect::<Vec<_>>();
-        let answer_entry_sets = self
-            .answer_entry_set_repository
-            .list_read_by_forms(&forms)
-            .await?;
-        let form_by_id = forms
+
+        let visible_answers: Vec<(FormId, Allowed<AnswerEntry, Read>)> = self
+            .answer_entry_repository
+            .list_all(&readable_forms)
+            .await?
             .into_iter()
-            .map(|form| (form.value().id().into_inner(), form))
-            .collect::<HashMap<_, _>>();
-
-        let visible_answers: Vec<(FormId, Allowed<AnswerEntry, Read>)> =
-            stream::iter(answer_entry_sets)
-                .then(|answer_entry_set| {
-                    let form_by_id = &form_by_id;
-                    async move {
-                        let form_id = *answer_entry_set.form_id();
-                        let Some(form) = form_by_id.get(&form_id.into_inner()) else {
-                            return Ok::<_, Error>(Vec::new());
-                        };
-
-                        Ok(form
-                            .readable_entries(&answer_entry_set)
-                            .into_iter()
-                            .map(|entry| (form_id, entry))
-                            .collect::<Vec<_>>())
-                    }
-                })
-                .try_collect::<Vec<Vec<_>>>()
-                .await?
-                .into_iter()
-                .flatten()
-                .collect();
+            .map(|entry| (*entry.value().form_id(), entry))
+            .collect();
 
         stream::iter(visible_answers)
             .then(|(form_id, form_answer)| {
@@ -341,7 +291,7 @@ impl<
         title: Option<AnswerTitle>,
     ) -> Result<AnswerDetails, Error> {
         let actor_ref = Actor::from(actor.clone());
-        let (form, answer_entry_set) = self.read_form_and_entry_set(form_id, &actor_ref).await?;
+        let form = self.read_form(form_id, &actor_ref).await?;
 
         let form_answer = match title {
             Some(title) => {
@@ -352,31 +302,27 @@ impl<
                     .ok_or(FormNotFound)?
                     .into_update()
                     .try_update(actor_ref.clone())?;
-                let set_update = self
-                    .answer_entry_set_repository
-                    .get_update(&form_update)
+                let entry = self
+                    .answer_entry_repository
+                    .get(&form, answer_id)
                     .await?
-                    .ok_or(FormNotFound)?;
-                let form_answer = form_update.change_entry_title(&set_update, answer_id, title)?;
+                    .ok_or(AnswerNotFound)?;
+                let updated_entry = form_update.change_entry_title(entry.into_inner(), title)?;
 
-                self.answer_entry_set_repository
-                    .update_entry(&set_update, &form_answer)
+                self.answer_entry_repository
+                    .update(&form_update, &updated_entry)
                     .await?;
 
-                let (form, answer_entry_set) =
-                    self.read_form_and_entry_set(form_id, &actor_ref).await?;
-                form.read_entry(&answer_entry_set, answer_id)
-                    .map_err(|error| match error {
-                        DomainError::NotFound => Error::from(AnswerNotFound),
-                        error => Error::from(error),
-                    })?
+                self.answer_entry_repository
+                    .get(&form, answer_id)
+                    .await?
+                    .ok_or(AnswerNotFound)?
             }
-            None => form
-                .read_entry(&answer_entry_set, answer_id)
-                .map_err(|error| match error {
-                    DomainError::NotFound => Error::from(AnswerNotFound),
-                    error => Error::from(error),
-                })?,
+            None => self
+                .answer_entry_repository
+                .get(&form, answer_id)
+                .await?
+                .ok_or(AnswerNotFound)?,
         };
 
         let labels = self

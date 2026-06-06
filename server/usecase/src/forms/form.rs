@@ -8,7 +8,7 @@ use domain::{
     repository::{
         form::{
             active_form_repository::ActiveFormRepository,
-            answer_entry_set_repository::AnswerEntrySetRepository,
+            answer_entry_repository::AnswerEntryRepository,
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
         },
@@ -34,14 +34,14 @@ pub struct FormUseCase<
     ArchivedFormRepo: ArchivedFormRepository,
     NotificationRepo: NotificationRepository,
     FormLabelRepo: FormLabelRepository,
-    AnswerEntrySetRepo: AnswerEntrySetRepository,
+    AnswerEntryRepo: AnswerEntryRepository,
     UserRepo: UserRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub archived_form_repository: &'a ArchivedFormRepo,
     pub notification_repository: &'a NotificationRepo,
     pub form_label_repository: &'a FormLabelRepo,
-    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub answer_entry_repository: &'a AnswerEntryRepo,
     pub user_repository: &'a UserRepo,
 }
 
@@ -50,7 +50,7 @@ impl<
     R2: ArchivedFormRepository,
     R3: NotificationRepository,
     R4: FormLabelRepository,
-    R5: AnswerEntrySetRepository,
+    R5: AnswerEntryRepository,
     R6: UserRepository,
 > FormUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
@@ -336,12 +336,12 @@ impl<
                 .into());
             }
 
-            let answer_entry_set = self
-                .answer_entry_set_repository
-                .get_read(&current_form_read)
+            if !self
+                .answer_entry_repository
+                .list_by_form(&current_form_read)
                 .await?
-                .ok_or(Error::from(FormNotFound))?;
-            if answer_entry_set.has_entries() {
+                .is_empty()
+            {
                 validate_answered_form_question_update(&current_questions, questions.as_slice())?;
             }
         }
@@ -635,7 +635,7 @@ mod tests {
         repository::{
             form::{
                 active_form_repository::MockActiveFormRepository,
-                answer_entry_set_repository::MockAnswerEntrySetRepository,
+                answer_entry_repository::MockAnswerEntryRepository,
                 archived_form_repository::MockArchivedFormRepository,
                 form_label_repository::MockFormLabelRepository,
             },
@@ -717,7 +717,7 @@ mod tests {
             .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
 
         let form_label_repository = MockFormLabelRepository::new();
-        let answer_entry_set_repository = MockAnswerEntrySetRepository::new();
+        let answer_entry_repository = MockAnswerEntryRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
         let user_repository = MockUserRepository::new();
@@ -727,7 +727,7 @@ mod tests {
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
-            answer_entry_set_repository: &answer_entry_set_repository,
+            answer_entry_repository: &answer_entry_repository,
             user_repository: &user_repository,
         };
 
@@ -766,7 +766,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(vec![]));
 
-        let answer_entry_set_repository = MockAnswerEntrySetRepository::new();
+        let answer_entry_repository = MockAnswerEntryRepository::new();
         let archived_form_repository = MockArchivedFormRepository::new();
         let notification_repository = MockNotificationRepository::new();
         let user_repository = MockUserRepository::new();
@@ -776,7 +776,7 @@ mod tests {
             archived_form_repository: &archived_form_repository,
             notification_repository: &notification_repository,
             form_label_repository: &form_label_repository,
-            answer_entry_set_repository: &answer_entry_set_repository,
+            answer_entry_repository: &answer_entry_repository,
             user_repository: &user_repository,
         };
 

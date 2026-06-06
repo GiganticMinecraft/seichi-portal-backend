@@ -12,7 +12,7 @@ use domain::{
     repository::{
         form::{
             active_form_repository::ActiveFormRepository,
-            answer_entry_set_repository::AnswerEntrySetRepository,
+            answer_entry_repository::AnswerEntryRepository,
             message_thread_repository::MessageThreadRepository,
         },
         notification_repository::NotificationRepository,
@@ -26,7 +26,6 @@ use domain::{
 };
 use errors::{
     Error,
-    domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound, UserNotFound},
 };
 
@@ -37,13 +36,13 @@ pub struct MessageUseCase<
     NotificationRepo: NotificationRepository,
     FormRepo: ActiveFormRepository,
     UserRepo: UserRepository,
-    AnswerEntrySetRepo: AnswerEntrySetRepository,
+    AnswerEntryRepo: AnswerEntryRepository,
     MessageThreadRepo: MessageThreadRepository,
 > {
     pub notification_repository: &'a NotificationRepo,
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
-    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub answer_entry_repository: &'a AnswerEntryRepo,
     pub message_thread_repository: &'a MessageThreadRepo,
 }
 
@@ -51,7 +50,7 @@ impl<
     R1: NotificationRepository,
     R2: ActiveFormRepository,
     R3: UserRepository,
-    R4: AnswerEntrySetRepository,
+    R4: AnswerEntryRepository,
     R5: MessageThreadRepository,
 > MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
@@ -68,17 +67,11 @@ impl<
             .ok_or(FormNotFound)?
             .try_read(actor.clone())?;
 
-        let answer_entry_set = self
-            .answer_entry_set_repository
-            .get_read(&form)
+        self.answer_entry_repository
+            .get(&form, answer_id)
             .await?
-            .ok_or(FormNotFound)?;
-
-        form.read_entry(&answer_entry_set, answer_id)
-            .map_err(|error| match error {
-                DomainError::NotFound => Error::from(AnswerNotFound),
-                error => Error::from(error),
-            })
+            .ok_or(AnswerNotFound)
+            .map_err(Into::into)
     }
 
     pub async fn post_message<N: Notificator>(

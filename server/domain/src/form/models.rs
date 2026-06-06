@@ -17,10 +17,7 @@ use types::non_empty_string::NonEmptyString;
 pub use crate::form::question::models::{Question, QuestionSet};
 
 use crate::{
-    form::{
-        answer::models::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, PostedAnswerContents},
-        answer_entry_set::models::AnswerEntrySet,
-    },
+    form::answer::models::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
     types::authorization_guard::{
         Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Authorizes, Create, Read,
         SelfGuarded, Update,
@@ -211,8 +208,7 @@ impl ResponsePeriod {
 ///
 /// 回答の公開範囲・受付期間・仮回答可否・デフォルトタイトルといった「ポリシー」を保持し、
 /// [`AnswerEntry`] の閲覧可否 ([`Self::can_read_entry`]) や新規受理 ([`Self::try_accept_answer`])
-/// を判断します。この値オブジェクトは [`ActiveForm`] が所有し、回答の集合である
-/// [`AnswerEntrySet`] は構造（所属）のみを担います。
+/// を判断します。この値オブジェクトは [`ActiveForm`] が所有します。
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
 pub struct AnswerSettings {
@@ -281,6 +277,7 @@ impl AnswerSettings {
 
     pub fn try_accept_answer(
         &self,
+        form_id: FormId,
         author: AnswerAuthor,
         actor: &Actor,
         title: AnswerTitle,
@@ -290,7 +287,7 @@ impl AnswerSettings {
             return Err(DomainError::Forbidden);
         }
 
-        Ok(AnswerEntry::new(author, title, posted_answers))
+        Ok(AnswerEntry::new(form_id, author, title, posted_answers))
     }
 
     /// `actor` が `entry` を閲覧できるかどうかを、回答の公開範囲をもとに判断します。
@@ -446,38 +443,26 @@ impl ActiveForm {
 
 /// [`ActiveForm`] のガードを起点とした、回答 ([`AnswerEntry`]) への認可の連鎖。
 ///
-/// `Allowed<AnswerEntrySet, _>` は [`ActiveForm`] が [`AnswerEntrySet`] の所属
-/// (`form_id` 一致) を確認することでのみ生成でき、個々の [`AnswerEntry`] の閲覧可否は
-/// [`ActiveForm`] が保持する [`AnswerSettings`] のポリシーで判断される。所属検証と
-/// ポリシー判断のいずれもドメイン内で完結する。
-impl Authorizes<AnswerEntrySet, Read> for ActiveForm {
-    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> bool {
-        set.form_id() == self.id()
-    }
-}
-
-impl Authorizes<AnswerEntrySet, Update> for ActiveForm {
-    fn check(&self, _actor: &Actor, set: &AnswerEntrySet) -> bool {
-        set.form_id() == self.id()
-    }
-}
-
+/// 個々の [`AnswerEntry`] の所属 (`form_id` 一致) と閲覧可否は、いずれも
+/// [`ActiveForm`] が保持する [`AnswerSettings`] のポリシーをもとにドメイン内で判断される。
 impl Authorizes<AnswerEntry, Read> for ActiveForm {
     fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
-        self.answer_settings.can_read_entry(entry, actor)
+        entry.form_id() == self.id() && self.answer_settings.can_read_entry(entry, actor)
     }
 }
 
 impl Authorizes<AnswerEntry, Update> for ActiveForm {
-    fn check(&self, actor: &Actor, _entry: &AnswerEntry) -> bool {
-        is_administrator(actor)
+    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
+        entry.form_id() == self.id() && is_administrator(actor)
     }
 }
 
 impl Authorizes<AnswerEntry, Create> for ActiveForm {
     fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
-        self.answer_settings
-            .can_accept_answer(entry.author(), actor)
+        entry.form_id() == self.id()
+            && self
+                .answer_settings
+                .can_accept_answer(entry.author(), actor)
     }
 }
 
@@ -491,6 +476,7 @@ impl Allowed<ActiveForm, Read> {
         posted_answers: PostedAnswerContents,
     ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
         let entry = self.value().answer_settings.try_accept_answer(
+            *self.value().id(),
             author,
             self.actor(),
             title,
@@ -499,65 +485,34 @@ impl Allowed<ActiveForm, Read> {
         self.authorize_create(entry)
     }
 
-    /// `set` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
-    pub fn readable_entries(
-        &self,
-        set: &Allowed<AnswerEntrySet, Read>,
-    ) -> Vec<Allowed<AnswerEntry, Read>> {
-        if set.value().form_id() != self.value().id() {
-            return Vec::new();
-        }
-
-        set.value()
-            .entries()
-            .iter()
-            .filter_map(|entry| self.authorize_read(entry.to_owned()).ok())
+    /// `entries` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
+    /// 所属 (`form_id` 一致) と公開範囲はいずれも [`Authorizes`] の判定で担保される。
+    pub fn readable_entries(&self, entries: Vec<AnswerEntry>) -> Vec<Allowed<AnswerEntry, Read>> {
+        entries
+            .into_iter()
+            .filter_map(|entry| self.authorize_read(entry).ok())
             .collect()
     }
 
-    /// `set` に含まれる `answer_id` の [`AnswerEntry`] を、所属と公開範囲を検証したうえで
-    /// 認可済みで返します。
+    /// `entry` を、所属 (`form_id` 一致) と公開範囲を検証したうえで認可済みで返します。
     pub fn read_entry(
         &self,
-        set: &Allowed<AnswerEntrySet, Read>,
-        answer_id: AnswerId,
+        entry: AnswerEntry,
     ) -> Result<Allowed<AnswerEntry, Read>, DomainError> {
-        if set.value().form_id() != self.value().id() {
-            return Err(DomainError::Forbidden);
-        }
-
-        let entry = set
-            .value()
-            .find_entry(answer_id)
-            .ok_or(DomainError::NotFound)?
-            .clone();
-
         self.authorize_read(entry)
     }
 }
 
 impl Allowed<ActiveForm, Update> {
-    /// `set` に含まれる `answer_id` の [`AnswerEntry`] のタイトルだけを変更し、更新認可済みで
-    /// 返します。タイトル以外が変わらないことは [`AnswerEntry::with_title`] による構築で保証され、
-    /// 更新権限は [`ActiveForm`] のガード経由で保証される。
+    /// `entry` のタイトルだけを変更し、更新認可済みで返します。タイトル以外が変わらないことは
+    /// [`AnswerEntry::with_title`] による構築で保証され、所属と更新権限は [`ActiveForm`] の
+    /// ガード経由で保証される。
     pub fn change_entry_title(
         &self,
-        set: &Allowed<AnswerEntrySet, Update>,
-        answer_id: AnswerId,
+        entry: AnswerEntry,
         title: AnswerTitle,
     ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
-        if set.value().form_id() != self.value().id() {
-            return Err(DomainError::Forbidden);
-        }
-
-        let entry = set
-            .value()
-            .find_entry(answer_id)
-            .ok_or(DomainError::NotFound)?
-            .clone()
-            .with_title(title);
-
-        self.authorize_update(entry)
+        self.authorize_update(entry.with_title(title))
     }
 }
 
@@ -1079,6 +1034,7 @@ mod tests {
 
     fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
         AnswerEntry::new(
+            FormId::new(),
             author,
             AnswerTitle::new(None),
             PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
@@ -1104,6 +1060,7 @@ mod tests {
         assert!(
             settings
                 .try_accept_answer(
+                    FormId::new(),
                     author,
                     &actor,
                     AnswerTitle::new(None),
@@ -1128,6 +1085,7 @@ mod tests {
         assert!(
             settings
                 .try_accept_answer(
+                    FormId::new(),
                     author,
                     &actor,
                     AnswerTitle::new(None),
@@ -1159,6 +1117,7 @@ mod tests {
         assert!(
             settings
                 .try_accept_answer(
+                    FormId::new(),
                     author,
                     &actor,
                     AnswerTitle::new(None),
