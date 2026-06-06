@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::form::{
     answer::models::AnswerEntry,
-    answer_entry_set::models::AnswerEntrySet,
     models::{FormLabelId, WebhookUrl},
     question::models::{Choice, Question, QuestionId, QuestionType},
 };
@@ -249,26 +248,29 @@ fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, Infra
     })
 }
 
-async fn fetch_answer_entries_for_entry_set(
+/// 回答 ([`AnswerEntry`]) を取得する。`form_id` を指定するとそのフォームの回答だけを、
+/// `None` を指定すると全フォームの回答を取得する。
+async fn fetch_answer_entries(
     txn: &mut DatabaseTransaction,
-    form_id: FormId,
+    form_id: Option<FormId>,
 ) -> Result<Vec<AnswerEntry>, InfraError> {
-    let form_id = form_id.into_inner().to_string();
-
-    let answers = sqlx::query(
-        r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
+    let base_query = r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
             users.name AS user_name, users.role AS user_role,
             temporary_user_id, temporary_users.name AS temporary_user_name,
             temporary_users.contact_text AS temporary_user_contact_text,
             timestamp FROM answers
             LEFT JOIN users ON answers.user = users.id
-            LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-            WHERE form_id = ?
-            ORDER BY answers.timestamp",
-    )
-    .bind(form_id)
-    .fetch_all(&mut **txn)
-    .await?;
+            LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id";
+    let sql = match form_id {
+        Some(_) => format!("{base_query} WHERE form_id = ? ORDER BY answers.timestamp"),
+        None => format!("{base_query} ORDER BY answers.timestamp"),
+    };
+
+    let mut query = sqlx::query(&sql);
+    if let Some(form_id) = form_id {
+        query = query.bind(form_id.into_inner().to_string());
+    }
+    let answers = query.fetch_all(&mut **txn).await?;
 
     let form_answer_records = answers
         .into_iter()
@@ -301,14 +303,6 @@ async fn fetch_answer_entries_for_entry_set(
         .map_err(|error: Error| InfraError::Unexpected {
             cause: error.to_string(),
         })
-}
-
-async fn answer_entry_set_for_form(
-    txn: &mut DatabaseTransaction,
-    form_id: FormId,
-) -> Result<AnswerEntrySet, InfraError> {
-    let entries = fetch_answer_entries_for_entry_set(txn, form_id).await?;
-    Ok(unsafe { AnswerEntrySet::from_raw_parts(form_id, entries) })
 }
 
 async fn fetch_form_row(
@@ -937,52 +931,17 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn get_answer_entry_set(
-        &self,
-        form_id: FormId,
-    ) -> Result<Option<AnswerEntrySet>, InfraError> {
+    async fn list_answer_entries(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                if fetch_form_row(txn, form_id).await?.is_none() {
-                    return Ok(None);
-                }
-
-                answer_entry_set_for_form(txn, form_id).await.map(Some)
-            })
+            Box::pin(async move { fetch_answer_entries(txn, Some(form_id)).await })
         })
         .await
     }
 
     #[tracing::instrument]
-    async fn list_answer_entry_sets(&self) -> Result<Vec<AnswerEntrySet>, InfraError> {
+    async fn list_all_answer_entries(&self) -> Result<Vec<AnswerEntry>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let form_ids = sqlx::query("SELECT id FROM form_meta_data ORDER BY id")
-                    .fetch_all(&mut **txn)
-                    .await?
-                    .into_iter()
-                    .map(|row| {
-                        Ok::<_, InfraError>(FormId::from(Uuid::parse_str(
-                            &row.try_get::<String, _>("id")?,
-                        )?))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                stream::try_unfold(
-                    (form_ids.into_iter(), txn),
-                    |(mut form_ids, txn)| async move {
-                        match form_ids.next() {
-                            Some(form_id) => {
-                                let set = answer_entry_set_for_form(txn, form_id).await?;
-                                Ok::<_, InfraError>(Some((set, (form_ids, txn))))
-                            }
-                            None => Ok::<_, InfraError>(None),
-                        }
-                    },
-                )
-                .try_collect()
-                .await
-            })
+            Box::pin(async move { fetch_answer_entries(txn, None).await })
         })
         .await
     }

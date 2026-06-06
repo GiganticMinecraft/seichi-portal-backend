@@ -57,7 +57,7 @@ impl Comment {
 // を実装しない。コメントは親である
 // [`AnswerEntry`](crate::form::answer::models::AnswerEntry) のガードを起点としてのみ
 // 認可され、その条件 (閲覧・作成・更新・削除) は
-// [`crate::form::answer_entry_set::models`] の `Authorizes<Comment, _>` が担う。
+// [`crate::form::answer::models`] の `Authorizes<Comment, _>` が担う。
 
 impl AuthorizationRole for Comment {
     type Role = ParentGuarded;

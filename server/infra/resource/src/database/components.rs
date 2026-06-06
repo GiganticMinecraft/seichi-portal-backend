@@ -13,7 +13,6 @@ use domain::search::models::{
 use domain::{
     form::{
         answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
-        answer_entry_set::models::AnswerEntrySet,
         comment::models::{Comment, CommentId},
         message::models::{Message, MessageId},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
@@ -77,11 +76,8 @@ pub trait FormDatabase: Send + Sync {
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
-    async fn get_answer_entry_set(
-        &self,
-        form_id: FormId,
-    ) -> Result<Option<AnswerEntrySet>, InfraError>;
-    async fn list_answer_entry_sets(&self) -> Result<Vec<AnswerEntrySet>, InfraError>;
+    async fn list_answer_entries(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, InfraError>;
+    async fn list_all_answer_entries(&self) -> Result<Vec<AnswerEntry>, InfraError>;
 }
 
 #[automock]

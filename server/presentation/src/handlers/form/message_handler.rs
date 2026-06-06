@@ -88,7 +88,7 @@ pub async fn post_message_handler<N: Notificator>(
         notification_repository: state.repository.notification_repository(),
         active_form_repository: state.repository.active_form_repository(),
         user_repository: state.repository.user_repository(),
-        answer_entry_set_repository: state.repository.answer_entry_set_repository(),
+        answer_entry_repository: state.repository.answer_entry_repository(),
         message_thread_repository: state.repository.message_thread_repository(),
     };
 
@@ -135,7 +135,7 @@ pub async fn update_message_handler(
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         message_thread_repository: repository.message_thread_repository(),
     };
 
@@ -179,7 +179,7 @@ pub async fn get_messages_handler(
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         message_thread_repository: repository.message_thread_repository(),
     };
 
@@ -236,7 +236,7 @@ pub async fn delete_message_handler(
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         message_thread_repository: repository.message_thread_repository(),
     };
 

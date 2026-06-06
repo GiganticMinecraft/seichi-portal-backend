@@ -1,5 +1,5 @@
 use crate::models::CrossSearchOutput;
-use domain::repository::form::answer_entry_set_repository::AnswerEntrySetRepository;
+use domain::repository::form::answer_entry_repository::AnswerEntryRepository;
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
@@ -7,11 +7,7 @@ use domain::repository::user_repository::UserRepository;
 use domain::search::models::NumberOfRecords;
 use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
-    form::{
-        answer::models::{AnswerEntry, AnswerId},
-        answer_entry_set::models::AnswerEntrySet,
-        models::ActiveForm,
-    },
+    form::answer::models::{AnswerEntry, AnswerId},
     repository::{
         form::active_form_repository::ActiveFormRepository, search_repository::SearchRepository,
     },
@@ -21,12 +17,10 @@ use domain::{
 };
 use errors::Error;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
 use tokio::time;
-use uuid::Uuid;
 
 pub struct SearchUseCase<
     'a,
@@ -35,7 +29,7 @@ pub struct SearchUseCase<
     FormAnswerLabelRepo: AnswerLabelRepository,
     FormLabelRepo: FormLabelRepository,
     UserRepo: UserRepository,
-    AnswerEntrySetRepo: AnswerEntrySetRepository,
+    AnswerEntryRepo: AnswerEntryRepository,
     CommentRepo: CommentRepository,
 > {
     pub search_repository: &'a SearchRepo,
@@ -43,7 +37,7 @@ pub struct SearchUseCase<
     pub form_answer_label_repository: &'a FormAnswerLabelRepo,
     pub form_label_repository: &'a FormLabelRepo,
     pub user_repository: &'a UserRepo,
-    pub answer_entry_set_repository: &'a AnswerEntrySetRepo,
+    pub answer_entry_repository: &'a AnswerEntryRepo,
     pub comment_repository: &'a CommentRepo,
 }
 
@@ -53,26 +47,21 @@ impl<
     R3: AnswerLabelRepository,
     R4: FormLabelRepository,
     R5: UserRepository,
-    R6: AnswerEntrySetRepository,
+    R6: AnswerEntryRepository,
     R7: CommentRepository,
 > SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
 {
-    /// `answer_entry_sets` の中から `answer_id` を含む回答集合を探し、フォームの回答公開範囲を
-    /// 検証したうえで、閲覧可能なら認可済みの [`AnswerEntry`] を返す。
+    /// 認可済みの `answer_entries` から `answer_id` の回答を探して返す。回答の公開範囲は
+    /// `answer_entries` を取得した時点で各フォームの読み取りガードが検証済みのため、ここでは
+    /// 同一性の照合だけを行う。
     fn read_visible_answer(
-        &self,
-        form_by_id: &HashMap<Uuid, Allowed<ActiveForm, Read>>,
-        answer_entry_sets: &[Allowed<AnswerEntrySet, Read>],
+        answer_entries: &[Allowed<AnswerEntry, Read>],
         answer_id: AnswerId,
-    ) -> Result<Option<Allowed<AnswerEntry, Read>>, Error> {
-        Ok(answer_entry_sets
+    ) -> Option<Allowed<AnswerEntry, Read>> {
+        answer_entries
             .iter()
-            .find(|answer_entry_set| answer_entry_set.find_entry(answer_id).is_some())
-            .and_then(|answer_entry_set| {
-                form_by_id
-                    .get(&answer_entry_set.form_id().into_inner())
-                    .and_then(|form| form.read_entry(answer_entry_set, answer_id).ok())
-            }))
+            .find(|entry| *entry.value().id() == answer_id)
+            .cloned()
     }
 
     pub async fn cross_search(
@@ -171,23 +160,17 @@ impl<
             .into_iter()
             .filter_map(|form| form.try_read(actor_ref.clone()).ok())
             .collect::<Vec<_>>();
-        let answer_entry_sets = self
-            .answer_entry_set_repository
-            .list_read_by_forms(&readable_forms)
+        let answer_entries = self
+            .answer_entry_repository
+            .list_all(&readable_forms)
             .await?;
-        let form_by_id = readable_forms
-            .into_iter()
-            .map(|form| (form.value().id().into_inner(), form))
-            .collect::<HashMap<_, _>>();
 
         let visible_answers = stream::iter(answers)
             .then(|entry| {
-                let answer_entry_sets = &answer_entry_sets;
-                let form_by_id = &form_by_id;
+                let answer_entries = &answer_entries;
 
                 async move {
-                    let Some(answer) =
-                        self.read_visible_answer(form_by_id, answer_entry_sets, entry.answer_id)?
+                    let Some(answer) = Self::read_visible_answer(answer_entries, entry.answer_id)
                     else {
                         return Ok::<_, Error>(None);
                     };
@@ -201,12 +184,10 @@ impl<
 
         let visible_comments = stream::iter(comments)
             .then(|comment| {
-                let answer_entry_sets = &answer_entry_sets;
-                let form_by_id = &form_by_id;
+                let answer_entries = &answer_entries;
 
                 async move {
-                    let Some(answer) =
-                        self.read_visible_answer(form_by_id, answer_entry_sets, comment.answer_id)?
+                    let Some(answer) = Self::read_visible_answer(answer_entries, comment.answer_id)
                     else {
                         return Ok::<_, Error>(None);
                     };
@@ -276,7 +257,7 @@ impl<
                     let repository_records = NumberOfRecordsPerAggregate {
                         form_meta_data: NumberOfRecords(self.active_form_repository.size().await?),
                         real_answers: NumberOfRecords(
-                            self.answer_entry_set_repository.size_entries().await?,
+                            self.answer_entry_repository.size().await?,
                         ),
                         form_answer_comments: NumberOfRecords(
                             self.comment_repository.size().await?,
@@ -317,20 +298,13 @@ impl<
                             })
                             .collect::<Result<Vec<_>, errors::Error>>()?;
 
-                        let answer_entry_sets = self
-                            .answer_entry_set_repository
-                            .list_read_by_forms(&form_guards)
-                            .await?;
+                        let answer_entries =
+                            self.answer_entry_repository.list_all(&form_guards).await?;
 
-                        let form_guards: HashMap<Uuid, Allowed<ActiveForm, Read>> = form_guards
-                            .into_iter()
-                            .map(|form| (form.value().id().into_inner(), form))
-                            .collect();
-
-                        let answers = answer_entry_sets
+                        let answers = answer_entries
                             .iter()
-                            .flat_map(|set| set.entries())
                             .flat_map(|entry| {
+                                let entry = entry.value();
                                 entry
                                     .contents()
                                     .iter()
@@ -351,17 +325,7 @@ impl<
                             })
                             .collect::<Vec<_>>();
 
-                        let comments = stream::iter(
-                            answer_entry_sets
-                                .iter()
-                                .filter_map(|set| {
-                                    form_guards
-                                        .get(&set.form_id().into_inner())
-                                        .map(|form| form.readable_entries(set))
-                                })
-                                .flatten()
-                                .collect::<Vec<_>>(),
-                        )
+                        let comments = stream::iter(answer_entries.clone())
                         .then(|answer| async move {
                             self.comment_repository
                                 .find_by_answer(&answer)

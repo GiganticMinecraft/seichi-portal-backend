@@ -10,9 +10,14 @@ use std::collections::{BTreeSet, HashMap};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    form::question::models::{Question, QuestionId},
+    form::{
+        comment::models::{Comment, CommentContent},
+        models::FormId,
+        question::models::{Question, QuestionId},
+    },
     types::authorization_guard::{
-        AuthorizationGuardDefinitions, AuthorizationRole, ParentGuarded, SelfGuarded,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Authorizes, Create, Delete,
+        ParentGuarded, Read, SelfGuarded, Update,
     },
     user::models::{Actor, Role, TemporaryUser, User, UserId},
 };
@@ -161,6 +166,7 @@ impl PostedAnswerContents {
 #[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, PartialEq, Debug)]
 pub struct AnswerEntry {
     id: AnswerId,
+    form_id: FormId,
     author: AnswerAuthor,
     timestamp: DateTime<Utc>,
     title: AnswerTitle,
@@ -169,9 +175,15 @@ pub struct AnswerEntry {
 
 impl AnswerEntry {
     /// [`AnswerEntry`] を新しく作成します。
-    pub fn new(author: AnswerAuthor, title: AnswerTitle, contents: PostedAnswerContents) -> Self {
+    pub fn new(
+        form_id: FormId,
+        author: AnswerAuthor,
+        title: AnswerTitle,
+        contents: PostedAnswerContents,
+    ) -> Self {
         Self {
             id: AnswerId::new(),
+            form_id,
             author,
             timestamp: Utc::now(),
             title,
@@ -186,6 +198,60 @@ impl AnswerEntry {
 
 impl AuthorizationRole for AnswerEntry {
     type Role = ParentGuarded;
+}
+
+impl Authorizes<Comment, Read> for AnswerEntry {
+    fn check(&self, _actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
+    }
+}
+
+impl Authorizes<Comment, Create> for AnswerEntry {
+    fn check(&self, actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
+            && matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
+    }
+}
+
+impl Authorizes<Comment, Update> for AnswerEntry {
+    fn check(&self, actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
+            && matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
+    }
+}
+
+impl Authorizes<Comment, Delete> for AnswerEntry {
+    fn check(&self, actor: &Actor, child: &Comment) -> bool {
+        child.answer_id() == self.id()
+            && matches!(
+                actor,
+                Actor::User(User::ActiveUser(user))
+                    if user.id() == child.commented_by() || user.role() == &Role::Administrator
+            )
+    }
+}
+
+impl Allowed<AnswerEntry, Read> {
+    pub fn authorize_comment(
+        &self,
+        comment: Comment,
+    ) -> Result<Allowed<Comment, Read>, DomainError> {
+        self.authorize_read(comment)
+    }
+
+    pub fn create_comment(
+        &self,
+        content: CommentContent,
+    ) -> Result<Allowed<Comment, Create>, DomainError> {
+        let commented_by = match self.actor() {
+            Actor::User(User::ActiveUser(user)) => *user.id(),
+            _ => return Err(DomainError::Forbidden),
+        };
+
+        let comment = Comment::new(*self.value().id(), content, commented_by);
+
+        self.authorize_create(comment)
+    }
 }
 
 pub type AnswerLabelId = types::Id<AnswerLabel>;

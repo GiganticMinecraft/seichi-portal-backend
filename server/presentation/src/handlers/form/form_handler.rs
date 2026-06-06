@@ -155,7 +155,7 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
         archived_form_repository: repository.archived_form_repository(),
         notification_repository: repository.notification_repository(),
         form_label_repository: repository.form_label_repository(),
-        answer_entry_set_repository: repository.answer_entry_set_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
         user_repository: repository.user_repository(),
     }
 }
