@@ -9,7 +9,14 @@
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | UNIQUE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
           "max_size": 72
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.discord_linked_users",
+            "name": "discord_id"
+          }
         }
       },
       {
@@ -18,7 +25,14 @@
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
           "max_size": 128
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.discord_linked_users",
+            "name": "discord_username"
+          }
         }
       }
     ],

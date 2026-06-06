@@ -9,7 +9,14 @@
         "type_info": {
           "type": "Tiny",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 63,
           "max_size": 1
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.discord_notification_settings",
+            "name": "is_send_message_notification"
+          }
         }
       },
       {
@@ -18,7 +25,14 @@
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
           "max_size": 64
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "name"
+          }
         }
       },
       {
@@ -27,7 +41,14 @@
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
           "max_size": 52
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "role"
+          }
         }
       }
     ],

@@ -7,7 +7,7 @@ use errors::infra::InfraError;
 use itertools::Itertools;
 use redis::Commands;
 use sha256::digest;
-use sqlx::{Row, query};
+use sqlx::{AssertSqlSafe, Row, query};
 use uuid::Uuid;
 
 use crate::{
@@ -64,7 +64,7 @@ impl UserDatabase for ConnectionPool {
 
                 let rows = uuid_strings
                     .iter()
-                    .fold(query(&sql), |query, uuid| query.bind(uuid))
+                    .fold(query(AssertSqlSafe(&*sql)), |query, uuid| query.bind(uuid))
                     .fetch_all(&mut **txn)
                     .await?;
 
