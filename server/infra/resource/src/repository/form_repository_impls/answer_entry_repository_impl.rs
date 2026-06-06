@@ -58,6 +58,10 @@ where
         &self,
         forms: &[Allowed<ActiveForm, Read>],
     ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
+        if forms.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mut entries_by_form = self
             .client
             .form()
