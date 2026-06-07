@@ -140,8 +140,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
             .ok_or(Error::from(CommentNotFound))?;
 
         if let Some(content) = content {
-            let updated = entry
-                .authorize_update(current_comment.into_inner().with_updated_content(content))?;
+            let updated = entry.update_comment(current_comment.into_inner(), content)?;
             self.comment_repository.update(updated).await?;
         }
 
@@ -167,7 +166,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
             .find(|comment| *comment.value().comment_id() == comment_id)
             .ok_or(Error::from(CommentNotFound))?;
 
-        let comment = entry.authorize_delete(comment.into_inner())?;
+        let comment = entry.delete_comment(comment.into_inner())?;
 
         self.comment_repository.delete(comment).await
     }

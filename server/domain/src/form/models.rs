@@ -19,8 +19,8 @@ pub use crate::form::question::models::{Question, QuestionSet};
 use crate::{
     form::answer::models::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
     types::authorization_guard::{
-        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Authorizes, Create, Read,
-        SelfGuarded, Update,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Create, Read, SelfGuarded,
+        Update,
     },
     user::models::{Actor, Role::Administrator, User, UserId},
 };
@@ -261,7 +261,7 @@ impl AnswerSettings {
     /// `author` / `actor` の組み合わせと受付期間・仮回答可否から、新しい [`AnswerEntry`] を
     /// 受理してよいかを判断し、受理できる場合のみ [`AnswerEntry`] を生成します。
     /// `actor` が `author` として回答を作成してよいかを、受付期間と一時回答の可否から判定する。
-    fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
+    pub(crate) fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
         let is_within_period = self.response_period.is_within_period(Utc::now());
 
         match (author, actor) {
@@ -441,31 +441,6 @@ impl ActiveForm {
     }
 }
 
-/// [`ActiveForm`] のガードを起点とした、回答 ([`AnswerEntry`]) への認可の連鎖。
-///
-/// 個々の [`AnswerEntry`] の所属 (`form_id` 一致) と閲覧可否は、いずれも
-/// [`ActiveForm`] が保持する [`AnswerSettings`] のポリシーをもとにドメイン内で判断される。
-impl Authorizes<AnswerEntry, Read> for ActiveForm {
-    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
-        entry.form_id() == self.id() && self.answer_settings.can_read_entry(entry, actor)
-    }
-}
-
-impl Authorizes<AnswerEntry, Update> for ActiveForm {
-    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
-        entry.form_id() == self.id() && is_administrator(actor)
-    }
-}
-
-impl Authorizes<AnswerEntry, Create> for ActiveForm {
-    fn check(&self, actor: &Actor, entry: &AnswerEntry) -> bool {
-        entry.form_id() == self.id()
-            && self
-                .answer_settings
-                .can_accept_answer(entry.author(), actor)
-    }
-}
-
 impl Allowed<ActiveForm, Read> {
     /// 回答にまつわるポリシー ([`AnswerSettings`]) に委譲して、新しい [`AnswerEntry`] を
     /// 受理してよいかを判断し、認可済みの [`Allowed<AnswerEntry, Create>`] を返します。
@@ -486,7 +461,8 @@ impl Allowed<ActiveForm, Read> {
     }
 
     /// `entries` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
-    /// 所属 (`form_id` 一致) と公開範囲はいずれも [`Authorizes`] の判定で担保される。
+    /// 所属 (`form_id` 一致) と公開範囲はいずれも
+    /// [`GuardedBy`](crate::types::authorization_guard::GuardedBy) の判定で担保される。
     pub fn readable_entries(&self, entries: Vec<AnswerEntry>) -> Vec<Allowed<AnswerEntry, Read>> {
         entries
             .into_iter()

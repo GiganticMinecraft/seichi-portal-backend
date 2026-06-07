@@ -12,12 +12,12 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     form::{
         comment::models::{Comment, CommentContent},
-        models::FormId,
+        models::{ActiveForm, FormId},
         question::models::{Question, QuestionId},
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Authorizes, Create, Delete,
-        ParentGuarded, Read, SelfGuarded, Update,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, BelongsTo, Create, Delete,
+        GuardedBy, ParentGuarded, Read, SelfGuarded, Update,
     },
     user::models::{Actor, Role, TemporaryUser, User, UserId},
 };
@@ -197,37 +197,32 @@ impl AnswerEntry {
 }
 
 impl AuthorizationRole for AnswerEntry {
-    type Role = ParentGuarded;
+    type Role = ParentGuarded<ActiveForm>;
 }
 
-impl Authorizes<Comment, Read> for AnswerEntry {
-    fn check(&self, _actor: &Actor, child: &Comment) -> bool {
-        child.answer_id() == self.id()
+impl BelongsTo<ActiveForm> for AnswerEntry {
+    fn belongs_to(&self, parent: &ActiveForm) -> bool {
+        self.form_id() == parent.id()
     }
 }
 
-impl Authorizes<Comment, Create> for AnswerEntry {
-    fn check(&self, actor: &Actor, child: &Comment) -> bool {
-        child.answer_id() == self.id()
-            && matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
+impl GuardedBy<ActiveForm, Read> for AnswerEntry {
+    fn is_allowed_for(&self, parent: &ActiveForm, actor: &Actor) -> bool {
+        parent.answer_settings().can_read_entry(self, actor)
     }
 }
 
-impl Authorizes<Comment, Update> for AnswerEntry {
-    fn check(&self, actor: &Actor, child: &Comment) -> bool {
-        child.answer_id() == self.id()
-            && matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == child.commented_by())
+impl GuardedBy<ActiveForm, Update> for AnswerEntry {
+    fn is_allowed_for(&self, _parent: &ActiveForm, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
     }
 }
 
-impl Authorizes<Comment, Delete> for AnswerEntry {
-    fn check(&self, actor: &Actor, child: &Comment) -> bool {
-        child.answer_id() == self.id()
-            && matches!(
-                actor,
-                Actor::User(User::ActiveUser(user))
-                    if user.id() == child.commented_by() || user.role() == &Role::Administrator
-            )
+impl GuardedBy<ActiveForm, Create> for AnswerEntry {
+    fn is_allowed_for(&self, parent: &ActiveForm, actor: &Actor) -> bool {
+        parent
+            .answer_settings()
+            .can_accept_answer(self.author(), actor)
     }
 }
 
@@ -251,6 +246,21 @@ impl Allowed<AnswerEntry, Read> {
         let comment = Comment::new(*self.value().id(), content, commented_by);
 
         self.authorize_create(comment)
+    }
+
+    pub fn update_comment(
+        &self,
+        comment: Comment,
+        content: CommentContent,
+    ) -> Result<Allowed<Comment, Update>, DomainError> {
+        self.authorize_update(comment.with_updated_content(content))
+    }
+
+    pub fn delete_comment(
+        &self,
+        comment: Comment,
+    ) -> Result<Allowed<Comment, Delete>, DomainError> {
+        self.authorize_delete(comment)
     }
 }
 

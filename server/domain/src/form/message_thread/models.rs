@@ -7,8 +7,7 @@ use crate::{
         message::models::{Message, MessageId},
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Authorizes, Delete, SelfGuarded,
-        Update,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Delete, SelfGuarded, Update,
     },
     user::models::{Actor, Role::Administrator, User, UserId},
 };
@@ -80,22 +79,6 @@ impl MessageThread {
                 .collect(),
             ..self
         }
-    }
-}
-
-impl Authorizes<Message, Update> for MessageThread {
-    fn check(&self, actor: &Actor, message: &Message) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if message.sender_id() == user.id())
-    }
-}
-
-impl Authorizes<Message, Delete> for MessageThread {
-    fn check(&self, actor: &Actor, message: &Message) -> bool {
-        matches!(
-            actor,
-            Actor::User(User::ActiveUser(user))
-                if message.sender_id() == user.id() || user.role() == &Administrator
-        )
     }
 }
 
