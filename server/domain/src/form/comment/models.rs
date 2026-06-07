@@ -6,9 +6,11 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    form::answer::models::AnswerId,
-    types::authorization_guard::{AuthorizationRole, ParentGuarded},
-    user::models::UserId,
+    form::answer::models::{AnswerEntry, AnswerId},
+    types::authorization_guard::{
+        AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, Update,
+    },
+    user::models::{Actor, Role, User, UserId},
 };
 
 pub type CommentId = types::Id<Comment>;
@@ -33,11 +35,6 @@ pub struct Comment {
 }
 
 impl Comment {
-    /// [`Comment`] を新しく作成します。
-    ///
-    /// コメントの生成は必ず紐づく [`AnswerEntry`](crate::form::answer::models::AnswerEntry)
-    /// の認可ゲートを通す必要があるため、この関数は crate 内
-    /// (集約のファクトリ) からのみ呼び出せるようにしてあります。
     pub(crate) fn new(answer_id: AnswerId, content: CommentContent, commented_by: UserId) -> Self {
         Self {
             answer_id,
@@ -53,12 +50,40 @@ impl Comment {
     }
 }
 
-// [`Comment`] は自己ガード ([`crate::types::authorization_guard::AuthorizationGuardDefinitions`])
-// を実装しない。コメントは親である
-// [`AnswerEntry`](crate::form::answer::models::AnswerEntry) のガードを起点としてのみ
-// 認可され、その条件 (閲覧・作成・更新・削除) は
-// [`crate::form::answer::models`] の `Authorizes<Comment, _>` が担う。
-
 impl AuthorizationRole for Comment {
-    type Role = ParentGuarded;
+    type Role = ParentGuarded<AnswerEntry>;
+}
+
+impl BelongsTo<AnswerEntry> for Comment {
+    fn belongs_to(&self, parent: &AnswerEntry) -> bool {
+        self.answer_id() == parent.id()
+    }
+}
+
+impl GuardedBy<AnswerEntry, Read> for Comment {
+    fn is_allowed_for(&self, _parent: &AnswerEntry, _actor: &Actor) -> bool {
+        true
+    }
+}
+
+impl GuardedBy<AnswerEntry, Create> for Comment {
+    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == self.commented_by())
+    }
+}
+
+impl GuardedBy<AnswerEntry, Update> for Comment {
+    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == self.commented_by())
+    }
+}
+
+impl GuardedBy<AnswerEntry, Delete> for Comment {
+    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::User(User::ActiveUser(user))
+                if user.id() == self.commented_by() || user.role() == &Role::Administrator
+        )
+    }
 }

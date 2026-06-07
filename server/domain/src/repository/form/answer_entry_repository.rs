@@ -22,11 +22,6 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         &self,
         form: &Allowed<ActiveForm, Read>,
     ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error>;
-    /// 渡された [`ActiveForm`] のガードを起点に、全フォームの回答を認可済みで返す。
-    ///
-    /// 「誰が読めるか」は引数で受け取った各 [`ActiveForm`] の読み取りガードが決めるため、
-    /// 検索エンジンのインデックス構築のような全件取得でも認可を呼び出し側に明示させられる。
-    /// 渡されなかったフォームの回答は結果に含まれない。
     async fn list_all(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
