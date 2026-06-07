@@ -275,21 +275,6 @@ impl AnswerSettings {
         }
     }
 
-    pub fn try_accept_answer(
-        &self,
-        form_id: FormId,
-        author: AnswerAuthor,
-        actor: &Actor,
-        title: AnswerTitle,
-        posted_answers: PostedAnswerContents,
-    ) -> Result<AnswerEntry, DomainError> {
-        if !self.can_accept_answer(&author, actor) {
-            return Err(DomainError::Forbidden);
-        }
-
-        Ok(AnswerEntry::new(form_id, author, title, posted_answers))
-    }
-
     /// `actor` が `entry` を閲覧できるかどうかを、回答の公開範囲をもとに判断します。
     pub fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
         match actor {
@@ -436,27 +421,34 @@ impl ActiveForm {
         Self { label_ids, ..self }
     }
 
+    fn try_accept_answer(
+        &self,
+        author: AnswerAuthor,
+        actor: &Actor,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<AnswerEntry, DomainError> {
+        if !self.answer_settings.can_accept_answer(&author, actor) {
+            return Err(DomainError::Forbidden);
+        }
+        Ok(AnswerEntry::new(*self.id(), author, title, posted_answers))
+    }
+
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: UserId) -> ArchivedForm {
         ArchivedForm::new(self, archived_at, archived_by)
     }
 }
 
 impl Allowed<ActiveForm, Read> {
-    /// 回答にまつわるポリシー ([`AnswerSettings`]) に委譲して、新しい [`AnswerEntry`] を
-    /// 受理してよいかを判断し、認可済みの [`Allowed<AnswerEntry, Create>`] を返します。
     pub fn try_accept_answer(
         &self,
         author: AnswerAuthor,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
-        let entry = self.value().answer_settings.try_accept_answer(
-            *self.value().id(),
-            author,
-            self.actor(),
-            title,
-            posted_answers,
-        )?;
+        let entry = self
+            .value()
+            .try_accept_answer(author, self.actor(), title, posted_answers)?;
         self.authorize_create(entry)
     }
 
@@ -1017,10 +1009,6 @@ mod tests {
         )
     }
 
-    fn empty_posted_answers() -> PostedAnswerContents {
-        PostedAnswerContents::try_new(&[], vec![]).unwrap()
-    }
-
     #[test]
     fn temporary_answer_creation_requires_allow_flag() {
         let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
@@ -1033,17 +1021,7 @@ mod tests {
             "contact".to_string(),
         ));
 
-        assert!(
-            settings
-                .try_accept_answer(
-                    FormId::new(),
-                    author,
-                    &actor,
-                    AnswerTitle::new(None),
-                    empty_posted_answers()
-                )
-                .is_err()
-        );
+        assert!(!settings.can_accept_answer(&author, &actor));
     }
 
     #[test]
@@ -1058,17 +1036,7 @@ mod tests {
             "contact".to_string(),
         ));
 
-        assert!(
-            settings
-                .try_accept_answer(
-                    FormId::new(),
-                    author,
-                    &actor,
-                    AnswerTitle::new(None),
-                    empty_posted_answers()
-                )
-                .is_ok()
-        );
+        assert!(settings.can_accept_answer(&author, &actor));
     }
 
     #[test]
@@ -1090,17 +1058,7 @@ mod tests {
             "contact".to_string(),
         ));
 
-        assert!(
-            settings
-                .try_accept_answer(
-                    FormId::new(),
-                    author,
-                    &actor,
-                    AnswerTitle::new(None),
-                    empty_posted_answers()
-                )
-                .is_err()
-        );
+        assert!(!settings.can_accept_answer(&author, &actor));
     }
 
     #[test]
