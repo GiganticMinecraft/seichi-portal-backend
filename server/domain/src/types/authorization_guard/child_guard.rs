@@ -41,7 +41,7 @@ impl<T, A: Actions> Allowed<T, A> {
         child: C,
     ) -> Result<Allowed<C, TargetAction>, DomainError>
     where
-        C: GuardedBy<T, TargetAction> + BelongsTo<T>,
+        C: GuardedBy<T, TargetAction>,
         TargetAction: Actions,
     {
         if !child.belongs_to(&self.value) {
