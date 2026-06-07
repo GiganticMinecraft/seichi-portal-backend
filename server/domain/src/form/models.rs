@@ -311,9 +311,9 @@ impl FormMeta {
 
 #[derive(Serialize, Clone, DerivingVia, Default, Debug, PartialEq)]
 #[deriving(IntoInner)]
-pub struct FormLabelIdSet(Vec<FormLabelId>);
+pub struct FormLabelAssignment(Vec<FormLabelId>);
 
-impl FormLabelIdSet {
+impl FormLabelAssignment {
     pub fn try_new(label_ids: Vec<FormLabelId>) -> Result<Self, DomainError> {
         if label_ids
             .iter()
@@ -337,22 +337,22 @@ impl FormLabelIdSet {
     }
 }
 
-impl<'de> Deserialize<'de> for FormLabelIdSet {
+impl<'de> Deserialize<'de> for FormLabelAssignment {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Vec::<FormLabelId>::deserialize(deserializer)
-            .and_then(|value| FormLabelIdSet::try_new(value).map_err(de::Error::custom))
+            .and_then(|value| FormLabelAssignment::try_new(value).map_err(de::Error::custom))
     }
 }
 
 #[cfg(test)]
-impl Arbitrary for FormLabelIdSet {
+impl Arbitrary for FormLabelAssignment {
     type Parameters = (SizeRange, <FormLabelId as Arbitrary>::Parameters);
     type Strategy = BoxedStrategy<Self>;
 
     fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
         Vec::<FormLabelId>::arbitrary_with(args)
             .prop_filter_map("unique form label ids", |value| {
-                FormLabelIdSet::try_new(value).ok()
+                FormLabelAssignment::try_new(value).ok()
             })
             .boxed()
     }
@@ -374,7 +374,7 @@ pub struct ActiveForm {
     answer_settings: AnswerSettings,
     questions: QuestionSet,
     #[serde(default)]
-    label_ids: FormLabelIdSet,
+    label_ids: FormLabelAssignment,
 }
 
 impl ActiveForm {
@@ -387,7 +387,7 @@ impl ActiveForm {
             settings: FormSettings::new(),
             answer_settings: AnswerSettings::default(),
             questions,
-            label_ids: FormLabelIdSet::empty(),
+            label_ids: FormLabelAssignment::empty(),
         }
     }
 
@@ -417,7 +417,7 @@ impl ActiveForm {
         Self { questions, ..self }
     }
 
-    pub fn replace_label_ids(self, label_ids: FormLabelIdSet) -> Self {
+    pub fn replace_label_ids(self, label_ids: FormLabelAssignment) -> Self {
         Self { label_ids, ..self }
     }
 
@@ -674,7 +674,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
+    /// use domain::form::models::{FormDescription, FormLabelAssignment, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -725,7 +725,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     ///     user::models::{ActiveUser, Actor, Role, User},
     /// };
     /// use uuid::Uuid;
-    /// use domain::form::models::{FormDescription, FormLabelIdSet, FormTitle};
+    /// use domain::form::models::{FormDescription, FormLabelAssignment, FormTitle};
     ///
     /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
     ///     "administrator".to_string(),
@@ -1107,7 +1107,7 @@ mod tests {
 
     #[test]
     fn form_label_id_set_allows_empty_ids() {
-        let label_ids = FormLabelIdSet::try_new(vec![]).unwrap();
+        let label_ids = FormLabelAssignment::try_new(vec![]).unwrap();
 
         assert!(label_ids.as_slice().is_empty());
     }
@@ -1116,7 +1116,7 @@ mod tests {
     fn form_label_id_set_allows_unique_ids() {
         let first = FormLabelId::new();
         let second = FormLabelId::new();
-        let label_ids = FormLabelIdSet::try_new(vec![first, second]).unwrap();
+        let label_ids = FormLabelAssignment::try_new(vec![first, second]).unwrap();
 
         assert_eq!(label_ids.as_slice(), &[first, second]);
     }
@@ -1124,7 +1124,7 @@ mod tests {
     #[test]
     fn form_label_id_set_rejects_duplicate_ids() {
         let label_id = FormLabelId::new();
-        let result = FormLabelIdSet::try_new(vec![label_id, label_id]);
+        let result = FormLabelAssignment::try_new(vec![label_id, label_id]);
 
         assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
     }
@@ -1133,7 +1133,7 @@ mod tests {
     fn form_label_id_set_deserialize_rejects_duplicate_ids() {
         let label_id = FormLabelId::new();
         let serialized = serde_json::to_string(&vec![label_id, label_id]).unwrap();
-        let result = serde_json::from_str::<FormLabelIdSet>(&serialized);
+        let result = serde_json::from_str::<FormLabelAssignment>(&serialized);
 
         assert!(result.is_err());
     }
@@ -1157,7 +1157,7 @@ mod tests {
             FormDescription::new("description".to_string()),
             sample_question_set(),
         )
-        .replace_label_ids(FormLabelIdSet::try_new(vec![label_id]).unwrap());
+        .replace_label_ids(FormLabelAssignment::try_new(vec![label_id]).unwrap());
 
         assert_eq!(form.label_ids().as_slice(), &[label_id]);
     }

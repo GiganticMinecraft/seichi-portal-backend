@@ -2,7 +2,7 @@ use chrono::Utc;
 use domain::{
     form::models::{
         ActiveForm, AnswerSettings, AnswerVisibility, ArchivedForm, DefaultAnswerTitle,
-        FormDescription, FormId, FormLabel, FormLabelId, FormLabelIdSet, FormTitle, Question,
+        FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormTitle, Question,
         QuestionSet, ResponsePeriod, Visibility, WebhookUrl,
     },
     repository::{
@@ -348,7 +348,7 @@ impl<
 
         let label_ids = match label_ids {
             Some(label_ids) => {
-                let label_ids = FormLabelIdSet::try_new(label_ids)?;
+                let label_ids = FormLabelAssignment::try_new(label_ids)?;
                 let labels = self
                     .form_label_repository
                     .fetch_labels_by_ids(label_ids.as_slice().to_vec())
@@ -628,7 +628,7 @@ mod tests {
     use domain::{
         form::{
             models::{
-                ActiveForm, FormDescription, FormLabelIdSet, FormMeta, FormSettings, FormTitle,
+                ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormSettings, FormTitle,
             },
             question::models::{QuestionId, QuestionSet, QuestionType},
         },
@@ -670,7 +670,7 @@ mod tests {
                 FormSettings::new(),
                 AnswerSettings::default(),
                 questions,
-                FormLabelIdSet::empty(),
+                FormLabelAssignment::empty(),
             )
         }
     }

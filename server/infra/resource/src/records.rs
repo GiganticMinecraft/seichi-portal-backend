@@ -8,7 +8,7 @@ use domain::{
         message::models::Message,
         models::{
             ActiveForm, AnswerSettings, ArchivedForm, DefaultAnswerTitle, FormDescription, FormId,
-            FormLabel, FormLabelId, FormLabelIdSet, FormLabelName, FormMeta, FormSettings,
+            FormLabel, FormLabelAssignment, FormLabelId, FormLabelName, FormMeta, FormSettings,
             FormTitle, QuestionSet, ResponsePeriod, WebhookUrl,
         },
         question::models::{Choice, Question, QuestionType},
@@ -168,7 +168,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
                 ),
                 answer_settings,
                 QuestionSet::try_new(questions)?,
-                FormLabelIdSet::try_new(label_ids)?,
+                FormLabelAssignment::try_new(label_ids)?,
             )
         })
     }
