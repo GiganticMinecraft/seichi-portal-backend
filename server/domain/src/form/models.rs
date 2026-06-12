@@ -167,7 +167,7 @@ impl TryFrom<String> for AnswerVisibility {
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
-pub struct ResponsePeriod {
+pub struct AnswerAcceptancePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
     #[serde(default)]
     start_at: Option<DateTime<Utc>>,
@@ -176,14 +176,14 @@ pub struct ResponsePeriod {
     end_at: Option<DateTime<Utc>>,
 }
 
-impl ResponsePeriod {
+impl AnswerAcceptancePeriod {
     pub fn try_new(
         start_at: Option<DateTime<Utc>>,
         end_at: Option<DateTime<Utc>>,
     ) -> Result<Self, DomainError> {
         match (start_at, end_at) {
             (Some(start_at), Some(end_at)) if start_at > end_at => {
-                Err(DomainError::InvalidResponsePeriod)
+                Err(DomainError::InvalidAnswerAcceptancePeriod)
             }
             _ => Ok(Self { start_at, end_at }),
         }
@@ -214,7 +214,7 @@ impl ResponsePeriod {
 pub struct AnswerSettings {
     default_answer_title: DefaultAnswerTitle,
     visibility: AnswerVisibility,
-    response_period: ResponsePeriod,
+    acceptance_period: AnswerAcceptancePeriod,
     allow_temporary_answers: bool,
 }
 
@@ -222,13 +222,13 @@ impl AnswerSettings {
     pub fn new(
         default_answer_title: DefaultAnswerTitle,
         visibility: AnswerVisibility,
-        response_period: ResponsePeriod,
+        acceptance_period: AnswerAcceptancePeriod,
         allow_temporary_answers: bool,
     ) -> Self {
         Self {
             default_answer_title,
             visibility,
-            response_period,
+            acceptance_period,
             allow_temporary_answers,
         }
     }
@@ -244,9 +244,9 @@ impl AnswerSettings {
         Self { visibility, ..self }
     }
 
-    pub fn change_response_period(self, response_period: ResponsePeriod) -> Self {
+    pub fn change_acceptance_period(self, acceptance_period: AnswerAcceptancePeriod) -> Self {
         Self {
-            response_period,
+            acceptance_period,
             ..self
         }
     }
@@ -262,7 +262,7 @@ impl AnswerSettings {
     /// 受理してよいかを判断し、受理できる場合のみ [`AnswerEntry`] を生成します。
     /// `actor` が `author` として回答を作成してよいかを、受付期間と一時回答の可否から判定する。
     pub(crate) fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
-        let is_within_period = self.response_period.is_within_period(Utc::now());
+        let is_within_period = self.acceptance_period.is_within_period(Utc::now());
 
         match (author, actor) {
             (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
@@ -986,12 +986,12 @@ mod tests {
 
     fn answer_settings(
         allow_temporary_answers: bool,
-        response_period: ResponsePeriod,
+        acceptance_period: AnswerAcceptancePeriod,
     ) -> AnswerSettings {
         AnswerSettings::new(
             DefaultAnswerTitle::new(None),
             AnswerVisibility::PRIVATE,
-            response_period,
+            acceptance_period,
             allow_temporary_answers,
         )
     }
@@ -1011,7 +1011,7 @@ mod tests {
 
     #[test]
     fn temporary_answer_creation_requires_allow_flag() {
-        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
         let author = AnswerAuthor::TemporaryUser(crate::user::models::TemporaryUser::new(
             "guest".to_string(),
             "contact".to_string(),
@@ -1026,7 +1026,7 @@ mod tests {
 
     #[test]
     fn temporary_answer_creation_succeeds_when_allowed_and_within_period() {
-        let settings = answer_settings(true, ResponsePeriod::try_new(None, None).unwrap());
+        let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap());
         let author = AnswerAuthor::TemporaryUser(crate::user::models::TemporaryUser::new(
             "guest".to_string(),
             "contact".to_string(),
@@ -1040,10 +1040,10 @@ mod tests {
     }
 
     #[test]
-    fn temporary_answer_creation_respects_response_period() {
+    fn temporary_answer_creation_respects_acceptance_period() {
         let settings = answer_settings(
             true,
-            ResponsePeriod::try_new(
+            AnswerAcceptancePeriod::try_new(
                 Some(Utc::now() - Duration::days(2)),
                 Some(Utc::now() - Duration::days(1)),
             )
@@ -1065,7 +1065,7 @@ mod tests {
     fn private_entry_is_readable_by_its_author() {
         let author = active_user(Role::StandardUser);
         let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
 
         assert!(settings.can_read_entry(&entry, &Actor::from(author)));
     }
@@ -1075,7 +1075,7 @@ mod tests {
         let author = active_user(Role::StandardUser);
         let other = active_user(Role::StandardUser);
         let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
 
         assert!(!settings.can_read_entry(&entry, &Actor::from(other)));
     }
@@ -1085,7 +1085,7 @@ mod tests {
         let author = active_user(Role::StandardUser);
         let administrator = active_user(Role::Administrator);
         let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
-        let settings = answer_settings(false, ResponsePeriod::try_new(None, None).unwrap());
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
 
         assert!(settings.can_read_entry(&entry, &Actor::from(administrator)));
     }
@@ -1098,7 +1098,7 @@ mod tests {
         let settings = AnswerSettings::new(
             DefaultAnswerTitle::new(None),
             AnswerVisibility::PUBLIC,
-            ResponsePeriod::try_new(None, None).unwrap(),
+            AnswerAcceptancePeriod::try_new(None, None).unwrap(),
             false,
         );
 

@@ -43,8 +43,8 @@ struct FormRow {
     visibility: String,
     answer_visibility: String,
     allow_temporary_answers: bool,
-    response_period_start_at: Option<DateTime<Utc>>,
-    response_period_end_at: Option<DateTime<Utc>>,
+    acceptance_period_start_at: Option<DateTime<Utc>>,
+    acceptance_period_end_at: Option<DateTime<Utc>>,
     default_answer_title: Option<String>,
 }
 
@@ -153,8 +153,8 @@ async fn active_form_record_from_row(
         visibility: row.visibility,
         answer_visibility: row.answer_visibility,
         allow_temporary_answers: row.allow_temporary_answers,
-        response_period_start_at: row.response_period_start_at,
-        response_period_end_at: row.response_period_end_at,
+        acceptance_period_start_at: row.acceptance_period_start_at,
+        acceptance_period_end_at: row.acceptance_period_end_at,
         default_answer_title: row.default_answer_title,
         questions: get_questions_txn_with_tables(txn, form_id, "form_questions", "form_choices")
             .await?,
@@ -189,8 +189,8 @@ async fn archived_form_record_from_row(
             visibility: row.form.visibility,
             answer_visibility: row.form.answer_visibility,
             allow_temporary_answers: row.form.allow_temporary_answers,
-            response_period_start_at: row.form.response_period_start_at,
-            response_period_end_at: row.form.response_period_end_at,
+            acceptance_period_start_at: row.form.acceptance_period_start_at,
+            acceptance_period_end_at: row.form.acceptance_period_end_at,
             default_answer_title: row.form.default_answer_title,
             questions: get_questions_txn_with_tables(
                 txn,
@@ -219,8 +219,8 @@ fn form_row_from_db_row(row: MySqlRow) -> Result<FormRow, InfraError> {
         visibility: row.try_get("visibility")?,
         answer_visibility: row.try_get("answer_visibility")?,
         allow_temporary_answers: row.try_get("allow_temporary_answers")?,
-        response_period_start_at: row.try_get("response_period_start_at")?,
-        response_period_end_at: row.try_get("response_period_end_at")?,
+        acceptance_period_start_at: row.try_get("acceptance_period_start_at")?,
+        acceptance_period_end_at: row.try_get("acceptance_period_end_at")?,
         default_answer_title: row.try_get("default_answer_title")?,
     })
 }
@@ -237,8 +237,8 @@ fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, Infra
             visibility: row.try_get("visibility")?,
             answer_visibility: row.try_get("answer_visibility")?,
             allow_temporary_answers: row.try_get("allow_temporary_answers")?,
-            response_period_start_at: row.try_get("response_period_start_at")?,
-            response_period_end_at: row.try_get("response_period_end_at")?,
+            acceptance_period_start_at: row.try_get("acceptance_period_start_at")?,
+            acceptance_period_end_at: row.try_get("acceptance_period_end_at")?,
             default_answer_title: row.try_get("default_answer_title")?,
         },
         archived_at: row.try_get("archived_at")?,
@@ -312,7 +312,7 @@ async fn fetch_form_row(
     let row = sqlx::query(
         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
-            f.response_period_start_at, f.response_period_end_at, f.default_answer_title,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
             f.created_at, f.updated_at, w.url AS webhook_url
         FROM form_meta_data f
         LEFT JOIN form_webhooks w ON f.id = w.form_id
@@ -332,7 +332,7 @@ async fn fetch_archived_form_row(
     let row = sqlx::query(
         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
-            f.response_period_start_at, f.response_period_end_at, f.default_answer_title,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
             f.created_at, f.updated_at, w.url AS webhook_url,
             f.archived_at, u.name AS archived_by_name,
             u.id AS archived_by_id, u.role AS archived_by_role
@@ -366,13 +366,13 @@ async fn insert_form_root(
         .to_owned()
         .into_inner()
         .map(NonEmptyString::into_inner);
-    let response_period_start_at = answer_settings.response_period().start_at().to_owned();
-    let response_period_end_at = answer_settings.response_period().end_at().to_owned();
+    let acceptance_period_start_at = answer_settings.acceptance_period().start_at().to_owned();
+    let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
 
     sqlx::query(
         r#"INSERT INTO form_meta_data
         (id, title, description, answer_visibility, allow_temporary_answers,
-         response_period_start_at, response_period_end_at, default_answer_title,
+         acceptance_period_start_at, acceptance_period_end_at, default_answer_title,
          created_by, updated_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
@@ -381,8 +381,8 @@ async fn insert_form_root(
     .bind(description)
     .bind(answer_visibility)
     .bind(allow_temporary_answers)
-    .bind(response_period_start_at)
-    .bind(response_period_end_at)
+    .bind(acceptance_period_start_at)
+    .bind(acceptance_period_end_at)
     .bind(default_answer_title)
     .bind(user_id.clone())
     .bind(user_id)
@@ -416,8 +416,8 @@ async fn update_form_root(
         .to_owned()
         .into_inner()
         .map(NonEmptyString::into_inner);
-    let response_period_start_at = answer_settings.response_period().start_at().to_owned();
-    let response_period_end_at = answer_settings.response_period().end_at().to_owned();
+    let acceptance_period_start_at = answer_settings.acceptance_period().start_at().to_owned();
+    let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
 
     let webhook_url = form
         .settings()
@@ -434,8 +434,8 @@ async fn update_form_root(
             visibility = ?,
             answer_visibility = ?,
             allow_temporary_answers = ?,
-            response_period_start_at = ?,
-            response_period_end_at = ?,
+            acceptance_period_start_at = ?,
+            acceptance_period_end_at = ?,
             default_answer_title = ?,
             updated_by = ?
             WHERE id = ?"#,
@@ -445,8 +445,8 @@ async fn update_form_root(
     .bind(visibility)
     .bind(answer_visibility)
     .bind(allow_temporary_answers)
-    .bind(response_period_start_at)
-    .bind(response_period_end_at)
+    .bind(acceptance_period_start_at)
+    .bind(acceptance_period_end_at)
     .bind(default_answer_title)
     .bind(updated_by_id)
     .bind(form_id.clone())
@@ -475,8 +475,8 @@ async fn copy_active_form_to_archive(
 
     sqlx::query(
         r"INSERT INTO archived_form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, response_period_start_at, response_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, response_period_start_at, response_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, ?, ?
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, ?, ?
         FROM form_meta_data
         WHERE id = ?",
     )
@@ -591,8 +591,8 @@ async fn restore_archived_form_to_active(
 
     sqlx::query(
         r"INSERT INTO form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, response_period_start_at, response_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, response_period_start_at, response_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by
         FROM archived_form_meta_data
         WHERE id = ?",
     )
@@ -723,7 +723,7 @@ impl FormDatabase for ConnectionPool {
                 let rows = sqlx::query(
                     r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
-            f.response_period_start_at, f.response_period_end_at, f.default_answer_title,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
                     f.created_at, f.updated_at, w.url AS webhook_url
                     FROM form_meta_data f
                     LEFT JOIN form_webhooks w ON f.id = w.form_id
@@ -780,7 +780,7 @@ impl FormDatabase for ConnectionPool {
                     sqlx::query(
                         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
-            f.response_period_start_at, f.response_period_end_at, f.default_answer_title,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
                         f.created_at, f.updated_at, w.url AS webhook_url,
                         f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
@@ -801,7 +801,7 @@ impl FormDatabase for ConnectionPool {
                     sqlx::query(
                         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
-            f.response_period_start_at, f.response_period_end_at, f.default_answer_title,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
                         f.created_at, f.updated_at, w.url AS webhook_url,
                         f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role

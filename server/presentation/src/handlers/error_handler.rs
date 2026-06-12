@@ -55,11 +55,11 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
                 "INTERNAL_SERVER_ERROR",
             )
         }
-        DomainError::InvalidResponsePeriod => problem_response(
+        DomainError::InvalidAnswerAcceptancePeriod => problem_response(
             StatusCode::BAD_REQUEST,
             "Bad Request",
-            "Invalid response period.",
-            "INVALID_RESPONSE_PERIOD",
+            "Invalid answer acceptance period.",
+            "INVALID_ANSWER_ACCEPTANCE_PERIOD",
         ),
         DomainError::InvalidWebhookUrl => problem_response(
             StatusCode::BAD_REQUEST,

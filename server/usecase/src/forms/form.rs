@@ -1,9 +1,9 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        ActiveForm, AnswerSettings, AnswerVisibility, ArchivedForm, DefaultAnswerTitle,
-        FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormTitle, Question,
-        QuestionSet, ResponsePeriod, Visibility, WebhookUrl,
+        ActiveForm, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, ArchivedForm,
+        DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId,
+        FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
     },
     repository::{
         form::{
@@ -302,7 +302,7 @@ impl<
         form_id: FormId,
         title: Option<FormTitle>,
         description: Option<FormDescription>,
-        response_period: Option<ResponsePeriod>,
+        acceptance_period: Option<AnswerAcceptancePeriod>,
         webhook: Option<WebhookUrl>,
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
@@ -387,9 +387,9 @@ impl<
                 None => updated_answer_settings,
                 Some(t) => updated_answer_settings.change_default_answer_title(t),
             };
-            let updated_answer_settings = match response_period {
+            let updated_answer_settings = match acceptance_period {
                 None => updated_answer_settings,
-                Some(p) => updated_answer_settings.change_response_period(p),
+                Some(p) => updated_answer_settings.change_acceptance_period(p),
             };
             let updated_answer_settings = match allow_temporary_answers {
                 None => updated_answer_settings,

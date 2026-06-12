@@ -426,7 +426,7 @@ pub async fn update_form_handler(
     let title = targets.title;
     let description = targets.description.map(FormDescription::new);
     let (
-        response_period,
+        acceptance_period,
         webhook_url,
         default_answer_title,
         visibility,
@@ -437,7 +437,7 @@ pub async fn update_form_handler(
             settings
                 .answer_settings
                 .as_ref()
-                .and_then(|answer_settings| answer_settings.response_period.to_owned()),
+                .and_then(|answer_settings| answer_settings.acceptance_period.to_owned()),
             settings.webhook_url.to_owned().and_then(|url| url.0),
             settings
                 .answer_settings
@@ -466,7 +466,7 @@ pub async fn update_form_handler(
             form_id,
             title,
             description,
-            response_period,
+            acceptance_period,
             webhook_url,
             default_answer_title,
             visibility,
