@@ -546,115 +546,17 @@ impl AuthorizationRole for ActiveForm {
 impl AuthorizationGuardDefinitions for ActiveForm {
     /// [`ActiveForm`] の作成権限があるかどうかを判定します。
     ///
-    /// 作成権限は以下の条件を満たしている場合に与えられます。
-    /// - [`actor`] が [`Administrator`] である場合
-    ///
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::ActiveForm,
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use uuid::Uuid;
-    /// use domain::form::models::{FormDescription, FormTitle};
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    ///
-    /// let form = ActiveForm::new(
-    ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from("")),
-    ///     domain::form::models::QuestionSet::try_new(
-    ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
-    ///             domain::form::question::models::Question::new_text(
-    ///                 "q".to_string().try_into().unwrap(),
-    ///                 0,
-    ///                 "Q".to_string().try_into().unwrap(),
-    ///                 None,
-    ///                 true,
-    ///             ).unwrap(),
-    ///         ]).unwrap(),
-    ///     ).unwrap(),
-    /// );
-    ///
-    /// assert!(form.can_create(&administrator));
-    /// assert!(!form.can_create(&standard_user));
-    /// ```
+    /// 作成権限は [`Administrator`] のみに与えられます。
     fn can_create(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
 
     /// [`ActiveForm`] の読み取り権限があるかどうかを判定します。
     ///
-    /// 読み取り権限は以下の条件のどちらかを満たしている場合に与えられます。
-    /// - [`actor`] が [`Administrator`] である場合
-    /// - [`ActiveForm`] が全体公開されている場合
-    ///
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::{ActiveForm, FormSettings},
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use uuid::Uuid;
-    /// use domain::form::models::{
-    ///     FormDescription, FormTitle, Visibility
-    /// };
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    ///
-    /// let sample_questions = || domain::form::models::QuestionSet::try_new(
-    ///     types::non_empty_vec::NonEmptyVec::try_new(vec![
-    ///         domain::form::question::models::Question::new_text(
-    ///             "q".to_string().try_into().unwrap(),
-    ///             0,
-    ///             "Q".to_string().try_into().unwrap(),
-    ///             None,
-    ///             true,
-    ///         ).unwrap(),
-    ///     ]).unwrap(),
-    /// ).unwrap();
-    ///
-    /// let private_form = ActiveForm::new(
-    ///     FormTitle::new("非公開フォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from("")),
-    ///     sample_questions(),
-    /// ).change_settings(FormSettings::new().change_visibility(Visibility::PRIVATE));
-    ///
-    ///  let public_form = ActiveForm::new(
-    ///     FormTitle::new("公開フォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from("")),
-    ///     sample_questions(),
-    /// ).change_settings(FormSettings::new().change_visibility(Visibility::PUBLIC));
-    ///
-    /// assert!(private_form.can_read(&administrator));
-    /// assert!(!private_form.can_read(&standard_user));
-    /// assert!(public_form.can_read(&administrator));
-    /// assert!(public_form.can_read(&standard_user));
-    /// ```
+    /// 読み取り権限は以下のいずれかを満たす場合に与えられます。
+    /// - [`Actor::System`] である場合
+    /// - [`FormSettings`] の [`Visibility`] が [`Visibility::PUBLIC`] である場合
+    /// - [`Administrator`] である場合
     fn can_read(&self, actor: &Actor) -> bool {
         matches!(actor, Actor::System)
             || self.settings.visibility == Visibility::PUBLIC
@@ -663,102 +565,14 @@ impl AuthorizationGuardDefinitions for ActiveForm {
 
     /// [`ActiveForm`] の更新権限があるかどうかを判定します。
     ///
-    /// 更新権限は以下の条件を満たしている場合に与えられます。
-    /// - [`actor`] が [`Administrator`] である場合
-    ///
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::ActiveForm,
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use uuid::Uuid;
-    /// use domain::form::models::{FormDescription, FormLabelAssignment, FormTitle};
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    ///
-    /// let form = ActiveForm::new(
-    ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from("")),
-    ///     domain::form::models::QuestionSet::try_new(
-    ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
-    ///             domain::form::question::models::Question::new_text(
-    ///                 "q".to_string().try_into().unwrap(),
-    ///                 0,
-    ///                 "Q".to_string().try_into().unwrap(),
-    ///                 None,
-    ///                 true,
-    ///             ).unwrap(),
-    ///         ]).unwrap(),
-    ///     ).unwrap(),
-    /// );
-    ///
-    /// assert!(form.can_update(&administrator));
-    /// assert!(!form.can_update(&standard_user));
-    /// ```
+    /// 更新権限は [`Administrator`] のみに与えられます。
     fn can_update(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
 
-    /// [`ActiveForm`] の削除権限があるかどうかを判定します。
+    /// [`ActiveForm`] の削除権限は常に与えられません。
     ///
-    /// 削除権限は以下の条件を満たしている場合に与えられます。
-    /// - [`actor`] が [`Administrator`] である場合
-    ///
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::ActiveForm,
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use uuid::Uuid;
-    /// use domain::form::models::{FormDescription, FormLabelAssignment, FormTitle};
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    ///
-    /// let form = ActiveForm::new(
-    ///     FormTitle::new("テストフォーム".to_string().try_into().unwrap()),
-    ///     FormDescription::new(String::from("")),
-    ///     domain::form::models::QuestionSet::try_new(
-    ///         types::non_empty_vec::NonEmptyVec::try_new(vec![
-    ///             domain::form::question::models::Question::new_text(
-    ///                 "q".to_string().try_into().unwrap(),
-    ///                 0,
-    ///                 "Q".to_string().try_into().unwrap(),
-    ///                 None,
-    ///                 true,
-    ///             ).unwrap(),
-    ///         ]).unwrap(),
-    ///     ).unwrap(),
-    /// );
-    ///
-    /// assert!(!form.can_delete(&administrator));
-    /// assert!(!form.can_delete(&standard_user));
-    /// ```
+    /// 削除は [`ArchivedForm`] へのアーカイブ操作を経由してください。
     fn can_delete(&self, _actor: &Actor) -> bool {
         false
     }
@@ -802,153 +616,26 @@ impl AuthorizationRole for FormLabel {
 impl AuthorizationGuardDefinitions for FormLabel {
     /// [`FormLabel`] の作成権限があるかどうかを判定します。
     ///
-    /// 作成権限は以下の条件を満たしている場合に与えられます。
-    /// - [`actor`] が [`Administrator`] である場合
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::{FormLabel, FormLabelName},
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use types::non_empty_string::NonEmptyString;
-    /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    /// let form_label = FormLabel::new(FormLabelName::new(
-    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
-    /// ));
-    ///
-    /// assert!(form_label.can_create(&administrator));
-    /// assert!(!form_label.can_create(&standard_user));
-    /// ```
+    /// 作成権限は [`Administrator`] のみに与えられます。
     fn can_create(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
 
-    /// [`FormLabel`] の読み取り権限があるかどうかを判定します。
-    ///
-    /// 読み取り権限はすべてのユーザーに与えられます。
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::{FormLabel, FormLabelName},
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use types::non_empty_string::NonEmptyString;
-    /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    /// let form_label = FormLabel::new(FormLabelName::new(
-    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
-    /// ));
-    ///
-    /// assert!(form_label.can_read(&administrator));
-    /// assert!(form_label.can_read(&standard_user));
-    /// ```
+    /// [`FormLabel`] の読み取り権限はすべてのユーザーに与えられます。
     fn can_read(&self, _actor: &Actor) -> bool {
         true
     }
 
     /// [`FormLabel`] の更新権限があるかどうかを判定します。
     ///
-    /// 更新権限は以下の条件を満たしている場合に与えられます。
-    /// - [`actor`] が [`Administrator`] である場合
-    ///
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::{FormLabel, FormLabelName},
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use types::non_empty_string::NonEmptyString;
-    /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    /// let form_label = FormLabel::new(FormLabelName::new(
-    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
-    /// ));
-    ///
-    /// assert!(form_label.can_update(&administrator));
-    /// assert!(!form_label.can_update(&standard_user));
-    /// ```
+    /// 更新権限は [`Administrator`] のみに与えられます。
     fn can_update(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
 
     /// [`FormLabel`] の削除権限があるかどうかを判定します。
     ///
-    /// 削除権限は以下の条件を満たしている場合に与えられます。
-    /// - [`actor`] が [`Administrator`] である場合
-    ///
-    /// # Examples
-    /// ```
-    /// use domain::{
-    ///     form::models::{FormLabel, FormLabelName},
-    ///     types::authorization_guard::AuthorizationGuardDefinitions,
-    ///     user::models::{ActiveUser, Actor, Role, User},
-    /// };
-    /// use types::non_empty_string::NonEmptyString;
-    /// use uuid::Uuid;
-    /// use domain::form::models::AnswerSettings;
-    ///
-    /// let administrator: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "administrator".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::Administrator,
-    /// )).into();
-    ///
-    /// let standard_user: Actor = User::ActiveUser(ActiveUser::new(
-    ///     "standard_user".to_string(),
-    ///     Uuid::new_v4().into(),
-    ///     Role::StandardUser,
-    /// )).into();
-    ///
-    /// let form_label = FormLabel::new(FormLabelName::new(
-    ///     NonEmptyString::try_new("テストラベル".to_string()).unwrap(),
-    /// ));
-    ///
-    /// assert!(form_label.can_delete(&administrator));
-    /// assert!(!form_label.can_delete(&standard_user));
-    /// ```
+    /// 削除権限は [`Administrator`] のみに与えられます。
     fn can_delete(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
