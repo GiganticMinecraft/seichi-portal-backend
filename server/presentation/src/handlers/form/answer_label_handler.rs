@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use domain::{
-    form::answer::models::{AnswerId, AnswerLabelId},
+    form::answer::{AnswerId, AnswerLabelId},
     repository::Repositories,
     user::models::ActiveUser,
 };

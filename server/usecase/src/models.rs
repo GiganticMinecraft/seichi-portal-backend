@@ -1,10 +1,10 @@
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerLabel},
-        comment::models::Comment,
-        message::models::Message,
+        answer::{AnswerEntry, AnswerLabel},
+        comment::Comment,
+        message::Message,
         models::{ActiveForm, ArchivedForm, FormId, FormLabel},
-        question::models::{Question, QuestionId},
+        question::{Question, QuestionId},
     },
     user::models::{ActiveUser, DiscordUser, User},
 };

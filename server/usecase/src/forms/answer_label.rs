@@ -1,5 +1,5 @@
 use domain::{
-    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
+    form::answer::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
     types::authorization_guard::{AuthorizationGuard, Create},
     user::models::{ActiveUser, Actor},

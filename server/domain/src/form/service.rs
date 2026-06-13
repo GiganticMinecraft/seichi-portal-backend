@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::form::{
-    answer::models::{AnswerTitle, PostedAnswerContents},
+    answer::{AnswerTitle, PostedAnswerContents},
     models::{DefaultAnswerTitle, Question},
 };
 
@@ -64,10 +64,10 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::form::answer::models::FormAnswerContentId;
+    use crate::form::answer::FormAnswerContentId;
     use crate::form::{
-        answer::models::FormAnswerContent,
-        question::models::{QuestionId, QuestionType},
+        answer::FormAnswerContent,
+        question::{QuestionId, QuestionType},
     };
     use crate::user::models::User;
 

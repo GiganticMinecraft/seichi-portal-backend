@@ -6,9 +6,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use domain::form::answer::models::{FormAnswerContent, FormAnswerContentId};
+use domain::form::answer::{FormAnswerContent, FormAnswerContentId};
 use domain::{
-    form::{answer::models::AnswerId, models::FormId},
+    form::{answer::AnswerId, models::FormId},
     repository::Repositories,
     user::models::{ActiveUser, TemporaryUser},
 };

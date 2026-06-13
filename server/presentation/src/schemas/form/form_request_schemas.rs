@@ -1,6 +1,6 @@
-use domain::form::question::models::{ChoiceId, QuestionId, QuestionType};
+use domain::form::question::{ChoiceId, QuestionId, QuestionType};
 use domain::form::{
-    answer::models::{AnswerLabelId, AnswerTitle},
+    answer::{AnswerLabelId, AnswerTitle},
     models::{
         AnswerAcceptancePeriod, AnswerVisibility, DefaultAnswerTitle, FormLabelId, FormTitle,
         Visibility, WebhookUrl,
@@ -143,7 +143,7 @@ pub struct ChoiceSchema {
     pub label: NonEmptyString,
 }
 
-impl From<ChoiceSchema> for domain::form::question::models::Choice {
+impl From<ChoiceSchema> for domain::form::question::Choice {
     fn from(choice: ChoiceSchema) -> Self {
         Self::new(choice.id, choice.position, choice.label)
     }

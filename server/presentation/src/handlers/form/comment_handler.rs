@@ -6,10 +6,10 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use domain::form::answer::models::AnswerId;
+use domain::form::answer::AnswerId;
 use domain::form::models::FormId;
 use domain::{
-    form::comment::models::{CommentContent, CommentId},
+    form::comment::{CommentContent, CommentId},
     repository::Repositories,
     user::models::ActiveUser,
 };

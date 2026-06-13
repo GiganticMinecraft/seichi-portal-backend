@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
 use domain::form::{
-    answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
+    answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
     models::{
         AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
         FormSettings, FormTitle, Visibility,
     },
-    question::models::{Choice, Question, QuestionType},
+    question::{Choice, Question, QuestionType},
 };
 use domain::user::models::{ActiveUser, Actor};
 use itertools::Itertools;
@@ -440,7 +440,7 @@ pub struct SenderSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::form::question::models::{Choice, Question};
+    use domain::form::question::{Choice, Question};
     use types::non_empty_vec::NonEmptyVec;
 
     #[test]

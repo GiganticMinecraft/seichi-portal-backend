@@ -10,7 +10,7 @@ use axum::{
 use domain::{
     form::{
         models::{ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel},
-        question::models::{Choice, Question, QuestionSet, QuestionType},
+        question::{Choice, Question, QuestionSet, QuestionType},
     },
     repository::Repositories,
     user::models::{ActiveUser, Actor, User},

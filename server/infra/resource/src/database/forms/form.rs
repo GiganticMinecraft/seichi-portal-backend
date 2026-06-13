@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::form::{
-    answer::models::AnswerEntry,
+    answer::AnswerEntry,
     models::{FormLabelId, WebhookUrl},
-    question::models::{Choice, Question, QuestionId, QuestionType},
+    question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
     form::models::{ActiveForm, ArchivedForm, FormId},

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerId},
+        answer::{AnswerEntry, AnswerId},
         models::ActiveForm,
     },
     repository::form::answer_entry_repository::AnswerEntryRepository,

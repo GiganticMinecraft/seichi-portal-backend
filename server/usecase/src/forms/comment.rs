@@ -1,9 +1,9 @@
-use domain::form::comment::models::CommentContent;
+use domain::form::comment::CommentContent;
 use domain::form::models::FormId;
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerId},
-        comment::models::{Comment, CommentId},
+        answer::{AnswerEntry, AnswerId},
+        comment::{Comment, CommentId},
     },
     repository::form::{
         active_form_repository::ActiveFormRepository,

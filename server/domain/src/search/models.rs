@@ -1,9 +1,9 @@
-use crate::form::answer::models::FormAnswerContentId;
+use crate::form::answer::FormAnswerContentId;
 use crate::form::{
-    answer::models::{AnswerId, AnswerLabelId},
-    comment::models::CommentId,
+    answer::{AnswerId, AnswerLabelId},
+    comment::CommentId,
     models::{FormDescription, FormId, FormLabelId, FormTitle},
-    question::models::QuestionId,
+    question::QuestionId,
 };
 use crate::user::models::UserId;
 use derive_getters::Getters;

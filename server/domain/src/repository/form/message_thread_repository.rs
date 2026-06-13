@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::{answer::models::AnswerId, message_thread::models::MessageThread},
+    form::{answer::AnswerId, message_thread::MessageThread},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 

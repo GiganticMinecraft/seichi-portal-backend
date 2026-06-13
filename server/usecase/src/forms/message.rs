@@ -1,12 +1,12 @@
 use common::config::FRONTEND;
-use domain::form::message_thread::models::MessageThread;
+use domain::form::message_thread::MessageThread;
 use domain::form::models::FormId;
 use domain::notification::models::{NotificationContent, NotificationType};
 use domain::notification::notificator::Notificator;
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerId},
-        message::models::{Message, MessageId},
+        answer::{AnswerEntry, AnswerId},
+        message::{Message, MessageId},
     },
     notification::models::NotificationPreference,
     repository::{

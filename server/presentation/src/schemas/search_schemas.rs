@@ -1,8 +1,8 @@
-use domain::form::answer::models::AnswerEntry;
+use domain::form::answer::AnswerEntry;
 use domain::{
     form::{
-        answer::models::{AnswerId, AnswerLabel},
-        comment::models::{Comment, CommentId},
+        answer::{AnswerId, AnswerLabel},
+        comment::{Comment, CommentId},
         models::{ActiveForm, FormLabel},
     },
     user::models::ActiveUser,

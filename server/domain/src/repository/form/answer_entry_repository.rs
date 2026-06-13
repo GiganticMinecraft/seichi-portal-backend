@@ -4,7 +4,7 @@ use mockall::automock;
 
 use crate::{
     form::{
-        answer::models::{AnswerEntry, AnswerId},
+        answer::{AnswerEntry, AnswerId},
         models::ActiveForm,
     },
     types::authorization_guard::{Allowed, Create, Read, Update},

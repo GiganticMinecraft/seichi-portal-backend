@@ -630,7 +630,7 @@ mod tests {
             models::{
                 ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormSettings, FormTitle,
             },
-            question::models::{QuestionId, QuestionSet, QuestionType},
+            question::{QuestionId, QuestionSet, QuestionType},
         },
         repository::{
             form::{

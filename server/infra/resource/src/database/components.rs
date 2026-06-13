@@ -12,9 +12,9 @@ use domain::search::models::{
 };
 use domain::{
     form::{
-        answer::models::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
-        comment::models::{Comment, CommentId},
-        message::models::{Message, MessageId},
+        answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
+        comment::{Comment, CommentId},
+        message::{Message, MessageId},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
     },
     notification::models::NotificationPreference,

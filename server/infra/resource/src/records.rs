@@ -3,15 +3,15 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use domain::{
     form::{
-        answer::models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
-        comment::models::{Comment, CommentContent},
-        message::models::Message,
+        answer::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
+        comment::{Comment, CommentContent},
+        message::Message,
         models::{
             ActiveForm, AnswerAcceptancePeriod, AnswerSettings, ArchivedForm, DefaultAnswerTitle,
             FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormLabelName,
             FormMeta, FormSettings, FormTitle, QuestionSet, WebhookUrl,
         },
-        question::models::{Choice, Question, QuestionType},
+        question::{Choice, Question, QuestionType},
     },
     notification::models::NotificationPreference,
     user::models::{ActiveUser, DiscordUser, DiscordUserId, DiscordUserName, Role, TemporaryUser},

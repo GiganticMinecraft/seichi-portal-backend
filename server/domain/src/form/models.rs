@@ -14,10 +14,10 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
-pub use crate::form::question::models::{Question, QuestionSet};
+pub use crate::form::question::{Question, QuestionSet};
 
 use crate::{
-    form::answer::models::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
+    form::answer::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
     types::authorization_guard::{
         Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Create, Read, SelfGuarded,
         Update,
@@ -646,7 +646,7 @@ mod tests {
     use chrono::Duration;
 
     use super::*;
-    use crate::form::question::models::{Question, QuestionId, QuestionType};
+    use crate::form::question::{Question, QuestionId, QuestionType};
     use crate::user::models::Role;
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
