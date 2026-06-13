@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
 use domain::form::{
-    answer::models::{AnswerEntry, AnswerLabel, FormAnswerContent},
+    answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
     models::{
         AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
         FormSettings, FormTitle, Visibility,
     },
-    question::models::{Choice, Question, QuestionType},
+    question::{Choice, Question, QuestionType},
 };
 use domain::user::models::{ActiveUser, Actor};
 use itertools::Itertools;
@@ -15,7 +15,7 @@ use usecase::models::CommentWithAuthor;
 use uuid::Uuid;
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct ResponsePeriodSchema {
+pub struct AnswerAcceptancePeriodSchema {
     pub start_at: Option<DateTime<Utc>>,
     pub end_at: Option<DateTime<Utc>>,
 }
@@ -42,7 +42,7 @@ pub struct AnswerSettingsSchema {
     #[schema(value_type = Option<String>)]
     pub default_answer_title: DefaultAnswerTitle,
     pub visibility: AnswerVisibility,
-    pub response_period: ResponsePeriodSchema,
+    pub acceptance_period: AnswerAcceptancePeriodSchema,
 }
 
 impl AnswerSettingsSchema {
@@ -50,9 +50,9 @@ impl AnswerSettingsSchema {
         Self {
             default_answer_title: answer_settings.default_answer_title().to_owned(),
             visibility: answer_settings.visibility().to_owned().into(),
-            response_period: ResponsePeriodSchema {
-                start_at: answer_settings.response_period().start_at().to_owned(),
-                end_at: answer_settings.response_period().end_at().to_owned(),
+            acceptance_period: AnswerAcceptancePeriodSchema {
+                start_at: answer_settings.acceptance_period().start_at().to_owned(),
+                end_at: answer_settings.acceptance_period().end_at().to_owned(),
             },
         }
     }
@@ -440,7 +440,7 @@ pub struct SenderSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::form::question::models::{Choice, Question};
+    use domain::form::question::{Choice, Question};
     use types::non_empty_vec::NonEmptyVec;
 
     #[test]

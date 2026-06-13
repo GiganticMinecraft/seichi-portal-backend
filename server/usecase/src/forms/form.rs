@@ -1,9 +1,9 @@
 use chrono::Utc;
 use domain::{
     form::models::{
-        ActiveForm, AnswerSettings, AnswerVisibility, ArchivedForm, DefaultAnswerTitle,
-        FormDescription, FormId, FormLabel, FormLabelId, FormLabelIdSet, FormTitle, Question,
-        QuestionSet, ResponsePeriod, Visibility, WebhookUrl,
+        ActiveForm, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, ArchivedForm,
+        DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId,
+        FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
     },
     repository::{
         form::{
@@ -302,7 +302,7 @@ impl<
         form_id: FormId,
         title: Option<FormTitle>,
         description: Option<FormDescription>,
-        response_period: Option<ResponsePeriod>,
+        acceptance_period: Option<AnswerAcceptancePeriod>,
         webhook: Option<WebhookUrl>,
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
@@ -348,7 +348,7 @@ impl<
 
         let label_ids = match label_ids {
             Some(label_ids) => {
-                let label_ids = FormLabelIdSet::try_new(label_ids)?;
+                let label_ids = FormLabelAssignment::try_new(label_ids)?;
                 let labels = self
                     .form_label_repository
                     .fetch_labels_by_ids(label_ids.as_slice().to_vec())
@@ -387,9 +387,9 @@ impl<
                 None => updated_answer_settings,
                 Some(t) => updated_answer_settings.change_default_answer_title(t),
             };
-            let updated_answer_settings = match response_period {
+            let updated_answer_settings = match acceptance_period {
                 None => updated_answer_settings,
-                Some(p) => updated_answer_settings.change_response_period(p),
+                Some(p) => updated_answer_settings.change_acceptance_period(p),
             };
             let updated_answer_settings = match allow_temporary_answers {
                 None => updated_answer_settings,
@@ -628,9 +628,9 @@ mod tests {
     use domain::{
         form::{
             models::{
-                ActiveForm, FormDescription, FormLabelIdSet, FormMeta, FormSettings, FormTitle,
+                ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormSettings, FormTitle,
             },
-            question::models::{QuestionId, QuestionSet, QuestionType},
+            question::{QuestionId, QuestionSet, QuestionType},
         },
         repository::{
             form::{
@@ -670,7 +670,7 @@ mod tests {
                 FormSettings::new(),
                 AnswerSettings::default(),
                 questions,
-                FormLabelIdSet::empty(),
+                FormLabelAssignment::empty(),
             )
         }
     }

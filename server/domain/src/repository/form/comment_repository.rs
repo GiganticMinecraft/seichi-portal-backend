@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::{answer::models::AnswerEntry, comment::models::Comment},
+    form::{answer::AnswerEntry, comment::Comment},
     types::authorization_guard::{Allowed, Create, Delete, Read, Update},
 };
 

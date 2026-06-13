@@ -3909,6 +3909,42 @@
   },
   "components": {
     "schemas": {
+      "AnswerAcceptancePeriodInput": {
+        "type": "object",
+        "properties": {
+          "end_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AnswerAcceptancePeriodSchema": {
+        "type": "object",
+        "properties": {
+          "end_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "start_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "AnswerAuthor": {
         "oneOf": [
           {
@@ -4076,17 +4112,17 @@
         "type": "object",
         "required": [
           "visibility",
-          "response_period"
+          "acceptance_period"
         ],
         "properties": {
+          "acceptance_period": {
+            "$ref": "#/components/schemas/AnswerAcceptancePeriodSchema"
+          },
           "default_answer_title": {
             "type": [
               "string",
               "null"
             ]
-          },
-          "response_period": {
-            "$ref": "#/components/schemas/ResponsePeriodSchema"
           },
           "visibility": {
             "$ref": "#/components/schemas/AnswerVisibility"
@@ -4882,42 +4918,6 @@
             "items": {
               "type": "string"
             }
-          }
-        }
-      },
-      "ResponsePeriodInput": {
-        "type": "object",
-        "properties": {
-          "end_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "start_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "ResponsePeriodSchema": {
-        "type": "object",
-        "properties": {
-          "end_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "start_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
           }
         }
       },

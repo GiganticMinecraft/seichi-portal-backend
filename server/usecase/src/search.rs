@@ -7,7 +7,7 @@ use domain::repository::user_repository::UserRepository;
 use domain::search::models::NumberOfRecords;
 use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
-    form::answer::models::{AnswerEntry, AnswerId},
+    form::answer::{AnswerEntry, AnswerId},
     repository::{
         form::active_form_repository::ActiveFormRepository, search_repository::SearchRepository,
     },

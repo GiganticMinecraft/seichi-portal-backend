@@ -1,6 +1,6 @@
 use domain::{
     form::{
-        answer::models::{
+        answer::{
             AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
             PostedAnswerContents,
         },

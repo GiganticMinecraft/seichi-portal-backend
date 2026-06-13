@@ -3,7 +3,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::models::{AnswerAuthor, AnswerEntry, AnswerId},
+        answer::{AnswerAuthor, AnswerEntry, AnswerId},
         models::FormId,
     },
     user::models::{ActiveUser, Role, TemporaryUser},

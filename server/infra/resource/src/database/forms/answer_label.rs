@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use domain::form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId};
+use domain::form::answer::{AnswerId, AnswerLabel, AnswerLabelId};
 use errors::infra::InfraError;
 use itertools::Itertools;
 use sqlx::{AssertSqlSafe, Row, query};

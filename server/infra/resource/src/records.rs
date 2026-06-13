@@ -3,15 +3,15 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use domain::{
     form::{
-        answer::models::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
-        comment::models::{Comment, CommentContent},
-        message::models::Message,
+        answer::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
+        comment::{Comment, CommentContent},
+        message::Message,
         models::{
-            ActiveForm, AnswerSettings, ArchivedForm, DefaultAnswerTitle, FormDescription, FormId,
-            FormLabel, FormLabelId, FormLabelIdSet, FormLabelName, FormMeta, FormSettings,
-            FormTitle, QuestionSet, ResponsePeriod, WebhookUrl,
+            ActiveForm, AnswerAcceptancePeriod, AnswerSettings, ArchivedForm, DefaultAnswerTitle,
+            FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormLabelName,
+            FormMeta, FormSettings, FormTitle, QuestionSet, WebhookUrl,
         },
-        question::models::{Choice, Question, QuestionType},
+        question::{Choice, Question, QuestionType},
     },
     notification::models::NotificationPreference,
     user::models::{ActiveUser, DiscordUser, DiscordUserId, DiscordUserName, Role, TemporaryUser},
@@ -111,8 +111,8 @@ pub struct ActiveFormRecord {
     pub visibility: String,
     pub answer_visibility: String,
     pub allow_temporary_answers: bool,
-    pub response_period_start_at: Option<DateTime<Utc>>,
-    pub response_period_end_at: Option<DateTime<Utc>>,
+    pub acceptance_period_start_at: Option<DateTime<Utc>>,
+    pub acceptance_period_end_at: Option<DateTime<Utc>>,
     pub default_answer_title: Option<String>,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
@@ -132,8 +132,8 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             visibility,
             answer_visibility,
             allow_temporary_answers,
-            response_period_start_at,
-            response_period_end_at,
+            acceptance_period_start_at,
+            acceptance_period_end_at,
             default_answer_title,
             questions,
             label_ids,
@@ -152,7 +152,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
                     .transpose()?,
             ),
             answer_visibility.try_into()?,
-            ResponsePeriod::try_new(response_period_start_at, response_period_end_at)?,
+            AnswerAcceptancePeriod::try_new(acceptance_period_start_at, acceptance_period_end_at)?,
             allow_temporary_answers,
         );
 
@@ -168,7 +168,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
                 ),
                 answer_settings,
                 QuestionSet::try_new(questions)?,
-                FormLabelIdSet::try_new(label_ids)?,
+                FormLabelAssignment::try_new(label_ids)?,
             )
         })
     }

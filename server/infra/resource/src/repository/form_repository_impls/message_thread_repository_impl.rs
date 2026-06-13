@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::{answer::models::AnswerId, message_thread::models::MessageThread},
+    form::{answer::AnswerId, message_thread::MessageThread},
     repository::form::message_thread_repository::MessageThreadRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };

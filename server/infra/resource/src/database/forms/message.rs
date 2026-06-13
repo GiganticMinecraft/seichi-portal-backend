@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use domain::form::{
-    answer::models::{AnswerEntry, AnswerId},
-    message::models::{Message, MessageId},
+    answer::{AnswerEntry, AnswerId},
+    message::{Message, MessageId},
 };
 use errors::infra::InfraError;
 

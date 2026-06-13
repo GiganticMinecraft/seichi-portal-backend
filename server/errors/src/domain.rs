@@ -13,8 +13,8 @@ pub enum DomainError {
     Forbidden,
     #[error("Empty message body.")]
     EmptyMessageBody,
-    #[error("Invalid response period.")]
-    InvalidResponsePeriod,
+    #[error("Invalid answer acceptance period.")]
+    InvalidAnswerAcceptancePeriod,
     #[error("Invalid webhook url.")]
     InvalidWebhookUrl,
     #[error("Invalid entity: {message}")]

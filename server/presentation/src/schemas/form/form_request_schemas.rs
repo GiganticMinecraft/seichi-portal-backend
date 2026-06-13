@@ -1,9 +1,9 @@
-use domain::form::question::models::{ChoiceId, QuestionId, QuestionType};
+use domain::form::question::{ChoiceId, QuestionId, QuestionType};
 use domain::form::{
-    answer::models::{AnswerLabelId, AnswerTitle},
+    answer::{AnswerLabelId, AnswerTitle},
     models::{
-        AnswerVisibility, DefaultAnswerTitle, FormLabelId, FormTitle, ResponsePeriod, Visibility,
-        WebhookUrl,
+        AnswerAcceptancePeriod, AnswerVisibility, DefaultAnswerTitle, FormLabelId, FormTitle,
+        Visibility, WebhookUrl,
     },
 };
 use serde::{Deserialize, Deserializer};
@@ -36,12 +36,12 @@ pub struct AnswerSettingsSchema {
     #[schema(value_type = Option<String>)]
     pub visibility: Option<AnswerVisibility>,
     #[serde(default)]
-    #[schema(value_type = Option<ResponsePeriodInput>)]
-    pub response_period: Option<ResponsePeriod>,
+    #[schema(value_type = Option<AnswerAcceptancePeriodInput>)]
+    pub acceptance_period: Option<AnswerAcceptancePeriod>,
 }
 
 #[derive(utoipa::ToSchema)]
-pub struct ResponsePeriodInput {
+pub struct AnswerAcceptancePeriodInput {
     pub start_at: Option<String>,
     pub end_at: Option<String>,
 }
@@ -143,7 +143,7 @@ pub struct ChoiceSchema {
     pub label: NonEmptyString,
 }
 
-impl From<ChoiceSchema> for domain::form::question::models::Choice {
+impl From<ChoiceSchema> for domain::form::question::Choice {
     fn from(choice: ChoiceSchema) -> Self {
         Self::new(choice.id, choice.position, choice.label)
     }

@@ -39,7 +39,7 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_request_schemas::TextQuestionSchema,
         presentation::schemas::form::form_request_schemas::TemporaryAnswerCreateSchema,
         presentation::schemas::form::form_request_schemas::TemporaryUserCreateSchema,
-        presentation::schemas::form::form_response_schemas::ResponsePeriodSchema,
+        presentation::schemas::form::form_response_schemas::AnswerAcceptancePeriodSchema,
         presentation::schemas::form::form_response_schemas::Role,
         presentation::schemas::form::form_response_schemas::SenderSchema,
         presentation::schemas::form::form_response_schemas::User,

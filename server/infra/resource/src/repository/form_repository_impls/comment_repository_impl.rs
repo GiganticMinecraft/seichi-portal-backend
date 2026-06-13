@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::{answer::models::AnswerEntry, comment::models::Comment},
+    form::{answer::AnswerEntry, comment::Comment},
     repository::form::comment_repository::CommentRepository,
     types::authorization_guard::{Allowed, Create, Delete, Read, Update},
 };

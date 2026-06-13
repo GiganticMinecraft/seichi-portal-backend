@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    form::answer::models::{AnswerId, AnswerLabel, AnswerLabelId},
+    form::answer::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
