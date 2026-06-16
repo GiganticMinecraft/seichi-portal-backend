@@ -986,7 +986,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d5483e05546a137b5759015a738eb75d3ca50cfc2be3997cc38255d3f244175"
 dependencies = [
  "deriving-via-impl",
- "itertools",
+ "itertools 0.14.0",
  "proc-macro-error2",
  "proc-macro2",
  "quote",
@@ -2014,6 +2014,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2899,7 +2908,7 @@ dependencies = [
  "domain",
  "errors",
  "futures",
- "itertools",
+ "itertools 0.15.0",
  "resource",
  "serde",
  "serde_json",
@@ -3335,7 +3344,7 @@ dependencies = [
  "envy",
  "errors",
  "futures",
- "itertools",
+ "itertools 0.15.0",
  "lapin",
  "meilisearch-sdk",
  "migration",
