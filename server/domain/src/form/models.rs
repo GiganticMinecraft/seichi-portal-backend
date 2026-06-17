@@ -200,7 +200,7 @@ impl Allowed<ActiveForm, Update> {
     }
 }
 
-#[derive(Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
 pub struct ArchivedForm {
     form: ActiveForm,
     archived_at: DateTime<Utc>,
@@ -214,18 +214,6 @@ impl ArchivedForm {
             archived_at,
             archived_by,
         }
-    }
-
-    /// [`ArchivedForm`] の各フィールドを指定して再構築します。
-    ///
-    /// データベースから復元したデータなど、通常のアーカイブ操作を経ずに
-    /// [`ArchivedForm`] を組み立てる場合に使用します。
-    pub fn from_persisted(
-        form: ActiveForm,
-        archived_at: DateTime<Utc>,
-        archived_by: UserId,
-    ) -> Self {
-        Self::new(form, archived_at, archived_by)
     }
 
     pub fn unarchive(self) -> ActiveForm {
