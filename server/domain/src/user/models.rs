@@ -253,3 +253,161 @@ impl AuthorizationGuardDefinitions for DiscordAccountLink {
         matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn user_id(seed: u128) -> UserId {
+        UserId::from(Uuid::from_u128(seed))
+    }
+
+    fn active_user(name: &str, id: UserId, role: Role) -> ActiveUser {
+        ActiveUser::new(name.to_string(), id, role)
+    }
+
+    fn temporary_actor() -> Actor {
+        Actor::from(TemporaryUser::new(
+            "temporary_user".to_string(),
+            "contact".to_string(),
+        ))
+    }
+
+    #[test]
+    fn active_user_equality_depends_only_on_id() {
+        let id = user_id(1);
+
+        assert_eq!(
+            active_user("user", id, Role::StandardUser),
+            active_user("renamed_user", id, Role::Administrator)
+        );
+        assert_ne!(
+            active_user("user", user_id(1), Role::StandardUser),
+            active_user("user", user_id(2), Role::StandardUser)
+        );
+    }
+
+    #[test]
+    fn active_user_can_be_created_only_by_self() {
+        let target = active_user("target", user_id(1), Role::StandardUser);
+        let same_user = Actor::from(active_user("same_user", user_id(1), Role::Administrator));
+        let other_user = Actor::from(active_user("other", user_id(2), Role::StandardUser));
+
+        assert!(target.can_create(&same_user));
+        assert!(!target.can_create(&other_user));
+        assert!(!target.can_create(&temporary_actor()));
+        assert!(!target.can_create(&Actor::from(User::Anonymous)));
+        assert!(!target.can_create(&Actor::System));
+    }
+
+    #[test]
+    fn active_user_can_be_read_by_any_actor() {
+        let target = active_user("target", user_id(1), Role::StandardUser);
+        let active_user_actor = Actor::from(active_user("reader", user_id(2), Role::StandardUser));
+
+        assert!(target.can_read(&active_user_actor));
+        assert!(target.can_read(&temporary_actor()));
+        assert!(target.can_read(&Actor::from(User::Anonymous)));
+        assert!(target.can_read(&Actor::System));
+    }
+
+    #[test]
+    fn active_user_can_be_updated_only_by_administrator() {
+        let target = active_user("target", user_id(1), Role::StandardUser);
+        let administrator = Actor::from(active_user("admin", user_id(2), Role::Administrator));
+        let standard_user = Actor::from(active_user("standard", user_id(1), Role::StandardUser));
+
+        assert!(target.can_update(&administrator));
+        assert!(!target.can_update(&standard_user));
+        assert!(!target.can_update(&temporary_actor()));
+        assert!(!target.can_update(&Actor::from(User::Anonymous)));
+        assert!(!target.can_update(&Actor::System));
+    }
+
+    #[test]
+    fn active_user_can_be_deleted_only_by_self() {
+        let target = active_user("target", user_id(1), Role::StandardUser);
+        let same_user = Actor::from(active_user("same_user", user_id(1), Role::Administrator));
+        let other_user = Actor::from(active_user("other", user_id(2), Role::Administrator));
+
+        assert!(target.can_delete(&same_user));
+        assert!(!target.can_delete(&other_user));
+        assert!(!target.can_delete(&temporary_actor()));
+        assert!(!target.can_delete(&Actor::from(User::Anonymous)));
+        assert!(!target.can_delete(&Actor::System));
+    }
+
+    #[test]
+    fn discord_account_link_can_be_written_only_by_linked_user() {
+        let linked_user_id = user_id(1);
+        let link = DiscordAccountLink::new(
+            linked_user_id,
+            DiscordUser::new(
+                DiscordUserId::new("12345678901234567".to_string()),
+                DiscordUserName::new("discord_user".to_string()),
+            ),
+        );
+        let linked_user = Actor::from(active_user("linked", linked_user_id, Role::StandardUser));
+        let other_user = Actor::from(active_user("other", user_id(2), Role::Administrator));
+        let non_active_actors = [
+            temporary_actor(),
+            Actor::from(User::Anonymous),
+            Actor::System,
+        ];
+
+        assert!(link.can_create(&linked_user));
+        assert!(link.can_update(&linked_user));
+        assert!(link.can_delete(&linked_user));
+
+        assert!(!link.can_create(&other_user));
+        assert!(!link.can_update(&other_user));
+        assert!(!link.can_delete(&other_user));
+
+        for actor in non_active_actors {
+            assert!(!link.can_create(&actor));
+            assert!(!link.can_update(&actor));
+            assert!(!link.can_delete(&actor));
+        }
+    }
+
+    #[test]
+    fn discord_account_link_can_be_read_by_any_actor() {
+        let link = DiscordAccountLink::new(
+            user_id(1),
+            DiscordUser::new(
+                DiscordUserId::new("12345678901234567".to_string()),
+                DiscordUserName::new("discord_user".to_string()),
+            ),
+        );
+        let active_user_actor = Actor::from(active_user("reader", user_id(2), Role::StandardUser));
+
+        assert!(link.can_read(&active_user_actor));
+        assert!(link.can_read(&temporary_actor()));
+        assert!(link.can_read(&Actor::from(User::Anonymous)));
+        assert!(link.can_read(&Actor::System));
+    }
+
+    #[test]
+    fn discord_user_id_allows_17_or_18_characters() {
+        assert_eq!(
+            DiscordUserId::new("12345678901234567".to_string()),
+            DiscordUserId("12345678901234567".to_string())
+        );
+        assert_eq!(
+            DiscordUserId::new("123456789012345678".to_string()),
+            DiscordUserId("123456789012345678".to_string())
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Discord user id must be 17 or 18 characters long")]
+    fn discord_user_id_rejects_16_characters() {
+        DiscordUserId::new("1234567890123456".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Discord user id must be 17 or 18 characters long")]
+    fn discord_user_id_rejects_19_characters() {
+        DiscordUserId::new("1234567890123456789".to_string());
+    }
+}
