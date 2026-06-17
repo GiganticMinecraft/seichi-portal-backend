@@ -6,4 +6,6 @@ pub enum ValidationError {
     EmptyValue,
     #[error("Negative value.")]
     NegativeValue,
+    #[error("Duplicate element.")]
+    DuplicateElement,
 }
