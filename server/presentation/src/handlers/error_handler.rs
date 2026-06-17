@@ -295,6 +295,12 @@ fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
             "Negative value error.",
             "NEGATIVE_VALUE",
         ),
+        ValidationError::DuplicateElement => problem_response(
+            StatusCode::BAD_REQUEST,
+            "Bad Request",
+            "Duplicate element error.",
+            "DUPLICATE_ELEMENT",
+        ),
     }
 }
 
