@@ -129,7 +129,10 @@ impl AuthorizationRole for MessageThread {
 
 impl AuthorizationGuardDefinitions for MessageThread {
     fn can_create(&self, actor: &Actor) -> bool {
-        is_answer_author_or_administrator(actor, &self.answer_author_id)
+        matches!(
+            actor,
+            Actor::User(User::ActiveUser(user)) if user.role() == &Administrator
+        )
     }
 
     fn can_read(&self, actor: &Actor) -> bool {
@@ -142,5 +145,159 @@ impl AuthorizationGuardDefinitions for MessageThread {
 
     fn can_delete(&self, _actor: &Actor) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        types::authorization_guard::{AuthorizationGuard, Create, Delete, Read},
+        user::models::{ActiveUser, Role, TemporaryUser},
+    };
+    use uuid::Uuid;
+
+    fn user_id(seed: &str) -> UserId {
+        Uuid::parse_str(seed).unwrap().into()
+    }
+
+    fn answer_id(seed: &str) -> AnswerId {
+        Uuid::parse_str(seed).unwrap().into()
+    }
+
+    fn active_user(name: &str, id: UserId, role: Role) -> ActiveUser {
+        ActiveUser::new(name.to_string(), id, role)
+    }
+
+    fn thread_for_answer_author(answer_author_id: UserId) -> MessageThread {
+        MessageThread::new(
+            answer_id("00000000-0000-7000-8000-000000000001"),
+            answer_author_id,
+        )
+    }
+
+    #[test]
+    fn only_administrator_can_create_message_thread() {
+        let answer_author_id = user_id("00000000-0000-7000-8000-000000000101");
+        let admin = Actor::from(active_user(
+            "admin",
+            user_id("00000000-0000-7000-8000-000000000102"),
+            Role::Administrator,
+        ));
+        let answer_author = Actor::from(active_user(
+            "answer_author",
+            answer_author_id,
+            Role::StandardUser,
+        ));
+        let other_user = Actor::from(active_user(
+            "other_user",
+            user_id("00000000-0000-7000-8000-000000000103"),
+            Role::StandardUser,
+        ));
+        let temporary_user = Actor::from(TemporaryUser::new(
+            "temporary_user".to_string(),
+            "temporary@example.com".to_string(),
+        ));
+
+        assert!(
+            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
+                .try_create(admin)
+                .is_ok()
+        );
+        assert!(
+            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
+                .try_create(answer_author)
+                .is_err()
+        );
+        assert!(
+            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
+                .try_create(other_user)
+                .is_err()
+        );
+        assert!(
+            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
+                .try_create(temporary_user)
+                .is_err()
+        );
+        assert!(
+            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
+                .try_create(Actor::User(User::Anonymous))
+                .is_err()
+        );
+        assert!(
+            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
+                .try_create(Actor::System)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn administrator_and_answer_author_can_read_and_update_message_thread() {
+        let answer_author_id = user_id("00000000-0000-7000-8000-000000000201");
+        let admin = Actor::from(active_user(
+            "admin",
+            user_id("00000000-0000-7000-8000-000000000202"),
+            Role::Administrator,
+        ));
+        let answer_author = Actor::from(active_user(
+            "answer_author",
+            answer_author_id,
+            Role::StandardUser,
+        ));
+        let other_user = Actor::from(active_user(
+            "other_user",
+            user_id("00000000-0000-7000-8000-000000000203"),
+            Role::StandardUser,
+        ));
+
+        for actor in [admin, answer_author] {
+            assert!(
+                AuthorizationGuard::<_, Read>::from(thread_for_answer_author(answer_author_id))
+                    .try_read(actor.clone())
+                    .is_ok()
+            );
+            assert!(
+                AuthorizationGuard::<_, Update>::from(thread_for_answer_author(answer_author_id))
+                    .try_update(actor)
+                    .is_ok()
+            );
+        }
+
+        assert!(
+            AuthorizationGuard::<_, Read>::from(thread_for_answer_author(answer_author_id))
+                .try_read(other_user.clone())
+                .is_err()
+        );
+        assert!(
+            AuthorizationGuard::<_, Update>::from(thread_for_answer_author(answer_author_id))
+                .try_update(other_user)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn message_thread_cannot_be_deleted() {
+        let answer_author_id = user_id("00000000-0000-7000-8000-000000000301");
+        let admin = Actor::from(active_user(
+            "admin",
+            user_id("00000000-0000-7000-8000-000000000302"),
+            Role::Administrator,
+        ));
+        let answer_author = Actor::from(active_user(
+            "answer_author",
+            answer_author_id,
+            Role::StandardUser,
+        ));
+
+        assert!(
+            AuthorizationGuard::<_, Delete>::from(thread_for_answer_author(answer_author_id))
+                .try_delete(admin)
+                .is_err()
+        );
+        assert!(
+            AuthorizationGuard::<_, Delete>::from(thread_for_answer_author(answer_author_id))
+                .try_delete(answer_author)
+                .is_err()
+        );
     }
 }
