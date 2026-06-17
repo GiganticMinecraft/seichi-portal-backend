@@ -186,13 +186,12 @@ impl TryFrom<ArchivedFormRecord> for ArchivedForm {
     type Error = Error;
 
     fn try_from(value: ArchivedFormRecord) -> Result<Self, Self::Error> {
-        Ok(ArchivedForm::from_persisted(
-            value.form.try_into()?,
-            value.archived_at,
-            Uuid::from_str(&value.archived_by_id)
-                .map_err(Into::<InfraError>::into)?
-                .into(),
-        ))
+        let form = value.form.try_into()?;
+        let archived_by = Uuid::from_str(&value.archived_by_id)
+            .map_err(Into::<InfraError>::into)?
+            .into();
+
+        Ok(unsafe { ArchivedForm::from_raw_parts(form, value.archived_at, archived_by) })
     }
 }
 
