@@ -107,3 +107,194 @@ impl<T> Allowed<T, Read> {
         self.authorize_any(child)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use uuid::Uuid;
+
+    use errors::domain::DomainError;
+
+    use crate::{
+        types::authorization_guard::{
+            Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizationRole,
+            BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, SelfGuarded, Update,
+        },
+        user::models::{ActiveUser, Actor, Role, User},
+    };
+
+    #[derive(Clone, PartialEq, Debug)]
+    struct ParentGuardTestStruct {
+        pub id: Uuid,
+    }
+
+    impl AuthorizationRole for ParentGuardTestStruct {
+        type Role = SelfGuarded;
+    }
+
+    impl AuthorizationGuardDefinitions for ParentGuardTestStruct {
+        fn can_create(&self, actor: &Actor) -> bool {
+            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        }
+
+        fn can_read(&self, actor: &Actor) -> bool {
+            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        }
+
+        fn can_update(&self, actor: &Actor) -> bool {
+            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        }
+
+        fn can_delete(&self, actor: &Actor) -> bool {
+            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        }
+    }
+
+    #[derive(Clone, PartialEq, Debug)]
+    struct ChildGuardTestStruct {
+        pub parent_id: Uuid,
+        pub allowed: bool,
+    }
+
+    impl AuthorizationRole for ChildGuardTestStruct {
+        type Role = ParentGuarded<ParentGuardTestStruct>;
+    }
+
+    impl BelongsTo<ParentGuardTestStruct> for ChildGuardTestStruct {
+        fn belongs_to(&self, parent: &ParentGuardTestStruct) -> bool {
+            self.parent_id == parent.id
+        }
+    }
+
+    impl GuardedBy<ParentGuardTestStruct, Create> for ChildGuardTestStruct {
+        fn is_allowed_for(&self, _parent: &ParentGuardTestStruct, _actor: &Actor) -> bool {
+            self.allowed
+        }
+    }
+
+    impl GuardedBy<ParentGuardTestStruct, Read> for ChildGuardTestStruct {
+        fn is_allowed_for(&self, _parent: &ParentGuardTestStruct, _actor: &Actor) -> bool {
+            self.allowed
+        }
+    }
+
+    impl GuardedBy<ParentGuardTestStruct, Update> for ChildGuardTestStruct {
+        fn is_allowed_for(&self, _parent: &ParentGuardTestStruct, _actor: &Actor) -> bool {
+            self.allowed
+        }
+    }
+
+    impl GuardedBy<ParentGuardTestStruct, Delete> for ChildGuardTestStruct {
+        fn is_allowed_for(&self, _parent: &ParentGuardTestStruct, _actor: &Actor) -> bool {
+            self.allowed
+        }
+    }
+
+    #[test]
+    fn allowed_parent_can_authorize_child() {
+        let admin: Actor = ActiveUser::new(
+            "admin".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        )
+        .into();
+        let parent_id = Uuid::new_v4();
+        let parent = ParentGuardTestStruct { id: parent_id };
+        let child = ChildGuardTestStruct {
+            parent_id,
+            allowed: true,
+        };
+
+        let read_parent = AuthorizationGuard::<_, Read>::from(parent.clone())
+            .try_read(admin.clone())
+            .unwrap();
+        let read_child = read_parent.authorize_read(child.clone()).unwrap();
+
+        assert_eq!(read_child.value(), &child);
+        assert_eq!(read_child.actor(), &admin);
+
+        assert!(
+            read_parent
+                .authorize_create(child.clone())
+                .map(Allowed::into_inner)
+                .is_ok()
+        );
+        assert!(
+            read_parent
+                .authorize_update(child.clone())
+                .map(Allowed::into_inner)
+                .is_ok()
+        );
+        assert!(
+            read_parent
+                .authorize_delete(child.clone())
+                .map(Allowed::into_inner)
+                .is_ok()
+        );
+
+        let update_parent = AuthorizationGuard::<_, Update>::from(parent)
+            .try_update(admin)
+            .unwrap();
+
+        assert!(
+            update_parent
+                .authorize_update(child.clone())
+                .map(Allowed::into_inner)
+                .is_ok()
+        );
+        assert!(
+            update_parent
+                .authorize_delete(child)
+                .map(Allowed::into_inner)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn allowed_parent_rejects_child_with_unmatched_parent() {
+        let admin: Actor = ActiveUser::new(
+            "admin".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        )
+        .into();
+        let parent = ParentGuardTestStruct { id: Uuid::new_v4() };
+        let child = ChildGuardTestStruct {
+            parent_id: Uuid::new_v4(),
+            allowed: true,
+        };
+
+        let read_parent = AuthorizationGuard::<_, Read>::from(parent)
+            .try_read(admin)
+            .unwrap();
+
+        assert!(matches!(
+            read_parent.authorize_read(child),
+            Err(DomainError::NotFound)
+        ));
+    }
+
+    #[test]
+    fn allowed_parent_rejects_child_when_guarded_by_denies_actor() {
+        let admin: Actor = ActiveUser::new(
+            "admin".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        )
+        .into();
+        let parent_id = Uuid::new_v4();
+        let parent = ParentGuardTestStruct { id: parent_id };
+        let child = ChildGuardTestStruct {
+            parent_id,
+            allowed: false,
+        };
+
+        let read_parent = AuthorizationGuard::<_, Read>::from(parent)
+            .try_read(admin)
+            .unwrap();
+
+        assert!(matches!(
+            read_parent.authorize_read(child),
+            Err(DomainError::Forbidden)
+        ));
+    }
+}
