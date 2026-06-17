@@ -87,3 +87,226 @@ impl GuardedBy<AnswerEntry, Delete> for Comment {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        form::{
+            answer::{
+                AnswerAuthor, AnswerSettings, AnswerTitle, AnswerVisibility, FormAnswerContent,
+                FormAnswerContentId, PostedAnswerContents,
+            },
+            models::{ActiveForm, FormDescription, FormTitle, QuestionSet},
+            question::{Question, QuestionId, QuestionType},
+        },
+        types::authorization_guard::{AuthorizationGuard, Read},
+        user::models::ActiveUser,
+    };
+    use errors::domain::DomainError;
+    use types::{non_empty_string::NonEmptyString, non_empty_vec::NonEmptyVec};
+    use uuid::Uuid;
+
+    fn active_user(name: &str, role: Role) -> ActiveUser {
+        ActiveUser::new(name.to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn comment_content(value: &str) -> CommentContent {
+        CommentContent::new(NonEmptyString::try_new(value.to_string()).unwrap())
+    }
+
+    fn sample_question_set() -> QuestionSet {
+        QuestionSet::try_new(
+            NonEmptyVec::try_new(vec![unsafe {
+                Question::from_raw_parts(
+                    QuestionId::from(Uuid::new_v4()),
+                    "body".to_string().try_into().unwrap(),
+                    0,
+                    "Body".to_string().try_into().unwrap(),
+                    None,
+                    QuestionType::Text,
+                    None,
+                    true,
+                )
+                .unwrap()
+            }])
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn sample_form(answer_visibility: AnswerVisibility) -> ActiveForm {
+        ActiveForm::new(
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new("description".to_string()),
+            sample_question_set(),
+        )
+        .change_answer_settings(AnswerSettings::default().change_visibility(answer_visibility))
+    }
+
+    fn sample_posted_answers(form: &ActiveForm) -> PostedAnswerContents {
+        PostedAnswerContents::try_new(
+            form.questions().as_slice(),
+            vec![FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: (*form.questions().as_slice()[0].id()).into(),
+                answer: "answer".to_string(),
+            }],
+        )
+        .unwrap()
+    }
+
+    fn answer_entry(form: &ActiveForm, author: &ActiveUser) -> AnswerEntry {
+        AnswerEntry::new(
+            *form.id(),
+            AnswerAuthor::AuthenticatedUser(*author.id()),
+            AnswerTitle::new(None),
+            sample_posted_answers(form),
+        )
+    }
+
+    fn read_form_by(
+        form: ActiveForm,
+        actor: Actor,
+    ) -> crate::types::authorization_guard::Allowed<ActiveForm, Read> {
+        AuthorizationGuard::<_, Read>::from(form)
+            .try_read(actor)
+            .unwrap()
+    }
+
+    fn read_entry_by(
+        form: ActiveForm,
+        entry: AnswerEntry,
+        actor: Actor,
+    ) -> crate::types::authorization_guard::Allowed<AnswerEntry, Read> {
+        read_form_by(form, actor).read_entry(entry).unwrap()
+    }
+
+    fn create_comment_by(
+        form: ActiveForm,
+        entry: AnswerEntry,
+        commenter: ActiveUser,
+        content: &str,
+    ) -> Comment {
+        read_entry_by(form, entry, Actor::from(commenter))
+            .create_comment(comment_content(content))
+            .unwrap()
+            .into_inner()
+    }
+
+    #[test]
+    fn active_user_can_create_comment_on_readable_answer_entry() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let commenter = active_user("commenter", Role::StandardUser);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let entry = answer_entry(&form, &answer_author);
+        let content = comment_content("visible answer comment");
+
+        let comment = read_entry_by(form, entry.clone(), Actor::from(commenter.clone()))
+            .create_comment(content.clone())
+            .unwrap();
+
+        assert_eq!(comment.value().commented_by(), commenter.id());
+        assert_eq!(comment.value().answer_id(), entry.id());
+        assert_eq!(comment.value().content(), &content);
+    }
+
+    #[test]
+    fn comment_creation_requires_readable_answer_entry() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let other_user = active_user("other", Role::StandardUser);
+        let form = sample_form(AnswerVisibility::PRIVATE);
+        let entry = answer_entry(&form, &answer_author);
+
+        let result = read_form_by(form, Actor::from(other_user)).read_entry(entry);
+
+        assert!(matches!(result, Err(DomainError::Forbidden)));
+    }
+
+    #[test]
+    fn system_actor_cannot_create_comment_on_readable_answer_entry() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let entry = answer_entry(&form, &answer_author);
+        let readable_entry = read_entry_by(form, entry, Actor::System);
+
+        let result = readable_entry.create_comment(comment_content("system comment"));
+
+        assert!(matches!(result, Err(DomainError::Forbidden)));
+    }
+
+    #[test]
+    fn comment_update_authorization_depends_on_comment_owner() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let commenter = active_user("commenter", Role::StandardUser);
+        let other_user = active_user("other", Role::StandardUser);
+        let administrator = active_user("admin", Role::Administrator);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let entry = answer_entry(&form, &answer_author);
+        let comment = create_comment_by(form.clone(), entry.clone(), commenter.clone(), "before");
+
+        let owner_readable_entry =
+            read_entry_by(form.clone(), entry.clone(), Actor::from(commenter));
+        let other_readable_entry =
+            read_entry_by(form.clone(), entry.clone(), Actor::from(other_user));
+        let admin_readable_entry = read_entry_by(form, entry, Actor::from(administrator));
+
+        let updated = owner_readable_entry
+            .update_comment(comment.clone(), comment_content("after"))
+            .unwrap();
+        let other_result =
+            other_readable_entry.update_comment(comment.clone(), comment_content("other update"));
+        let admin_result =
+            admin_readable_entry.update_comment(comment, comment_content("admin update"));
+
+        assert_eq!(updated.value().content(), &comment_content("after"));
+        assert!(matches!(other_result, Err(DomainError::Forbidden)));
+        assert!(matches!(admin_result, Err(DomainError::Forbidden)));
+    }
+
+    #[test]
+    fn comment_delete_authorization_allows_owner_and_administrator() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let commenter = active_user("commenter", Role::StandardUser);
+        let other_user = active_user("other", Role::StandardUser);
+        let administrator = active_user("admin", Role::Administrator);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let entry = answer_entry(&form, &answer_author);
+        let comment =
+            create_comment_by(form.clone(), entry.clone(), commenter.clone(), "delete me");
+
+        let owner_readable_entry =
+            read_entry_by(form.clone(), entry.clone(), Actor::from(commenter));
+        let admin_readable_entry =
+            read_entry_by(form.clone(), entry.clone(), Actor::from(administrator));
+        let other_readable_entry = read_entry_by(form, entry, Actor::from(other_user));
+
+        let owner_result = owner_readable_entry.delete_comment(comment.clone());
+        let admin_result = admin_readable_entry.delete_comment(comment.clone());
+        let other_result = other_readable_entry.delete_comment(comment);
+
+        assert!(owner_result.is_ok());
+        assert!(admin_result.is_ok());
+        assert!(matches!(other_result, Err(DomainError::Forbidden)));
+    }
+
+    #[test]
+    fn comment_operations_reject_comment_for_another_answer_entry() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let commenter = active_user("commenter", Role::StandardUser);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let original_entry = answer_entry(&form, &answer_author);
+        let other_entry = answer_entry(&form, &answer_author);
+        let comment = create_comment_by(
+            form.clone(),
+            original_entry,
+            commenter.clone(),
+            "foreign comment",
+        );
+        let other_readable_entry = read_entry_by(form, other_entry, Actor::from(commenter));
+
+        let result = other_readable_entry.update_comment(comment, comment_content("after"));
+
+        assert!(matches!(result, Err(DomainError::NotFound)));
+    }
+}

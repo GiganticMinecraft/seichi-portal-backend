@@ -115,7 +115,7 @@ where
             if existing_ids.contains(&msg_id_str) {
                 self.client
                     .form_message()
-                    .update_message_body(*message.id(), message.body().to_owned())
+                    .update_message_body(*message.id(), message.body().as_str().to_owned())
                     .await?;
             } else {
                 self.client

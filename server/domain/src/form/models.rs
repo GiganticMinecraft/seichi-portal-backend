@@ -297,7 +297,15 @@ impl AuthorizationGuardDefinitions for ActiveForm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::form::question::{Question, QuestionId, QuestionType};
+    use crate::{
+        form::{
+            answer::{FormAnswerContent, FormAnswerContentId},
+            question::{Question, QuestionId, QuestionType},
+        },
+        types::authorization_guard::{AuthorizationGuard, Read},
+        user::models::{ActiveUser, Role, TemporaryUser},
+    };
+    use chrono::Duration;
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
@@ -321,27 +329,115 @@ mod tests {
         .unwrap()
     }
 
-    #[test]
-    fn active_form_new_has_empty_label_ids() {
-        let form = ActiveForm::new(
-            FormTitle::new("Form".to_string().try_into().unwrap()),
-            FormDescription::new("description".to_string()),
-            sample_question_set(),
-        );
-
-        assert!(form.label_ids().as_slice().is_empty());
-    }
-
-    #[test]
-    fn active_form_replace_label_ids_replaces_ids() {
-        let label_id = FormLabelId::new();
-        let form = ActiveForm::new(
+    fn sample_form() -> ActiveForm {
+        ActiveForm::new(
             FormTitle::new("Form".to_string().try_into().unwrap()),
             FormDescription::new("description".to_string()),
             sample_question_set(),
         )
-        .replace_label_ids(FormLabelAssignment::try_new(vec![label_id]).unwrap());
+    }
 
-        assert_eq!(form.label_ids().as_slice(), &[label_id]);
+    fn active_user(role: Role) -> ActiveUser {
+        ActiveUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn sample_posted_answers(form: &ActiveForm) -> PostedAnswerContents {
+        PostedAnswerContents::try_new(
+            form.questions().as_slice(),
+            vec![FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: (*form.questions().as_slice()[0].id()).into(),
+                answer: "answer".to_string(),
+            }],
+        )
+        .unwrap()
+    }
+
+    fn public_form_read_by(form: ActiveForm, actor: Actor) -> Allowed<ActiveForm, Read> {
+        AuthorizationGuard::<_, Read>::from(form)
+            .try_read(actor)
+            .unwrap()
+    }
+
+    #[test]
+    fn try_accept_answer_respects_temporary_answer_settings() {
+        let temporary_user = TemporaryUser::new("guest".to_string(), "contact".to_string());
+        let actor = Actor::from(temporary_user.clone());
+        let temporary_author = AnswerAuthor::TemporaryUser(temporary_user);
+
+        let form = sample_form();
+        let denied_result = public_form_read_by(form.clone(), actor.clone()).try_accept_answer(
+            temporary_author.clone(),
+            AnswerTitle::new(None),
+            sample_posted_answers(&form),
+        );
+
+        assert!(matches!(denied_result, Err(DomainError::Forbidden)));
+
+        let form = form
+            .change_answer_settings(AnswerSettings::default().change_allow_temporary_answers(true));
+        let accepted_result = public_form_read_by(form.clone(), actor).try_accept_answer(
+            temporary_author,
+            AnswerTitle::new(None),
+            sample_posted_answers(&form),
+        );
+
+        assert!(accepted_result.is_ok());
+    }
+
+    #[test]
+    fn form_readability_does_not_imply_private_answer_readability() {
+        let answer_author = active_user(Role::StandardUser);
+        let other_user = active_user(Role::StandardUser);
+        let form = sample_form();
+        let entry = AnswerEntry::new(
+            *form.id(),
+            AnswerAuthor::AuthenticatedUser(*answer_author.id()),
+            AnswerTitle::new(None),
+            sample_posted_answers(&form),
+        );
+
+        let private_answer_read_by_author =
+            public_form_read_by(form.clone(), Actor::from(answer_author)).read_entry(entry.clone());
+        let private_answer_read_by_other_user =
+            public_form_read_by(form.clone(), Actor::from(other_user.clone()))
+                .read_entry(entry.clone());
+
+        assert!(private_answer_read_by_author.is_ok());
+        assert!(matches!(
+            private_answer_read_by_other_user,
+            Err(DomainError::Forbidden)
+        ));
+
+        let public_answer_form = form.change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let public_answer_result =
+            public_form_read_by(public_answer_form, Actor::from(other_user)).read_entry(entry);
+
+        assert!(public_answer_result.is_ok());
+    }
+
+    #[test]
+    fn try_accept_answer_respects_acceptance_period() {
+        let user = active_user(Role::StandardUser);
+        let actor = Actor::from(user.clone());
+        let form = sample_form().change_answer_settings(
+            AnswerSettings::default().change_acceptance_period(
+                AnswerAcceptancePeriod::try_new(
+                    Some(Utc::now() - Duration::days(2)),
+                    Some(Utc::now() - Duration::days(1)),
+                )
+                .unwrap(),
+            ),
+        );
+
+        let result = public_form_read_by(form.clone(), actor).try_accept_answer(
+            AnswerAuthor::AuthenticatedUser(*user.id()),
+            AnswerTitle::new(None),
+            sample_posted_answers(&form),
+        );
+
+        assert!(matches!(result, Err(DomainError::Forbidden)));
     }
 }

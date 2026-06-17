@@ -5,7 +5,10 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
-    form::{answer::AnswerId, message::MessageId},
+    form::{
+        answer::AnswerId,
+        message::{MessageBody, MessageId},
+    },
     repository::Repositories,
     user::models::ActiveUser,
 };
@@ -96,7 +99,13 @@ pub async fn post_message_handler<N: Notificator>(
     let Json(message) = json.map_err_to_error().map_err(handle_error)?;
 
     form_message_use_case
-        .post_message(&user, form_id, message.body, answer_id, &state.notificator)
+        .post_message(
+            &user,
+            form_id,
+            MessageBody::new(message.body),
+            answer_id,
+            &state.notificator,
+        )
         .await
         .map_err(handle_error)?;
 
@@ -143,7 +152,13 @@ pub async fn update_message_handler(
     let Json(body_schema) = json.map_err_to_error().map_err(handle_error)?;
 
     form_message_use_case
-        .update_message_body(&user, form_id, answer_id, &message_id, body_schema.body)
+        .update_message_body(
+            &user,
+            form_id,
+            answer_id,
+            &message_id,
+            body_schema.body.map(MessageBody::new),
+        )
         .await
         .map_err(handle_error)?;
 
@@ -195,7 +210,7 @@ pub async fn get_messages_handler(
             .into_iter()
             .map(|message_with_sender| MessageContentSchema {
                 id: message_with_sender.message.id().into_inner(),
-                body: message_with_sender.message.body().to_owned(),
+                body: message_with_sender.message.body().as_str().to_owned(),
                 sender: SenderSchema {
                     uuid: message_with_sender.sender.id().to_string(),
                     name: message_with_sender.sender.name().to_owned(),
