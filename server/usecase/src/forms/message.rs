@@ -6,7 +6,7 @@ use domain::notification::notificator::Notificator;
 use domain::{
     form::{
         answer::{AnswerEntry, AnswerId},
-        message::{Message, MessageId},
+        message::{Message, MessageBody, MessageId},
     },
     notification::models::NotificationPreference,
     repository::{
@@ -78,7 +78,7 @@ impl<
         &self,
         actor: &ActiveUser,
         form_id: FormId,
-        message_body: String,
+        message_body: MessageBody,
         answer_id: AnswerId,
         notificator: &N,
     ) -> Result<(), Error> {
@@ -87,93 +87,88 @@ impl<
             .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        match Message::try_new(*actor.id(), message_body) {
-            Ok(message) => {
-                let notification_recipient_id = form_answer
+        let message = Message::new(*actor.id(), message_body);
+        let notification_recipient_id = form_answer
+            .author()
+            .authenticated_user_id()
+            .ok_or(Error::from(UserNotFound))?;
+
+        let message_sender_id = *message.sender_id();
+
+        let post_result = match self
+            .message_thread_repository
+            .get_by_answer_id(answer_id)
+            .await?
+        {
+            Some(thread_guard) => {
+                let thread = thread_guard.into_update().try_update(actor_user.clone())?;
+                let updated = thread.map(|t| t.add_message(message));
+                self.message_thread_repository.update(updated).await
+            }
+            None => {
+                let answer_author_id = form_answer
                     .author()
                     .authenticated_user_id()
                     .ok_or(Error::from(UserNotFound))?;
+                let thread = MessageThread::new(answer_id, answer_author_id).add_message(message);
+                let guard = AuthorizationGuard::<MessageThread, Create>::from(thread);
+                self.message_thread_repository
+                    .create(guard.try_create(actor_user.clone())?)
+                    .await
+            }
+        };
 
-                let message_sender_id = *message.sender_id();
+        match post_result {
+            Ok(_) if message_sender_id != notification_recipient_id => {
+                let fetched_notification_preference = self
+                    .notification_repository
+                    .fetch_notification_settings(notification_recipient_id.into_inner())
+                    .await?;
 
-                let post_result = match self
-                    .message_thread_repository
-                    .get_by_answer_id(answer_id)
-                    .await?
-                {
-                    Some(thread_guard) => {
-                        let thread = thread_guard.into_update().try_update(actor_user.clone())?;
-                        let updated = thread.map(|t| t.add_message(message));
-                        self.message_thread_repository.update(updated).await
-                    }
+                let notification_preference = match fetched_notification_preference {
+                    Some(settings) => settings.try_read(Actor::System)?.into_inner(),
                     None => {
-                        let answer_author_id = form_answer
-                            .author()
-                            .authenticated_user_id()
-                            .ok_or(Error::from(UserNotFound))?;
-                        let thread =
-                            MessageThread::new(answer_id, answer_author_id).add_message(message);
-                        let guard = AuthorizationGuard::<MessageThread, Create>::from(thread);
-                        self.message_thread_repository
-                            .create(guard.try_create(actor_user.clone())?)
-                            .await
-                    }
-                };
+                        let recipient = self
+                            .user_repository
+                            .find_by(notification_recipient_id.into_inner())
+                            .await?
+                            .ok_or(Error::from(UserNotFound))?
+                            .try_read(actor_user.clone())?
+                            .into_inner();
 
-                match post_result {
-                    Ok(_) if message_sender_id != notification_recipient_id => {
-                        let fetched_notification_preference = self
-                            .notification_repository
-                            .fetch_notification_settings(notification_recipient_id.into_inner())
-                            .await?;
+                        let preference = NotificationPreference::new(*recipient.id());
 
-                        let notification_preference = match fetched_notification_preference {
-                            Some(settings) => settings.try_read(Actor::System)?.into_inner(),
-                            None => {
-                                let recipient = self
-                                    .user_repository
-                                    .find_by(notification_recipient_id.into_inner())
-                                    .await?
-                                    .ok_or(Error::from(UserNotFound))?
-                                    .try_read(actor_user.clone())?
-                                    .into_inner();
-
-                                let preference = NotificationPreference::new(*recipient.id());
-
-                                self.notification_repository
-                                    .create_notification_settings(
-                                        AuthorizationGuard::<_, Create>::from(preference.clone())
-                                            .try_create(Actor::from(recipient.clone()))?,
-                                    )
-                                    .await?;
-
-                                AuthorizationGuard::<_, Read>::from(preference)
-                                    .try_read(Actor::System)?
-                                    .into_inner()
-                            }
-                        };
-
-                        let url = &*FRONTEND.url;
-                        notificator
-                            .notify(
-                                notification_recipient_id,
-                                NotificationType::MessageReceived,
-                                &notification_preference,
-                                &NotificationContent::new(vec![
-                                    "あなたの回答にメッセージが送信されました。".to_string(),
-                                    "メッセージを確認してください。".to_string(),
-                                    format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
-                                ]),
+                        self.notification_repository
+                            .create_notification_settings(
+                                AuthorizationGuard::<_, Create>::from(preference.clone())
+                                    .try_create(Actor::from(recipient.clone()))?,
                             )
                             .await?;
 
-                        Ok(())
+                        AuthorizationGuard::<_, Read>::from(preference)
+                            .try_read(Actor::System)?
+                            .into_inner()
                     }
-                    Err(error) => Err(error),
-                    _ => Ok(()),
-                }
+                };
+
+                let url = &*FRONTEND.url;
+                notificator
+                    .notify(
+                        notification_recipient_id,
+                        NotificationType::MessageReceived,
+                        &notification_preference,
+                        &NotificationContent::new(vec![
+                            "あなたの回答にメッセージが送信されました。".to_string(),
+                            "メッセージを確認してください。".to_string(),
+                            format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
+                        ]),
+                    )
+                    .await?;
+
+                Ok(())
             }
-            Err(error) => Err(Error::from(error)),
+            Err(error) => Err(error),
+            _ => Ok(()),
         }
     }
 
@@ -220,7 +215,7 @@ impl<
         form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,
-        body: Option<String>,
+        body: Option<MessageBody>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
         self.read_answer_entry(&actor_user, form_id, answer_id)

@@ -17,7 +17,7 @@ impl FormMessageDatabase for ConnectionPool {
         let id = message.id().to_string().to_owned();
         let related_answer_id = answer_id.into_inner().to_string();
         let sender = message.sender_id().to_string();
-        let body = message.body().to_owned();
+        let body = message.body().as_str().to_owned();
         let timestamp = message.timestamp().to_owned();
 
         self.read_write_transaction(|txn| {

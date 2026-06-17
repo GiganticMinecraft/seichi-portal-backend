@@ -273,10 +273,12 @@ pub struct ReplaceAnswerLabelSchema {
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct PostedMessageSchema {
-    pub body: String,
+    #[schema(value_type = String, min_length = 1)]
+    pub body: NonEmptyString,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct MessageUpdateSchema {
-    pub body: Option<String>,
+    #[schema(value_type = Option<String>, min_length = 1)]
+    pub body: Option<NonEmptyString>,
 }

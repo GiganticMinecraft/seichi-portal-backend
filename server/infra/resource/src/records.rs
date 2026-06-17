@@ -5,7 +5,7 @@ use domain::{
     form::{
         answer::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
         comment::{Comment, CommentContent},
-        message::Message,
+        message::{Message, MessageBody},
         models::{
             ActiveForm, AnswerAcceptancePeriod, AnswerSettings, ArchivedForm, DefaultAnswerTitle,
             FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormLabelName,
@@ -402,7 +402,7 @@ impl TryFrom<MessageRecord> for Message {
                 Uuid::from_str(&sender_id)
                     .map_err(Into::<InfraError>::into)?
                     .into(),
-                body,
+                MessageBody::new(body.try_into()?),
                 timestamp,
             ))
         }
