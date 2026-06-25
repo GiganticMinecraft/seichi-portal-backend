@@ -691,6 +691,7 @@ dependencies = [
  "envy",
  "proptest",
  "serde",
+ "tokio",
  "uuid",
 ]
 
