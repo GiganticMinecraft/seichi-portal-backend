@@ -1,7 +1,8 @@
 use std::time::Duration;
 
-use common::retry::{RetryPolicy, retry_async};
+use common::retry::{RetryPolicy, retry_async_if};
 use errors::infra::InfraError;
+use reqwest::StatusCode;
 use serde::Serialize;
 
 const DISCORD_EMBED_COLOR_LIME: i32 = 65_280;
@@ -52,32 +53,75 @@ impl DiscordWebhookSender {
     }
 
     pub async fn send_with_retry(&self, message: DiscordWebhookMessage) -> Result<(), InfraError> {
-        retry_async(Self::retry_policy(), |_| {
-            let sender = self.clone();
-            let message = message.clone();
-            async move { sender.send(message).await }
-        })
+        retry_async_if(
+            Self::retry_policy(),
+            |_| {
+                let sender = self.clone();
+                let message = message.clone();
+                async move { sender.send(message).await }
+            },
+            DiscordWebhookSendError::is_retryable,
+        )
         .await
+        .map_err(Into::into)
     }
 
-    async fn send(&self, message: DiscordWebhookMessage) -> Result<(), InfraError> {
+    async fn send(&self, message: DiscordWebhookMessage) -> Result<(), DiscordWebhookSendError> {
         let webhook_url = message.webhook_url.clone();
         let request = DiscordWebhookRequest::from(message);
-        let response = self.client.post(webhook_url).json(&request).send().await?;
+        let response = self
+            .client
+            .post(webhook_url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|error| DiscordWebhookSendError::Retryable(error.into()))?;
         let status = response.status();
 
-        status
-            .is_success()
-            .then_some(())
-            .ok_or_else(|| InfraError::Outgoing {
-                cause: format!("Discord webhook returned non-success status: {status}"),
-            })
+        match status {
+            status if status.is_success() => Ok(()),
+            status if is_retryable_status(status) => {
+                Err(DiscordWebhookSendError::Retryable(status_error(status)))
+            }
+            status => Err(DiscordWebhookSendError::Fatal(status_error(status))),
+        }
     }
 }
 
 impl Default for DiscordWebhookSender {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+enum DiscordWebhookSendError {
+    Retryable(InfraError),
+    Fatal(InfraError),
+}
+
+impl DiscordWebhookSendError {
+    fn is_retryable(&self) -> bool {
+        matches!(self, Self::Retryable(_))
+    }
+}
+
+impl From<DiscordWebhookSendError> for InfraError {
+    fn from(error: DiscordWebhookSendError) -> Self {
+        match error {
+            DiscordWebhookSendError::Retryable(error) | DiscordWebhookSendError::Fatal(error) => {
+                error
+            }
+        }
+    }
+}
+
+fn is_retryable_status(status: StatusCode) -> bool {
+    status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS
+}
+
+fn status_error(status: StatusCode) -> InfraError {
+    InfraError::Outgoing {
+        cause: format!("Discord webhook returned non-success status: {status}"),
     }
 }
 

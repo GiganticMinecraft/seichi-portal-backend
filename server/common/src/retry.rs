@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, time::Duration};
+use std::{future::Future, time::Duration};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetryPolicy {
@@ -41,7 +41,22 @@ where
     Operation: Fn(usize) -> OperationFuture + Send + Sync,
     OperationFuture: Future<Output = Result<T, E>> + Send,
 {
-    retry_async_with_sleeper(policy, operation, tokio::time::sleep).await
+    retry_async_if(policy, operation, |_| true).await
+}
+
+pub async fn retry_async_if<T, E, Operation, OperationFuture, ShouldRetry>(
+    policy: RetryPolicy,
+    operation: Operation,
+    should_retry: ShouldRetry,
+) -> Result<T, E>
+where
+    T: Send,
+    E: Send,
+    Operation: Fn(usize) -> OperationFuture + Send + Sync,
+    OperationFuture: Future<Output = Result<T, E>> + Send,
+    ShouldRetry: Fn(&E) -> bool + Send + Sync,
+{
+    retry_async_with_sleeper_if(policy, operation, tokio::time::sleep, should_retry).await
 }
 
 pub async fn retry_async_with_sleeper<T, E, Operation, OperationFuture, Sleeper, SleepFuture>(
@@ -57,33 +72,46 @@ where
     Sleeper: Fn(Duration) -> SleepFuture + Send + Sync,
     SleepFuture: Future<Output = ()> + Send,
 {
-    retry_attempt(&policy, &operation, &sleeper, 0).await
+    retry_async_with_sleeper_if(policy, operation, sleeper, |_| true).await
 }
 
-fn retry_attempt<'a, T, E, Operation, OperationFuture, Sleeper, SleepFuture>(
-    policy: &'a RetryPolicy,
-    operation: &'a Operation,
-    sleeper: &'a Sleeper,
-    attempt_index: usize,
-) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'a>>
+pub async fn retry_async_with_sleeper_if<
+    T,
+    E,
+    Operation,
+    OperationFuture,
+    Sleeper,
+    SleepFuture,
+    ShouldRetry,
+>(
+    policy: RetryPolicy,
+    operation: Operation,
+    sleeper: Sleeper,
+    should_retry: ShouldRetry,
+) -> Result<T, E>
 where
-    T: Send + 'a,
-    E: Send + 'a,
-    Operation: Fn(usize) -> OperationFuture + Sync + 'a,
-    OperationFuture: Future<Output = Result<T, E>> + Send + 'a,
-    Sleeper: Fn(Duration) -> SleepFuture + Sync + 'a,
-    SleepFuture: Future<Output = ()> + Send + 'a,
+    T: Send,
+    E: Send,
+    Operation: Fn(usize) -> OperationFuture + Send + Sync,
+    OperationFuture: Future<Output = Result<T, E>> + Send,
+    Sleeper: Fn(Duration) -> SleepFuture + Send + Sync,
+    SleepFuture: Future<Output = ()> + Send,
+    ShouldRetry: Fn(&E) -> bool + Send + Sync,
 {
-    Box::pin(async move {
+    let mut attempt_index = 0;
+
+    loop {
         match operation(attempt_index).await {
-            Ok(value) => Ok(value),
-            Err(_) if policy.should_retry_after_attempt(attempt_index) => {
+            Ok(value) => return Ok(value),
+            Err(error)
+                if policy.should_retry_after_attempt(attempt_index) && should_retry(&error) =>
+            {
                 sleeper(policy.delay_for_retry(attempt_index)).await;
-                retry_attempt(policy, operation, sleeper, attempt_index + 1).await
+                attempt_index += 1;
             }
-            Err(error) => Err(error),
+            Err(error) => return Err(error),
         }
-    })
+    }
 }
 
 #[cfg(test)]
@@ -174,6 +202,30 @@ mod tests {
 
         assert_eq!(result, Err(5));
         assert_eq!(attempts.load(Ordering::SeqCst), 6);
+    }
+
+    #[tokio::test]
+    async fn retry_async_does_not_retry_when_error_is_not_retryable() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let result = retry_async_with_sleeper_if(
+            RetryPolicy::new(5, Duration::from_secs(1), 2),
+            {
+                let attempts = Arc::clone(&attempts);
+                move |_| {
+                    let attempts = Arc::clone(&attempts);
+                    async move {
+                        attempts.fetch_add(1, Ordering::SeqCst);
+                        Err::<(), _>("fatal")
+                    }
+                }
+            },
+            |_| async {},
+            |error| error != &"fatal",
+        )
+        .await;
+
+        assert_eq!(result, Err("fatal"));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
     }
 
     #[test]
