@@ -1,4 +1,4 @@
-use std::{future::Future, time::Duration};
+use std::{future::Future, pin::Pin, time::Duration};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetryPolicy {
@@ -36,53 +36,68 @@ pub async fn retry_async<T, E, Operation, OperationFuture>(
     operation: Operation,
 ) -> Result<T, E>
 where
-    Operation: FnMut(usize) -> OperationFuture,
-    OperationFuture: Future<Output = Result<T, E>>,
+    T: Send,
+    E: Send,
+    Operation: Fn(usize) -> OperationFuture + Send + Sync,
+    OperationFuture: Future<Output = Result<T, E>> + Send,
 {
     retry_async_with_sleeper(policy, operation, tokio::time::sleep).await
 }
 
 pub async fn retry_async_with_sleeper<T, E, Operation, OperationFuture, Sleeper, SleepFuture>(
     policy: RetryPolicy,
-    mut operation: Operation,
-    mut sleeper: Sleeper,
+    operation: Operation,
+    sleeper: Sleeper,
 ) -> Result<T, E>
 where
-    Operation: FnMut(usize) -> OperationFuture,
-    OperationFuture: Future<Output = Result<T, E>>,
-    Sleeper: FnMut(Duration) -> SleepFuture,
-    SleepFuture: Future<Output = ()>,
+    T: Send,
+    E: Send,
+    Operation: Fn(usize) -> OperationFuture + Send + Sync,
+    OperationFuture: Future<Output = Result<T, E>> + Send,
+    Sleeper: Fn(Duration) -> SleepFuture + Send + Sync,
+    SleepFuture: Future<Output = ()> + Send,
 {
-    let mut attempt_index = 0;
+    retry_attempt(&policy, &operation, &sleeper, 0).await
+}
 
-    loop {
+fn retry_attempt<'a, T, E, Operation, OperationFuture, Sleeper, SleepFuture>(
+    policy: &'a RetryPolicy,
+    operation: &'a Operation,
+    sleeper: &'a Sleeper,
+    attempt_index: usize,
+) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'a>>
+where
+    T: Send + 'a,
+    E: Send + 'a,
+    Operation: Fn(usize) -> OperationFuture + Sync + 'a,
+    OperationFuture: Future<Output = Result<T, E>> + Send + 'a,
+    Sleeper: Fn(Duration) -> SleepFuture + Sync + 'a,
+    SleepFuture: Future<Output = ()> + Send + 'a,
+{
+    Box::pin(async move {
         match operation(attempt_index).await {
-            Ok(value) => return Ok(value),
+            Ok(value) => Ok(value),
             Err(_) if policy.should_retry_after_attempt(attempt_index) => {
                 sleeper(policy.delay_for_retry(attempt_index)).await;
-                attempt_index += 1;
+                retry_attempt(policy, operation, sleeper, attempt_index + 1).await
             }
-            Err(error) => return Err(error),
+            Err(error) => Err(error),
         }
-    }
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        cell::RefCell,
-        rc::Rc,
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
     };
 
     #[tokio::test]
     async fn retry_async_does_not_retry_when_first_attempt_succeeds() {
         let attempts = Arc::new(AtomicUsize::new(0));
-        let delays = Rc::new(RefCell::new(vec![]));
+        let sleeps = Arc::new(AtomicUsize::new(0));
         let result = retry_async_with_sleeper(
             RetryPolicy::new(5, Duration::from_secs(1), 2),
             {
@@ -96,11 +111,11 @@ mod tests {
                 }
             },
             {
-                let delays = Rc::clone(&delays);
-                move |delay| {
-                    let delays = Rc::clone(&delays);
+                let sleeps = Arc::clone(&sleeps);
+                move |_| {
+                    let sleeps = Arc::clone(&sleeps);
                     async move {
-                        delays.borrow_mut().push(delay);
+                        sleeps.fetch_add(1, Ordering::SeqCst);
                     }
                 }
             },
@@ -109,7 +124,7 @@ mod tests {
 
         assert_eq!(result, Ok("ok"));
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
-        assert!(delays.borrow().is_empty());
+        assert_eq!(sleeps.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
