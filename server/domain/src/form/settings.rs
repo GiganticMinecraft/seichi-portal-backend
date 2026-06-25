@@ -35,6 +35,10 @@ impl FormSettings {
         }
     }
 
+    pub fn webhook_url_for_system(&self) -> &WebhookUrl {
+        &self.webhook_url
+    }
+
     pub fn visibility(&self) -> &Visibility {
         &self.visibility
     }

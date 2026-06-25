@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{
@@ -14,9 +15,18 @@ use domain::{
 };
 use errors::ErrorExtra;
 use itertools::Itertools;
-use resource::repository::RealInfrastructureRepository;
+use resource::{
+    outgoing::discord_webhook_sender::{
+        DiscordWebhookField, DiscordWebhookMessage, DiscordWebhookSender,
+    },
+    repository::{RealInfrastructureRepository, Repository},
+};
 use serde_json::json;
-use usecase::forms::answer::AnswerUseCase;
+use tracing::warn;
+use usecase::forms::{
+    answer::AnswerUseCase,
+    answer_webhook::{AnswerWebhookNotification, AnswerWebhookNotifier},
+};
 
 use crate::schemas::error_responses::*;
 use crate::{
@@ -28,6 +38,70 @@ use crate::{
         form_response_schemas::FormAnswer,
     },
 };
+
+type ResourceRepository = Repository<resource::database::connection::ConnectionPool>;
+type ResourceAnswerUseCase<'a> = AnswerUseCase<
+    'a,
+    ResourceRepository,
+    ResourceRepository,
+    ResourceRepository,
+    ResourceRepository,
+>;
+
+fn build_answer_use_case<'a>(
+    repository: &'a RealInfrastructureRepository,
+    answer_webhook_notifier: Option<&'a dyn AnswerWebhookNotifier>,
+) -> ResourceAnswerUseCase<'a> {
+    AnswerUseCase {
+        active_form_repository: repository.active_form_repository(),
+        answer_label_repository: repository.answer_label_repository(),
+        user_repository: repository.user_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
+        answer_webhook_notifier,
+    }
+}
+
+struct ResourceAnswerWebhookNotifier {
+    sender: DiscordWebhookSender,
+}
+
+impl ResourceAnswerWebhookNotifier {
+    fn new(sender: DiscordWebhookSender) -> Self {
+        Self { sender }
+    }
+}
+
+#[async_trait]
+impl AnswerWebhookNotifier for ResourceAnswerWebhookNotifier {
+    async fn notify_answer_posted(&self, notification: AnswerWebhookNotification) {
+        let sender = self.sender.clone();
+        tokio::spawn(async move {
+            let form_id = notification.form_id.clone();
+            let answer_id = notification.answer_id.clone();
+            let attempts = DiscordWebhookSender::retry_policy().max_attempts();
+            let message = DiscordWebhookMessage {
+                webhook_url: notification.webhook_url,
+                title: "回答が送信されました".to_string(),
+                link_url: notification.answer_url,
+                fields: notification
+                    .fields
+                    .into_iter()
+                    .map(|field| DiscordWebhookField::new(field.name, field.value, false))
+                    .collect(),
+            };
+
+            if let Err(error) = sender.send_with_retry(message).await {
+                warn!(
+                    form_id,
+                    answer_id,
+                    attempts,
+                    error = %error,
+                    "failed to send answer webhook after retries"
+                );
+            }
+        });
+    }
+}
 
 #[derive(utoipa::IntoResponses)]
 pub enum GetAllAnswersResponse {
@@ -103,12 +177,7 @@ pub async fn get_all_answers(
     Extension(user): Extension<ActiveUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetAllAnswersResponse, Response> {
-    let form_answer_use_case = AnswerUseCase {
-        active_form_repository: repository.active_form_repository(),
-        answer_label_repository: repository.answer_label_repository(),
-        user_repository: repository.user_repository(),
-        answer_entry_repository: repository.answer_entry_repository(),
-    };
+    let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let answers = form_answer_use_case
         .get_all_answers(&user)
@@ -155,12 +224,7 @@ pub async fn get_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetAnswerResponse, Response> {
-    let form_answer_use_case = AnswerUseCase {
-        active_form_repository: repository.active_form_repository(),
-        answer_label_repository: repository.answer_label_repository(),
-        user_repository: repository.user_repository(),
-        answer_entry_repository: repository.answer_entry_repository(),
-    };
+    let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
 
@@ -201,12 +265,7 @@ pub async fn get_answer_by_form_id_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<GetAnswersByFormResponse, Response> {
-    let form_answer_use_case = AnswerUseCase {
-        active_form_repository: repository.active_form_repository(),
-        answer_label_repository: repository.answer_label_repository(),
-        user_repository: repository.user_repository(),
-        answer_entry_repository: repository.answer_entry_repository(),
-    };
+    let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
@@ -256,12 +315,8 @@ pub async fn post_answer_handler(
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<AnswerCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
-    let form_answer_use_case = AnswerUseCase {
-        active_form_repository: repository.active_form_repository(),
-        answer_label_repository: repository.answer_label_repository(),
-        user_repository: repository.user_repository(),
-        answer_entry_repository: repository.answer_entry_repository(),
-    };
+    let webhook_notifier = ResourceAnswerWebhookNotifier::new(DiscordWebhookSender::new());
+    let form_answer_use_case = build_answer_use_case(&repository, Some(&webhook_notifier));
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
@@ -307,12 +362,8 @@ pub async fn post_temporary_answer_handler(
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<TemporaryAnswerCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
-    let form_answer_use_case = AnswerUseCase {
-        active_form_repository: repository.active_form_repository(),
-        answer_label_repository: repository.answer_label_repository(),
-        user_repository: repository.user_repository(),
-        answer_entry_repository: repository.answer_entry_repository(),
-    };
+    let webhook_notifier = ResourceAnswerWebhookNotifier::new(DiscordWebhookSender::new());
+    let form_answer_use_case = build_answer_use_case(&repository, Some(&webhook_notifier));
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
@@ -366,12 +417,7 @@ pub async fn update_answer_handler(
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<AnswerUpdateSchema>, JsonRejection>,
 ) -> Result<UpdateAnswerResponse, Response> {
-    let form_answer_use_case = AnswerUseCase {
-        active_form_repository: repository.active_form_repository(),
-        answer_label_repository: repository.answer_label_repository(),
-        user_repository: repository.user_repository(),
-        answer_entry_repository: repository.answer_entry_repository(),
-    };
+    let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
