@@ -245,13 +245,48 @@ pub async fn create_form_handler(
     let questions = into_create_questions(questions)
         .map_err(errors::Error::from)
         .map_err(handle_error)?;
+    let (
+        webhook,
+        visibility,
+        allow_temporary_answers,
+        answer_visibility,
+        acceptance_period,
+        default_answer_title,
+    ) = settings
+        .map(|settings| {
+            let answer_settings = settings.answer_settings;
+            let (answer_visibility, acceptance_period, default_answer_title) = answer_settings
+                .map(|answer_settings| {
+                    (
+                        answer_settings.visibility,
+                        answer_settings.acceptance_period,
+                        answer_settings.default_answer_title,
+                    )
+                })
+                .unwrap_or_default();
+
+            (
+                settings.webhook_url.and_then(|url| url.0),
+                settings.visibility,
+                settings.allow_temporary_answers,
+                answer_visibility,
+                acceptance_period,
+                default_answer_title,
+            )
+        })
+        .unwrap_or_default();
 
     let form = form_use_case
         .create_form(
             title,
             form_description,
             questions,
-            settings.and_then(|settings| settings.allow_temporary_answers),
+            webhook,
+            visibility,
+            allow_temporary_answers,
+            answer_visibility,
+            acceptance_period,
+            default_answer_title,
             &user,
         )
         .await

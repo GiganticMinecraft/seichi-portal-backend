@@ -356,6 +356,7 @@ async fn insert_form_root(
     let form_id = form.id().into_inner().to_string();
     let title = form.title().to_string();
     let description = form.description().to_owned().into_inner();
+    let visibility = form.settings().visibility().to_string();
     let user_id = created_by.id().to_string();
 
     let answer_settings = form.answer_settings();
@@ -368,17 +369,25 @@ async fn insert_form_root(
         .map(NonEmptyString::into_inner);
     let acceptance_period_start_at = answer_settings.acceptance_period().start_at().to_owned();
     let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
+    let webhook_url = form
+        .settings()
+        .webhook_url(&Actor::from(created_by.clone()))
+        .ok()
+        .map(ToOwned::to_owned)
+        .and_then(WebhookUrl::into_inner)
+        .map(NonEmptyString::into_inner);
 
     sqlx::query(
         r#"INSERT INTO form_meta_data
-        (id, title, description, answer_visibility, allow_temporary_answers,
+        (id, title, description, visibility, answer_visibility, allow_temporary_answers,
          acceptance_period_start_at, acceptance_period_end_at, default_answer_title,
          created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(form_id.clone())
     .bind(title)
     .bind(description)
+    .bind(visibility)
     .bind(answer_visibility)
     .bind(allow_temporary_answers)
     .bind(acceptance_period_start_at)
@@ -389,8 +398,9 @@ async fn insert_form_root(
     .execute(&mut **txn)
     .await?;
 
-    sqlx::query(r"INSERT INTO form_webhooks (form_id, url) VALUES (?, NULL)")
+    sqlx::query(r"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)")
         .bind(form_id)
+        .bind(webhook_url)
         .execute(&mut **txn)
         .await?;
 

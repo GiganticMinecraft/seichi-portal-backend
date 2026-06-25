@@ -3,7 +3,7 @@ use domain::{
     form::models::{
         ActiveForm, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, ArchivedForm,
         DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId,
-        FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
+        FormSettings, FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
     },
     repository::{
         form::{
@@ -54,19 +54,50 @@ impl<
     R6: UserRepository,
 > FormUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_form(
         &self,
         title: FormTitle,
         description: FormDescription,
         questions: NonEmptyVec<Question>,
+        webhook: Option<WebhookUrl>,
+        visibility: Option<Visibility>,
         allow_temporary_answers: Option<bool>,
+        answer_visibility: Option<AnswerVisibility>,
+        acceptance_period: Option<AnswerAcceptancePeriod>,
+        default_answer_title: Option<DefaultAnswerTitle>,
         user: &ActiveUser,
     ) -> Result<ActiveForm, Error> {
         let user_as_user = Actor::from(user.clone());
 
+        let form_settings = FormSettings::new();
+        let form_settings = match webhook {
+            Some(webhook) => form_settings.change_webhook_url(webhook),
+            None => form_settings,
+        };
+        let form_settings = match visibility {
+            Some(visibility) => form_settings.change_visibility(visibility),
+            None => form_settings,
+        };
+
+        let answer_settings = AnswerSettings::default();
         let answer_settings = match allow_temporary_answers {
-            Some(allow) => AnswerSettings::default().change_allow_temporary_answers(allow),
-            None => AnswerSettings::default(),
+            Some(allow) => answer_settings.change_allow_temporary_answers(allow),
+            None => answer_settings,
+        };
+        let answer_settings = match answer_visibility {
+            Some(visibility) => answer_settings.change_visibility(visibility),
+            None => answer_settings,
+        };
+        let answer_settings = match acceptance_period {
+            Some(acceptance_period) => answer_settings.change_acceptance_period(acceptance_period),
+            None => answer_settings,
+        };
+        let answer_settings = match default_answer_title {
+            Some(default_answer_title) => {
+                answer_settings.change_default_answer_title(default_answer_title)
+            }
+            None => answer_settings,
         };
 
         let form = ActiveForm::new(
@@ -74,6 +105,7 @@ impl<
             description,
             QuestionSet::try_new(questions).map_err(Error::from)?,
         )
+        .change_settings(form_settings)
         .change_answer_settings(answer_settings);
         let form_id = *form.id();
 
@@ -705,6 +737,11 @@ mod tests {
                 FormTitle::new("Form".to_string().try_into().unwrap()),
                 FormDescription::new("description".to_string()),
                 input_questions,
+                None,
+                None,
+                None,
+                None,
+                None,
                 None,
                 &user,
             )
