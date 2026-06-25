@@ -28,15 +28,11 @@ impl FormSettings {
     }
 
     pub fn webhook_url(&self, actor: &Actor) -> Result<&WebhookUrl, DomainError> {
-        if is_administrator(actor) {
+        if matches!(actor, Actor::System) || is_administrator(actor) {
             Ok(&self.webhook_url)
         } else {
             Err(DomainError::Forbidden)
         }
-    }
-
-    pub fn webhook_url_for_system(&self) -> &WebhookUrl {
-        &self.webhook_url
     }
 
     pub fn visibility(&self) -> &Visibility {

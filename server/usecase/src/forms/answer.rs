@@ -110,9 +110,10 @@ impl<
         };
         let Some(webhook_url) = form
             .settings()
-            .webhook_url_for_system()
-            .to_owned()
-            .into_inner()
+            .webhook_url(&Actor::System)
+            .ok()
+            .cloned()
+            .and_then(|url| url.into_inner())
             .map(|url| url.into_inner())
         else {
             return;
