@@ -24,6 +24,25 @@ use uuid::Uuid;
 
 use crate::forms::form::FormUseCase;
 
+fn paginate<T>(
+    items: impl IntoIterator<Item = T>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> Vec<T> {
+    let items = items.into_iter().skip(offset.unwrap_or(0) as usize);
+    match limit {
+        Some(limit) => items.take(limit as usize).collect(),
+        None => items.collect(),
+    }
+}
+
+fn not_found_error(entity: &str, id: impl std::fmt::Display) -> Error {
+    errors::domain::DomainError::InvalidEntity {
+        message: format!("{entity} with id {id} not found"),
+    }
+    .into()
+}
+
 #[derive(Default)]
 pub(crate) struct FormUseCaseTestRepositories {
     pub(crate) active_form_repository: InMemoryActiveFormRepository,
@@ -108,15 +127,19 @@ impl ActiveFormRepository for InMemoryActiveFormRepository {
 
     async fn list(
         &self,
-        _offset: Option<u32>,
-        _limit: Option<u32>,
+        offset: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
-        Ok(self
+        let forms = self
             .forms
             .lock()
             .unwrap()
             .iter()
             .cloned()
+            .collect::<Vec<_>>();
+
+        Ok(paginate(forms, offset, limit)
+            .into_iter()
             .map(AuthorizationGuard::from)
             .collect())
     }
@@ -130,8 +153,14 @@ impl ActiveFormRepository for InMemoryActiveFormRepository {
         _actor: &ActiveUser,
         updated_form: Allowed<ActiveForm, Update>,
     ) -> Result<(), Error> {
-        self.save_form(updated_form.into_inner());
-        Ok(())
+        let form = updated_form.into_inner();
+        let mut forms = self.forms.lock().unwrap();
+        if let Some(stored_form) = forms.iter_mut().find(|stored| *stored.id() == *form.id()) {
+            *stored_form = form;
+            Ok(())
+        } else {
+            Err(not_found_error("ActiveForm", form.id()))
+        }
     }
 
     async fn size(&self) -> Result<u32, Error> {
@@ -276,8 +305,10 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .find(|stored| *stored.id() == *answer_entry.id())
         {
             *stored_answer = answer_entry.value().clone();
+            Ok(())
+        } else {
+            Err(not_found_error("AnswerEntry", answer_entry.id()))
         }
-        Ok(())
     }
 
     async fn size(&self) -> Result<u32, Error> {
@@ -294,16 +325,38 @@ pub(crate) struct InMemoryArchivedFormRepository {
 impl ArchivedFormRepository for InMemoryArchivedFormRepository {
     async fn list(
         &self,
-        _offset: Option<u32>,
-        _limit: Option<u32>,
-        _query: Option<String>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        query: Option<String>,
     ) -> Result<Vec<AuthorizationGuard<ArchivedForm, Read>>, Error> {
-        Ok(self
+        let mut forms = self
             .forms
             .lock()
             .unwrap()
             .iter()
             .cloned()
+            .filter(|form| match &query {
+                Some(query) => {
+                    form.form()
+                        .title()
+                        .to_owned()
+                        .into_inner()
+                        .into_inner()
+                        .contains(query)
+                        || form
+                            .form()
+                            .description()
+                            .to_owned()
+                            .into_inner()
+                            .contains(query)
+                }
+                None => true,
+            })
+            .collect::<Vec<_>>();
+        forms.sort_by(|left, right| right.archived_at().cmp(left.archived_at()));
+
+        Ok(paginate(forms, offset, limit)
+            .into_iter()
             .map(AuthorizationGuard::from)
             .collect())
     }
@@ -382,8 +435,13 @@ impl NotificationRepository for InMemoryNotificationRepository {
             stored.recipient_id().into_inner() == notification_settings.recipient_id().into_inner()
         }) {
             *stored_preference = notification_settings.into_inner();
+            Ok(())
+        } else {
+            Err(not_found_error(
+                "NotificationPreference",
+                notification_settings.recipient_id(),
+            ))
         }
-        Ok(())
     }
 }
 
@@ -440,8 +498,10 @@ impl UserRepository for InMemoryUserRepository {
         let mut users = self.users.lock().unwrap();
         if let Some(stored_user) = users.iter_mut().find(|stored| stored.id() == user.id()) {
             *stored_user = user;
+            Ok(())
+        } else {
+            Err(not_found_error("ActiveUser", user.id()))
         }
-        Ok(())
     }
 
     async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<Option<ActiveUser>, Error> {
