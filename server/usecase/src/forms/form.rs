@@ -625,22 +625,13 @@ fn validate_answered_form_question_update(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::repositories::FormUseCaseTestRepositories;
     use domain::{
         form::{
             models::{
                 ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormSettings, FormTitle,
             },
             question::{QuestionId, QuestionSet, QuestionType},
-        },
-        repository::{
-            form::{
-                active_form_repository::MockActiveFormRepository,
-                answer_entry_repository::MockAnswerEntryRepository,
-                archived_form_repository::MockArchivedFormRepository,
-                form_label_repository::MockFormLabelRepository,
-            },
-            notification_repository::MockNotificationRepository,
-            user_repository::MockUserRepository,
         },
         user::models::{ActiveUser, Role},
     };
@@ -706,30 +697,8 @@ mod tests {
         ])
         .unwrap();
 
-        let mut active_form_repository = MockActiveFormRepository::new();
-        active_form_repository
-            .expect_create()
-            .times(1)
-            .returning(|_, _| Ok(()));
-        active_form_repository
-            .expect_get()
-            .times(1)
-            .returning(move |form_id| Ok(Some(sample_form(form_id).into())));
-
-        let form_label_repository = MockFormLabelRepository::new();
-        let answer_entry_repository = MockAnswerEntryRepository::new();
-        let archived_form_repository = MockArchivedFormRepository::new();
-        let notification_repository = MockNotificationRepository::new();
-        let user_repository = MockUserRepository::new();
-
-        let usecase = FormUseCase {
-            active_form_repository: &active_form_repository,
-            archived_form_repository: &archived_form_repository,
-            notification_repository: &notification_repository,
-            form_label_repository: &form_label_repository,
-            answer_entry_repository: &answer_entry_repository,
-            user_repository: &user_repository,
-        };
+        let repositories = FormUseCaseTestRepositories::default();
+        let usecase = repositories.form_use_case();
 
         let created_form = usecase
             .create_form(
@@ -750,35 +719,8 @@ mod tests {
         let user = admin_user();
         let form_id = FormId::from(Uuid::new_v4());
         let form = sample_form(form_id);
-        let mut active_form_repository = MockActiveFormRepository::new();
-        active_form_repository
-            .expect_get()
-            .times(3)
-            .returning(move |_| Ok(Some(sample_form(form_id).into())));
-        active_form_repository
-            .expect_update_form()
-            .times(1)
-            .returning(|_, _| Ok(()));
-
-        let mut form_label_repository = MockFormLabelRepository::new();
-        form_label_repository
-            .expect_fetch_labels_by_form_id()
-            .times(1)
-            .returning(|_| Ok(vec![]));
-
-        let answer_entry_repository = MockAnswerEntryRepository::new();
-        let archived_form_repository = MockArchivedFormRepository::new();
-        let notification_repository = MockNotificationRepository::new();
-        let user_repository = MockUserRepository::new();
-
-        let usecase = FormUseCase {
-            active_form_repository: &active_form_repository,
-            archived_form_repository: &archived_form_repository,
-            notification_repository: &notification_repository,
-            form_label_repository: &form_label_repository,
-            answer_entry_repository: &answer_entry_repository,
-            user_repository: &user_repository,
-        };
+        let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form.clone()]);
+        let usecase = repositories.form_use_case();
 
         let (updated_form, _) = usecase
             .update_form(
