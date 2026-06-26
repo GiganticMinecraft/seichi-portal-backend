@@ -63,7 +63,7 @@ impl<T: 'static> PartialSchema for Id<T> {
 )]
 pub struct IntegerId<T>(#[underlying] i32, std::marker::PhantomData<T>);
 
-#[derive(DerivingVia, Debug, PartialOrd, PartialEq)]
+#[derive(DerivingVia, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[deriving(From, Into, Copy, Default, IntoInner(via: Uuid), Display(via: Uuid), Serialize(via: Uuid
 ), Deserialize(via: Uuid))]
@@ -77,5 +77,31 @@ pub struct Id<T>(
 impl<T> Id<T> {
     pub fn new() -> Self {
         Self(Uuid::now_v7(), std::marker::PhantomData)
+    }
+}
+
+impl<T> Eq for Id<T> {}
+
+impl<T> PartialEq for Id<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> PartialOrd for Id<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Id<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl<T> std::hash::Hash for Id<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::hash::Hash::hash(&self.0, state);
     }
 }

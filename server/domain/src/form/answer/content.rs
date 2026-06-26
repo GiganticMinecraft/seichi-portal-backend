@@ -24,11 +24,11 @@ impl PostedAnswerContents {
     ) -> Result<Self, DomainError> {
         let questions_by_id = questions
             .iter()
-            .map(|question| (question.id().into_inner(), question))
+            .map(|question| (question.id(), question))
             .collect::<HashMap<_, _>>();
         let answered_question_ids = contents
             .iter()
-            .map(|answer| answer.question_id.into_inner())
+            .map(|answer| answer.question_id)
             .collect::<BTreeSet<_>>();
 
         if answered_question_ids.len() != contents.len() {
@@ -38,14 +38,14 @@ impl PostedAnswerContents {
         }
 
         if let Some(error) = contents.iter().find_map(|answer| {
-            let question = questions_by_id
-                .get(&answer.question_id.into_inner())
-                .ok_or_else(|| DomainError::InvalidEntity {
+            let question = questions_by_id.get(&answer.question_id).ok_or_else(|| {
+                DomainError::InvalidEntity {
                     message: format!(
                         "question {} does not belong to the form",
                         answer.question_id
                     ),
-                });
+                }
+            });
 
             question
                 .and_then(|question| match question {
@@ -87,9 +87,7 @@ impl PostedAnswerContents {
         if let Some(missing_question) = questions
             .iter()
             .filter(|question| question.is_required())
-            .map(|question| (question.id().into_inner(), question))
-            .find(|(question_id, _)| !answered_question_ids.contains(question_id))
-            .map(|(_, question)| question)
+            .find(|question| !answered_question_ids.contains(&question.id()))
         {
             return Err(DomainError::InvalidEntity {
                 message: format!(
