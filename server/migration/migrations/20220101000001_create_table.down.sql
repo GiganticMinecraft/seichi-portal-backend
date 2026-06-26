@@ -25,5 +25,5 @@ DROP TABLE IF EXISTS
     discord_notification_settings,
     discord_linked_users,
     temporary_users,
-    answer_submission_restrictions,
+    answer_submitter_restrictions,
     users;
