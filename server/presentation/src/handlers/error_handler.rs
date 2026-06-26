@@ -9,19 +9,31 @@ use errors::{
     Error, domain::DomainError, infra::InfraError, usecase::UseCaseError,
     validation::ValidationError,
 };
-use serde_json::json;
+
+use crate::schemas::error_response::{ErrorResponse, ErrorRestriction};
 
 fn problem_response(status: StatusCode, title: &str, detail: &str, error_code: &str) -> Response {
+    problem_response_with_restriction(status, title, detail, error_code, None)
+}
+
+fn problem_response_with_restriction(
+    status: StatusCode,
+    title: &str,
+    detail: &str,
+    error_code: &str,
+    restriction: Option<ErrorRestriction>,
+) -> Response {
     (
         status,
         [(header::CONTENT_TYPE, "application/problem+json")],
-        Json(json!({
-            "type": "about:blank",
-            "title": title,
-            "status": status.as_u16(),
-            "detail": detail,
-            "errorCode": error_code,
-        })),
+        Json(ErrorResponse {
+            problem_type: "about:blank".to_string(),
+            title: title.to_string(),
+            status: status.as_u16(),
+            detail: detail.to_string(),
+            error_code: error_code.to_string(),
+            restriction,
+        }),
     )
         .into_response()
 }
@@ -34,6 +46,15 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             "You do not have permission to access this resource.",
             "FORBIDDEN",
         ),
+        DomainError::AnswerSubmissionRestricted { reason, expires_at } => {
+            problem_response_with_restriction(
+                StatusCode::FORBIDDEN,
+                "Forbidden",
+                "Answer submission is restricted.",
+                "ANSWER_SUBMISSION_RESTRICTED",
+                Some(ErrorRestriction { reason, expires_at }),
+            )
+        }
         DomainError::NotFound => problem_response(
             StatusCode::NOT_FOUND,
             "Not Found",

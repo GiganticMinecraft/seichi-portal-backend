@@ -1,12 +1,15 @@
+use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::arbitrary_uuid_v4;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use domain_derive::UnsafeFromRawParts;
+use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 use crate::types::authorization_guard::{
@@ -29,6 +32,81 @@ pub struct UserId(
     #[underlying]
     Uuid,
 );
+
+pub type AnswerSubmissionRestrictionId = types::Id<AnswerSubmissionRestriction>;
+
+#[derive(Clone, DerivingVia, Debug, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: NonEmptyString), Deserialize(via: NonEmptyString))]
+pub struct AnswerSubmissionRestrictionReason(NonEmptyString);
+
+impl AnswerSubmissionRestrictionReason {
+    pub fn new(reason: NonEmptyString) -> Self {
+        Self(reason)
+    }
+}
+
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+pub struct AnswerSubmissionRestriction {
+    id: AnswerSubmissionRestrictionId,
+    user_id: UserId,
+    reason: AnswerSubmissionRestrictionReason,
+    restricted_by: UserId,
+    restricted_at: DateTime<Utc>,
+    expires_at: Option<DateTime<Utc>>,
+}
+
+impl AnswerSubmissionRestriction {
+    pub fn new(
+        user_id: UserId,
+        reason: AnswerSubmissionRestrictionReason,
+        restricted_by: UserId,
+        restricted_at: DateTime<Utc>,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Result<Self, DomainError> {
+        if expires_at.is_some_and(|expires_at| expires_at <= restricted_at) {
+            return Err(DomainError::InvalidEntity {
+                message:
+                    "answer submission restriction expires_at must be later than restricted_at"
+                        .to_string(),
+            });
+        }
+
+        Ok(Self {
+            id: AnswerSubmissionRestrictionId::new(),
+            user_id,
+            reason,
+            restricted_by,
+            restricted_at,
+            expires_at,
+        })
+    }
+
+    pub fn is_active_at(&self, now: DateTime<Utc>) -> bool {
+        self.expires_at.is_none_or(|expires_at| now < expires_at)
+    }
+}
+
+impl AuthorizationRole for AnswerSubmissionRestriction {
+    type Role = SelfGuarded;
+}
+
+impl AuthorizationGuardDefinitions for AnswerSubmissionRestriction {
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if self.user_id == *user.id() || user.role() == &Role::Administrator)
+    }
+
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+    }
+
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+    }
+}
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Debug, Clone)]

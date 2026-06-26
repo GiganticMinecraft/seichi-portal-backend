@@ -1,8 +1,9 @@
+use chrono::Utc;
 use domain::{
     form::{
         answer::{
-            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
-            PostedAnswerContents,
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerSubmitter, AnswerTitle,
+            FormAnswerContent, PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
@@ -186,6 +187,17 @@ impl<
         let form = form_guard.try_read(actor.clone())?;
         let questions = form.value().questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
+        let restriction = self
+            .user_repository
+            .fetch_active_answer_submission_restriction(user.id().into_inner())
+            .await?
+            .map(|restriction| {
+                restriction
+                    .try_read(actor.clone())
+                    .map(|restriction| restriction.into_inner())
+            })
+            .transpose()?;
+        let submitter = AnswerSubmitter::try_new(user.clone(), restriction, Utc::now())?;
 
         let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             form.value()
@@ -197,8 +209,7 @@ impl<
             user.name(),
         )?;
 
-        let author = AnswerAuthor::AuthenticatedUser(*user.id());
-        let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
+        let answer_entry = form.try_accept_answer(submitter, title, posted_answers)?;
 
         self.answer_entry_repository
             .post(&form, &answer_entry)
@@ -242,8 +253,8 @@ impl<
             temporary_user.name(),
             temporary_user.contact_text()
         );
-        let author = AnswerAuthor::TemporaryUser(temporary_user);
-        let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
+        let answer_entry =
+            form.try_accept_temporary_answer(temporary_user, title, posted_answers)?;
 
         self.answer_entry_repository
             .post(&form, &answer_entry)
@@ -431,5 +442,161 @@ impl<
 
         self.build_answer_details(actor, form_id, form_answer, labels)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use domain::{
+        form::{
+            answer::{AnswerLabelId, FormAnswerContentId},
+            models::{FormDescription, FormTitle, QuestionSet},
+            question::Question,
+        },
+        repository::form::answer_label_repository::AnswerLabelRepository,
+        types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
+        user::models::{AnswerSubmissionRestriction, AnswerSubmissionRestrictionReason, Role},
+    };
+    use errors::domain::DomainError;
+    use types::non_empty_vec::NonEmptyVec;
+    use uuid::Uuid;
+
+    use crate::test_utils::repositories::FormUseCaseTestRepositories;
+
+    #[derive(Default)]
+    struct EmptyAnswerLabelRepository;
+
+    #[async_trait]
+    impl AnswerLabelRepository for EmptyAnswerLabelRepository {
+        async fn create_label_for_answers(
+            &self,
+            _label: Allowed<AnswerLabel, Create>,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn get_labels_for_answers(
+            &self,
+        ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+            Ok(vec![])
+        }
+
+        async fn get_label_for_answers(
+            &self,
+            _label_id: AnswerLabelId,
+        ) -> Result<Option<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+            Ok(None)
+        }
+
+        async fn get_labels_for_answers_by_label_ids(
+            &self,
+            _label_ids: Vec<AnswerLabelId>,
+        ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+            Ok(vec![])
+        }
+
+        async fn get_labels_for_answers_by_answer_id(
+            &self,
+            _answer_id: AnswerId,
+        ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
+            Ok(vec![])
+        }
+
+        async fn delete_label_for_answers(
+            &self,
+            _label: Allowed<AnswerLabel, Delete>,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn edit_label_for_answers(
+            &self,
+            _label: Allowed<AnswerLabel, Update>,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn replace_answer_labels(
+            &self,
+            _answer_id: AnswerId,
+            _labels: Vec<Allowed<AnswerLabel, Update>>,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn size(&self) -> Result<u32, Error> {
+            Ok(0)
+        }
+    }
+
+    fn active_user(name: &str, role: Role) -> ActiveUser {
+        ActiveUser::new(name.to_string(), Uuid::new_v4().into(), role)
+    }
+
+    fn sample_form() -> ActiveForm {
+        let question = Question::new_text(
+            "body".to_string().try_into().unwrap(),
+            0,
+            "Body".to_string().try_into().unwrap(),
+            None,
+            true,
+        )
+        .unwrap();
+
+        ActiveForm::new(
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new("description".to_string()),
+            QuestionSet::try_new(NonEmptyVec::try_new(vec![question]).unwrap()).unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn post_answers_rejects_user_with_active_answer_submission_restriction() {
+        let form = sample_form();
+        let user = active_user("user", Role::StandardUser);
+        let now = Utc::now();
+        let restriction = AnswerSubmissionRestriction::new(
+            *user.id(),
+            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            Uuid::new_v4().into(),
+            now,
+            None,
+        )
+        .unwrap();
+        let answer = FormAnswerContent {
+            id: FormAnswerContentId::new(),
+            question_id: (*form.questions().as_slice()[0].id()).into(),
+            answer: "answer".to_string(),
+        };
+
+        let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form.clone()]);
+        repositories
+            .user_repository
+            .save_answer_submission_restriction(restriction);
+        let empty_answer_label_repository = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &empty_answer_label_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: None,
+        };
+
+        let result = usecase.post_answers(user, *form.id(), vec![answer]).await;
+
+        assert_eq!(
+            result,
+            Err(DomainError::AnswerSubmissionRestricted {
+                reason: "spam".to_string(),
+                expires_at: None,
+            }
+            .into())
+        );
+        assert_eq!(
+            repositories.answer_entry_repository.size().await.unwrap(),
+            0
+        );
     }
 }

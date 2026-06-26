@@ -19,14 +19,14 @@ pub use crate::form::{
 
 use crate::{
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
+        answer::{AnswerAuthor, AnswerEntry, AnswerSubmitter, AnswerTitle, PostedAnswerContents},
         is_administrator,
     },
     types::authorization_guard::{
         Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Create, Read, SelfGuarded,
         Update,
     },
-    user::models::{Actor, UserId},
+    user::models::{Actor, TemporaryUser, UserId},
 };
 
 pub type FormId = types::Id<ActiveForm>;
@@ -137,14 +137,32 @@ impl ActiveForm {
         Self { label_ids, ..self }
     }
 
-    fn try_accept_answer(
+    fn try_accept_answer_from_submitter(
         &self,
-        author: AnswerAuthor,
-        actor: &Actor,
+        submitter: AnswerSubmitter,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<AnswerEntry, DomainError> {
-        if !self.answer_settings.can_accept_answer(&author, actor) {
+        let user = submitter.into_user();
+        let author = AnswerAuthor::AuthenticatedUser(*user.id());
+        let actor = Actor::from(user);
+
+        if !self.answer_settings.can_accept_answer(&author, &actor) {
+            return Err(DomainError::Forbidden);
+        }
+        Ok(AnswerEntry::new(*self.id(), author, title, posted_answers))
+    }
+
+    fn try_accept_temporary_answer(
+        &self,
+        temporary_user: TemporaryUser,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<AnswerEntry, DomainError> {
+        let actor = Actor::from(temporary_user.clone());
+        let author = AnswerAuthor::TemporaryUser(temporary_user);
+
+        if !self.answer_settings.can_accept_answer(&author, &actor) {
             return Err(DomainError::Forbidden);
         }
         Ok(AnswerEntry::new(*self.id(), author, title, posted_answers))
@@ -158,13 +176,25 @@ impl ActiveForm {
 impl Allowed<ActiveForm, Read> {
     pub fn try_accept_answer(
         &self,
-        author: AnswerAuthor,
+        submitter: AnswerSubmitter,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
-        let entry = self
-            .value()
-            .try_accept_answer(author, self.actor(), title, posted_answers)?;
+        let entry =
+            self.value()
+                .try_accept_answer_from_submitter(submitter, title, posted_answers)?;
+        self.authorize_create(entry)
+    }
+
+    pub fn try_accept_temporary_answer(
+        &self,
+        temporary_user: TemporaryUser,
+        title: AnswerTitle,
+        posted_answers: PostedAnswerContents,
+    ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
+        let entry =
+            self.value()
+                .try_accept_temporary_answer(temporary_user, title, posted_answers)?;
         self.authorize_create(entry)
     }
 
@@ -287,7 +317,7 @@ mod tests {
     use super::*;
     use crate::{
         form::{
-            answer::{FormAnswerContent, FormAnswerContentId},
+            answer::{AnswerSubmitter, FormAnswerContent, FormAnswerContentId},
             question::{Question, QuestionId, QuestionType},
         },
         types::authorization_guard::{AuthorizationGuard, Read},
@@ -351,21 +381,21 @@ mod tests {
     fn try_accept_answer_respects_temporary_answer_settings() {
         let temporary_user = TemporaryUser::new("guest".to_string(), "contact".to_string());
         let actor = Actor::from(temporary_user.clone());
-        let temporary_author = AnswerAuthor::TemporaryUser(temporary_user);
 
         let form = sample_form();
-        let denied_result = public_form_read_by(form.clone(), actor.clone()).try_accept_answer(
-            temporary_author.clone(),
-            AnswerTitle::new(None),
-            sample_posted_answers(&form),
-        );
+        let denied_result = public_form_read_by(form.clone(), actor.clone())
+            .try_accept_temporary_answer(
+                temporary_user.clone(),
+                AnswerTitle::new(None),
+                sample_posted_answers(&form),
+            );
 
         assert!(matches!(denied_result, Err(DomainError::Forbidden)));
 
         let form = form
             .change_answer_settings(AnswerSettings::default().change_allow_temporary_answers(true));
-        let accepted_result = public_form_read_by(form.clone(), actor).try_accept_answer(
-            temporary_author,
+        let accepted_result = public_form_read_by(form.clone(), actor).try_accept_temporary_answer(
+            temporary_user,
             AnswerTitle::new(None),
             sample_posted_answers(&form),
         );
@@ -410,6 +440,7 @@ mod tests {
     fn try_accept_answer_respects_acceptance_period() {
         let user = active_user(Role::StandardUser);
         let actor = Actor::from(user.clone());
+        let submitter = AnswerSubmitter::try_new(user, None, Utc::now()).unwrap();
         let form = sample_form().change_answer_settings(
             AnswerSettings::default().change_acceptance_period(
                 AnswerAcceptancePeriod::try_new(
@@ -421,7 +452,7 @@ mod tests {
         );
 
         let result = public_form_read_by(form.clone(), actor).try_accept_answer(
-            AnswerAuthor::AuthenticatedUser(*user.id()),
+            submitter,
             AnswerTitle::new(None),
             sample_posted_answers(&form),
         );

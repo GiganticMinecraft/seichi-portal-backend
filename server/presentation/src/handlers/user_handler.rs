@@ -10,7 +10,7 @@ use axum_extra::{
 };
 use domain::{
     repository::Repositories,
-    user::models::{ActiveUser, UserSessionExpires},
+    user::models::{ActiveUser, AnswerSubmissionRestrictionReason, UserSessionExpires},
 };
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -18,7 +18,10 @@ use usecase::user::UserUseCase;
 use uuid::Uuid;
 
 use crate::schemas::error_responses::*;
-use crate::schemas::user::{UserInfoResponse, UserSchema, UserUpdateSchema};
+use crate::schemas::user::{
+    AnswerSubmissionRestrictionRequest, AnswerSubmissionRestrictionResponse, UserInfoResponse,
+    UserSchema, UserUpdateSchema,
+};
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
@@ -58,6 +61,34 @@ impl IntoResponse for PatchUserRoleResponse {
 pub enum UserListResponse {
     #[response(status = 200, description = "The request has succeeded.")]
     Ok(Vec<UserSchema>),
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetAnswerSubmissionRestrictionResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Option<AnswerSubmissionRestrictionResponse>),
+}
+
+impl IntoResponse for GetAnswerSubmissionRestrictionResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum PutAnswerSubmissionRestrictionResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(AnswerSubmissionRestrictionResponse),
+}
+
+impl IntoResponse for PutAnswerSubmissionRestrictionResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
 }
 
 impl IntoResponse for UserListResponse {
@@ -228,6 +259,127 @@ pub async fn user_list(
     Ok(UserListResponse::Ok(
         users.into_iter().map(Into::into).collect(),
     ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/users/{uuid}/answer-submission-restriction",
+    summary = "ユーザーの有効な回答投稿制限の取得",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        GetAnswerSubmissionRestrictionResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
+pub async fn get_answer_submission_restriction(
+    Extension(actor): Extension<ActiveUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+) -> Result<GetAnswerSubmissionRestrictionResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
+    let restriction = user_use_case
+        .fetch_active_answer_submission_restriction(&actor, uuid)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(GetAnswerSubmissionRestrictionResponse::Ok(
+        restriction.map(Into::into),
+    ))
+}
+
+#[utoipa::path(
+    put,
+    path = "/users/{uuid}/answer-submission-restriction",
+    summary = "ユーザーの回答投稿を制限する",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    request_body = AnswerSubmissionRestrictionRequest,
+    responses(
+        PutAnswerSubmissionRestrictionResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
+pub async fn put_answer_submission_restriction(
+    Extension(actor): Extension<ActiveUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+    json: Result<Json<AnswerSubmissionRestrictionRequest>, JsonRejection>,
+) -> Result<PutAnswerSubmissionRestrictionResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(request) = json.map_err_to_error().map_err(handle_error)?;
+    let restriction = user_use_case
+        .restrict_answer_submission(
+            &actor,
+            uuid,
+            AnswerSubmissionRestrictionReason::new(request.reason),
+            request.expires_at,
+        )
+        .await
+        .map_err(handle_error)?;
+
+    Ok(PutAnswerSubmissionRestrictionResponse::Ok(
+        restriction.into(),
+    ))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/users/{uuid}/answer-submission-restriction",
+    summary = "ユーザーの回答投稿制限を解除する",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
+pub async fn delete_answer_submission_restriction(
+    Extension(actor): Extension<ActiveUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+) -> Result<impl IntoResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
+    user_use_case
+        .lift_answer_submission_restriction(&actor, uuid)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 #[utoipa::path(
