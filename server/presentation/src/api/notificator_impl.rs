@@ -3,7 +3,7 @@ use domain::notification::models::{NotificationContent, NotificationPreference, 
 use domain::notification::notificator::Notificator;
 use domain::repository::Repositories;
 use domain::repository::user_repository::UserRepository;
-use domain::user::models::{Actor, UserId};
+use domain::{account::models::UserId, auth::Actor};
 use errors::Error;
 use errors::usecase::UseCaseError::UserNotFound;
 use resource::outgoing::connection::ConnectionPool;

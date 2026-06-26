@@ -2,11 +2,12 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use domain::{
+    account::models::{AccountUser, Role},
+    form::answer::TemporaryAnswerAuthor,
     form::{
         answer::{AnswerAuthor, AnswerEntry, AnswerId},
         models::FormId,
     },
-    user::models::{ActiveUser, Role, TemporaryUser},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -30,7 +31,7 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
             Some(user_id.to_string()),
             None,
         ),
-        AnswerAuthor::TemporaryUser(temporary_user) => (
+        AnswerAuthor::TemporaryAnswerAuthor(temporary_user) => (
             "TEMPORARY_USER".to_string(),
             None,
             Some(temporary_user.id().to_string()),
@@ -41,13 +42,13 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
 pub(crate) fn author_from_row(row: &MySqlRow) -> Result<AnswerAuthorRecord, InfraError> {
     let author_type: String = row.try_get("author_type")?;
     match author_type.as_str() {
-        "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(ActiveUser::new(
+        "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(AccountUser::new(
             row.try_get("user_name")?,
             Uuid::from_str(&row.try_get::<String, _>("user")?)?.into(),
             Role::from_str(&row.try_get::<String, _>("user_role")?)?,
         ))),
-        "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryUser(unsafe {
-            TemporaryUser::from_raw_parts(
+        "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryAnswerAuthor(unsafe {
+            TemporaryAnswerAuthor::from_raw_parts(
                 Uuid::from_str(&row.try_get::<String, _>("temporary_user_id")?)?.into(),
                 row.try_get("temporary_user_name")?,
                 row.try_get("temporary_user_contact_text")?,

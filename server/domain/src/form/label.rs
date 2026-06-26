@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use types::{non_empty_string::NonEmptyString, ordered_unique_vec::OrderedUniqueVec};
 
 use crate::{
+    auth::Actor,
     form::is_administrator,
     types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
-    user::models::Actor,
 };
 
 pub type FormLabelId = types::Id<FormLabel>;
@@ -55,7 +55,7 @@ impl AuthorizationRole for FormLabel {
 impl AuthorizationGuardDefinitions for FormLabel {
     /// [`FormLabel`] の作成権限があるかどうかを判定します。
     ///
-    /// 作成権限は [`Administrator`](crate::user::models::Role::Administrator) のみに与えられます。
+    /// 作成権限は [`Administrator`](crate::account::models::Role::Administrator) のみに与えられます。
     fn can_create(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
@@ -67,14 +67,14 @@ impl AuthorizationGuardDefinitions for FormLabel {
 
     /// [`FormLabel`] の更新権限があるかどうかを判定します。
     ///
-    /// 更新権限は [`Administrator`](crate::user::models::Role::Administrator) のみに与えられます。
+    /// 更新権限は [`Administrator`](crate::account::models::Role::Administrator) のみに与えられます。
     fn can_update(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
 
     /// [`FormLabel`] の削除権限があるかどうかを判定します。
     ///
-    /// 削除権限は [`Administrator`](crate::user::models::Role::Administrator) のみに与えられます。
+    /// 削除権限は [`Administrator`](crate::account::models::Role::Administrator) のみに与えられます。
     fn can_delete(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }

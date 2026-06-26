@@ -8,12 +8,13 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
     form::{
         models::{ActiveForm, ArchivedForm, FormDescription, FormId, FormLabel},
         question::{Choice, Question, QuestionSet, QuestionType},
     },
     repository::Repositories,
-    user::models::{ActiveUser, Actor, User},
 };
 use errors::{ErrorExtra, domain::DomainError};
 use resource::{
@@ -184,7 +185,7 @@ fn form_schema(actor: &Actor, form: &ActiveForm, labels: Vec<FormLabel>) -> Form
 fn archived_form_schema_from_parts(
     actor: &Actor,
     form: ArchivedForm,
-    archived_by: ActiveUser,
+    archived_by: AccountUser,
     labels: Vec<FormLabel>,
 ) -> ArchivedFormSchema {
     ArchivedFormSchema {
@@ -227,7 +228,7 @@ fn archived_form_schema_from_parts(
     tag = "Forms"
 )]
 pub async fn create_form_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormCreateSchema>, JsonRejection>,
 ) -> Result<CreateFormResponse, Response> {
@@ -320,22 +321,17 @@ pub async fn create_form_handler(
     tag = "Forms"
 )]
 pub async fn form_list_handler(
-    Extension(user): Extension<User>,
+    Extension(actor): Extension<Actor>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
 ) -> Result<FormListResponse, Response> {
     let form_use_case = build_form_use_case(&repository);
 
     let forms = form_use_case
-        .form_list(
-            &Actor::from(user.clone()),
-            offset_and_limit.offset,
-            offset_and_limit.limit,
-        )
+        .form_list(&actor, offset_and_limit.offset, offset_and_limit.limit)
         .await
         .map_err(handle_error)?;
 
-    let actor = Actor::from(user.clone());
     let response_schema = forms
         .into_iter()
         .map(|(form, labels)| form_schema(&actor, &form, labels))
@@ -363,7 +359,7 @@ pub async fn form_list_handler(
     tag = "Forms"
 )]
 pub async fn get_form_handler(
-    Extension(user): Extension<User>,
+    Extension(actor): Extension<Actor>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<GetFormResponse, Response> {
@@ -372,11 +368,9 @@ pub async fn get_form_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
     let ActiveFormWithLabels { form, labels } = form_use_case
-        .get_form(&Actor::from(user.clone()), form_id)
+        .get_form(&actor, form_id)
         .await
         .map_err(handle_error)?;
-
-    let actor = Actor::from(user.clone());
 
     Ok(GetFormResponse::Ok(form_schema(&actor, &form, labels)))
 }
@@ -400,7 +394,7 @@ pub async fn get_form_handler(
     tag = "Forms"
 )]
 pub async fn archive_form_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -448,7 +442,7 @@ pub async fn archive_form_handler(
     tag = "Forms"
 )]
 pub async fn update_form_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormUpdateSchema>, JsonRejection>,
@@ -545,7 +539,7 @@ pub async fn update_form_handler(
     tag = "Archived Forms"
 )]
 pub async fn archived_form_list_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     Query(offset_and_limit): Query<OffsetAndLimit>,
     query: Result<Query<SearchQuery>, axum::extract::rejection::QueryRejection>,
@@ -602,7 +596,7 @@ pub async fn archived_form_list_handler(
     tag = "Archived Forms"
 )]
 pub async fn get_archived_form_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<ArchivedFormResponse, Response> {
@@ -647,7 +641,7 @@ pub async fn get_archived_form_handler(
     tag = "Archived Forms"
 )]
 pub async fn restore_archived_form_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {

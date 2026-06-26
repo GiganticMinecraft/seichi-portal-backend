@@ -11,6 +11,7 @@ use domain::search::models::{
     NumberOfRecordsPerAggregate, UserSearchHit,
 };
 use domain::{
+    account::models::{AccountUser, AnswerSubmissionRestriction, DiscordAccountLink, Role},
     form::{
         answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
         comment::{Comment, CommentId},
@@ -19,7 +20,6 @@ use domain::{
     },
     notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
-    user::models::{ActiveUser, AnswerSubmissionRestriction, DiscordAccountLink, Role},
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -57,7 +57,7 @@ pub trait DatabaseComponents: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait FormDatabase: Send + Sync {
-    async fn create(&self, form: &ActiveForm, user: &ActiveUser) -> Result<(), InfraError>;
+    async fn create(&self, form: &ActiveForm, user: &AccountUser) -> Result<(), InfraError>;
     async fn list(
         &self,
         offset: Option<u32>,
@@ -74,7 +74,7 @@ pub trait FormDatabase: Send + Sync {
     -> Result<Option<ArchivedFormRecord>, InfraError>;
     async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError>;
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
-    async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError>;
+    async fn update(&self, form: &ActiveForm, updated_by: &AccountUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
     async fn list_answer_entries(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, InfraError>;
     async fn list_all_answer_entries(&self) -> Result<Vec<AnswerEntry>, InfraError>;
@@ -206,9 +206,9 @@ pub trait FormLabelDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait UserDatabase: Send + Sync {
-    async fn find_by(&self, uuid: Uuid) -> Result<Option<ActiveUser>, InfraError>;
-    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<ActiveUser>, InfraError>;
-    async fn upsert_user(&self, user: &ActiveUser) -> Result<(), InfraError>;
+    async fn find_by(&self, uuid: Uuid) -> Result<Option<AccountUser>, InfraError>;
+    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<AccountUser>, InfraError>;
+    async fn upsert_user(&self, user: &AccountUser) -> Result<(), InfraError>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
     async fn fetch_active_answer_submission_restriction(
         &self,
@@ -223,23 +223,23 @@ pub trait UserDatabase: Send + Sync {
         user_id: Uuid,
         lifted_by: Uuid,
     ) -> Result<(), InfraError>;
-    async fn fetch_all_users(&self) -> Result<Vec<ActiveUser>, InfraError>;
+    async fn fetch_all_users(&self) -> Result<Vec<AccountUser>, InfraError>;
     async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &ActiveUser,
+        user: &AccountUser,
         expires: u32,
     ) -> Result<String, InfraError>;
     async fn fetch_user_by_session_id(
         &self,
         session_id: String,
-    ) -> Result<Option<ActiveUser>, InfraError>;
+    ) -> Result<Option<AccountUser>, InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
     async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
     async fn unlink_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
     async fn fetch_discord_user(
         &self,
-        user: &ActiveUser,
+        user: &AccountUser,
     ) -> Result<Option<DiscordUserRecord>, InfraError>;
     async fn fetch_size(&self) -> Result<u32, InfraError>;
 }

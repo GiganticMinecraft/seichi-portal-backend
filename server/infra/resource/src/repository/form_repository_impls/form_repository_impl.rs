@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use domain::{
+    account::models::AccountUser,
     form::models::{ActiveForm, ArchivedForm, FormId},
     repository::form::{
         active_form_repository::ActiveFormRepository,
         archived_form_repository::ArchivedFormRepository,
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
-    user::models::ActiveUser,
 };
 use errors::Error;
 
@@ -26,7 +26,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn create(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form: Allowed<ActiveForm, Create>,
     ) -> Result<(), Error> {
         self.client.form().create(form.value(), actor).await?;
@@ -67,7 +67,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn update_form(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         updated_form: Allowed<ActiveForm, Update>,
     ) -> Result<(), Error> {
         self.client

@@ -1,5 +1,7 @@
 use chrono::Utc;
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
     form::models::{
         ActiveForm, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, ArchivedForm,
         DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
@@ -17,7 +19,6 @@ use domain::{
         user_repository::UserRepository,
     },
     types::authorization_guard::{AuthorizationGuard, Create},
-    user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
@@ -67,7 +68,7 @@ impl<
         answer_visibility: Option<AnswerVisibility>,
         acceptance_period: Option<AnswerAcceptancePeriod>,
         default_answer_title: Option<DefaultAnswerTitle>,
-        user: &ActiveUser,
+        user: &AccountUser,
     ) -> Result<ActiveForm, Error> {
         let user_as_user = Actor::from(user.clone());
 
@@ -198,7 +199,7 @@ impl<
 
     pub async fn archived_form_list(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         offset: Option<u32>,
         limit: Option<u32>,
         query: Option<String>,
@@ -255,7 +256,7 @@ impl<
 
     pub async fn get_archived_form(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
     ) -> Result<ArchivedFormDetails, Error> {
         let actor_user = Actor::from(actor.clone());
@@ -295,7 +296,7 @@ impl<
 
     pub async fn archive_form(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
     ) -> Result<ArchivedForm, Error> {
         let actor_user = Actor::from(actor.clone());
@@ -318,7 +319,7 @@ impl<
             .map_err(Into::into)
     }
 
-    pub async fn restore_form(&self, actor: &ActiveUser, form_id: FormId) -> Result<(), Error> {
+    pub async fn restore_form(&self, actor: &AccountUser, form_id: FormId) -> Result<(), Error> {
         let form = self
             .archived_form_repository
             .get(form_id)
@@ -333,7 +334,7 @@ impl<
     #[allow(clippy::too_many_arguments)]
     pub async fn update_form(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         title: Option<FormTitle>,
         description: Option<FormDescription>,
@@ -664,19 +665,19 @@ mod tests {
     use super::*;
     use crate::test_utils::repositories::FormUseCaseTestRepositories;
     use domain::{
+        account::models::{AccountUser, Role},
         form::{
             models::{
                 ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormSettings, FormTitle,
             },
             question::{QuestionId, QuestionSet, QuestionType},
         },
-        user::models::{ActiveUser, Role},
     };
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
-    fn admin_user() -> ActiveUser {
-        ActiveUser::new("admin".to_string(), Uuid::nil().into(), Role::Administrator)
+    fn admin_user() -> AccountUser {
+        AccountUser::new("admin".to_string(), Uuid::nil().into(), Role::Administrator)
     }
 
     fn sample_form(form_id: FormId) -> ActiveForm {

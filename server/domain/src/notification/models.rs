@@ -2,8 +2,9 @@ use derive_getters::Getters;
 use domain_derive::UnsafeFromRawParts;
 
 use crate::{
+    account::models::{Role, UserId},
+    auth::Actor,
     types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
-    user::models::{Actor, Role, User, UserId},
 };
 
 #[derive(Debug)]
@@ -64,7 +65,7 @@ impl AuthorizationGuardDefinitions for NotificationPreference {
     fn can_create(&self, actor: &Actor) -> bool {
         matches!(
             actor,
-            Actor::User(User::ActiveUser(actor))
+            Actor::AccountUser(actor)
                 if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
         ) || matches!(actor, Actor::System)
     }
@@ -72,7 +73,7 @@ impl AuthorizationGuardDefinitions for NotificationPreference {
     fn can_read(&self, actor: &Actor) -> bool {
         matches!(
             actor,
-            Actor::User(User::ActiveUser(actor))
+            Actor::AccountUser(actor)
                 if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
         ) || matches!(actor, Actor::System)
     }
@@ -80,7 +81,7 @@ impl AuthorizationGuardDefinitions for NotificationPreference {
     fn can_update(&self, actor: &Actor) -> bool {
         matches!(
             actor,
-            Actor::User(User::ActiveUser(actor))
+            Actor::AccountUser(actor)
                 if self.recipient_id() == actor.id() || actor.role() == &Role::Administrator
         )
     }

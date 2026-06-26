@@ -7,13 +7,14 @@ use domain::repository::user_repository::UserRepository;
 use domain::search::models::NumberOfRecords;
 use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
     form::answer::{AnswerEntry, AnswerId},
     repository::{
         form::active_form_repository::ActiveFormRepository, search_repository::SearchRepository,
     },
     search::models::SearchableFieldsWithOperation,
     types::authorization_guard::{Allowed, Read},
-    user::models::{ActiveUser, Actor},
 };
 use errors::Error;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
@@ -66,7 +67,7 @@ impl<
 
     pub async fn cross_search(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         query: String,
     ) -> Result<CrossSearchOutput, Error> {
         let actor = Actor::from(actor.clone());

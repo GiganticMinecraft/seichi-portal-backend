@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
-use crate::{form::is_administrator, user::models::Actor};
+use crate::{auth::Actor, form::is_administrator};
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(UnsafeFromRawParts, Serialize, Deserialize, Clone, Default, Debug, PartialEq)]

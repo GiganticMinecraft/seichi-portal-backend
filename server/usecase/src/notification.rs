@@ -1,10 +1,11 @@
 use domain::types::authorization_guard::{AuthorizationGuard, Create, Read};
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
     notification::models::NotificationPreference,
     repository::{
         notification_repository::NotificationRepository, user_repository::UserRepository,
     },
-    user::models::{ActiveUser, Actor},
 };
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
@@ -21,7 +22,7 @@ pub struct NotificationUseCase<
 impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1, R2> {
     pub async fn fetch_notification_settings(
         &self,
-        actor: ActiveUser,
+        actor: AccountUser,
         target: Uuid,
     ) -> Result<NotificationPreference, Error> {
         let actor_user = Actor::from(actor);
@@ -53,7 +54,7 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
 
     pub async fn update_notification_settings(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         is_send_message_notification: Option<bool>,
     ) -> Result<(), Error> {
         // NOTE: Discord への通知設定は、Discord への連携がすでに行われていなければならない

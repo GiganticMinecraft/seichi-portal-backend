@@ -1,7 +1,7 @@
 use errors::domain::DomainError;
 use std::marker::PhantomData;
 
-use crate::user::models::Actor;
+use crate::auth::Actor;
 
 use super::{Actions, Allowed, AuthorizationRole, Create, Delete, Read, Update};
 
@@ -115,11 +115,12 @@ mod test {
     use errors::domain::DomainError;
 
     use crate::{
+        account::models::{AccountUser, Role},
+        auth::Actor,
         types::authorization_guard::{
             Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizationRole,
             BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, SelfGuarded, Update,
         },
-        user::models::{ActiveUser, Actor, Role, User},
     };
 
     #[derive(Clone, PartialEq, Debug)]
@@ -133,19 +134,19 @@ mod test {
 
     impl AuthorizationGuardDefinitions for ParentGuardTestStruct {
         fn can_create(&self, actor: &Actor) -> bool {
-            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+            matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_read(&self, actor: &Actor) -> bool {
-            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+            matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_update(&self, actor: &Actor) -> bool {
-            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+            matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_delete(&self, actor: &Actor) -> bool {
-            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+            matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
         }
     }
 
@@ -191,7 +192,7 @@ mod test {
 
     #[test]
     fn allowed_parent_can_authorize_child() {
-        let admin: Actor = ActiveUser::new(
+        let admin: Actor = AccountUser::new(
             "admin".to_string(),
             Uuid::new_v4().into(),
             Role::Administrator,
@@ -251,7 +252,7 @@ mod test {
 
     #[test]
     fn allowed_parent_rejects_child_with_unmatched_parent() {
-        let admin: Actor = ActiveUser::new(
+        let admin: Actor = AccountUser::new(
             "admin".to_string(),
             Uuid::new_v4().into(),
             Role::Administrator,
@@ -275,7 +276,7 @@ mod test {
 
     #[test]
     fn allowed_parent_rejects_child_when_guarded_by_denies_actor() {
-        let admin: Actor = ActiveUser::new(
+        let admin: Actor = AccountUser::new(
             "admin".to_string(),
             Uuid::new_v4().into(),
             Role::Administrator,

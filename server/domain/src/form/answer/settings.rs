@@ -11,8 +11,9 @@ use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
+    account::models::Role,
+    auth::Actor,
     form::answer::{AnswerAuthor, AnswerEntry},
-    user::models::{Actor, Role, User},
 };
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -144,10 +145,10 @@ impl AnswerSettings {
         let is_within_period = self.acceptance_period.is_within_period(Utc::now());
 
         match (author, actor) {
-            (AnswerAuthor::AuthenticatedUser(user_id), Actor::User(User::ActiveUser(user))) => {
+            (AnswerAuthor::AuthenticatedUser(user_id), Actor::AccountUser(user)) => {
                 *user_id == *user.id() && (is_within_period || user.role() == &Role::Administrator)
             }
-            (AnswerAuthor::TemporaryUser(_), Actor::User(User::TemporaryUser(_))) => {
+            (AnswerAuthor::TemporaryAnswerAuthor(_), Actor::TemporaryAnswerAuthor(_)) => {
                 self.allow_temporary_answers && is_within_period
             }
             _ => false,
@@ -157,7 +158,7 @@ impl AnswerSettings {
     /// `actor` が `entry` を閲覧できるかどうかを、回答の公開範囲をもとに判断します。
     pub fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
         match actor {
-            Actor::User(User::ActiveUser(user)) => {
+            Actor::AccountUser(user) => {
                 entry.author().authenticated_user_id() == Some(*user.id())
                     || self.visibility == AnswerVisibility::PUBLIC
                     || user.role() == &Role::Administrator
@@ -172,11 +173,12 @@ impl AnswerSettings {
 mod tests {
     use super::*;
     use crate::{
+        account::models::{AccountUser, UserId},
+        form::answer::TemporaryAnswerAuthor,
         form::{
             answer::{AnswerTitle, PostedAnswerContents},
             models::FormId,
         },
-        user::models::{ActiveUser, TemporaryUser, UserId},
     };
     use chrono::Duration;
     use uuid::Uuid;
@@ -193,8 +195,8 @@ mod tests {
         )
     }
 
-    fn active_user(role: Role) -> ActiveUser {
-        ActiveUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    fn active_user(role: Role) -> AccountUser {
+        AccountUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
     }
 
     fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
@@ -209,11 +211,11 @@ mod tests {
     #[test]
     fn temporary_answer_creation_requires_allow_flag() {
         let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
-        let author = AnswerAuthor::TemporaryUser(TemporaryUser::new(
+        let author = AnswerAuthor::TemporaryAnswerAuthor(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));
-        let actor = Actor::from(TemporaryUser::new(
+        let actor = Actor::from(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));
@@ -224,11 +226,11 @@ mod tests {
     #[test]
     fn temporary_answer_creation_succeeds_when_allowed_and_within_period() {
         let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap());
-        let author = AnswerAuthor::TemporaryUser(TemporaryUser::new(
+        let author = AnswerAuthor::TemporaryAnswerAuthor(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));
-        let actor = Actor::from(TemporaryUser::new(
+        let actor = Actor::from(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));
@@ -246,11 +248,11 @@ mod tests {
             )
             .unwrap(),
         );
-        let author = AnswerAuthor::TemporaryUser(TemporaryUser::new(
+        let author = AnswerAuthor::TemporaryAnswerAuthor(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));
-        let actor = Actor::from(TemporaryUser::new(
+        let actor = Actor::from(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));

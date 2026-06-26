@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-use crate::user::models::Actor;
+use crate::auth::Actor;
 
 use super::Actions;
 

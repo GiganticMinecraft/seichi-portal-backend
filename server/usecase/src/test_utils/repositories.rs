@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use domain::{
+    account::models::{AccountUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser},
     form::{
         answer::{AnswerEntry, AnswerId},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId},
@@ -16,7 +17,6 @@ use domain::{
         user_repository::UserRepository,
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::{ActiveUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser},
 };
 use errors::Error;
 use std::sync::Mutex;
@@ -118,7 +118,7 @@ impl InMemoryActiveFormRepository {
 impl ActiveFormRepository for InMemoryActiveFormRepository {
     async fn create(
         &self,
-        _actor: &ActiveUser,
+        _actor: &AccountUser,
         form: Allowed<ActiveForm, Create>,
     ) -> Result<(), Error> {
         self.save_form(form.into_inner());
@@ -150,7 +150,7 @@ impl ActiveFormRepository for InMemoryActiveFormRepository {
 
     async fn update_form(
         &self,
-        _actor: &ActiveUser,
+        _actor: &AccountUser,
         updated_form: Allowed<ActiveForm, Update>,
     ) -> Result<(), Error> {
         let form = updated_form.into_inner();
@@ -447,8 +447,8 @@ impl NotificationRepository for InMemoryNotificationRepository {
 
 #[derive(Default)]
 pub(crate) struct InMemoryUserRepository {
-    users: Mutex<Vec<ActiveUser>>,
-    sessions: Mutex<Vec<(String, ActiveUser)>>,
+    users: Mutex<Vec<AccountUser>>,
+    sessions: Mutex<Vec<(String, AccountUser)>>,
     answer_submission_restrictions: Mutex<Vec<AnswerSubmissionRestriction>>,
 }
 
@@ -469,7 +469,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn find_by(
         &self,
         uuid: Uuid,
-    ) -> Result<Option<AuthorizationGuard<ActiveUser, Read>>, Error> {
+    ) -> Result<Option<AuthorizationGuard<AccountUser, Read>>, Error> {
         Ok(self
             .users
             .lock()
@@ -483,7 +483,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn find_by_ids(
         &self,
         uuids: Vec<Uuid>,
-    ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error> {
         Ok(self
             .users
             .lock()
@@ -495,7 +495,7 @@ impl UserRepository for InMemoryUserRepository {
             .collect())
     }
 
-    async fn upsert_user(&self, user: Allowed<ActiveUser, Create>) -> Result<(), Error> {
+    async fn upsert_user(&self, user: Allowed<AccountUser, Create>) -> Result<(), Error> {
         let user = user.into_inner();
         let mut users = self.users.lock().unwrap();
         if let Some(stored_user) = users.iter_mut().find(|stored| stored.id() == user.id()) {
@@ -506,14 +506,14 @@ impl UserRepository for InMemoryUserRepository {
         Ok(())
     }
 
-    async fn patch_user_role(&self, user: Allowed<ActiveUser, Update>) -> Result<(), Error> {
+    async fn patch_user_role(&self, user: Allowed<AccountUser, Update>) -> Result<(), Error> {
         let user = user.into_inner();
         let mut users = self.users.lock().unwrap();
         if let Some(stored_user) = users.iter_mut().find(|stored| stored.id() == user.id()) {
             *stored_user = user;
             Ok(())
         } else {
-            Err(not_found_error("ActiveUser", user.id()))
+            Err(not_found_error("AccountUser", user.id()))
         }
     }
 
@@ -556,11 +556,11 @@ impl UserRepository for InMemoryUserRepository {
         Ok(())
     }
 
-    async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<Option<ActiveUser>, Error> {
+    async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<Option<AccountUser>, Error> {
         Ok(None)
     }
 
-    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
+    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error> {
         Ok(self
             .users
             .lock()
@@ -574,7 +574,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &ActiveUser,
+        user: &AccountUser,
         _expires: u32,
     ) -> Result<String, Error> {
         self.sessions
@@ -587,7 +587,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn fetch_user_by_session_id(
         &self,
         session_id: String,
-    ) -> Result<Option<ActiveUser>, Error> {
+    ) -> Result<Option<AccountUser>, Error> {
         Ok(self
             .sessions
             .lock()
@@ -621,7 +621,7 @@ impl UserRepository for InMemoryUserRepository {
 
     async fn fetch_discord_user(
         &self,
-        _user: &Allowed<ActiveUser, Read>,
+        _user: &Allowed<AccountUser, Read>,
     ) -> Result<Option<DiscordUser>, Error> {
         Ok(None)
     }

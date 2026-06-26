@@ -5,12 +5,12 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
+    account::models::AccountUser,
     form::{
         answer::AnswerId,
         message::{MessageBody, MessageId},
     },
     repository::Repositories,
-    user::models::ActiveUser,
 };
 use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
@@ -82,7 +82,7 @@ impl<N: Notificator> RealInfrastructureRepositoryWithNotificator<N> {
     tag = "Messages"
 )]
 pub async fn post_message_handler<N: Notificator>(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(state): State<Arc<RealInfrastructureRepositoryWithNotificator<N>>>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<PostedMessageSchema>, JsonRejection>,
@@ -135,7 +135,7 @@ pub async fn post_message_handler<N: Notificator>(
     tag = "Messages"
 )]
 pub async fn update_message_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
     json: Result<Json<MessageUpdateSchema>, JsonRejection>,
@@ -186,7 +186,7 @@ pub async fn update_message_handler(
     tag = "Messages"
 )]
 pub async fn get_messages_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetMessagesResponse, Response> {
@@ -243,7 +243,7 @@ pub async fn get_messages_handler(
     tag = "Messages"
 )]
 pub async fn delete_message_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {

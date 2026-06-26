@@ -6,11 +6,12 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
+    account::models::{Role::Administrator, UserId},
+    auth::Actor,
     form::message_thread::MessageThread,
     types::authorization_guard::{
         AuthorizationRole, BelongsTo, Delete, GuardedBy, ParentGuarded, Update,
     },
-    user::models::{Actor, Role::Administrator, User, UserId},
 };
 
 pub type MessageId = types::Id<Message>;
@@ -67,7 +68,7 @@ impl BelongsTo<MessageThread> for Message {
 
 impl GuardedBy<MessageThread, Update> for Message {
     fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if self.sender_id() == user.id())
+        matches!(actor, Actor::AccountUser(user) if self.sender_id() == user.id())
     }
 }
 
@@ -75,7 +76,7 @@ impl GuardedBy<MessageThread, Delete> for Message {
     fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
         matches!(
             actor,
-            Actor::User(User::ActiveUser(user))
+            Actor::AccountUser(user)
                 if self.sender_id() == user.id() || user.role() == &Administrator
         )
     }
@@ -85,16 +86,16 @@ impl GuardedBy<MessageThread, Delete> for Message {
 mod tests {
     use super::*;
     use crate::{
+        account::models::{AccountUser, Role},
         form::answer::AnswerId,
         types::authorization_guard::{AuthorizationGuard, Update},
-        user::models::{ActiveUser, Role},
     };
     use uuid::Uuid;
 
     #[test]
     fn message_update_requires_message_to_belong_to_thread() {
         let user_id: UserId = Uuid::new_v4().into();
-        let actor = Actor::from(ActiveUser::new(
+        let actor = Actor::from(AccountUser::new(
             "sender".to_string(),
             user_id,
             Role::StandardUser,

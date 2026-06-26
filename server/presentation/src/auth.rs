@@ -12,7 +12,7 @@ use axum_extra::{
     headers::{Authorization, authorization::Bearer},
 };
 use domain::repository::Repositories;
-use domain::user::models::{ActiveUser, User};
+use domain::{account::models::AccountUser, auth::Actor};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use usecase::user::UserUseCase;
@@ -35,7 +35,7 @@ fn unauthorized_response(detail: &str) -> Response {
 async fn resolve_user(
     repository: &RealInfrastructureRepository,
     session_id: &str,
-) -> Result<ActiveUser, Response> {
+) -> Result<AccountUser, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -81,10 +81,10 @@ pub async fn optional_auth(
     match auth {
         Ok(auth) => {
             let user = resolve_user(&repository, auth.token()).await?;
-            request.extensions_mut().insert(User::ActiveUser(user));
+            request.extensions_mut().insert(Actor::AccountUser(user));
         }
         Err(_) => {
-            request.extensions_mut().insert(User::Anonymous);
+            request.extensions_mut().insert(Actor::Anonymous);
         }
     }
 

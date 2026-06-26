@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use domain::{
-    repository::user_repository::UserRepository,
-    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::{
-        ActiveUser, Actor, AnswerSubmissionRestriction, AnswerSubmissionRestrictionReason,
+    account::models::{
+        AccountUser, AnswerSubmissionRestriction, AnswerSubmissionRestrictionReason,
         DiscordAccountLink, Role,
     },
+    auth::Actor,
+    repository::user_repository::UserRepository,
+    types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
 };
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
@@ -17,7 +18,7 @@ pub struct UserUseCase<'a, UserRepo: UserRepository> {
 }
 
 impl<R: UserRepository> UserUseCase<'_, R> {
-    pub async fn find_by(&self, actor: &ActiveUser, uuid: Uuid) -> Result<ActiveUser, Error> {
+    pub async fn find_by(&self, actor: &AccountUser, uuid: Uuid) -> Result<AccountUser, Error> {
         let actor_ref = Actor::from(actor.clone());
         self.repository
             .find_by(uuid)
@@ -33,8 +34,8 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn upsert_user(
         &self,
-        actor: &ActiveUser,
-        upsert_target: ActiveUser,
+        actor: &AccountUser,
+        upsert_target: AccountUser,
     ) -> Result<(), Error> {
         self.repository
             .upsert_user(
@@ -46,10 +47,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn patch_user_role(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         uuid: Uuid,
         role: Role,
-    ) -> Result<ActiveUser, Error> {
+    ) -> Result<AccountUser, Error> {
         let actor_ref = Actor::from(actor.clone());
         let current_user_guard = self
             .repository
@@ -59,7 +60,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
         let current_user = current_user_guard.try_read(actor_ref.clone())?.into_inner();
         let new_role_user =
-            ActiveUser::new(current_user.name().to_owned(), *current_user.id(), role);
+            AccountUser::new(current_user.name().to_owned(), *current_user.id(), role);
 
         self.repository
             .patch_user_role(
@@ -82,7 +83,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn restrict_answer_submission(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         uuid: Uuid,
         reason: AnswerSubmissionRestrictionReason,
         expires_at: Option<DateTime<Utc>>,
@@ -113,7 +114,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn lift_answer_submission_restriction(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         uuid: Uuid,
     ) -> Result<(), Error> {
         let actor_ref = Actor::from(actor.clone());
@@ -138,7 +139,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn fetch_active_answer_submission_restriction(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         uuid: Uuid,
     ) -> Result<Option<AnswerSubmissionRestriction>, Error> {
         let actor_ref = Actor::from(actor.clone());
@@ -159,7 +160,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .map_err(Into::into)
     }
 
-    pub async fn fetch_all_users(&self, actor: &ActiveUser) -> Result<Vec<ActiveUser>, Error> {
+    pub async fn fetch_all_users(&self, actor: &AccountUser) -> Result<Vec<AccountUser>, Error> {
         let actor_ref = Actor::from(actor.clone());
         self.repository
             .fetch_all_users()
@@ -177,7 +178,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn fetch_user_by_xbox_token(
         &self,
         token: String,
-    ) -> Result<Option<ActiveUser>, Error> {
+    ) -> Result<Option<AccountUser>, Error> {
         let fetched_user = self.repository.fetch_user_by_xbox_token(token).await?;
 
         match fetched_user {
@@ -209,7 +210,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &ActiveUser,
+        user: &AccountUser,
         expires: u32,
     ) -> Result<String, Error> {
         self.repository
@@ -220,7 +221,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn fetch_user_by_session_id(
         &self,
         session_id: String,
-    ) -> Result<Option<ActiveUser>, Error> {
+    ) -> Result<Option<AccountUser>, Error> {
         self.repository.fetch_user_by_session_id(session_id).await
     }
 
@@ -231,7 +232,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
     pub async fn link_discord_user(
         &self,
         discord_oauth_token: String,
-        user: ActiveUser,
+        user: AccountUser,
     ) -> Result<(), Error> {
         let discord_user = self
             .repository
@@ -248,7 +249,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .await
     }
 
-    pub async fn unlink_discord_user(&self, user: ActiveUser) -> Result<(), Error> {
+    pub async fn unlink_discord_user(&self, user: AccountUser) -> Result<(), Error> {
         let allowed_user = AuthorizationGuard::<_, Read>::from(user.clone())
             .try_read(Actor::from(user.clone()))?;
         let discord_user = self.repository.fetch_discord_user(&allowed_user).await?;
@@ -268,7 +269,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
     pub async fn fetch_user_information(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         target_user_id: Uuid,
     ) -> Result<UserProfile, Error> {
         let guard = self

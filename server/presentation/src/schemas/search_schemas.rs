@@ -1,11 +1,11 @@
 use domain::form::answer::AnswerEntry;
 use domain::{
+    account::models::AccountUser,
     form::{
         answer::{AnswerId, AnswerLabel},
         comment::{Comment, CommentId},
         models::{ActiveForm, FormLabel},
     },
-    user::models::ActiveUser,
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,7 @@ pub struct CrossSearchResult {
     #[schema(value_type = Vec<serde_json::Value>)]
     pub forms: Vec<ActiveForm>,
     #[schema(value_type = Vec<serde_json::Value>)]
-    pub users: Vec<ActiveUser>,
+    pub users: Vec<AccountUser>,
     #[schema(value_type = Vec<serde_json::Value>)]
     pub answers: Vec<AnswerEntry>,
     #[schema(value_type = Vec<serde_json::Value>)]

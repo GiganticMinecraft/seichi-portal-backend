@@ -1,16 +1,17 @@
 use std::collections::HashMap;
 
 use domain::{
+    account::models::{AccountUser, UserId},
+    auth::Actor,
     repository::user_repository::UserRepository,
-    user::models::{ActiveUser, Actor, UserId},
 };
 use errors::Error;
 
 pub(crate) async fn resolve_user_references<R: UserRepository + ?Sized>(
     repo: &R,
-    actor: &ActiveUser,
+    actor: &AccountUser,
     user_ids: Vec<UserId>,
-) -> Result<HashMap<UserId, ActiveUser>, Error> {
+) -> Result<HashMap<UserId, AccountUser>, Error> {
     if user_ids.is_empty() {
         return Ok(HashMap::new());
     }

@@ -18,6 +18,9 @@ pub use crate::form::{
 };
 
 use crate::{
+    account::models::UserId,
+    auth::Actor,
+    form::answer::TemporaryAnswerAuthor,
     form::{
         answer::{AnswerAuthor, AnswerEntry, AnswerSubmitter, AnswerTitle, PostedAnswerContents},
         is_administrator,
@@ -26,7 +29,6 @@ use crate::{
         Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Create, Read, SelfGuarded,
         Update,
     },
-    user::models::{Actor, TemporaryUser, UserId},
 };
 
 pub type FormId = types::Id<ActiveForm>;
@@ -155,12 +157,12 @@ impl ActiveForm {
 
     fn try_accept_temporary_answer(
         &self,
-        temporary_user: TemporaryUser,
+        temporary_user: TemporaryAnswerAuthor,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<AnswerEntry, DomainError> {
         let actor = Actor::from(temporary_user.clone());
-        let author = AnswerAuthor::TemporaryUser(temporary_user);
+        let author = AnswerAuthor::TemporaryAnswerAuthor(temporary_user);
 
         if !self.answer_settings.can_accept_answer(&author, &actor) {
             return Err(DomainError::Forbidden);
@@ -188,7 +190,7 @@ impl Allowed<ActiveForm, Read> {
 
     pub fn try_accept_temporary_answer(
         &self,
-        temporary_user: TemporaryUser,
+        temporary_user: TemporaryAnswerAuthor,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
@@ -280,7 +282,7 @@ impl AuthorizationRole for ActiveForm {
 impl AuthorizationGuardDefinitions for ActiveForm {
     /// [`ActiveForm`] の作成権限があるかどうかを判定します。
     ///
-    /// 作成権限は [`Administrator`](crate::user::models::Role::Administrator) のみに与えられます。
+    /// 作成権限は [`Administrator`](crate::account::models::Role::Administrator) のみに与えられます。
     fn can_create(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
@@ -290,7 +292,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// 読み取り権限は以下のいずれかを満たす場合に与えられます。
     /// - [`Actor::System`] である場合
     /// - [`FormSettings`] の [`Visibility`] が [`Visibility::PUBLIC`] である場合
-    /// - [`Administrator`](crate::user::models::Role::Administrator) である場合
+    /// - [`Administrator`](crate::account::models::Role::Administrator) である場合
     fn can_read(&self, actor: &Actor) -> bool {
         matches!(actor, Actor::System)
             || self.settings.visibility() == &Visibility::PUBLIC
@@ -299,7 +301,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
 
     /// [`ActiveForm`] の更新権限があるかどうかを判定します。
     ///
-    /// 更新権限は [`Administrator`](crate::user::models::Role::Administrator) のみに与えられます。
+    /// 更新権限は [`Administrator`](crate::account::models::Role::Administrator) のみに与えられます。
     fn can_update(&self, actor: &Actor) -> bool {
         is_administrator(actor)
     }
@@ -316,12 +318,13 @@ impl AuthorizationGuardDefinitions for ActiveForm {
 mod tests {
     use super::*;
     use crate::{
+        account::models::{AccountUser, Role},
+        form::answer::TemporaryAnswerAuthor,
         form::{
             answer::{AnswerSubmitter, FormAnswerContent, FormAnswerContentId},
             question::{Question, QuestionId, QuestionType},
         },
         types::authorization_guard::{AuthorizationGuard, Read},
-        user::models::{ActiveUser, Role, TemporaryUser},
     };
     use chrono::Duration;
     use types::non_empty_vec::NonEmptyVec;
@@ -355,8 +358,8 @@ mod tests {
         )
     }
 
-    fn active_user(role: Role) -> ActiveUser {
-        ActiveUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    fn active_user(role: Role) -> AccountUser {
+        AccountUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
     }
 
     fn sample_posted_answers(form: &ActiveForm) -> PostedAnswerContents {
@@ -379,7 +382,7 @@ mod tests {
 
     #[test]
     fn try_accept_answer_respects_temporary_answer_settings() {
-        let temporary_user = TemporaryUser::new("guest".to_string(), "contact".to_string());
+        let temporary_user = TemporaryAnswerAuthor::new("guest".to_string(), "contact".to_string());
         let actor = Actor::from(temporary_user.clone());
 
         let form = sample_form();

@@ -1,7 +1,7 @@
 use errors::domain::DomainError;
 use std::marker::PhantomData;
 
-use crate::user::models::Actor;
+use crate::auth::Actor;
 
 use super::{Actions, Allowed, AuthorizationRole, Create, Delete, Read, Update};
 
@@ -45,7 +45,7 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions, A: Actions> {
 ///     types::authorization_guard::{
 ///         AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded,
 ///     },
-///     user::models::{Actor, Role, User, UserId},
+///     auth::Actor, account::models::{Role, UserId},
 /// };
 /// use uuid::Uuid;
 ///
@@ -59,19 +59,19 @@ pub struct AuthorizationGuard<T: AuthorizationGuardDefinitions, A: Actions> {
 ///
 /// impl AuthorizationGuardDefinitions for GuardTarget {
 ///     fn can_create(&self, actor: &Actor) -> bool {
-///         matches!(actor, Actor::User(User::ActiveUser(u)) if u.role() == &Role::Administrator)
+///         matches!(actor, Actor::AccountUser(u) if u.role() == &Role::Administrator)
 ///     }
 ///
 ///     fn can_read(&self, actor: &Actor) -> bool {
-///         matches!(actor, Actor::User(User::ActiveUser(u)) if *u.id() == self.user_id)
+///         matches!(actor, Actor::AccountUser(u) if *u.id() == self.user_id)
 ///     }
 ///
 ///     fn can_update(&self, actor: &Actor) -> bool {
-///         matches!(actor, Actor::User(User::ActiveUser(u)) if *u.id() == self.user_id)
+///         matches!(actor, Actor::AccountUser(u) if *u.id() == self.user_id)
 ///     }
 ///
 ///     fn can_delete(&self, actor: &Actor) -> bool {
-///         matches!(actor, Actor::User(User::ActiveUser(u)) if *u.id() == self.user_id)
+///         matches!(actor, Actor::AccountUser(u) if *u.id() == self.user_id)
 ///     }
 /// }
 /// ```
@@ -284,11 +284,12 @@ mod test {
     use uuid::Uuid;
 
     use crate::{
+        account::models::{AccountUser, Role},
+        auth::Actor,
         types::authorization_guard::{
             Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizationRole, Delete,
             SelfGuarded,
         },
-        user::models::{ActiveUser, Actor, Role, User},
     };
 
     #[derive(Clone, PartialEq, Debug)]
@@ -302,37 +303,37 @@ mod test {
 
     impl AuthorizationGuardDefinitions for AuthorizationGuardTestStruct {
         fn can_create(&self, actor: &Actor) -> bool {
-            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+            matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_read(&self, actor: &Actor) -> bool {
             matches!(
                 actor,
-                Actor::User(User::ActiveUser(actor))
+                Actor::AccountUser(actor)
                     if actor.role() == &Role::Administrator
                         || actor.role() == &Role::StandardUser
             )
         }
 
         fn can_update(&self, actor: &Actor) -> bool {
-            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+            matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
         }
 
         fn can_delete(&self, actor: &Actor) -> bool {
-            matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+            matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
         }
     }
 
     #[test]
     fn authorization_guard_test() {
-        let admin: Actor = ActiveUser::new(
+        let admin: Actor = AccountUser::new(
             "admin".to_string(),
             Uuid::new_v4().into(),
             Role::Administrator,
         )
         .into();
 
-        let standard_user: Actor = ActiveUser::new(
+        let standard_user: Actor = AccountUser::new(
             "standard_user".to_string(),
             Uuid::new_v4().into(),
             Role::StandardUser,
@@ -369,7 +370,7 @@ mod test {
 
     #[test]
     fn allowed_can_borrow_and_unwrap_value() {
-        let user: Actor = ActiveUser::new(
+        let user: Actor = AccountUser::new(
             "user".to_string(),
             Uuid::new_v4().into(),
             Role::Administrator,

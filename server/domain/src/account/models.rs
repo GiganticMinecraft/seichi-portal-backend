@@ -12,8 +12,9 @@ use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
-use crate::types::authorization_guard::{
-    AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded,
+use crate::{
+    auth::Actor,
+    types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
 };
 
 #[derive(DerivingVia, Debug, PartialOrd, PartialEq, Eq, Hash)]
@@ -92,131 +93,50 @@ impl AuthorizationRole for AnswerSubmissionRestriction {
 
 impl AuthorizationGuardDefinitions for AnswerSubmissionRestriction {
     fn can_create(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(user) if user.role() == &Role::Administrator)
     }
 
     fn can_read(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if self.user_id == *user.id() || user.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(user) if self.user_id == *user.id() || user.role() == &Role::Administrator)
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(user) if user.role() == &Role::Administrator)
     }
 
     fn can_delete(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(user) if user.role() == &Role::Administrator)
     }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Debug, Clone)]
-pub struct ActiveUser {
+pub struct AccountUser {
     name: String,
     id: UserId,
     #[serde(default)]
     role: Role,
 }
 
-impl ActiveUser {
+impl AccountUser {
     pub fn new(name: String, id: UserId, role: Role) -> Self {
         Self { name, id, role }
     }
 }
 
-impl PartialEq for ActiveUser {
+impl PartialEq for AccountUser {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum User {
-    ActiveUser(ActiveUser),
-    TemporaryUser(TemporaryUser),
-    Anonymous,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Actor {
-    User(User),
-    System,
-}
-
-impl From<ActiveUser> for User {
-    fn from(user: ActiveUser) -> Self {
-        Self::ActiveUser(user)
-    }
-}
-
-impl From<TemporaryUser> for User {
-    fn from(user: TemporaryUser) -> Self {
-        Self::TemporaryUser(user)
-    }
-}
-
-impl From<ActiveUser> for Actor {
-    fn from(user: ActiveUser) -> Self {
-        Self::User(User::ActiveUser(user))
-    }
-}
-
-impl From<TemporaryUser> for Actor {
-    fn from(user: TemporaryUser) -> Self {
-        Self::User(User::TemporaryUser(user))
-    }
-}
-
-impl From<User> for Actor {
-    fn from(user: User) -> Self {
-        Self::User(user)
-    }
-}
-
-#[derive(DerivingVia, Debug, PartialOrd, PartialEq, Eq, Hash, Clone, Copy)]
-#[deriving(
-    From,
-    Into,
-    IntoInner(via: Uuid),
-    Display(via: Uuid),
-    Serialize(via: Uuid),
-    Deserialize(via: Uuid)
-)]
-pub struct TemporaryUserId(#[underlying] Uuid);
-
-/// 一時回答が許可されたフォームで、ログインせずに回答した人の著者情報。
-///
-/// `TemporaryUser` は永続的な認証主体ではなく、回答作成時に入力された情報を
-/// 回答の著者として保持するためのスナップショットである。`id` は通常の
-/// `UserId` やログインセッションとは別の、回答著者を一時ユーザーとして識別する
-/// ローカルな UUID として扱う。
-///
-/// `name` と `contact_text` は、管理者や回答閲覧者が回答者を識別し、必要に応じて
-/// 連絡するための入力値である。権限判定上は回答の作成主体としてだけ使われ、
-/// 通常の `User` と同じ閲覧・更新権限は持たない。
-#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Debug, Clone, PartialEq, Eq)]
-pub struct TemporaryUser {
-    id: TemporaryUserId,
-    name: String,
-    contact_text: String,
-}
-
-impl TemporaryUser {
-    pub fn new(name: String, contact_text: String) -> Self {
-        Self {
-            id: TemporaryUserId::from(Uuid::new_v4()),
-            name,
-            contact_text,
-        }
-    }
-}
-
-impl AuthorizationRole for ActiveUser {
+impl AuthorizationRole for AccountUser {
     type Role = SelfGuarded;
 }
 
-impl AuthorizationGuardDefinitions for ActiveUser {
+impl AuthorizationGuardDefinitions for AccountUser {
     fn can_create(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
+        matches!(actor, Actor::AccountUser(actor) if actor == self)
     }
 
     fn can_read(&self, _actor: &Actor) -> bool {
@@ -224,11 +144,11 @@ impl AuthorizationGuardDefinitions for ActiveUser {
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role == Role::Administrator)
+        matches!(actor, Actor::AccountUser(actor) if actor.role == Role::Administrator)
     }
 
     fn can_delete(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor == self)
+        matches!(actor, Actor::AccountUser(actor) if actor == self)
     }
 }
 
@@ -316,7 +236,7 @@ impl AuthorizationRole for DiscordAccountLink {
 
 impl AuthorizationGuardDefinitions for DiscordAccountLink {
     fn can_create(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
+        matches!(actor, Actor::AccountUser(actor) if *actor.id() == self.user_id)
     }
 
     fn can_read(&self, _actor: &Actor) -> bool {
@@ -324,28 +244,29 @@ impl AuthorizationGuardDefinitions for DiscordAccountLink {
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
+        matches!(actor, Actor::AccountUser(actor) if *actor.id() == self.user_id)
     }
 
     fn can_delete(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if *actor.id() == self.user_id)
+        matches!(actor, Actor::AccountUser(actor) if *actor.id() == self.user_id)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::form::answer::TemporaryAnswerAuthor;
 
     fn user_id(seed: u128) -> UserId {
         UserId::from(Uuid::from_u128(seed))
     }
 
-    fn active_user(name: &str, id: UserId, role: Role) -> ActiveUser {
-        ActiveUser::new(name.to_string(), id, role)
+    fn active_user(name: &str, id: UserId, role: Role) -> AccountUser {
+        AccountUser::new(name.to_string(), id, role)
     }
 
     fn temporary_actor() -> Actor {
-        Actor::from(TemporaryUser::new(
+        Actor::from(TemporaryAnswerAuthor::new(
             "temporary_user".to_string(),
             "contact".to_string(),
         ))
@@ -374,7 +295,7 @@ mod tests {
         assert!(target.can_create(&same_user));
         assert!(!target.can_create(&other_user));
         assert!(!target.can_create(&temporary_actor()));
-        assert!(!target.can_create(&Actor::from(User::Anonymous)));
+        assert!(!target.can_create(&Actor::Anonymous));
         assert!(!target.can_create(&Actor::System));
     }
 
@@ -385,7 +306,7 @@ mod tests {
 
         assert!(target.can_read(&active_user_actor));
         assert!(target.can_read(&temporary_actor()));
-        assert!(target.can_read(&Actor::from(User::Anonymous)));
+        assert!(target.can_read(&Actor::Anonymous));
         assert!(target.can_read(&Actor::System));
     }
 
@@ -398,7 +319,7 @@ mod tests {
         assert!(target.can_update(&administrator));
         assert!(!target.can_update(&standard_user));
         assert!(!target.can_update(&temporary_actor()));
-        assert!(!target.can_update(&Actor::from(User::Anonymous)));
+        assert!(!target.can_update(&Actor::Anonymous));
         assert!(!target.can_update(&Actor::System));
     }
 
@@ -411,7 +332,7 @@ mod tests {
         assert!(target.can_delete(&same_user));
         assert!(!target.can_delete(&other_user));
         assert!(!target.can_delete(&temporary_actor()));
-        assert!(!target.can_delete(&Actor::from(User::Anonymous)));
+        assert!(!target.can_delete(&Actor::Anonymous));
         assert!(!target.can_delete(&Actor::System));
     }
 
@@ -427,11 +348,7 @@ mod tests {
         );
         let linked_user = Actor::from(active_user("linked", linked_user_id, Role::StandardUser));
         let other_user = Actor::from(active_user("other", user_id(2), Role::Administrator));
-        let non_active_actors = [
-            temporary_actor(),
-            Actor::from(User::Anonymous),
-            Actor::System,
-        ];
+        let non_active_actors = [temporary_actor(), Actor::Anonymous, Actor::System];
 
         assert!(link.can_create(&linked_user));
         assert!(link.can_update(&linked_user));
@@ -461,7 +378,7 @@ mod tests {
 
         assert!(link.can_read(&active_user_actor));
         assert!(link.can_read(&temporary_actor()));
-        assert!(link.can_read(&Actor::from(User::Anonymous)));
+        assert!(link.can_read(&Actor::Anonymous));
         assert!(link.can_read(&Actor::System));
     }
 
