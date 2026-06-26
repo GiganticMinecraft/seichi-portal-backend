@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use domain::{
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::{ActiveUser, DiscordAccountLink, DiscordUser, DiscordUserId, DiscordUserName},
+    user::models::{
+        ActiveUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser, DiscordUserId,
+        DiscordUserName,
+    },
 };
 use errors::{Error, infra::InfraError::Reqwest};
 use itertools::Itertools;
@@ -53,6 +56,40 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
                 user.value().id().into_inner(),
                 user.value().role().to_owned(),
             )
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_active_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<AnswerSubmissionRestriction>, Error> {
+        self.client
+            .user()
+            .fetch_active_answer_submission_restriction(user_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn restrict_answer_submission(
+        &self,
+        restriction: Allowed<AnswerSubmissionRestriction, Create>,
+    ) -> Result<(), Error> {
+        self.client
+            .user()
+            .restrict_answer_submission(restriction.value())
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn lift_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+        actor: &ActiveUser,
+    ) -> Result<(), Error> {
+        self.client
+            .user()
+            .lift_answer_submission_restriction(user_id, actor.id().into_inner())
             .await
             .map_err(Into::into)
     }

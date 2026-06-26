@@ -1,12 +1,15 @@
+use chrono::{DateTime, Utc};
 #[cfg(test)]
 use common::test_utils::arbitrary_uuid_v4;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use domain_derive::UnsafeFromRawParts;
+use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 use crate::types::authorization_guard::{
@@ -29,6 +32,122 @@ pub struct UserId(
     #[underlying]
     Uuid,
 );
+
+pub type AnswerSubmissionRestrictionId = types::Id<AnswerSubmissionRestriction>;
+
+#[derive(Clone, DerivingVia, Debug, PartialEq)]
+#[deriving(From, Into, IntoInner, Serialize(via: NonEmptyString), Deserialize(via: NonEmptyString))]
+pub struct AnswerSubmissionRestrictionReason(NonEmptyString);
+
+impl AnswerSubmissionRestrictionReason {
+    pub fn new(reason: NonEmptyString) -> Self {
+        Self(reason)
+    }
+}
+
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+pub struct AnswerSubmissionRestriction {
+    id: AnswerSubmissionRestrictionId,
+    user_id: UserId,
+    reason: AnswerSubmissionRestrictionReason,
+    restricted_by: UserId,
+    restricted_at: DateTime<Utc>,
+    expires_at: Option<DateTime<Utc>>,
+}
+
+impl AnswerSubmissionRestriction {
+    pub fn new(
+        user_id: UserId,
+        reason: AnswerSubmissionRestrictionReason,
+        restricted_by: UserId,
+        restricted_at: DateTime<Utc>,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Result<Self, DomainError> {
+        if expires_at.is_some_and(|expires_at| expires_at <= restricted_at) {
+            return Err(DomainError::InvalidEntity {
+                message:
+                    "answer submission restriction expires_at must be later than restricted_at"
+                        .to_string(),
+            });
+        }
+
+        Ok(Self {
+            id: AnswerSubmissionRestrictionId::new(),
+            user_id,
+            reason,
+            restricted_by,
+            restricted_at,
+            expires_at,
+        })
+    }
+
+    pub fn is_active_at(&self, now: DateTime<Utc>) -> bool {
+        self.expires_at.is_none_or(|expires_at| now < expires_at)
+    }
+}
+
+impl AuthorizationRole for AnswerSubmissionRestriction {
+    type Role = SelfGuarded;
+}
+
+impl AuthorizationGuardDefinitions for AnswerSubmissionRestriction {
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if self.user_id == *user.id() || user.role() == &Role::Administrator)
+    }
+
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+    }
+
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnswerSubmitter {
+    user: ActiveUser,
+}
+
+impl AnswerSubmitter {
+    pub fn try_new(
+        user: ActiveUser,
+        restriction: Option<AnswerSubmissionRestriction>,
+        now: DateTime<Utc>,
+    ) -> Result<Self, DomainError> {
+        if let Some(restriction) = restriction {
+            if restriction.user_id != *user.id() {
+                return Err(DomainError::InvalidEntity {
+                    message: "answer submission restriction must belong to the submitter"
+                        .to_string(),
+                });
+            }
+
+            if !restriction.is_active_at(now) {
+                return Ok(Self { user });
+            }
+
+            return Err(DomainError::AnswerSubmissionRestricted {
+                reason: restriction.reason.into_inner().into_inner(),
+                expires_at: restriction.expires_at,
+            });
+        }
+
+        Ok(Self { user })
+    }
+
+    pub fn user(&self) -> &ActiveUser {
+        &self.user
+    }
+
+    pub fn into_user(self) -> ActiveUser {
+        self.user
+    }
+}
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Debug, Clone)]
@@ -385,6 +504,76 @@ mod tests {
         assert!(link.can_read(&temporary_actor()));
         assert!(link.can_read(&Actor::from(User::Anonymous)));
         assert!(link.can_read(&Actor::System));
+    }
+
+    #[test]
+    fn answer_submitter_is_created_when_user_has_no_active_restriction() {
+        let user = active_user("user", user_id(1), Role::StandardUser);
+
+        assert!(AnswerSubmitter::try_new(user, None, Utc::now()).is_ok());
+    }
+
+    #[test]
+    fn answer_submitter_rejects_active_restriction() {
+        let now = Utc::now();
+        let user = active_user("user", user_id(1), Role::StandardUser);
+        let restriction = AnswerSubmissionRestriction::new(
+            *user.id(),
+            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            user_id(2),
+            now,
+            None,
+        )
+        .unwrap();
+
+        let result = AnswerSubmitter::try_new(user, Some(restriction), now);
+
+        assert_eq!(
+            result,
+            Err(DomainError::AnswerSubmissionRestricted {
+                reason: "spam".to_string(),
+                expires_at: None,
+            })
+        );
+    }
+
+    #[test]
+    fn answer_submitter_ignores_expired_restriction() {
+        let now = Utc::now();
+        let user = active_user("user", user_id(1), Role::StandardUser);
+        let restriction = AnswerSubmissionRestriction::new(
+            *user.id(),
+            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            user_id(2),
+            now - chrono::Duration::hours(2),
+            Some(now - chrono::Duration::hours(1)),
+        )
+        .unwrap();
+
+        assert!(AnswerSubmitter::try_new(user, Some(restriction), now).is_ok());
+    }
+
+    #[test]
+    fn answer_submitter_rejects_restriction_for_different_user() {
+        let now = Utc::now();
+        let user = active_user("user", user_id(1), Role::StandardUser);
+        let restriction = AnswerSubmissionRestriction::new(
+            user_id(2),
+            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            user_id(3),
+            now,
+            None,
+        )
+        .unwrap();
+
+        let result = AnswerSubmitter::try_new(user, Some(restriction), now);
+
+        assert_eq!(
+            result,
+            Err(DomainError::InvalidEntity {
+                message: "answer submission restriction must belong to the submitter".to_string(),
+            })
+        );
     }
 
     #[test]

@@ -12,16 +12,32 @@ use errors::{
 use serde_json::json;
 
 fn problem_response(status: StatusCode, title: &str, detail: &str, error_code: &str) -> Response {
+    problem_response_with_restriction(status, title, detail, error_code, None)
+}
+
+fn problem_response_with_restriction(
+    status: StatusCode,
+    title: &str,
+    detail: &str,
+    error_code: &str,
+    restriction: Option<serde_json::Value>,
+) -> Response {
+    let mut body = json!({
+        "type": "about:blank",
+        "title": title,
+        "status": status.as_u16(),
+        "detail": detail,
+        "errorCode": error_code,
+    });
+
+    if let Some(restriction) = restriction {
+        body["restriction"] = restriction;
+    }
+
     (
         status,
         [(header::CONTENT_TYPE, "application/problem+json")],
-        Json(json!({
-            "type": "about:blank",
-            "title": title,
-            "status": status.as_u16(),
-            "detail": detail,
-            "errorCode": error_code,
-        })),
+        Json(body),
     )
         .into_response()
 }
@@ -34,6 +50,18 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             "You do not have permission to access this resource.",
             "FORBIDDEN",
         ),
+        DomainError::AnswerSubmissionRestricted { reason, expires_at } => {
+            problem_response_with_restriction(
+                StatusCode::FORBIDDEN,
+                "Forbidden",
+                "Answer submission is restricted.",
+                "ANSWER_SUBMISSION_RESTRICTED",
+                Some(json!({
+                    "reason": reason,
+                    "expires_at": expires_at,
+                })),
+            )
+        }
         DomainError::NotFound => problem_response(
             StatusCode::NOT_FOUND,
             "Not Found",

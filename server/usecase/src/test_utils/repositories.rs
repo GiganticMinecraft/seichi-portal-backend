@@ -16,7 +16,7 @@ use domain::{
         user_repository::UserRepository,
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::{ActiveUser, DiscordAccountLink, DiscordUser},
+    user::models::{ActiveUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser},
 };
 use errors::Error;
 use std::sync::Mutex;
@@ -449,6 +449,19 @@ impl NotificationRepository for InMemoryNotificationRepository {
 pub(crate) struct InMemoryUserRepository {
     users: Mutex<Vec<ActiveUser>>,
     sessions: Mutex<Vec<(String, ActiveUser)>>,
+    answer_submission_restrictions: Mutex<Vec<AnswerSubmissionRestriction>>,
+}
+
+impl InMemoryUserRepository {
+    pub(crate) fn save_answer_submission_restriction(
+        &self,
+        restriction: AnswerSubmissionRestriction,
+    ) {
+        self.answer_submission_restrictions
+            .lock()
+            .unwrap()
+            .push(restriction);
+    }
 }
 
 #[async_trait]
@@ -502,6 +515,42 @@ impl UserRepository for InMemoryUserRepository {
         } else {
             Err(not_found_error("ActiveUser", user.id()))
         }
+    }
+
+    async fn fetch_active_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<AnswerSubmissionRestriction>, Error> {
+        Ok(self
+            .answer_submission_restrictions
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|restriction| {
+                restriction.user_id().into_inner() == user_id
+                    && restriction.is_active_at(chrono::Utc::now())
+            })
+            .cloned())
+    }
+
+    async fn restrict_answer_submission(
+        &self,
+        restriction: Allowed<AnswerSubmissionRestriction, Create>,
+    ) -> Result<(), Error> {
+        self.save_answer_submission_restriction(restriction.into_inner());
+        Ok(())
+    }
+
+    async fn lift_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+        _actor: &ActiveUser,
+    ) -> Result<(), Error> {
+        self.answer_submission_restrictions
+            .lock()
+            .unwrap()
+            .retain(|restriction| restriction.user_id().into_inner() != user_id);
+        Ok(())
     }
 
     async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<Option<ActiveUser>, Error> {

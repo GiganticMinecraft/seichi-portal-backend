@@ -2,7 +2,10 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::user::models::{ActiveUser, DiscordAccountLink, Role};
+use domain::user::models::{
+    ActiveUser, AnswerSubmissionRestriction, AnswerSubmissionRestrictionId,
+    AnswerSubmissionRestrictionReason, DiscordAccountLink, Role,
+};
 use errors::infra::InfraError;
 use itertools::Itertools;
 use redis::Commands;
@@ -117,6 +120,131 @@ impl UserDatabase for ConnectionPool {
                     role.to_string(),
                     uuid.to_string(),
                 )
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
+    async fn fetch_active_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<AnswerSubmissionRestriction>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let row = sqlx::query(
+                    r#"
+                    SELECT id, user_id, reason, restricted_by, restricted_at, expires_at
+                    FROM answer_submission_restrictions
+                    WHERE user_id = ?
+                      AND lifted_at IS NULL
+                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
+                    ORDER BY restricted_at DESC
+                    LIMIT 1
+                    "#,
+                )
+                .bind(user_id.to_string())
+                .fetch_optional(&mut **txn)
+                .await?;
+
+                row.map(|row| {
+                    Ok::<_, InfraError>(unsafe {
+                        AnswerSubmissionRestriction::from_raw_parts(
+                            AnswerSubmissionRestrictionId::from(Uuid::parse_str(
+                                &row.try_get::<String, _>("id")?,
+                            )?),
+                            Uuid::parse_str(&row.try_get::<String, _>("user_id")?)?.into(),
+                            AnswerSubmissionRestrictionReason::new(
+                                row.try_get::<String, _>("reason")?.try_into().map_err(
+                                    |err: errors::validation::ValidationError| {
+                                        InfraError::Unexpected {
+                                            cause: err.to_string(),
+                                        }
+                                    },
+                                )?,
+                            ),
+                            Uuid::parse_str(&row.try_get::<String, _>("restricted_by")?)?.into(),
+                            row.try_get("restricted_at")?,
+                            row.try_get("expires_at")?,
+                        )
+                    })
+                })
+                .transpose()
+            })
+        })
+        .await
+    }
+
+    async fn restrict_answer_submission(
+        &self,
+        restriction: &AnswerSubmissionRestriction,
+    ) -> Result<(), InfraError> {
+        let restriction_id = restriction.id().to_string();
+        let user_id = restriction.user_id().to_string();
+        let reason = restriction.reason().to_owned().into_inner().into_inner();
+        let restricted_by = restriction.restricted_by().to_string();
+        let restricted_at = *restriction.restricted_at();
+        let expires_at = *restriction.expires_at();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query(
+                    r#"
+                    UPDATE answer_submission_restrictions
+                    SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
+                    WHERE user_id = ?
+                      AND lifted_at IS NULL
+                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
+                    "#,
+                )
+                .bind(&restricted_by)
+                .bind(&user_id)
+                .execute(&mut **txn)
+                .await?;
+
+                sqlx::query(
+                    r#"
+                    INSERT INTO answer_submission_restrictions
+                        (id, user_id, reason, restricted_by, restricted_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    "#,
+                )
+                .bind(restriction_id)
+                .bind(user_id)
+                .bind(reason)
+                .bind(restricted_by)
+                .bind(restricted_at)
+                .bind(expires_at)
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
+    async fn lift_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+        lifted_by: Uuid,
+    ) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query(
+                    r#"
+                    UPDATE answer_submission_restrictions
+                    SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
+                    WHERE user_id = ?
+                      AND lifted_at IS NULL
+                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
+                    "#,
+                )
+                .bind(lifted_by.to_string())
+                .bind(user_id.to_string())
                 .execute(&mut **txn)
                 .await?;
 

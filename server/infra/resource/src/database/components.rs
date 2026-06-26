@@ -19,7 +19,7 @@ use domain::{
     },
     notification::models::NotificationPreference,
     search::models::SearchableFieldsWithOperation,
-    user::models::{ActiveUser, DiscordAccountLink, Role},
+    user::models::{ActiveUser, AnswerSubmissionRestriction, DiscordAccountLink, Role},
 };
 use errors::infra::InfraError;
 use mockall::automock;
@@ -210,6 +210,19 @@ pub trait UserDatabase: Send + Sync {
     async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<ActiveUser>, InfraError>;
     async fn upsert_user(&self, user: &ActiveUser) -> Result<(), InfraError>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
+    async fn fetch_active_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<AnswerSubmissionRestriction>, InfraError>;
+    async fn restrict_answer_submission(
+        &self,
+        restriction: &AnswerSubmissionRestriction,
+    ) -> Result<(), InfraError>;
+    async fn lift_answer_submission_restriction(
+        &self,
+        user_id: Uuid,
+        lifted_by: Uuid,
+    ) -> Result<(), InfraError>;
     async fn fetch_all_users(&self) -> Result<Vec<ActiveUser>, InfraError>;
     async fn start_user_session(
         &self,

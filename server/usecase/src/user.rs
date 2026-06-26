@@ -1,7 +1,11 @@
+use chrono::{DateTime, Utc};
 use domain::{
     repository::user_repository::UserRepository,
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::{ActiveUser, Actor, DiscordAccountLink, Role},
+    user::models::{
+        ActiveUser, Actor, AnswerSubmissionRestriction, AnswerSubmissionRestrictionReason,
+        DiscordAccountLink, Role,
+    },
 };
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
@@ -73,6 +77,79 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         updated_user_guard
             .try_read(actor_ref.clone())
             .map(|user| user.into_inner())
+            .map_err(Into::into)
+    }
+
+    pub async fn restrict_answer_submission(
+        &self,
+        actor: &ActiveUser,
+        uuid: Uuid,
+        reason: AnswerSubmissionRestrictionReason,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Result<AnswerSubmissionRestriction, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        self.repository
+            .find_by(uuid)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        let restriction = AnswerSubmissionRestriction::new(
+            uuid.into(),
+            reason,
+            *actor.id(),
+            Utc::now(),
+            expires_at,
+        )?;
+
+        self.repository
+            .restrict_answer_submission(
+                AuthorizationGuard::<_, Create>::from(restriction.clone())
+                    .try_create(actor_ref.clone())?,
+            )
+            .await?;
+
+        Ok(restriction)
+    }
+
+    pub async fn lift_answer_submission_restriction(
+        &self,
+        actor: &ActiveUser,
+        uuid: Uuid,
+    ) -> Result<(), Error> {
+        if actor.role() != &Role::Administrator {
+            return Err(errors::domain::DomainError::Forbidden.into());
+        }
+
+        self.repository
+            .find_by(uuid)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        self.repository
+            .lift_answer_submission_restriction(uuid, actor)
+            .await
+    }
+
+    pub async fn fetch_active_answer_submission_restriction(
+        &self,
+        actor: &ActiveUser,
+        uuid: Uuid,
+    ) -> Result<Option<AnswerSubmissionRestriction>, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        self.repository
+            .find_by(uuid)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        self.repository
+            .fetch_active_answer_submission_restriction(uuid)
+            .await?
+            .map(|restriction| {
+                AuthorizationGuard::<_, Read>::from(restriction)
+                    .try_read(actor_ref.clone())
+                    .map(|restriction| restriction.into_inner())
+            })
+            .transpose()
             .map_err(Into::into)
     }
 
