@@ -1,0 +1,4 @@
+interface:
+  display_name: "seichi Portal Coding"
+  short_description: "Use project sqlx and auth rules."
+  default_prompt: "Use $seichi-portal-backend-coding-discipline when changing seichi-portal-backend Rust code that touches sqlx queries, repositories, use cases, or authorization boundaries."

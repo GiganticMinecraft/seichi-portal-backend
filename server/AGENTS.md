@@ -65,3 +65,23 @@ pub fn change_title(self, title: Title) -> Self {
     Self { title, ..self }
 }
 ```
+
+---
+
+## `sqlx` クエリの静的検証
+
+静的に書ける SQL は、原則として `sqlx::query!`、`sqlx::query_as!`、`sqlx::query_scalar!` などの typed query マクロを使う。
+
+`sqlx::query` や `sqlx::query_as` を使ってよいのは、SQL 文字列を実行時に組み立てる必要がある場合だけ。動的クエリにする場合は、なぜ typed query にできないかを近くのコメントか PR 説明に書く。
+
+typed query を追加・変更した場合は、ルート `.env` の `DATABASE_URL` を使って `cargo sqlx prepare --workspace` を実行し、`.sqlx/` の更新をコミットに含める。
+
+---
+
+## Repository 境界での認可
+
+Repository で権限が必要な操作は、呼び出し元の事前チェックだけに依存しない。
+
+読み取り結果として認可対象を返す場合は `AuthorizationGuard<T, Read>` を返し、書き込みや削除など認可済みの値が必要な操作では `Allowed<T, Create>`、`Allowed<T, Update>`、`Allowed<T, Delete>` などを引数に要求する。
+
+Handler や Usecase の `if` 文だけで認可を済ませず、Repository の型シグネチャで認可済みの経路を強制する。

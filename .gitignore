@@ -5,3 +5,4 @@ target
 proptest-regressions/
 .hypothesis
 .vscode/
+.agents/settings.local.json
