@@ -21,29 +21,27 @@ pub struct UserSchema {
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
-pub struct AnswerSubmissionRestrictionRequest {
+pub struct AnswerSubmitterRestrictionRequest {
     #[schema(value_type = String)]
     pub reason: NonEmptyString,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct AnswerSubmissionRestrictionResponse {
+pub struct AnswerSubmitterRestrictionResponse {
     pub id: String,
-    pub user_id: String,
+    pub submitter_id: String,
     pub reason: String,
     pub restricted_by: String,
     pub restricted_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-impl From<domain::account::models::AnswerSubmissionRestriction>
-    for AnswerSubmissionRestrictionResponse
-{
-    fn from(value: domain::account::models::AnswerSubmissionRestriction) -> Self {
+impl From<domain::form::answer::AnswerSubmitterRestriction> for AnswerSubmitterRestrictionResponse {
+    fn from(value: domain::form::answer::AnswerSubmitterRestriction) -> Self {
         Self {
             id: value.id().to_string(),
-            user_id: value.user_id().to_string(),
+            submitter_id: value.submitter_id().to_string(),
             reason: value.reason().to_owned().into_inner().into_inner(),
             restricted_by: value.restricted_by().to_string(),
             restricted_at: *value.restricted_at(),

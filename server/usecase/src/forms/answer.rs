@@ -11,12 +11,15 @@ use domain::{
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
     },
-    repository::form::{
-        active_form_repository::ActiveFormRepository,
-        answer_entry_repository::AnswerEntryRepository,
-        answer_label_repository::AnswerLabelRepository,
-    },
     repository::user_repository::UserRepository,
+    repository::{
+        answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
+        form::{
+            active_form_repository::ActiveFormRepository,
+            answer_entry_repository::AnswerEntryRepository,
+            answer_label_repository::AnswerLabelRepository,
+        },
+    },
     types::authorization_guard::{Allowed, Read},
 };
 use errors::{
@@ -40,11 +43,13 @@ pub struct AnswerUseCase<
     FormRepo: ActiveFormRepository,
     AnswerLabelRepo: AnswerLabelRepository,
     UserRepo: UserRepository,
+    AnswerSubmitterRestrictionRepo: AnswerSubmitterRestrictionRepository,
     AnswerEntryRepo: AnswerEntryRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
+    pub answer_submitter_restriction_repository: &'a AnswerSubmitterRestrictionRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
     pub discord_answer_webhook_notifier: Option<&'a dyn DiscordAnswerWebhookNotifier>,
 }
@@ -53,8 +58,9 @@ impl<
     R1: ActiveFormRepository,
     R2: AnswerLabelRepository,
     R3: UserRepository,
-    R4: AnswerEntryRepository,
-> AnswerUseCase<'_, R1, R2, R3, R4>
+    R4: AnswerSubmitterRestrictionRepository,
+    R5: AnswerEntryRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
     async fn read_form(
         &self,
@@ -190,8 +196,8 @@ impl<
         let questions = form.value().questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
         let restriction = self
-            .user_repository
-            .fetch_active_answer_submission_restriction(user.id().into_inner())
+            .answer_submitter_restriction_repository
+            .fetch_active_by_submitter_id(user.id().into_inner())
             .await?
             .map(|restriction| {
                 restriction
@@ -452,9 +458,12 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use domain::{
-        account::models::{AnswerSubmissionRestriction, AnswerSubmissionRestrictionReason, Role},
+        account::models::Role,
         form::{
-            answer::{AnswerLabelId, FormAnswerContentId},
+            answer::{
+                AnswerLabelId, AnswerSubmitterRestriction, AnswerSubmitterRestrictionReason,
+                FormAnswerContentId,
+            },
             models::{FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
@@ -555,13 +564,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn post_answers_rejects_user_with_active_answer_submission_restriction() {
+    async fn post_answers_rejects_user_with_active_answer_submitter_restriction() {
         let form = sample_form();
         let user = active_user("user", Role::StandardUser);
         let now = Utc::now();
-        let restriction = AnswerSubmissionRestriction::new(
+        let restriction = AnswerSubmitterRestriction::new(
             *user.id(),
-            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            AnswerSubmitterRestrictionReason::new("spam".to_string().try_into().unwrap()),
             Uuid::new_v4().into(),
             now,
             None,
@@ -575,13 +584,15 @@ mod tests {
 
         let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form.clone()]);
         repositories
-            .user_repository
-            .save_answer_submission_restriction(restriction);
+            .answer_submitter_restriction_repository
+            .save_answer_submitter_restriction(restriction);
         let empty_answer_label_repository = EmptyAnswerLabelRepository;
         let usecase = AnswerUseCase {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &empty_answer_label_repository,
             user_repository: &repositories.user_repository,
+            answer_submitter_restriction_repository: &repositories
+                .answer_submitter_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: None,
         };

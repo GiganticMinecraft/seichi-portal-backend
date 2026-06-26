@@ -1,14 +1,12 @@
 use async_trait::async_trait;
 use domain::{
     account::models::{
-        AccountUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser, DiscordUserId,
-        DiscordUserName,
+        AccountUser, DiscordAccountLink, DiscordUser, DiscordUserId, DiscordUserName,
     },
-    auth::Actor,
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
-use errors::{Error, domain::DomainError, infra::InfraError::Reqwest};
+use errors::{Error, infra::InfraError::Reqwest};
 use itertools::Itertools;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
 use uuid::Uuid;
@@ -57,45 +55,6 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
                 user.value().id().into_inner(),
                 user.value().role().to_owned(),
             )
-            .await
-            .map_err(Into::into)
-    }
-
-    async fn fetch_active_answer_submission_restriction(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<AuthorizationGuard<AnswerSubmissionRestriction, Read>>, Error> {
-        Ok(self
-            .client
-            .user()
-            .fetch_active_answer_submission_restriction(user_id)
-            .await?
-            .map(Into::into))
-    }
-
-    async fn restrict_answer_submission(
-        &self,
-        restriction: Allowed<AnswerSubmissionRestriction, Create>,
-    ) -> Result<(), Error> {
-        self.client
-            .user()
-            .restrict_answer_submission(restriction.value())
-            .await
-            .map_err(Into::into)
-    }
-
-    async fn lift_answer_submission_restriction(
-        &self,
-        restriction: Allowed<AnswerSubmissionRestriction, Delete>,
-    ) -> Result<(), Error> {
-        let lifted_by = match restriction.actor() {
-            Actor::AccountUser(user) => user.id().into_inner(),
-            _ => return Err(DomainError::Forbidden.into()),
-        };
-
-        self.client
-            .user()
-            .lift_answer_submission_restriction(restriction.user_id().into_inner(), lifted_by)
             .await
             .map_err(Into::into)
     }

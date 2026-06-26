@@ -3906,13 +3906,13 @@
         ]
       }
     },
-    "/api/v1/users/{uuid}/answer-submission-restriction": {
+    "/api/v1/users/{uuid}/answer-submitter-restriction": {
       "get": {
         "tags": [
           "Users"
         ],
-        "summary": "ユーザーの有効な回答投稿制限の取得",
-        "operationId": "get_answer_submission_restriction",
+        "summary": "回答投稿者の有効な回答投稿制限の取得",
+        "operationId": "get_answer_submitter_restriction",
         "parameters": [
           {
             "name": "uuid",
@@ -3935,7 +3935,7 @@
                       "type": "null"
                     },
                     {
-                      "$ref": "#/components/schemas/AnswerSubmissionRestrictionResponse"
+                      "$ref": "#/components/schemas/AnswerSubmitterRestrictionResponse"
                     }
                   ]
                 }
@@ -4003,8 +4003,8 @@
         "tags": [
           "Users"
         ],
-        "summary": "ユーザーの回答投稿を制限する",
-        "operationId": "put_answer_submission_restriction",
+        "summary": "回答投稿者の回答投稿を制限する",
+        "operationId": "put_answer_submitter_restriction",
         "parameters": [
           {
             "name": "uuid",
@@ -4020,7 +4020,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AnswerSubmissionRestrictionRequest"
+                "$ref": "#/components/schemas/AnswerSubmitterRestrictionRequest"
               }
             }
           },
@@ -4032,7 +4032,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnswerSubmissionRestrictionResponse"
+                  "$ref": "#/components/schemas/AnswerSubmitterRestrictionResponse"
                 }
               }
             }
@@ -4108,8 +4108,8 @@
         "tags": [
           "Users"
         ],
-        "summary": "ユーザーの回答投稿制限を解除する",
-        "operationId": "delete_answer_submission_restriction",
+        "summary": "回答投稿者の回答投稿制限を解除する",
+        "operationId": "delete_answer_submitter_restriction",
         "parameters": [
           {
             "name": "uuid",
@@ -4406,7 +4406,7 @@
           }
         }
       },
-      "AnswerSubmissionRestrictionRequest": {
+      "AnswerSubmitterRestrictionRequest": {
         "type": "object",
         "required": [
           "reason"
@@ -4424,11 +4424,11 @@
           }
         }
       },
-      "AnswerSubmissionRestrictionResponse": {
+      "AnswerSubmitterRestrictionResponse": {
         "type": "object",
         "required": [
           "id",
-          "user_id",
+          "submitter_id",
           "reason",
           "restricted_by",
           "restricted_at"
@@ -4454,7 +4454,7 @@
           "restricted_by": {
             "type": "string"
           },
-          "user_id": {
+          "submitter_id": {
             "type": "string"
           }
         }

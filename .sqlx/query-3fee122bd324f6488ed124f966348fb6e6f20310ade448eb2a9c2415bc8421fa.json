@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                    UPDATE answer_submitter_restrictions\n                    SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?\n                    WHERE submitter_id = ?\n                      AND lifted_at IS NULL\n                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3fee122bd324f6488ed124f966348fb6e6f20310ade448eb2a9c2415bc8421fa"
+}

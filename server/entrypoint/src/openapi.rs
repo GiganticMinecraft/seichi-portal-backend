@@ -13,8 +13,8 @@ use utoipa_axum::routes;
         presentation::schemas::error_response::ErrorRestriction,
         presentation::schemas::user::UserInfoResponse,
         presentation::schemas::user::UserSchema,
-        presentation::schemas::user::AnswerSubmissionRestrictionRequest,
-        presentation::schemas::user::AnswerSubmissionRestrictionResponse,
+        presentation::schemas::user::AnswerSubmitterRestrictionRequest,
+        presentation::schemas::user::AnswerSubmitterRestrictionResponse,
         presentation::schemas::form::form_response_schemas::AnswerComment,
         presentation::schemas::form::form_response_schemas::AnswerContent,
         presentation::schemas::form::form_response_schemas::AnswerLabels,
@@ -157,9 +157,9 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         .routes(routes!(user_handler::get_my_user_info))
         .routes(routes!(user_handler::user_list))
         .routes(routes!(
-            user_handler::get_answer_submission_restriction,
-            user_handler::put_answer_submission_restriction,
-            user_handler::delete_answer_submission_restriction
+            user_handler::get_answer_submitter_restriction,
+            user_handler::put_answer_submitter_restriction,
+            user_handler::delete_answer_submitter_restriction
         ))
         .routes(routes!(search_handler::cross_search))
         .routes(routes!(message_handler::get_messages_handler))

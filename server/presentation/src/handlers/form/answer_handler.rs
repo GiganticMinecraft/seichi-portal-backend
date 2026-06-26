@@ -47,6 +47,7 @@ type ResourceAnswerUseCase<'a> = AnswerUseCase<
     ResourceRepository,
     ResourceRepository,
     ResourceRepository,
+    ResourceRepository,
 >;
 
 fn build_answer_use_case<'a>(
@@ -57,6 +58,8 @@ fn build_answer_use_case<'a>(
         active_form_repository: repository.active_form_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
+        answer_submitter_restriction_repository: repository
+            .answer_submitter_restriction_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         discord_answer_webhook_notifier,
     }
