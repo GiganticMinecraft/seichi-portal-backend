@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use domain::{
-    account::models::{AccountUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser},
+    account::models::{AccountUser, DiscordAccountLink, DiscordUser},
     form::{
-        answer::{AnswerEntry, AnswerId},
+        answer::{AnswerEntry, AnswerId, AnswerSubmitterRestriction},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId},
     },
     notification::models::NotificationPreference,
     repository::{
+        answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_repository::AnswerEntryRepository,
@@ -51,6 +52,8 @@ pub(crate) struct FormUseCaseTestRepositories {
     pub(crate) form_label_repository: InMemoryFormLabelRepository,
     pub(crate) answer_entry_repository: InMemoryAnswerEntryRepository,
     pub(crate) user_repository: InMemoryUserRepository,
+    pub(crate) answer_submitter_restriction_repository:
+        InMemoryAnswerSubmitterRestrictionRepository,
 }
 
 impl FormUseCaseTestRepositories {
@@ -449,19 +452,6 @@ impl NotificationRepository for InMemoryNotificationRepository {
 pub(crate) struct InMemoryUserRepository {
     users: Mutex<Vec<AccountUser>>,
     sessions: Mutex<Vec<(String, AccountUser)>>,
-    answer_submission_restrictions: Mutex<Vec<AnswerSubmissionRestriction>>,
-}
-
-impl InMemoryUserRepository {
-    pub(crate) fn save_answer_submission_restriction(
-        &self,
-        restriction: AnswerSubmissionRestriction,
-    ) {
-        self.answer_submission_restrictions
-            .lock()
-            .unwrap()
-            .push(restriction);
-    }
 }
 
 #[async_trait]
@@ -515,45 +505,6 @@ impl UserRepository for InMemoryUserRepository {
         } else {
             Err(not_found_error("AccountUser", user.id()))
         }
-    }
-
-    async fn fetch_active_answer_submission_restriction(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<AuthorizationGuard<AnswerSubmissionRestriction, Read>>, Error> {
-        Ok(self
-            .answer_submission_restrictions
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|restriction| {
-                restriction.user_id().into_inner() == user_id
-                    && restriction.is_active_at(chrono::Utc::now())
-            })
-            .cloned()
-            .map(Into::into))
-    }
-
-    async fn restrict_answer_submission(
-        &self,
-        restriction: Allowed<AnswerSubmissionRestriction, Create>,
-    ) -> Result<(), Error> {
-        let restriction = restriction.into_inner();
-        let mut restrictions = self.answer_submission_restrictions.lock().unwrap();
-        restrictions.retain(|stored| stored.user_id() != restriction.user_id());
-        restrictions.push(restriction);
-        Ok(())
-    }
-
-    async fn lift_answer_submission_restriction(
-        &self,
-        restriction: Allowed<AnswerSubmissionRestriction, Delete>,
-    ) -> Result<(), Error> {
-        self.answer_submission_restrictions
-            .lock()
-            .unwrap()
-            .retain(|stored| stored.user_id() != restriction.user_id());
-        Ok(())
     }
 
     async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<Option<AccountUser>, Error> {
@@ -635,5 +586,61 @@ impl UserRepository for InMemoryUserRepository {
 
     async fn size(&self) -> Result<u32, Error> {
         Ok(self.users.lock().unwrap().len() as u32)
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct InMemoryAnswerSubmitterRestrictionRepository {
+    restrictions: Mutex<Vec<AnswerSubmitterRestriction>>,
+}
+
+impl InMemoryAnswerSubmitterRestrictionRepository {
+    pub(crate) fn save_answer_submitter_restriction(
+        &self,
+        restriction: AnswerSubmitterRestriction,
+    ) {
+        self.restrictions.lock().unwrap().push(restriction);
+    }
+}
+
+#[async_trait]
+impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestrictionRepository {
+    async fn fetch_active_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Option<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error> {
+        Ok(self
+            .restrictions
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|restriction| {
+                restriction.submitter_id().into_inner() == submitter_id
+                    && restriction.is_active_at(chrono::Utc::now())
+            })
+            .cloned()
+            .map(Into::into))
+    }
+
+    async fn restrict(
+        &self,
+        restriction: Allowed<AnswerSubmitterRestriction, Create>,
+    ) -> Result<(), Error> {
+        let restriction = restriction.into_inner();
+        let mut restrictions = self.restrictions.lock().unwrap();
+        restrictions.retain(|stored| stored.submitter_id() != restriction.submitter_id());
+        restrictions.push(restriction);
+        Ok(())
+    }
+
+    async fn lift(
+        &self,
+        restriction: Allowed<AnswerSubmitterRestriction, Delete>,
+    ) -> Result<(), Error> {
+        self.restrictions
+            .lock()
+            .unwrap()
+            .retain(|stored| stored.submitter_id() != restriction.submitter_id());
+        Ok(())
     }
 }

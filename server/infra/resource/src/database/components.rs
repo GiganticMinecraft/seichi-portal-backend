@@ -11,9 +11,9 @@ use domain::search::models::{
     NumberOfRecordsPerAggregate, UserSearchHit,
 };
 use domain::{
-    account::models::{AccountUser, AnswerSubmissionRestriction, DiscordAccountLink, Role},
+    account::models::{AccountUser, DiscordAccountLink, Role},
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
+        answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerSubmitterRestriction},
         comment::{Comment, CommentId},
         message::{Message, MessageId},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
@@ -34,6 +34,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormMessageThreadDatabase: FormMessageThreadDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
+    type ConcreteAnswerSubmitterRestrictionDatabase: AnswerSubmitterRestrictionDatabase;
     type ConcreteUserDatabase: UserDatabase;
     type ConcreteDiscordAPI: DiscordAPI;
     type ConcreteNotificationDatabase: NotificationDatabase;
@@ -48,6 +49,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form_message_thread(&self) -> &Self::ConcreteFormMessageThreadDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
+    fn answer_submitter_restriction(&self) -> &Self::ConcreteAnswerSubmitterRestrictionDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
     fn discord_api(&self) -> &Self::ConcreteDiscordAPI;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
@@ -210,19 +212,6 @@ pub trait UserDatabase: Send + Sync {
     async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<AccountUser>, InfraError>;
     async fn upsert_user(&self, user: &AccountUser) -> Result<(), InfraError>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
-    async fn fetch_active_answer_submission_restriction(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<AnswerSubmissionRestriction>, InfraError>;
-    async fn restrict_answer_submission(
-        &self,
-        restriction: &AnswerSubmissionRestriction,
-    ) -> Result<(), InfraError>;
-    async fn lift_answer_submission_restriction(
-        &self,
-        user_id: Uuid,
-        lifted_by: Uuid,
-    ) -> Result<(), InfraError>;
     async fn fetch_all_users(&self) -> Result<Vec<AccountUser>, InfraError>;
     async fn start_user_session(
         &self,
@@ -242,6 +231,17 @@ pub trait UserDatabase: Send + Sync {
         user: &AccountUser,
     ) -> Result<Option<DiscordUserRecord>, InfraError>;
     async fn fetch_size(&self) -> Result<u32, InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait AnswerSubmitterRestrictionDatabase: Send + Sync {
+    async fn fetch_active_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Option<AnswerSubmitterRestriction>, InfraError>;
+    async fn restrict(&self, restriction: &AnswerSubmitterRestriction) -> Result<(), InfraError>;
+    async fn lift(&self, submitter_id: Uuid, lifted_by: Uuid) -> Result<(), InfraError>;
 }
 
 #[automock]

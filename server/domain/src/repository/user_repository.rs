@@ -4,7 +4,7 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    account::models::{AccountUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser},
+    account::models::{AccountUser, DiscordAccountLink, DiscordUser},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 
@@ -21,18 +21,6 @@ pub trait UserRepository: Send + Sync + 'static {
     ) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error>;
     async fn upsert_user(&self, user: Allowed<AccountUser, Create>) -> Result<(), Error>;
     async fn patch_user_role(&self, user: Allowed<AccountUser, Update>) -> Result<(), Error>;
-    async fn fetch_active_answer_submission_restriction(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<AuthorizationGuard<AnswerSubmissionRestriction, Read>>, Error>;
-    async fn restrict_answer_submission(
-        &self,
-        restriction: Allowed<AnswerSubmissionRestriction, Create>,
-    ) -> Result<(), Error>;
-    async fn lift_answer_submission_restriction(
-        &self,
-        restriction: Allowed<AnswerSubmissionRestriction, Delete>,
-    ) -> Result<(), Error>;
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<AccountUser>, Error>;
     async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error>;
     async fn start_user_session(

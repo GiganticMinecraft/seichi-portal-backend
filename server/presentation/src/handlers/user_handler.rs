@@ -9,17 +9,18 @@ use axum_extra::{
     headers::{Authorization, authorization::Bearer},
 };
 use domain::{
-    account::models::{AccountUser, AnswerSubmissionRestrictionReason, UserSessionExpires},
+    account::models::{AccountUser, UserSessionExpires},
+    form::answer::AnswerSubmitterRestrictionReason,
     repository::Repositories,
 };
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
-use usecase::user::UserUseCase;
+use usecase::{answer_submitter_restriction::AnswerSubmitterRestrictionUseCase, user::UserUseCase};
 use uuid::Uuid;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::user::{
-    AnswerSubmissionRestrictionRequest, AnswerSubmissionRestrictionResponse, UserInfoResponse,
+    AnswerSubmitterRestrictionRequest, AnswerSubmitterRestrictionResponse, UserInfoResponse,
     UserSchema, UserUpdateSchema,
 };
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
@@ -64,12 +65,12 @@ pub enum UserListResponse {
 }
 
 #[derive(utoipa::IntoResponses)]
-pub enum GetAnswerSubmissionRestrictionResponse {
+pub enum GetAnswerSubmitterRestrictionResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Option<AnswerSubmissionRestrictionResponse>),
+    Ok(Option<AnswerSubmitterRestrictionResponse>),
 }
 
-impl IntoResponse for GetAnswerSubmissionRestrictionResponse {
+impl IntoResponse for GetAnswerSubmitterRestrictionResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
@@ -78,12 +79,12 @@ impl IntoResponse for GetAnswerSubmissionRestrictionResponse {
 }
 
 #[derive(utoipa::IntoResponses)]
-pub enum PutAnswerSubmissionRestrictionResponse {
+pub enum PutAnswerSubmitterRestrictionResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(AnswerSubmissionRestrictionResponse),
+    Ok(AnswerSubmitterRestrictionResponse),
 }
 
-impl IntoResponse for PutAnswerSubmissionRestrictionResponse {
+impl IntoResponse for PutAnswerSubmitterRestrictionResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
@@ -263,13 +264,13 @@ pub async fn user_list(
 
 #[utoipa::path(
     get,
-    path = "/users/{uuid}/answer-submission-restriction",
-    summary = "ユーザーの有効な回答投稿制限の取得",
+    path = "/users/{uuid}/answer-submitter-restriction",
+    summary = "回答投稿者の有効な回答投稿制限の取得",
     params(
         ("uuid" = String, Path, description = "User UUID"),
     ),
     responses(
-        GetAnswerSubmissionRestrictionResponse,
+        GetAnswerSubmitterRestrictionResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -279,36 +280,37 @@ pub async fn user_list(
     security(("bearer" = [])),
     tag = "Users"
 )]
-pub async fn get_answer_submission_restriction(
+pub async fn get_answer_submitter_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetAnswerSubmissionRestrictionResponse, Response> {
-    let user_use_case = UserUseCase {
-        repository: repository.user_repository(),
+) -> Result<GetAnswerSubmitterRestrictionResponse, Response> {
+    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+        user_repository: repository.user_repository(),
+        restriction_repository: repository.answer_submitter_restriction_repository(),
     };
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
-    let restriction = user_use_case
-        .fetch_active_answer_submission_restriction(&actor, uuid)
+    let restriction = restriction_use_case
+        .fetch_active(&actor, uuid)
         .await
         .map_err(handle_error)?;
 
-    Ok(GetAnswerSubmissionRestrictionResponse::Ok(
+    Ok(GetAnswerSubmitterRestrictionResponse::Ok(
         restriction.map(Into::into),
     ))
 }
 
 #[utoipa::path(
     put,
-    path = "/users/{uuid}/answer-submission-restriction",
-    summary = "ユーザーの回答投稿を制限する",
+    path = "/users/{uuid}/answer-submitter-restriction",
+    summary = "回答投稿者の回答投稿を制限する",
     params(
         ("uuid" = String, Path, description = "User UUID"),
     ),
-    request_body = AnswerSubmissionRestrictionRequest,
+    request_body = AnswerSubmitterRestrictionRequest,
     responses(
-        PutAnswerSubmissionRestrictionResponse,
+        PutAnswerSubmitterRestrictionResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -319,37 +321,38 @@ pub async fn get_answer_submission_restriction(
     security(("bearer" = [])),
     tag = "Users"
 )]
-pub async fn put_answer_submission_restriction(
+pub async fn put_answer_submitter_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-    json: Result<Json<AnswerSubmissionRestrictionRequest>, JsonRejection>,
-) -> Result<PutAnswerSubmissionRestrictionResponse, Response> {
-    let user_use_case = UserUseCase {
-        repository: repository.user_repository(),
+    json: Result<Json<AnswerSubmitterRestrictionRequest>, JsonRejection>,
+) -> Result<PutAnswerSubmitterRestrictionResponse, Response> {
+    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+        user_repository: repository.user_repository(),
+        restriction_repository: repository.answer_submitter_restriction_repository(),
     };
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
     let Json(request) = json.map_err_to_error().map_err(handle_error)?;
-    let restriction = user_use_case
-        .restrict_answer_submission(
+    let restriction = restriction_use_case
+        .restrict(
             &actor,
             uuid,
-            AnswerSubmissionRestrictionReason::new(request.reason),
+            AnswerSubmitterRestrictionReason::new(request.reason),
             request.expires_at,
         )
         .await
         .map_err(handle_error)?;
 
-    Ok(PutAnswerSubmissionRestrictionResponse::Ok(
+    Ok(PutAnswerSubmitterRestrictionResponse::Ok(
         restriction.into(),
     ))
 }
 
 #[utoipa::path(
     delete,
-    path = "/users/{uuid}/answer-submission-restriction",
-    summary = "ユーザーの回答投稿制限を解除する",
+    path = "/users/{uuid}/answer-submitter-restriction",
+    summary = "回答投稿者の回答投稿制限を解除する",
     params(
         ("uuid" = String, Path, description = "User UUID"),
     ),
@@ -364,18 +367,19 @@ pub async fn put_answer_submission_restriction(
     security(("bearer" = [])),
     tag = "Users"
 )]
-pub async fn delete_answer_submission_restriction(
+pub async fn delete_answer_submitter_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
-    let user_use_case = UserUseCase {
-        repository: repository.user_repository(),
+    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+        user_repository: repository.user_repository(),
+        restriction_repository: repository.answer_submitter_restriction_repository(),
     };
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
-    user_use_case
-        .lift_answer_submission_restriction(&actor, uuid)
+    restriction_use_case
+        .lift(&actor, uuid)
         .await
         .map_err(handle_error)?;
 

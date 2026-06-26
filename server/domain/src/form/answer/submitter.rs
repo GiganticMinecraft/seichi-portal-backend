@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use errors::domain::DomainError;
 
-use crate::account::models::{AccountUser, AnswerSubmissionRestriction};
+use crate::{account::models::AccountUser, form::answer::AnswerSubmitterRestriction};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnswerSubmitter {
@@ -11,13 +11,13 @@ pub struct AnswerSubmitter {
 impl AnswerSubmitter {
     pub fn try_new(
         user: AccountUser,
-        restriction: Option<AnswerSubmissionRestriction>,
+        restriction: Option<AnswerSubmitterRestriction>,
         now: DateTime<Utc>,
     ) -> Result<Self, DomainError> {
         if let Some(restriction) = restriction {
-            if restriction.user_id() != user.id() {
+            if restriction.submitter_id() != user.id() {
                 return Err(DomainError::InvalidEntity {
-                    message: "answer submission restriction must belong to the submitter"
+                    message: "answer submitter restriction must belong to the submitter"
                         .to_string(),
                 });
             }
@@ -47,7 +47,10 @@ impl AnswerSubmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::account::models::{AnswerSubmissionRestrictionReason, Role, UserId};
+    use crate::{
+        account::models::{Role, UserId},
+        form::answer::AnswerSubmitterRestrictionReason,
+    };
     use uuid::Uuid;
 
     fn user_id(seed: u128) -> UserId {
@@ -69,9 +72,9 @@ mod tests {
     fn answer_submitter_rejects_active_restriction() {
         let now = Utc::now();
         let user = active_user("user", user_id(1), Role::StandardUser);
-        let restriction = AnswerSubmissionRestriction::new(
+        let restriction = AnswerSubmitterRestriction::new(
             *user.id(),
-            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            AnswerSubmitterRestrictionReason::new("spam".to_string().try_into().unwrap()),
             user_id(2),
             now,
             None,
@@ -93,9 +96,9 @@ mod tests {
     fn answer_submitter_ignores_expired_restriction() {
         let now = Utc::now();
         let user = active_user("user", user_id(1), Role::StandardUser);
-        let restriction = AnswerSubmissionRestriction::new(
+        let restriction = AnswerSubmitterRestriction::new(
             *user.id(),
-            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            AnswerSubmitterRestrictionReason::new("spam".to_string().try_into().unwrap()),
             user_id(2),
             now - chrono::Duration::hours(2),
             Some(now - chrono::Duration::hours(1)),
@@ -109,9 +112,9 @@ mod tests {
     fn answer_submitter_rejects_restriction_for_different_user() {
         let now = Utc::now();
         let user = active_user("user", user_id(1), Role::StandardUser);
-        let restriction = AnswerSubmissionRestriction::new(
+        let restriction = AnswerSubmitterRestriction::new(
             user_id(2),
-            AnswerSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            AnswerSubmitterRestrictionReason::new("spam".to_string().try_into().unwrap()),
             user_id(3),
             now,
             None,
@@ -123,7 +126,7 @@ mod tests {
         assert_eq!(
             result,
             Err(DomainError::InvalidEntity {
-                message: "answer submission restriction must belong to the submitter".to_string(),
+                message: "answer submitter restriction must belong to the submitter".to_string(),
             })
         );
     }

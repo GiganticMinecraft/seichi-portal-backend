@@ -2,9 +2,11 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::account::models::{
-    AccountUser, AnswerSubmissionRestriction, AnswerSubmissionRestrictionId,
-    AnswerSubmissionRestrictionReason, DiscordAccountLink, Role,
+use domain::{
+    account::models::{AccountUser, DiscordAccountLink, Role},
+    form::answer::{
+        AnswerSubmitterRestriction, AnswerSubmitterRestrictionId, AnswerSubmitterRestrictionReason,
+    },
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -15,7 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{
-        components::UserDatabase,
+        components::{AnswerSubmitterRestrictionDatabase, UserDatabase},
         connection::{ConnectionPool, redis_connection},
         count::count_as_u32,
     },
@@ -119,125 +121,6 @@ impl UserDatabase for ConnectionPool {
                     "UPDATE users SET role = ? WHERE id = ?",
                     role.to_string(),
                     uuid.to_string(),
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                Ok::<(), InfraError>(())
-            })
-        })
-        .await
-    }
-
-    async fn fetch_active_answer_submission_restriction(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<AnswerSubmissionRestriction>, InfraError> {
-        self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                let row = sqlx::query!(
-                    r#"
-                    SELECT id, user_id, reason, restricted_by, restricted_at, expires_at
-                    FROM answer_submission_restrictions
-                    WHERE user_id = ?
-                      AND lifted_at IS NULL
-                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
-                    ORDER BY restricted_at DESC
-                    LIMIT 1
-                    "#,
-                    user_id.to_string(),
-                )
-                .fetch_optional(&mut **txn)
-                .await?;
-
-                row.map(|row| {
-                    Ok::<_, InfraError>(unsafe {
-                        AnswerSubmissionRestriction::from_raw_parts(
-                            AnswerSubmissionRestrictionId::from(Uuid::parse_str(&row.id)?),
-                            Uuid::parse_str(&row.user_id)?.into(),
-                            AnswerSubmissionRestrictionReason::new(row.reason.try_into().map_err(
-                                |err: errors::validation::ValidationError| InfraError::Unexpected {
-                                    cause: err.to_string(),
-                                },
-                            )?),
-                            Uuid::parse_str(&row.restricted_by)?.into(),
-                            row.restricted_at.and_utc(),
-                            row.expires_at.map(|expires_at| expires_at.and_utc()),
-                        )
-                    })
-                })
-                .transpose()
-            })
-        })
-        .await
-    }
-
-    async fn restrict_answer_submission(
-        &self,
-        restriction: &AnswerSubmissionRestriction,
-    ) -> Result<(), InfraError> {
-        let restriction_id = restriction.id().to_string();
-        let user_id = restriction.user_id().to_string();
-        let reason = restriction.reason().to_owned().into_inner().into_inner();
-        let restricted_by = restriction.restricted_by().to_string();
-        let restricted_at = *restriction.restricted_at();
-        let expires_at = *restriction.expires_at();
-
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                sqlx::query!(
-                    r#"
-                    UPDATE answer_submission_restrictions
-                    SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
-                    WHERE user_id = ?
-                      AND lifted_at IS NULL
-                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
-                    "#,
-                    restricted_by,
-                    user_id,
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                sqlx::query!(
-                    r#"
-                    INSERT INTO answer_submission_restrictions
-                        (id, user_id, reason, restricted_by, restricted_at, expires_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    "#,
-                    restriction_id,
-                    user_id,
-                    reason,
-                    restricted_by,
-                    restricted_at,
-                    expires_at,
-                )
-                .execute(&mut **txn)
-                .await?;
-
-                Ok::<(), InfraError>(())
-            })
-        })
-        .await
-    }
-
-    async fn lift_answer_submission_restriction(
-        &self,
-        user_id: Uuid,
-        lifted_by: Uuid,
-    ) -> Result<(), InfraError> {
-        self.read_write_transaction(|txn| {
-            Box::pin(async move {
-                sqlx::query!(
-                    r#"
-                    UPDATE answer_submission_restrictions
-                    SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
-                    WHERE user_id = ?
-                      AND lifted_at IS NULL
-                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
-                    "#,
-                    lifted_by.to_string(),
-                    user_id.to_string(),
                 )
                 .execute(&mut **txn)
                 .await?;
@@ -397,6 +280,121 @@ impl UserDatabase for ConnectionPool {
                     .await?;
 
                 count_as_u32(size, "users")
+            })
+        })
+        .await
+    }
+}
+
+#[async_trait]
+impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
+    async fn fetch_active_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Option<AnswerSubmitterRestriction>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let row = sqlx::query!(
+                    r#"
+                    SELECT id, submitter_id, reason, restricted_by, restricted_at, expires_at
+                    FROM answer_submitter_restrictions
+                    WHERE submitter_id = ?
+                      AND lifted_at IS NULL
+                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
+                    ORDER BY restricted_at DESC
+                    LIMIT 1
+                    "#,
+                    submitter_id.to_string(),
+                )
+                .fetch_optional(&mut **txn)
+                .await?;
+
+                row.map(|row| {
+                    Ok::<_, InfraError>(unsafe {
+                        AnswerSubmitterRestriction::from_raw_parts(
+                            AnswerSubmitterRestrictionId::from(Uuid::parse_str(&row.id)?),
+                            Uuid::parse_str(&row.submitter_id)?.into(),
+                            AnswerSubmitterRestrictionReason::new(row.reason.try_into().map_err(
+                                |err: errors::validation::ValidationError| InfraError::Unexpected {
+                                    cause: err.to_string(),
+                                },
+                            )?),
+                            Uuid::parse_str(&row.restricted_by)?.into(),
+                            row.restricted_at.and_utc(),
+                            row.expires_at.map(|expires_at| expires_at.and_utc()),
+                        )
+                    })
+                })
+                .transpose()
+            })
+        })
+        .await
+    }
+
+    async fn restrict(&self, restriction: &AnswerSubmitterRestriction) -> Result<(), InfraError> {
+        let restriction_id = restriction.id().to_string();
+        let submitter_id = restriction.submitter_id().to_string();
+        let reason = restriction.reason().to_owned().into_inner().into_inner();
+        let restricted_by = restriction.restricted_by().to_string();
+        let restricted_at = *restriction.restricted_at();
+        let expires_at = *restriction.expires_at();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!(
+                    r#"
+                    UPDATE answer_submitter_restrictions
+                    SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
+                    WHERE submitter_id = ?
+                      AND lifted_at IS NULL
+                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
+                    "#,
+                    restricted_by,
+                    submitter_id,
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                sqlx::query!(
+                    r#"
+                    INSERT INTO answer_submitter_restrictions
+                        (id, submitter_id, reason, restricted_by, restricted_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    "#,
+                    restriction_id,
+                    submitter_id,
+                    reason,
+                    restricted_by,
+                    restricted_at,
+                    expires_at,
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
+    async fn lift(&self, submitter_id: Uuid, lifted_by: Uuid) -> Result<(), InfraError> {
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!(
+                    r#"
+                    UPDATE answer_submitter_restrictions
+                    SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
+                    WHERE submitter_id = ?
+                      AND lifted_at IS NULL
+                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
+                    "#,
+                    lifted_by.to_string(),
+                    submitter_id.to_string(),
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
             })
         })
         .await

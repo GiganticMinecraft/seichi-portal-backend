@@ -1,3 +1,4 @@
+pub mod answer_submitter_restriction_repository_impl;
 pub mod form_repository_impls;
 pub mod notification_repository_impl;
 pub mod search_repository_impl;
@@ -69,6 +70,7 @@ impl<
     type ConcreteAnswerLabelRepository = Repository<Client>;
     type ConcreteCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
+    type ConcreteAnswerSubmitterRestrictionRepository = Repository<Client>;
     type ConcreteMessageThreadRepository = Repository<Client>;
     type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
@@ -84,6 +86,12 @@ impl<
     }
 
     fn form_label_repository(&self) -> &Self::ConcreteFormLabelRepository {
+        &self.db
+    }
+
+    fn answer_submitter_restriction_repository(
+        &self,
+    ) -> &Self::ConcreteAnswerSubmitterRestrictionRepository {
         &self.db
     }
 
