@@ -167,3 +167,138 @@ impl AnswerSettings {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        form::{
+            answer::{AnswerTitle, PostedAnswerContents},
+            models::FormId,
+        },
+        user::models::{ActiveUser, TemporaryUser, UserId},
+    };
+    use chrono::Duration;
+    use uuid::Uuid;
+
+    fn answer_settings(
+        allow_temporary_answers: bool,
+        acceptance_period: AnswerAcceptancePeriod,
+    ) -> AnswerSettings {
+        AnswerSettings::new(
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PRIVATE,
+            acceptance_period,
+            allow_temporary_answers,
+        )
+    }
+
+    fn active_user(role: Role) -> ActiveUser {
+        ActiveUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
+        AnswerEntry::new(
+            FormId::new(),
+            author,
+            AnswerTitle::new(None),
+            PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
+        )
+    }
+
+    #[test]
+    fn temporary_answer_creation_requires_allow_flag() {
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
+        let author = AnswerAuthor::TemporaryUser(TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+        let actor = Actor::from(TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+
+        assert!(!settings.can_accept_answer(&author, &actor));
+    }
+
+    #[test]
+    fn temporary_answer_creation_succeeds_when_allowed_and_within_period() {
+        let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap());
+        let author = AnswerAuthor::TemporaryUser(TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+        let actor = Actor::from(TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+
+        assert!(settings.can_accept_answer(&author, &actor));
+    }
+
+    #[test]
+    fn temporary_answer_creation_respects_acceptance_period() {
+        let settings = answer_settings(
+            true,
+            AnswerAcceptancePeriod::try_new(
+                Some(Utc::now() - Duration::days(2)),
+                Some(Utc::now() - Duration::days(1)),
+            )
+            .unwrap(),
+        );
+        let author = AnswerAuthor::TemporaryUser(TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+        let actor = Actor::from(TemporaryUser::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+
+        assert!(!settings.can_accept_answer(&author, &actor));
+    }
+
+    #[test]
+    fn private_entry_is_readable_by_its_author() {
+        let author = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(author)));
+    }
+
+    #[test]
+    fn private_entry_is_not_readable_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
+
+        assert!(!settings.can_read_entry(&entry, &Actor::from(other)));
+    }
+
+    #[test]
+    fn private_entry_is_readable_by_administrator() {
+        let author = active_user(Role::StandardUser);
+        let administrator = active_user(Role::Administrator);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(administrator)));
+    }
+
+    #[test]
+    fn public_entry_is_readable_by_other_standard_user() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = AnswerSettings::new(
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PUBLIC,
+            AnswerAcceptancePeriod::try_new(None, None).unwrap(),
+            false,
+        );
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(other)));
+    }
+}
