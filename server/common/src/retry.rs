@@ -1,5 +1,10 @@
 use std::{future::Future, time::Duration};
 
+/// 非同期処理のリトライ回数と待機時間を表すポリシー。
+///
+/// 初回実行はリトライ回数に含めず、`max_retries` 回まで再実行します。
+/// 待機時間は `initial_delay` から始まり、リトライごとに
+/// `backoff_multiplier` 倍されます。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetryPolicy {
     max_retries: usize,
@@ -8,6 +13,7 @@ pub struct RetryPolicy {
 }
 
 impl RetryPolicy {
+    /// リトライポリシーを作成します。
     pub fn new(max_retries: usize, initial_delay: Duration, backoff_multiplier: u32) -> Self {
         Self {
             max_retries,
@@ -16,10 +22,14 @@ impl RetryPolicy {
         }
     }
 
+    /// 初回実行を含めた最大試行回数を返します。
     pub fn max_attempts(&self) -> usize {
         self.max_retries + 1
     }
 
+    /// 指定したリトライの前に待機する時間を返します。
+    ///
+    /// `retry_index` は 0 始まりで、最初のリトライでは `initial_delay` を返します。
     pub fn delay_for_retry(&self, retry_index: usize) -> Duration {
         (0..retry_index).fold(self.initial_delay, |delay, _| {
             delay.saturating_mul(self.backoff_multiplier)
@@ -31,6 +41,10 @@ impl RetryPolicy {
     }
 }
 
+/// 失敗した非同期処理をポリシーに従ってリトライします。
+///
+/// すべてのエラーをリトライ対象として扱います。`operation` には 0 始まりの
+/// 試行回数が渡されます。
 pub async fn retry_async<T, E, Operation, OperationFuture>(
     policy: RetryPolicy,
     operation: Operation,
@@ -44,6 +58,10 @@ where
     retry_async_if(policy, operation, |_| true).await
 }
 
+/// リトライ対象のエラーを判定しながら、失敗した非同期処理をリトライします。
+///
+/// `should_retry` が `false` を返したエラーは即座に返します。`operation` には
+/// 0 始まりの試行回数が渡されます。
 pub async fn retry_async_if<T, E, Operation, OperationFuture, ShouldRetry>(
     policy: RetryPolicy,
     operation: Operation,
@@ -59,6 +77,10 @@ where
     retry_async_with_sleeper_if(policy, operation, tokio::time::sleep, should_retry).await
 }
 
+/// 待機処理を差し替えて、失敗した非同期処理をリトライします。
+///
+/// 主にテストで実時間の sleep を避けたい場合に使用します。すべてのエラーを
+/// リトライ対象として扱います。
 pub async fn retry_async_with_sleeper<T, E, Operation, OperationFuture, Sleeper, SleepFuture>(
     policy: RetryPolicy,
     operation: Operation,
@@ -75,6 +97,10 @@ where
     retry_async_with_sleeper_if(policy, operation, sleeper, |_| true).await
 }
 
+/// 待機処理とリトライ可否判定を差し替えて、失敗した非同期処理をリトライします。
+///
+/// `operation` には 0 始まりの試行回数が渡されます。リトライ上限に達した場合、
+/// または `should_retry` が `false` を返した場合は、その時点のエラーを返します。
 pub async fn retry_async_with_sleeper_if<
     T,
     E,
