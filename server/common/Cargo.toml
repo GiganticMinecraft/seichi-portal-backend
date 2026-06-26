@@ -9,4 +9,5 @@ chrono = { workspace = true }
 envy = { workspace = true }
 proptest = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true }
 uuid = { workspace = true }

@@ -4568,14 +4568,14 @@
           "answer_settings": {
             "$ref": "#/components/schemas/AnswerSettingsSchema"
           },
-          "visibility": {
-            "type": "string"
-          },
-          "webhook_url": {
+          "discord_webhook_url": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "visibility": {
+            "type": "string"
           }
         }
       },

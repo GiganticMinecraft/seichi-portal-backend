@@ -245,13 +245,48 @@ pub async fn create_form_handler(
     let questions = into_create_questions(questions)
         .map_err(errors::Error::from)
         .map_err(handle_error)?;
+    let (
+        discord_webhook_url,
+        visibility,
+        allow_temporary_answers,
+        answer_visibility,
+        acceptance_period,
+        default_answer_title,
+    ) = settings
+        .map(|settings| {
+            let answer_settings = settings.answer_settings;
+            let (answer_visibility, acceptance_period, default_answer_title) = answer_settings
+                .map(|answer_settings| {
+                    (
+                        answer_settings.visibility,
+                        answer_settings.acceptance_period,
+                        answer_settings.default_answer_title,
+                    )
+                })
+                .unwrap_or_default();
+
+            (
+                settings.discord_webhook_url.and_then(|url| url.0),
+                settings.visibility,
+                settings.allow_temporary_answers,
+                answer_visibility,
+                acceptance_period,
+                default_answer_title,
+            )
+        })
+        .unwrap_or_default();
 
     let form = form_use_case
         .create_form(
             title,
             form_description,
             questions,
-            settings.and_then(|settings| settings.allow_temporary_answers),
+            discord_webhook_url,
+            visibility,
+            allow_temporary_answers,
+            answer_visibility,
+            acceptance_period,
+            default_answer_title,
             &user,
         )
         .await
@@ -427,7 +462,7 @@ pub async fn update_form_handler(
     let description = targets.description.map(FormDescription::new);
     let (
         acceptance_period,
-        webhook_url,
+        discord_webhook_url,
         default_answer_title,
         visibility,
         allow_temporary_answers,
@@ -438,7 +473,10 @@ pub async fn update_form_handler(
                 .answer_settings
                 .as_ref()
                 .and_then(|answer_settings| answer_settings.acceptance_period.to_owned()),
-            settings.webhook_url.to_owned().and_then(|url| url.0),
+            settings
+                .discord_webhook_url
+                .to_owned()
+                .and_then(|url| url.0),
             settings
                 .answer_settings
                 .as_ref()
@@ -467,7 +505,7 @@ pub async fn update_form_handler(
             title,
             description,
             acceptance_period,
-            webhook_url,
+            discord_webhook_url,
             default_answer_title,
             visibility,
             allow_temporary_answers,

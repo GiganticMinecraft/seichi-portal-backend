@@ -23,7 +23,14 @@ use errors::{
 };
 use futures::{StreamExt, stream};
 
-use crate::{models::AnswerDetails, user_reference_resolver::resolve_user_references};
+use crate::{
+    forms::discord_answer_webhook::{
+        DiscordAnswerWebhookField, DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier,
+    },
+    models::AnswerDetails,
+    user_reference_resolver::resolve_user_references,
+};
+use common::config::FRONTEND;
 
 pub struct AnswerUseCase<
     'a,
@@ -36,6 +43,7 @@ pub struct AnswerUseCase<
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
+    pub discord_answer_webhook_notifier: Option<&'a dyn DiscordAnswerWebhookNotifier>,
 }
 
 impl<
@@ -93,6 +101,75 @@ impl<
         })
     }
 
+    async fn notify_discord_answer_webhook(
+        &self,
+        form: &Allowed<ActiveForm, Read>,
+        answer_entry: &Allowed<AnswerEntry, domain::types::authorization_guard::Create>,
+        respondent: String,
+    ) {
+        let Some(notifier) = self.discord_answer_webhook_notifier else {
+            return;
+        };
+        let Some(discord_webhook_url) = form
+            .settings()
+            .discord_webhook_url(&Actor::System)
+            .ok()
+            .cloned()
+            .and_then(|url| url.into_inner())
+            .map(|url| url.into_inner())
+        else {
+            return;
+        };
+
+        let form_id = form.id().into_inner().to_string();
+        let answer_id = answer_entry.id().into_inner().to_string();
+        let answer_url = format!("{}/forms/{form_id}/answers/{answer_id}", FRONTEND.url);
+        let answer_title = answer_entry
+            .title()
+            .to_owned()
+            .into_inner()
+            .map(|title| title.into_inner())
+            .unwrap_or_default();
+        let questions = form.questions().as_slice();
+        let answer_fields = answer_entry
+            .contents()
+            .iter()
+            .map(|content| {
+                let question_title = questions
+                    .iter()
+                    .find(|question| question.id() == content.question_id)
+                    .map(|question| question.title().to_owned().into_inner())
+                    .unwrap_or_else(|| "不明な質問".to_string());
+
+                DiscordAnswerWebhookField::new(question_title, content.answer.clone())
+            })
+            .collect::<Vec<_>>();
+        let fields = [
+            vec![
+                DiscordAnswerWebhookField::new(
+                    "フォーム名".to_string(),
+                    form.title().to_owned().into_inner().into_inner(),
+                ),
+                DiscordAnswerWebhookField::new("タイトル".to_string(), answer_title),
+                DiscordAnswerWebhookField::new("回答者".to_string(), respondent),
+            ],
+            answer_fields,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        notifier
+            .notify_answer_posted(DiscordAnswerWebhookNotification {
+                discord_webhook_url,
+                answer_url,
+                form_id,
+                answer_id,
+                fields,
+            })
+            .await;
+    }
+
     pub async fn post_answers(
         &self,
         user: ActiveUser,
@@ -125,7 +202,12 @@ impl<
 
         self.answer_entry_repository
             .post(&form, &answer_entry)
-            .await
+            .await?;
+
+        self.notify_discord_answer_webhook(&form, &answer_entry, user.name().to_string())
+            .await;
+
+        Ok(())
     }
 
     pub async fn post_temporary_answers(
@@ -155,12 +237,22 @@ impl<
             temporary_user.name(),
         )?;
 
+        let respondent = format!(
+            "{} ({})",
+            temporary_user.name(),
+            temporary_user.contact_text()
+        );
         let author = AnswerAuthor::TemporaryUser(temporary_user);
         let answer_entry = form.try_accept_answer(author, title, posted_answers)?;
 
         self.answer_entry_repository
             .post(&form, &answer_entry)
-            .await
+            .await?;
+
+        self.notify_discord_answer_webhook(&form, &answer_entry, respondent)
+            .await;
+
+        Ok(())
     }
 
     pub async fn get_answers(

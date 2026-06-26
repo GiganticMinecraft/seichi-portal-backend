@@ -15,8 +15,8 @@ pub enum DomainError {
     EmptyMessageBody,
     #[error("Invalid answer acceptance period.")]
     InvalidAnswerAcceptancePeriod,
-    #[error("Invalid webhook url.")]
-    InvalidWebhookUrl,
+    #[error("Invalid Discord webhook url.")]
+    InvalidDiscordWebhookUrl,
     #[error("Invalid entity: {message}")]
     InvalidEntity { message: String },
 }

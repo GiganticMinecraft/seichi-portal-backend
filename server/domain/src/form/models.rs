@@ -14,7 +14,7 @@ pub use crate::form::{
     answer::{AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, DefaultAnswerTitle},
     label::{FormLabel, FormLabelAssignment, FormLabelId, FormLabelName},
     question::{Question, QuestionSet},
-    settings::{FormSettings, Visibility, WebhookUrl},
+    settings::{DiscordWebhookUrl, FormSettings, Visibility},
 };
 
 use crate::{

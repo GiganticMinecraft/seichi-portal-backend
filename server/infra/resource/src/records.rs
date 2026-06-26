@@ -8,8 +8,8 @@ use domain::{
         message::{Message, MessageBody},
         models::{
             ActiveForm, AnswerAcceptancePeriod, AnswerSettings, ArchivedForm, DefaultAnswerTitle,
-            FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormLabelName,
-            FormMeta, FormSettings, FormTitle, QuestionSet, WebhookUrl,
+            DiscordWebhookUrl, FormDescription, FormId, FormLabel, FormLabelAssignment,
+            FormLabelId, FormLabelName, FormMeta, FormSettings, FormTitle, QuestionSet,
         },
         question::{Choice, Question, QuestionType},
     },
@@ -107,7 +107,7 @@ pub struct ActiveFormRecord {
     pub description: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub webhook_url: Option<String>,
+    pub discord_webhook_url: Option<String>,
     pub visibility: String,
     pub answer_visibility: String,
     pub allow_temporary_answers: bool,
@@ -128,7 +128,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             description,
             created_at,
             updated_at,
-            webhook_url,
+            discord_webhook_url,
             visibility,
             answer_visibility,
             allow_temporary_answers,
@@ -163,7 +163,11 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
                 FormDescription::new(description),
                 FormMeta::from_raw_parts(created_at, updated_at),
                 FormSettings::from_raw_parts(
-                    WebhookUrl::try_new(webhook_url.map(NonEmptyString::try_new).transpose()?)?,
+                    DiscordWebhookUrl::try_new(
+                        discord_webhook_url
+                            .map(NonEmptyString::try_new)
+                            .transpose()?,
+                    )?,
                     visibility.try_into()?,
                 ),
                 answer_settings,
