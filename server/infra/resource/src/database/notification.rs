@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use domain::{notification::models::NotificationPreference, user::models::Role};
+use domain::{account::models::Role, notification::models::NotificationPreference};
 use errors::infra::InfraError;
 use uuid::Uuid;
 

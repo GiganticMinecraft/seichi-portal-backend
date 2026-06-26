@@ -9,9 +9,10 @@ use axum::{
 };
 use domain::form::answer::{FormAnswerContent, FormAnswerContentId};
 use domain::{
+    account::models::AccountUser,
+    form::answer::TemporaryAnswerAuthor,
     form::{answer::AnswerId, models::FormId},
     repository::Repositories,
-    user::models::{ActiveUser, TemporaryUser},
 };
 use errors::ErrorExtra;
 use itertools::Itertools;
@@ -174,7 +175,7 @@ impl IntoResponse for UpdateAnswerResponse {
     tag = "Answers"
 )]
 pub async fn get_all_answers(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetAllAnswersResponse, Response> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
@@ -220,7 +221,7 @@ pub async fn get_all_answers(
     tag = "Answers"
 )]
 pub async fn get_answer_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetAnswerResponse, Response> {
@@ -261,7 +262,7 @@ pub async fn get_answer_handler(
     tag = "Answers"
 )]
 pub async fn get_answer_by_form_id_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
 ) -> Result<GetAnswersByFormResponse, Response> {
@@ -310,7 +311,7 @@ pub async fn get_answer_by_form_id_handler(
     tag = "Answers"
 )]
 pub async fn post_answer_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<AnswerCreateSchema>, JsonRejection>,
@@ -372,7 +373,7 @@ pub async fn post_temporary_answer_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
-    let temporary_user = TemporaryUser::new(
+    let temporary_user = TemporaryAnswerAuthor::new(
         schema.temporary_user.name.into_inner(),
         schema.temporary_user.contact_text.into_inner(),
     );
@@ -416,7 +417,7 @@ pub async fn post_temporary_answer_handler(
     tag = "Answers"
 )]
 pub async fn update_answer_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<AnswerUpdateSchema>, JsonRejection>,

@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
+    account::models::Role,
+    auth::Actor,
     types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
-    user::models::{Actor, Role, User},
 };
 
 pub type AnswerLabelId = types::Id<AnswerLabel>;
@@ -38,7 +39,7 @@ impl AuthorizationRole for AnswerLabel {
 
 impl AuthorizationGuardDefinitions for AnswerLabel {
     fn can_create(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
     }
 
     fn can_read(&self, _actor: &Actor) -> bool {
@@ -46,10 +47,10 @@ impl AuthorizationGuardDefinitions for AnswerLabel {
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
     }
 
     fn can_delete(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
     }
 }

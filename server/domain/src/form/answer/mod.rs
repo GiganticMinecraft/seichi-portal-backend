@@ -6,7 +6,7 @@ mod settings;
 mod submitter;
 mod title;
 
-pub use author::AnswerAuthor;
+pub use author::{AnswerAuthor, TemporaryAnswerAuthor, TemporaryAnswerAuthorId};
 pub use content::{FormAnswerContent, FormAnswerContentId, PostedAnswerContents};
 pub use entry::{AnswerEntry, AnswerId};
 pub use label::{AnswerLabel, AnswerLabelId};

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use domain::user::models::Role;
+use domain::account::models::Role;
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
@@ -37,10 +37,10 @@ pub struct AnswerSubmissionRestrictionResponse {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-impl From<domain::user::models::AnswerSubmissionRestriction>
+impl From<domain::account::models::AnswerSubmissionRestriction>
     for AnswerSubmissionRestrictionResponse
 {
-    fn from(value: domain::user::models::AnswerSubmissionRestriction) -> Self {
+    fn from(value: domain::account::models::AnswerSubmissionRestriction) -> Self {
         Self {
             id: value.id().to_string(),
             user_id: value.user_id().to_string(),
@@ -52,8 +52,8 @@ impl From<domain::user::models::AnswerSubmissionRestriction>
     }
 }
 
-impl From<domain::user::models::ActiveUser> for UserSchema {
-    fn from(val: domain::user::models::ActiveUser) -> Self {
+impl From<domain::account::models::AccountUser> for UserSchema {
+    fn from(val: domain::account::models::AccountUser) -> Self {
         UserSchema {
             id: val.id().to_string(),
             name: val.name().to_owned(),

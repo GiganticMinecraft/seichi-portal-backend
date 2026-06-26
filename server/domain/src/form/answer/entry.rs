@@ -5,6 +5,8 @@ use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    account::models::Role,
+    auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
         comment::{Comment, CommentContent},
@@ -14,7 +16,6 @@ use crate::{
         Allowed, AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read,
         Update,
     },
-    user::models::{Actor, Role, User},
 };
 
 pub type AnswerId = types::Id<AnswerEntry>;
@@ -70,7 +71,7 @@ impl GuardedBy<ActiveForm, Read> for AnswerEntry {
 
 impl GuardedBy<ActiveForm, Update> for AnswerEntry {
     fn is_allowed_for(&self, _parent: &ActiveForm, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(user) if user.role() == &Role::Administrator)
     }
 }
 
@@ -95,7 +96,7 @@ impl Allowed<AnswerEntry, Read> {
         content: CommentContent,
     ) -> Result<Allowed<Comment, Create>, DomainError> {
         let commented_by = match self.actor() {
-            Actor::User(User::ActiveUser(user)) => *user.id(),
+            Actor::AccountUser(user) => *user.id(),
             _ => return Err(DomainError::Forbidden),
         };
 

@@ -1,4 +1,6 @@
 use domain::{
+    account::models::{AccountUser, DiscordUser},
+    auth::Actor,
     form::{
         answer::{AnswerEntry, AnswerLabel},
         comment::Comment,
@@ -6,13 +8,12 @@ use domain::{
         models::{ActiveForm, ArchivedForm, FormId, FormLabel},
         question::{Question, QuestionId},
     },
-    user::models::{ActiveUser, DiscordUser, User},
 };
 
 pub struct AnswerDetails {
     pub form_id: FormId,
     pub form_answer: AnswerEntry,
-    pub author: User,
+    pub author: Actor,
     pub labels: Vec<AnswerLabel>,
 }
 
@@ -23,18 +24,18 @@ pub struct ActiveFormWithLabels {
 
 pub struct ArchivedFormDetails {
     pub form: ArchivedForm,
-    pub archived_by: ActiveUser,
+    pub archived_by: AccountUser,
     pub labels: Vec<FormLabel>,
 }
 
 pub struct CommentWithAuthor {
     pub comment: Comment,
-    pub commented_by: ActiveUser,
+    pub commented_by: AccountUser,
 }
 
 pub struct MessageWithSender {
     pub message: Message,
-    pub sender: ActiveUser,
+    pub sender: AccountUser,
 }
 
 pub struct UpsertQuestionInput {
@@ -43,13 +44,13 @@ pub struct UpsertQuestionInput {
 }
 
 pub struct UserProfile {
-    pub user: ActiveUser,
+    pub user: AccountUser,
     pub discord_user: Option<DiscordUser>,
 }
 
 pub struct CrossSearchOutput {
     pub forms: Vec<ActiveForm>,
-    pub users: Vec<ActiveUser>,
+    pub users: Vec<AccountUser>,
     pub answers: Vec<AnswerEntry>,
     pub label_for_forms: Vec<FormLabel>,
     pub label_for_answers: Vec<AnswerLabel>,

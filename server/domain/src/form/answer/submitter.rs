@@ -1,16 +1,16 @@
 use chrono::{DateTime, Utc};
 use errors::domain::DomainError;
 
-use crate::user::models::{ActiveUser, AnswerSubmissionRestriction};
+use crate::account::models::{AccountUser, AnswerSubmissionRestriction};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnswerSubmitter {
-    user: ActiveUser,
+    user: AccountUser,
 }
 
 impl AnswerSubmitter {
     pub fn try_new(
-        user: ActiveUser,
+        user: AccountUser,
         restriction: Option<AnswerSubmissionRestriction>,
         now: DateTime<Utc>,
     ) -> Result<Self, DomainError> {
@@ -35,11 +35,11 @@ impl AnswerSubmitter {
         Ok(Self { user })
     }
 
-    pub fn user(&self) -> &ActiveUser {
+    pub fn user(&self) -> &AccountUser {
         &self.user
     }
 
-    pub fn into_user(self) -> ActiveUser {
+    pub fn into_user(self) -> AccountUser {
         self.user
     }
 }
@@ -47,15 +47,15 @@ impl AnswerSubmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::user::models::{AnswerSubmissionRestrictionReason, Role, UserId};
+    use crate::account::models::{AnswerSubmissionRestrictionReason, Role, UserId};
     use uuid::Uuid;
 
     fn user_id(seed: u128) -> UserId {
         UserId::from(Uuid::from_u128(seed))
     }
 
-    fn active_user(name: &str, id: UserId, role: Role) -> ActiveUser {
-        ActiveUser::new(name.to_string(), id, role)
+    fn active_user(name: &str, id: UserId, role: Role) -> AccountUser {
+        AccountUser::new(name.to_string(), id, role)
     }
 
     #[test]

@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use domain::{
+    account::models::{AccountUser, DiscordUser, DiscordUserId, DiscordUserName, Role},
+    form::answer::TemporaryAnswerAuthor,
     form::{
         answer::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
         comment::{Comment, CommentContent},
@@ -14,7 +16,6 @@ use domain::{
         question::{Choice, Question, QuestionType},
     },
     notification::models::NotificationPreference,
-    user::models::{ActiveUser, DiscordUser, DiscordUserId, DiscordUserName, Role, TemporaryUser},
 };
 use errors::{Error, infra::InfraError};
 use types::non_empty_string::NonEmptyString;
@@ -230,11 +231,11 @@ pub struct UserRecord {
     pub role: Role,
 }
 
-impl TryFrom<UserRecord> for ActiveUser {
+impl TryFrom<UserRecord> for AccountUser {
     type Error = InfraError;
 
     fn try_from(UserRecord { name, id, role }: UserRecord) -> Result<Self, Self::Error> {
-        Ok(ActiveUser::new(name, Uuid::from_str(&id)?.into(), role))
+        Ok(AccountUser::new(name, Uuid::from_str(&id)?.into(), role))
     }
 }
 
@@ -292,8 +293,8 @@ pub struct FormAnswerRecord {
 }
 
 pub enum AnswerAuthorRecord {
-    AuthenticatedUser(ActiveUser),
-    TemporaryUser(TemporaryUser),
+    AuthenticatedUser(AccountUser),
+    TemporaryAnswerAuthor(TemporaryAnswerAuthor),
 }
 
 impl TryFrom<FormAnswerRecord> for AnswerEntry {
@@ -314,7 +315,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             AnswerAuthorRecord::AuthenticatedUser(user) => {
                 AnswerAuthor::AuthenticatedUser(*user.id())
             }
-            AnswerAuthorRecord::TemporaryUser(user) => AnswerAuthor::TemporaryUser(user),
+            AnswerAuthorRecord::TemporaryAnswerAuthor(user) => AnswerAuthor::Temporary(user),
         };
         unsafe {
             Ok(AnswerEntry::from_raw_parts(

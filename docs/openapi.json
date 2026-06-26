@@ -4250,7 +4250,7 @@
             ],
             "properties": {
               "temporary_user": {
-                "$ref": "#/components/schemas/TemporaryUser"
+                "$ref": "#/components/schemas/TemporaryAnswerAuthor"
               },
               "type": {
                 "type": "string",
@@ -5362,25 +5362,7 @@
           }
         }
       },
-      "TemporaryAnswerCreateSchema": {
-        "type": "object",
-        "required": [
-          "temporary_user",
-          "contents"
-        ],
-        "properties": {
-          "contents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AnswerContentSchema"
-            }
-          },
-          "temporary_user": {
-            "$ref": "#/components/schemas/TemporaryUserCreateSchema"
-          }
-        }
-      },
-      "TemporaryUser": {
+      "TemporaryAnswerAuthor": {
         "type": "object",
         "required": [
           "id",
@@ -5396,6 +5378,24 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "TemporaryAnswerCreateSchema": {
+        "type": "object",
+        "required": [
+          "temporary_user",
+          "contents"
+        ],
+        "properties": {
+          "contents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnswerContentSchema"
+            }
+          },
+          "temporary_user": {
+            "$ref": "#/components/schemas/TemporaryUserCreateSchema"
           }
         }
       },

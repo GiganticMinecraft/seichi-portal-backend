@@ -6,8 +6,9 @@ use domain::form::{
     question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
+    account::models::{AccountUser, Role},
+    auth::Actor,
     form::models::{ActiveForm, ArchivedForm, FormId},
-    user::models::{ActiveUser, Actor, Role},
 };
 use errors::{Error, infra::InfraError};
 use futures::{TryStreamExt, stream};
@@ -351,7 +352,7 @@ async fn fetch_archived_form_row(
 async fn insert_form_root(
     txn: &mut DatabaseTransaction,
     form: &ActiveForm,
-    created_by: &ActiveUser,
+    created_by: &AccountUser,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
     let title = form.title().to_string();
@@ -410,7 +411,7 @@ async fn insert_form_root(
 async fn update_form_root(
     txn: &mut DatabaseTransaction,
     form: &ActiveForm,
-    updated_by: &ActiveUser,
+    updated_by: &AccountUser,
 ) -> Result<(), InfraError> {
     let form_id = form.id().into_inner().to_string();
     let title = form.title().to_owned().into_inner().into_inner();
@@ -707,7 +708,7 @@ async fn restore_archived_form_to_active(
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn create(&self, form: &ActiveForm, user: &ActiveUser) -> Result<(), InfraError> {
+    async fn create(&self, form: &ActiveForm, user: &AccountUser) -> Result<(), InfraError> {
         let form = form.clone();
         let user = user.clone();
 
@@ -911,7 +912,7 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn update(&self, form: &ActiveForm, updated_by: &ActiveUser) -> Result<(), InfraError> {
+    async fn update(&self, form: &ActiveForm, updated_by: &AccountUser) -> Result<(), InfraError> {
         let form = form.clone();
         let updated_by = updated_by.clone();
 

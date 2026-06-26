@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use domain::user::models::{
-    ActiveUser, AnswerSubmissionRestriction, AnswerSubmissionRestrictionId,
+use domain::account::models::{
+    AccountUser, AnswerSubmissionRestriction, AnswerSubmissionRestrictionId,
     AnswerSubmissionRestrictionReason, DiscordAccountLink, Role,
 };
 use errors::infra::InfraError;
@@ -24,7 +24,7 @@ use crate::{
 
 #[async_trait]
 impl UserDatabase for ConnectionPool {
-    async fn find_by(&self, uuid: Uuid) -> Result<Option<ActiveUser>, InfraError> {
+    async fn find_by(&self, uuid: Uuid) -> Result<Option<AccountUser>, InfraError> {
         Ok(self
             .read_only_transaction(|txn| {
                 Box::pin(async move {
@@ -37,7 +37,7 @@ impl UserDatabase for ConnectionPool {
 
                     let user = query
                         .map(|row| {
-                            Ok::<ActiveUser, InfraError>(ActiveUser::new(
+                            Ok::<AccountUser, InfraError>(AccountUser::new(
                                 row.name,
                                 uuid.into(),
                                 Role::from_str(&row.role)?,
@@ -51,7 +51,7 @@ impl UserDatabase for ConnectionPool {
             .await?)
     }
 
-    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<ActiveUser>, InfraError> {
+    async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<AccountUser>, InfraError> {
         if uuids.is_empty() {
             return Ok(Vec::new());
         }
@@ -76,19 +76,19 @@ impl UserDatabase for ConnectionPool {
                         let id: String = row.try_get("id")?;
                         let name: String = row.try_get("name")?;
                         let role: String = row.try_get("role")?;
-                        Ok::<ActiveUser, InfraError>(ActiveUser::new(
+                        Ok::<AccountUser, InfraError>(AccountUser::new(
                             name,
                             Uuid::parse_str(&id)?.into(),
                             Role::from_str(&role)?,
                         ))
                     })
-                    .collect::<Result<Vec<ActiveUser>, _>>()
+                    .collect::<Result<Vec<AccountUser>, _>>()
             })
         })
         .await
     }
 
-    async fn upsert_user(&self, user: &ActiveUser) -> Result<(), InfraError> {
+    async fn upsert_user(&self, user: &AccountUser) -> Result<(), InfraError> {
         let user_id = user.id().to_string();
         let user_name = user.name().to_owned();
         let user_role = user.role().to_string();
@@ -248,7 +248,7 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
-    async fn fetch_all_users(&self) -> Result<Vec<ActiveUser>, InfraError> {
+    async fn fetch_all_users(&self) -> Result<Vec<AccountUser>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let query = sqlx::query!("SELECT id, name, role FROM users")
@@ -258,13 +258,13 @@ impl UserDatabase for ConnectionPool {
                 let users = query
                     .into_iter()
                     .map(|row| {
-                        Ok::<ActiveUser, InfraError>(ActiveUser::new(
+                        Ok::<AccountUser, InfraError>(AccountUser::new(
                             row.name,
                             Uuid::parse_str(&row.id)?.into(),
                             Role::from_str(&row.role)?,
                         ))
                     })
-                    .collect::<Result<Vec<ActiveUser>, InfraError>>()?;
+                    .collect::<Result<Vec<AccountUser>, InfraError>>()?;
 
                 Ok::<_, InfraError>(users)
             })
@@ -275,7 +275,7 @@ impl UserDatabase for ConnectionPool {
     async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &ActiveUser,
+        user: &AccountUser,
         expires: u32,
     ) -> Result<String, InfraError> {
         let now = Utc::now().timestamp_millis();
@@ -292,11 +292,11 @@ impl UserDatabase for ConnectionPool {
     async fn fetch_user_by_session_id(
         &self,
         session_id: String,
-    ) -> Result<Option<ActiveUser>, InfraError> {
+    ) -> Result<Option<AccountUser>, InfraError> {
         let mut redis_connection = redis_connection().await;
 
         let result: Option<String> = redis_connection.get(&session_id)?;
-        let user = result.and_then(|s| serde_json::from_str::<ActiveUser>(&s).ok());
+        let user = result.and_then(|s| serde_json::from_str::<AccountUser>(&s).ok());
 
         Ok(user)
     }
@@ -361,7 +361,7 @@ impl UserDatabase for ConnectionPool {
 
     async fn fetch_discord_user(
         &self,
-        user: &ActiveUser,
+        user: &AccountUser,
     ) -> Result<Option<DiscordUserRecord>, InfraError> {
         let user_id = user.id().to_string();
 

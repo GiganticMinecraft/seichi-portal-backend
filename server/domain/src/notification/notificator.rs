@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use errors::Error;
 
 use crate::{
+    account::models::UserId,
     notification::models::{NotificationContent, NotificationPreference, NotificationType},
-    user::models::UserId,
 };
 
 #[async_trait]

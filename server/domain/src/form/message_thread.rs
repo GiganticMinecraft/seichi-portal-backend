@@ -2,6 +2,8 @@ use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
 
 use crate::{
+    account::models::{Role::Administrator, UserId},
+    auth::Actor,
     form::{
         answer::AnswerId,
         message::{Message, MessageBody, MessageId},
@@ -9,7 +11,6 @@ use crate::{
     types::authorization_guard::{
         Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Delete, SelfGuarded, Update,
     },
-    user::models::{Actor, Role::Administrator, User, UserId},
 };
 
 #[derive(UnsafeFromRawParts, Clone, Debug, PartialEq)]
@@ -113,7 +114,7 @@ impl Allowed<MessageThread, Update> {
 fn is_answer_author_or_administrator(actor: &Actor, answer_author_id: &UserId) -> bool {
     matches!(
         actor,
-        Actor::User(User::ActiveUser(user))
+        Actor::AccountUser(user)
             if user.role() == &Administrator
                 || *user.id() == *answer_author_id
     )
@@ -127,7 +128,7 @@ impl AuthorizationGuardDefinitions for MessageThread {
     fn can_create(&self, actor: &Actor) -> bool {
         matches!(
             actor,
-            Actor::User(User::ActiveUser(user)) if user.role() == &Administrator
+            Actor::AccountUser(user) if user.role() == &Administrator
         )
     }
 
@@ -148,8 +149,9 @@ impl AuthorizationGuardDefinitions for MessageThread {
 mod tests {
     use super::*;
     use crate::{
+        account::models::{AccountUser, Role},
+        form::answer::TemporaryAnswerAuthor,
         types::authorization_guard::{AuthorizationGuard, Create, Delete, Read},
-        user::models::{ActiveUser, Role, TemporaryUser},
     };
     use uuid::Uuid;
 
@@ -161,8 +163,8 @@ mod tests {
         Uuid::parse_str(seed).unwrap().into()
     }
 
-    fn active_user(name: &str, id: UserId, role: Role) -> ActiveUser {
-        ActiveUser::new(name.to_string(), id, role)
+    fn active_user(name: &str, id: UserId, role: Role) -> AccountUser {
+        AccountUser::new(name.to_string(), id, role)
     }
 
     fn thread_for_answer_author(answer_author_id: UserId) -> MessageThread {
@@ -198,7 +200,7 @@ mod tests {
             user_id("00000000-0000-7000-8000-000000000103"),
             Role::StandardUser,
         ));
-        let temporary_user = Actor::from(TemporaryUser::new(
+        let temporary_user = Actor::from(TemporaryAnswerAuthor::new(
             "temporary_user".to_string(),
             "temporary@example.com".to_string(),
         ));
@@ -225,7 +227,7 @@ mod tests {
         );
         assert!(
             AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
-                .try_create(Actor::User(User::Anonymous))
+                .try_create(Actor::Anonymous)
                 .is_err()
         );
         assert!(

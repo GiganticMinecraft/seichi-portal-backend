@@ -1,4 +1,4 @@
-use domain::user::models::DiscordUserId;
+use domain::account::models::DiscordUserId;
 use errors::{Error, infra::InfraError};
 use serenity::all::UserId;
 

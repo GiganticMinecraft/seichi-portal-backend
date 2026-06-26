@@ -7,9 +7,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use domain::{
+    account::models::AccountUser,
     form::answer::{AnswerId, AnswerLabelId},
     repository::Repositories,
-    user::models::ActiveUser,
 };
 use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
@@ -93,7 +93,7 @@ impl IntoResponse for EditAnswerLabelResponse {
     tag = "Labels"
 )]
 pub async fn create_label_for_answers(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<AnswerLabelSchema>, JsonRejection>,
 ) -> Result<CreateAnswerLabelResponse, Response> {
@@ -126,7 +126,7 @@ pub async fn create_label_for_answers(
     tag = "Labels"
 )]
 pub async fn get_labels_for_answers(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetAnswerLabelsResponse, Response> {
     let answer_label_use_case = AnswerLabelUseCase {
@@ -161,7 +161,7 @@ pub async fn get_labels_for_answers(
     tag = "Labels"
 )]
 pub async fn delete_label_for_answers(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<AnswerLabelId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -200,7 +200,7 @@ pub async fn delete_label_for_answers(
     tag = "Labels"
 )]
 pub async fn edit_label_for_answers(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<AnswerLabelId>, PathRejection>,
     json: Result<Json<AnswerLabelUpdateSchema>, JsonRejection>,
@@ -239,7 +239,7 @@ pub async fn edit_label_for_answers(
     tag = "Labels"
 )]
 pub async fn replace_answer_labels(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<AnswerId>, PathRejection>,
     Json(label_ids): Json<ReplaceAnswerLabelSchema>,

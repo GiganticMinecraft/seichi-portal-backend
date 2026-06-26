@@ -1,11 +1,12 @@
 use async_trait::async_trait;
 use domain::{
+    account::models::{
+        AccountUser, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser, DiscordUserId,
+        DiscordUserName,
+    },
+    auth::Actor,
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
-    user::models::{
-        ActiveUser, Actor, AnswerSubmissionRestriction, DiscordAccountLink, DiscordUser,
-        DiscordUserId, DiscordUserName, User,
-    },
 };
 use errors::{Error, domain::DomainError, infra::InfraError::Reqwest};
 use itertools::Itertools;
@@ -23,14 +24,14 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn find_by(
         &self,
         uuid: Uuid,
-    ) -> Result<Option<AuthorizationGuard<ActiveUser, Read>>, Error> {
+    ) -> Result<Option<AuthorizationGuard<AccountUser, Read>>, Error> {
         Ok(self.client.user().find_by(uuid).await?.map(Into::into))
     }
 
     async fn find_by_ids(
         &self,
         uuids: Vec<Uuid>,
-    ) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
+    ) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error> {
         Ok(self
             .client
             .user()
@@ -41,7 +42,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .collect_vec())
     }
 
-    async fn upsert_user(&self, user: Allowed<ActiveUser, Create>) -> Result<(), Error> {
+    async fn upsert_user(&self, user: Allowed<AccountUser, Create>) -> Result<(), Error> {
         self.client
             .user()
             .upsert_user(user.value())
@@ -49,7 +50,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn patch_user_role(&self, user: Allowed<ActiveUser, Update>) -> Result<(), Error> {
+    async fn patch_user_role(&self, user: Allowed<AccountUser, Update>) -> Result<(), Error> {
         self.client
             .user()
             .patch_user_role(
@@ -88,7 +89,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         restriction: Allowed<AnswerSubmissionRestriction, Delete>,
     ) -> Result<(), Error> {
         let lifted_by = match restriction.actor() {
-            Actor::User(User::ActiveUser(user)) => user.id().into_inner(),
+            Actor::AccountUser(user) => user.id().into_inner(),
             _ => return Err(DomainError::Forbidden.into()),
         };
 
@@ -99,7 +100,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .map_err(Into::into)
     }
 
-    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<ActiveUser>, Error> {
+    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<AccountUser>, Error> {
         let client = reqwest::Client::new();
 
         let response = client
@@ -113,7 +114,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
                 cause: err.to_string(),
             })?;
 
-        Ok(serde_json::from_str::<ActiveUser>(
+        Ok(serde_json::from_str::<AccountUser>(
             response
                 .text()
                 .await
@@ -125,7 +126,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         .ok())
     }
 
-    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error> {
+    async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error> {
         Ok(self
             .client
             .user()
@@ -139,7 +140,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn start_user_session(
         &self,
         xbox_token: String,
-        user: &ActiveUser,
+        user: &AccountUser,
         expires: u32,
     ) -> Result<String, Error> {
         self.client
@@ -152,7 +153,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn fetch_user_by_session_id(
         &self,
         session_id: String,
-    ) -> Result<Option<ActiveUser>, Error> {
+    ) -> Result<Option<AccountUser>, Error> {
         Ok(self
             .client
             .user()
@@ -192,7 +193,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
 
     async fn fetch_discord_user(
         &self,
-        user: &Allowed<ActiveUser, Read>,
+        user: &Allowed<AccountUser, Read>,
     ) -> Result<Option<DiscordUser>, Error> {
         Ok(self
             .client

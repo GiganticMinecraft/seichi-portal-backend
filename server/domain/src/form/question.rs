@@ -9,9 +9,9 @@ use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 
 use crate::{
+    account::models::Role,
+    auth::Actor,
     types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
-    user::models::Actor,
-    user::models::{Role, User},
 };
 
 pub type QuestionId = types::Id<Question>;
@@ -376,7 +376,7 @@ impl AuthorizationRole for Question {
 
 impl AuthorizationGuardDefinitions for Question {
     fn can_create(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
     }
 
     fn can_read(&self, _actor: &Actor) -> bool {
@@ -384,11 +384,11 @@ impl AuthorizationGuardDefinitions for Question {
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
     }
 
     fn can_delete(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(actor)) if actor.role() == &Role::Administrator)
+        matches!(actor, Actor::AccountUser(actor) if actor.role() == &Role::Administrator)
     }
 }
 

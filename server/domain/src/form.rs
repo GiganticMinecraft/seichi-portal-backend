@@ -8,8 +8,8 @@ pub mod question;
 pub mod service;
 pub mod settings;
 
-use crate::user::models::{Actor, Role::Administrator, User};
+use crate::{account::models::Role::Administrator, auth::Actor};
 
 pub(super) fn is_administrator(actor: &Actor) -> bool {
-    matches!(actor, Actor::User(User::ActiveUser(user)) if user.role() == &Administrator)
+    matches!(actor, Actor::AccountUser(user) if user.role() == &Administrator)
 }

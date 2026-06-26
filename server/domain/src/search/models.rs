@@ -1,3 +1,4 @@
+use crate::account::models::UserId;
 use crate::form::answer::FormAnswerContentId;
 use crate::form::{
     answer::{AnswerId, AnswerLabelId},
@@ -5,7 +6,6 @@ use crate::form::{
     models::{FormDescription, FormId, FormLabelId, FormTitle},
     question::QuestionId,
 };
-use crate::user::models::UserId;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use errors::Error;

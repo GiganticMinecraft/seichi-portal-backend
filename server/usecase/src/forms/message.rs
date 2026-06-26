@@ -4,6 +4,8 @@ use domain::form::models::FormId;
 use domain::notification::models::{NotificationContent, NotificationType};
 use domain::notification::notificator::Notificator;
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
     form::{
         answer::{AnswerEntry, AnswerId},
         message::{Message, MessageBody, MessageId},
@@ -22,7 +24,6 @@ use domain::{
         authorization_guard::{Allowed, AuthorizationGuard},
         authorization_guard::{Create, Read},
     },
-    user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
@@ -76,7 +77,7 @@ impl<
 
     pub async fn post_message<N: Notificator>(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         message_body: MessageBody,
         answer_id: AnswerId,
@@ -174,7 +175,7 @@ impl<
 
     pub async fn get_messages(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<MessageWithSender>, Error> {
@@ -211,7 +212,7 @@ impl<
 
     pub async fn update_message_body(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,
@@ -239,7 +240,7 @@ impl<
 
     pub async fn delete_message(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
         message_id: &MessageId,

@@ -7,7 +7,7 @@ use domain::form::{
     },
     question::{Choice, Question, QuestionType},
 };
-use domain::user::models::{ActiveUser, Actor};
+use domain::{account::models::AccountUser, auth::Actor};
 use itertools::Itertools;
 use serde::Serialize;
 use types::non_empty_string::NonEmptyString;
@@ -128,7 +128,7 @@ pub struct ArchivedFormSchema {
     pub metadata: FormMetaSchema,
     pub archived_at: DateTime<Utc>,
     #[schema(value_type = serde_json::Value)]
-    pub archived_by: ActiveUser,
+    pub archived_by: AccountUser,
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
@@ -266,11 +266,11 @@ pub enum Role {
     Administrator,
 }
 
-impl From<domain::user::models::Role> for Role {
-    fn from(val: domain::user::models::Role) -> Self {
+impl From<domain::account::models::Role> for Role {
+    fn from(val: domain::account::models::Role) -> Self {
         match val {
-            domain::user::models::Role::StandardUser => Role::StandardUser,
-            domain::user::models::Role::Administrator => Role::Administrator,
+            domain::account::models::Role::StandardUser => Role::StandardUser,
+            domain::account::models::Role::Administrator => Role::Administrator,
         }
     }
 }
@@ -283,15 +283,15 @@ pub struct User {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct TemporaryUser {
+pub struct TemporaryAnswerAuthor {
     id: String,
     name: String,
     contact_text: String,
 }
 
-impl From<domain::user::models::TemporaryUser> for TemporaryUser {
-    fn from(val: domain::user::models::TemporaryUser) -> Self {
-        TemporaryUser {
+impl From<domain::form::answer::TemporaryAnswerAuthor> for TemporaryAnswerAuthor {
+    fn from(val: domain::form::answer::TemporaryAnswerAuthor) -> Self {
+        TemporaryAnswerAuthor {
             id: val.id().to_string(),
             name: val.name().to_owned(),
             contact_text: val.contact_text().to_owned(),
@@ -305,29 +305,28 @@ pub enum AnswerAuthor {
     #[serde(rename = "AUTHENTICATED_USER")]
     AuthenticatedUser { user: User },
     #[serde(rename = "TEMPORARY_USER")]
-    TemporaryUser { temporary_user: TemporaryUser },
+    Temporary {
+        temporary_user: TemporaryAnswerAuthor,
+    },
 }
 
-impl From<domain::user::models::User> for AnswerAuthor {
-    fn from(val: domain::user::models::User) -> Self {
+impl From<Actor> for AnswerAuthor {
+    fn from(val: Actor) -> Self {
         match val {
-            domain::user::models::User::ActiveUser(user) => {
-                AnswerAuthor::AuthenticatedUser { user: user.into() }
-            }
-            domain::user::models::User::TemporaryUser(temporary_user) => {
-                AnswerAuthor::TemporaryUser {
-                    temporary_user: temporary_user.into(),
-                }
-            }
-            domain::user::models::User::Anonymous => {
+            Actor::AccountUser(user) => AnswerAuthor::AuthenticatedUser { user: user.into() },
+            Actor::TemporaryAnswerAuthor(temporary_user) => AnswerAuthor::Temporary {
+                temporary_user: temporary_user.into(),
+            },
+            Actor::Anonymous => {
                 unreachable!("Anonymous user cannot be an answer author")
             }
+            Actor::System => unreachable!("System actor cannot be an answer author"),
         }
     }
 }
 
-impl From<ActiveUser> for User {
-    fn from(val: ActiveUser) -> Self {
+impl From<AccountUser> for User {
+    fn from(val: AccountUser) -> Self {
         User {
             uuid: val.id().to_string(),
             name: val.name().to_owned(),
@@ -399,7 +398,7 @@ impl FormAnswer {
     pub fn new(
         answer: AnswerEntry,
         form_id: FormId,
-        author: domain::user::models::User,
+        author: Actor,
         labels: Vec<AnswerLabel>,
     ) -> Self {
         FormAnswer {

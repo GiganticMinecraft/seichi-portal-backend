@@ -64,13 +64,12 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::auth::Actor;
     use crate::form::answer::FormAnswerContentId;
     use crate::form::{
         answer::FormAnswerContent,
         question::{QuestionId, QuestionType},
     };
-    use crate::user::models::User;
-
     fn question_id(seed: &str) -> QuestionId {
         Uuid::parse_str(seed).unwrap().into()
     }
@@ -147,7 +146,7 @@ mod tests {
         )
         .unwrap();
 
-        let actor = User::ActiveUser(crate::user::models::ActiveUser::new(
+        let actor = Actor::AccountUser(crate::account::models::AccountUser::new(
             "respondent_name".to_string(),
             Uuid::nil().into(),
             Default::default(),
@@ -158,9 +157,10 @@ mod tests {
             questions.as_slice(),
             &answers,
             match &actor {
-                User::ActiveUser(actor) => actor.name(),
-                User::TemporaryUser(actor) => actor.name(),
-                User::Anonymous => unreachable!(),
+                Actor::AccountUser(actor) => actor.name(),
+                Actor::TemporaryAnswerAuthor(actor) => actor.name(),
+                Actor::Anonymous => unreachable!(),
+                Actor::System => unreachable!(),
             },
         )
         .unwrap();

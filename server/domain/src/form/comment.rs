@@ -6,11 +6,12 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
+    account::models::{Role, UserId},
+    auth::Actor,
     form::answer::{AnswerEntry, AnswerId},
     types::authorization_guard::{
         AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, Update,
     },
-    user::models::{Actor, Role, User, UserId},
 };
 
 pub type CommentId = types::Id<Comment>;
@@ -68,13 +69,13 @@ impl GuardedBy<AnswerEntry, Read> for Comment {
 
 impl GuardedBy<AnswerEntry, Create> for Comment {
     fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == self.commented_by())
+        matches!(actor, Actor::AccountUser(user) if user.id() == self.commented_by())
     }
 }
 
 impl GuardedBy<AnswerEntry, Update> for Comment {
     fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
-        matches!(actor, Actor::User(User::ActiveUser(user)) if user.id() == self.commented_by())
+        matches!(actor, Actor::AccountUser(user) if user.id() == self.commented_by())
     }
 }
 
@@ -82,7 +83,7 @@ impl GuardedBy<AnswerEntry, Delete> for Comment {
     fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
         matches!(
             actor,
-            Actor::User(User::ActiveUser(user))
+            Actor::AccountUser(user)
                 if user.id() == self.commented_by() || user.role() == &Role::Administrator
         )
     }
@@ -92,6 +93,7 @@ impl GuardedBy<AnswerEntry, Delete> for Comment {
 mod tests {
     use super::*;
     use crate::{
+        account::models::AccountUser,
         form::{
             answer::{
                 AnswerAuthor, AnswerSettings, AnswerTitle, AnswerVisibility, FormAnswerContent,
@@ -101,14 +103,13 @@ mod tests {
             question::{Question, QuestionId, QuestionType},
         },
         types::authorization_guard::{AuthorizationGuard, Read},
-        user::models::ActiveUser,
     };
     use errors::domain::DomainError;
     use types::{non_empty_string::NonEmptyString, non_empty_vec::NonEmptyVec};
     use uuid::Uuid;
 
-    fn active_user(name: &str, role: Role) -> ActiveUser {
-        ActiveUser::new(name.to_string(), UserId::from(Uuid::new_v4()), role)
+    fn active_user(name: &str, role: Role) -> AccountUser {
+        AccountUser::new(name.to_string(), UserId::from(Uuid::new_v4()), role)
     }
 
     fn comment_content(value: &str) -> CommentContent {
@@ -156,7 +157,7 @@ mod tests {
         .unwrap()
     }
 
-    fn answer_entry(form: &ActiveForm, author: &ActiveUser) -> AnswerEntry {
+    fn answer_entry(form: &ActiveForm, author: &AccountUser) -> AnswerEntry {
         AnswerEntry::new(
             *form.id(),
             AnswerAuthor::AuthenticatedUser(*author.id()),
@@ -185,7 +186,7 @@ mod tests {
     fn create_comment_by(
         form: ActiveForm,
         entry: AnswerEntry,
-        commenter: ActiveUser,
+        commenter: AccountUser,
         content: &str,
     ) -> Comment {
         read_entry_by(form, entry, Actor::from(commenter))

@@ -8,9 +8,9 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
+    account::models::AccountUser,
     form::models::{FormLabelId, FormLabelName},
     repository::Repositories,
-    user::models::ActiveUser,
 };
 use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
@@ -80,7 +80,7 @@ impl IntoResponse for GetFormLabelsResponse {
     tag = "Labels"
 )]
 pub async fn create_label_for_forms(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormLabelCreateSchema>, JsonRejection>,
 ) -> Result<CreateFormLabelResponse, Response> {
@@ -113,7 +113,7 @@ pub async fn create_label_for_forms(
     tag = "Labels"
 )]
 pub async fn get_labels_for_forms(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetFormLabelsResponse, Response> {
     let form_label_use_case = FormLabelUseCase {
@@ -148,7 +148,7 @@ pub async fn get_labels_for_forms(
     tag = "Labels"
 )]
 pub async fn delete_label_for_forms(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormLabelId>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -187,7 +187,7 @@ pub async fn delete_label_for_forms(
     tag = "Labels"
 )]
 pub async fn edit_label_for_forms(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormLabelId>, PathRejection>,
     json: Result<Json<FormLabelUpdateSchema>, JsonRejection>,

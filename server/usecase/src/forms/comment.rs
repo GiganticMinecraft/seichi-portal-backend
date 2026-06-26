@@ -1,6 +1,8 @@
 use domain::form::comment::CommentContent;
 use domain::form::models::FormId;
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
     form::{
         answer::{AnswerEntry, AnswerId},
         comment::{Comment, CommentId},
@@ -11,7 +13,6 @@ use domain::{
     },
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, Read},
-    user::models::{ActiveUser, Actor},
 };
 use errors::{
     Error,
@@ -59,7 +60,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
 
     async fn build_comments_with_authors(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         comments: Vec<Comment>,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
         let user_ids = comments.iter().map(|c| *c.commented_by()).collect();
@@ -82,7 +83,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
 
     pub async fn get_comments(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
@@ -104,7 +105,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
 
     pub async fn post_comment(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
         content: CommentContent,
@@ -121,7 +122,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
 
     pub async fn update_comment(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
         comment_id: CommentId,
@@ -149,7 +150,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
 
     pub async fn delete_comment(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
         comment_id: CommentId,

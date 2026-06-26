@@ -1,8 +1,9 @@
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
     form::answer::{AnswerId, AnswerLabel, AnswerLabelId},
     repository::form::answer_label_repository::AnswerLabelRepository,
     types::authorization_guard::{AuthorizationGuard, Create},
-    user::models::{ActiveUser, Actor},
 };
 use errors::{Error, usecase::UseCaseError::LabelNotFound};
 use types::non_empty_string::NonEmptyString;
@@ -14,7 +15,7 @@ pub struct AnswerLabelUseCase<'a, AnswerLabelRepo: AnswerLabelRepository> {
 impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
     pub async fn create_label_for_answers(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         label_name: NonEmptyString,
     ) -> Result<AnswerLabel, Error> {
         let actor_user = Actor::from(actor.clone());
@@ -39,7 +40,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
 
     pub async fn get_labels_for_answers(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
     ) -> Result<Vec<AnswerLabel>, Error> {
         let actor_user = Actor::from(actor.clone());
         Ok(self
@@ -57,7 +58,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
 
     pub async fn delete_label_for_answers(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         label_id: AnswerLabelId,
     ) -> Result<(), Error> {
         let answer_label = self
@@ -77,7 +78,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
 
     pub async fn edit_label_for_answers(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         label_id: AnswerLabelId,
         name: Option<NonEmptyString>,
     ) -> Result<AnswerLabel, Error> {
@@ -108,7 +109,7 @@ impl<R1: AnswerLabelRepository> AnswerLabelUseCase<'_, R1> {
 
     pub async fn replace_answer_labels(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         answer_id: AnswerId,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<(), Error> {

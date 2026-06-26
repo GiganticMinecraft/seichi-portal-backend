@@ -3,9 +3,9 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
+    account::models::AccountUser,
     form::models::{ActiveForm, FormId},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
-    user::models::ActiveUser,
 };
 
 #[automock]
@@ -13,7 +13,7 @@ use crate::{
 pub trait ActiveFormRepository: Send + Sync + 'static {
     async fn create(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form: Allowed<ActiveForm, Create>,
     ) -> Result<(), Error>;
     async fn list(
@@ -24,7 +24,7 @@ pub trait ActiveFormRepository: Send + Sync + 'static {
     async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<ActiveForm, Read>>, Error>;
     async fn update_form(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         updated_form: Allowed<ActiveForm, Update>,
     ) -> Result<(), Error>;
     async fn size(&self) -> Result<u32, Error>;

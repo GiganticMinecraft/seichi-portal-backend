@@ -8,8 +8,8 @@ use domain::search::models::{
     NumberOfRecordsPerAggregate, RealAnswers, UserSearchHit, Users,
 };
 use domain::{
+    account::models::UserId,
     search::models::{Operation, SearchableFields, SearchableFieldsWithOperation},
-    user::models::UserId,
 };
 use errors::infra::InfraError;
 use itertools::Itertools;

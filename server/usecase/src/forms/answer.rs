@@ -1,5 +1,8 @@
 use chrono::Utc;
 use domain::{
+    account::models::AccountUser,
+    auth::Actor,
+    form::answer::TemporaryAnswerAuthor,
     form::{
         answer::{
             AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerSubmitter, AnswerTitle,
@@ -15,7 +18,6 @@ use domain::{
     },
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, Read},
-    user::models::{ActiveUser, Actor, TemporaryUser, User},
 };
 use errors::{
     Error,
@@ -69,7 +71,7 @@ impl<
 
     async fn build_answer_details(
         &self,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         form_id: FormId,
         form_answer: Allowed<AnswerEntry, Read>,
         labels: Vec<AnswerLabel>,
@@ -83,14 +85,14 @@ impl<
         let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
 
         let author = match form_answer.author() {
-            AnswerAuthor::AuthenticatedUser(user_id) => User::ActiveUser(
+            AnswerAuthor::AuthenticatedUser(user_id) => Actor::AccountUser(
                 users
                     .get(user_id)
                     .cloned()
                     .ok_or(Error::from(errors::usecase::UseCaseError::UserNotFound))?,
             ),
-            AnswerAuthor::TemporaryUser(temporary_user) => {
-                User::TemporaryUser(temporary_user.clone())
+            AnswerAuthor::Temporary(temporary_user) => {
+                Actor::TemporaryAnswerAuthor(temporary_user.clone())
             }
         };
 
@@ -173,7 +175,7 @@ impl<
 
     pub async fn post_answers(
         &self,
-        user: ActiveUser,
+        user: AccountUser,
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
@@ -223,7 +225,7 @@ impl<
 
     pub async fn post_temporary_answers(
         &self,
-        temporary_user: TemporaryUser,
+        temporary_user: TemporaryAnswerAuthor,
         form_id: FormId,
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
@@ -270,7 +272,7 @@ impl<
         &self,
         form_id: FormId,
         answer_id: AnswerId,
-        user: &ActiveUser,
+        user: &AccountUser,
     ) -> Result<AnswerDetails, Error> {
         let actor = Actor::from(user.clone());
         let form = self.read_form(form_id, &actor).await?;
@@ -300,7 +302,7 @@ impl<
     pub async fn get_answers_by_form_id(
         &self,
         form_id: FormId,
-        actor: &ActiveUser,
+        actor: &AccountUser,
     ) -> Result<Vec<AnswerDetails>, Error> {
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
@@ -331,7 +333,7 @@ impl<
             .collect()
     }
 
-    pub async fn get_all_answers(&self, user: &ActiveUser) -> Result<Vec<AnswerDetails>, Error> {
+    pub async fn get_all_answers(&self, user: &AccountUser) -> Result<Vec<AnswerDetails>, Error> {
         let actor_ref = Actor::from(user.clone());
         let readable_forms = self
             .active_form_repository
@@ -390,7 +392,7 @@ impl<
         &self,
         form_id: FormId,
         answer_id: AnswerId,
-        actor: &ActiveUser,
+        actor: &AccountUser,
         title: Option<AnswerTitle>,
     ) -> Result<AnswerDetails, Error> {
         let actor_ref = Actor::from(actor.clone());
@@ -450,6 +452,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use domain::{
+        account::models::{AnswerSubmissionRestriction, AnswerSubmissionRestrictionReason, Role},
         form::{
             answer::{AnswerLabelId, FormAnswerContentId},
             models::{FormDescription, FormTitle, QuestionSet},
@@ -457,7 +460,6 @@ mod tests {
         },
         repository::form::answer_label_repository::AnswerLabelRepository,
         types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
-        user::models::{AnswerSubmissionRestriction, AnswerSubmissionRestrictionReason, Role},
     };
     use errors::domain::DomainError;
     use types::non_empty_vec::NonEmptyVec;
@@ -531,8 +533,8 @@ mod tests {
         }
     }
 
-    fn active_user(name: &str, role: Role) -> ActiveUser {
-        ActiveUser::new(name.to_string(), Uuid::new_v4().into(), role)
+    fn active_user(name: &str, role: Role) -> AccountUser {
+        AccountUser::new(name.to_string(), Uuid::new_v4().into(), role)
     }
 
     fn sample_form() -> ActiveForm {

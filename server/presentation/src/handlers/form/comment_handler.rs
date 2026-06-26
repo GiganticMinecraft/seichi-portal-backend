@@ -9,9 +9,9 @@ use axum::{
 use domain::form::answer::AnswerId;
 use domain::form::models::FormId;
 use domain::{
+    account::models::AccountUser,
     form::comment::{CommentContent, CommentId},
     repository::Repositories,
-    user::models::ActiveUser,
 };
 use errors::ErrorExtra;
 use resource::repository::RealInfrastructureRepository;
@@ -59,7 +59,7 @@ impl IntoResponse for GetFormCommentResponse {
     tag = "Comments"
 )]
 pub async fn get_form_comment(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
 ) -> Result<GetFormCommentResponse, Response> {
@@ -107,7 +107,7 @@ pub async fn get_form_comment(
     tag = "Comments"
 )]
 pub async fn post_form_comment(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<CommentPostSchema>, JsonRejection>,
@@ -158,7 +158,7 @@ pub async fn post_form_comment(
     tag = "Comments"
 )]
 pub async fn update_form_comment(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
     json: Result<Json<CommentUpdateSchema>, JsonRejection>,
@@ -209,7 +209,7 @@ pub async fn update_form_comment(
     tag = "Comments"
 )]
 pub async fn delete_form_comment_handler(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {

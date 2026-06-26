@@ -9,8 +9,8 @@ use axum_extra::{
     headers::{Authorization, authorization::Bearer},
 };
 use domain::{
+    account::models::{AccountUser, AnswerSubmissionRestrictionReason, UserSessionExpires},
     repository::Repositories,
-    user::models::{ActiveUser, AnswerSubmissionRestrictionReason, UserSessionExpires},
 };
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
@@ -114,7 +114,7 @@ impl IntoResponse for UserListResponse {
     tag = "Users"
 )]
 pub async fn get_my_user_info(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<GetUserInfoResponse, Response> {
     let user_use_case = UserUseCase {
@@ -159,7 +159,7 @@ pub async fn get_my_user_info(
     tag = "Users"
 )]
 pub async fn get_user_info(
-    Extension(actor): Extension<ActiveUser>,
+    Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<GetUserInfoResponse, Response> {
@@ -208,7 +208,7 @@ pub async fn get_user_info(
     tag = "Users"
 )]
 pub async fn patch_user_role(
-    Extension(actor): Extension<ActiveUser>,
+    Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
     json: Result<Json<UserUpdateSchema>, JsonRejection>,
@@ -245,7 +245,7 @@ pub async fn patch_user_role(
     tag = "Users"
 )]
 pub async fn user_list(
-    Extension(actor): Extension<ActiveUser>,
+    Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<UserListResponse, Response> {
     let user_use_case = UserUseCase {
@@ -280,7 +280,7 @@ pub async fn user_list(
     tag = "Users"
 )]
 pub async fn get_answer_submission_restriction(
-    Extension(actor): Extension<ActiveUser>,
+    Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<GetAnswerSubmissionRestrictionResponse, Response> {
@@ -320,7 +320,7 @@ pub async fn get_answer_submission_restriction(
     tag = "Users"
 )]
 pub async fn put_answer_submission_restriction(
-    Extension(actor): Extension<ActiveUser>,
+    Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
     json: Result<Json<AnswerSubmissionRestrictionRequest>, JsonRejection>,
@@ -365,7 +365,7 @@ pub async fn put_answer_submission_restriction(
     tag = "Users"
 )]
 pub async fn delete_answer_submission_restriction(
-    Extension(actor): Extension<ActiveUser>,
+    Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -506,7 +506,7 @@ pub async fn end_session(
     tag = "Users"
 )]
 pub async fn link_discord(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<DiscordOAuthToken>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
@@ -544,7 +544,7 @@ pub async fn link_discord(
     tag = "Users"
 )]
 pub async fn unlink_discord(
-    Extension(user): Extension<ActiveUser>,
+    Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
 ) -> Result<impl IntoResponse, Response> {
     let user_use_case = UserUseCase {
