@@ -61,7 +61,7 @@ impl AnswerSettingsSchema {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct FormSettingsSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub webhook_url: Option<Option<String>>,
+    pub discord_webhook_url: Option<Option<String>>,
     #[schema(value_type = String)]
     pub visibility: Visibility,
     pub allow_temporary_answers: bool,
@@ -75,8 +75,8 @@ impl FormSettingsSchema {
         answer_settings: &AnswerSettings,
     ) -> Self {
         FormSettingsSchema {
-            webhook_url: settings
-                .webhook_url(actor)
+            discord_webhook_url: settings
+                .discord_webhook_url(actor)
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),

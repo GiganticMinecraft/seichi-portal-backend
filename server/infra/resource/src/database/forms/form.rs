@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::form::{
     answer::AnswerEntry,
-    models::{FormLabelId, WebhookUrl},
+    models::{DiscordWebhookUrl, FormLabelId},
     question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
@@ -39,7 +39,7 @@ struct FormRow {
     description: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    webhook_url: Option<String>,
+    discord_webhook_url: Option<String>,
     visibility: String,
     answer_visibility: String,
     allow_temporary_answers: bool,
@@ -149,7 +149,7 @@ async fn active_form_record_from_row(
         description: row.description,
         created_at: row.created_at,
         updated_at: row.updated_at,
-        webhook_url: row.webhook_url,
+        discord_webhook_url: row.discord_webhook_url,
         visibility: row.visibility,
         answer_visibility: row.answer_visibility,
         allow_temporary_answers: row.allow_temporary_answers,
@@ -185,7 +185,7 @@ async fn archived_form_record_from_row(
             description: row.form.description,
             created_at: row.form.created_at,
             updated_at: row.form.updated_at,
-            webhook_url: row.form.webhook_url,
+            discord_webhook_url: row.form.discord_webhook_url,
             visibility: row.form.visibility,
             answer_visibility: row.form.answer_visibility,
             allow_temporary_answers: row.form.allow_temporary_answers,
@@ -215,7 +215,7 @@ fn form_row_from_db_row(row: MySqlRow) -> Result<FormRow, InfraError> {
         description: row.try_get("description")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
-        webhook_url: row.try_get("webhook_url")?,
+        discord_webhook_url: row.try_get("discord_webhook_url")?,
         visibility: row.try_get("visibility")?,
         answer_visibility: row.try_get("answer_visibility")?,
         allow_temporary_answers: row.try_get("allow_temporary_answers")?,
@@ -233,7 +233,7 @@ fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, Infra
             description: row.try_get("description")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
-            webhook_url: row.try_get("webhook_url")?,
+            discord_webhook_url: row.try_get("discord_webhook_url")?,
             visibility: row.try_get("visibility")?,
             answer_visibility: row.try_get("answer_visibility")?,
             allow_temporary_answers: row.try_get("allow_temporary_answers")?,
@@ -313,9 +313,9 @@ async fn fetch_form_row(
         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
             f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-            f.created_at, f.updated_at, w.url AS webhook_url
+            f.created_at, f.updated_at, w.url AS discord_webhook_url
         FROM form_meta_data f
-        LEFT JOIN form_webhooks w ON f.id = w.form_id
+        LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
         WHERE f.id = ?",
     )
     .bind(form_id.into_inner().to_string())
@@ -333,12 +333,12 @@ async fn fetch_archived_form_row(
         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
             f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-            f.created_at, f.updated_at, w.url AS webhook_url,
+            f.created_at, f.updated_at, w.url AS discord_webhook_url,
             f.archived_at, u.name AS archived_by_name,
             u.id AS archived_by_id, u.role AS archived_by_role
         FROM archived_form_meta_data f
         INNER JOIN users u ON f.archived_by = u.id
-        LEFT JOIN archived_form_webhooks w ON f.id = w.form_id
+        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
         WHERE f.id = ?",
     )
     .bind(form_id.into_inner().to_string())
@@ -369,12 +369,12 @@ async fn insert_form_root(
         .map(NonEmptyString::into_inner);
     let acceptance_period_start_at = answer_settings.acceptance_period().start_at().to_owned();
     let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
-    let webhook_url = form
+    let discord_webhook_url = form
         .settings()
-        .webhook_url(&Actor::from(created_by.clone()))
+        .discord_webhook_url(&Actor::from(created_by.clone()))
         .ok()
         .map(ToOwned::to_owned)
-        .and_then(WebhookUrl::into_inner)
+        .and_then(DiscordWebhookUrl::into_inner)
         .map(NonEmptyString::into_inner);
 
     sqlx::query(
@@ -398,9 +398,9 @@ async fn insert_form_root(
     .execute(&mut **txn)
     .await?;
 
-    sqlx::query(r"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)")
+    sqlx::query(r"INSERT INTO form_discord_webhooks (form_id, url) VALUES (?, ?)")
         .bind(form_id)
-        .bind(webhook_url)
+        .bind(discord_webhook_url)
         .execute(&mut **txn)
         .await?;
 
@@ -429,12 +429,12 @@ async fn update_form_root(
     let acceptance_period_start_at = answer_settings.acceptance_period().start_at().to_owned();
     let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
 
-    let webhook_url = form
+    let discord_webhook_url = form
         .settings()
-        .webhook_url(&Actor::from(updated_by.clone()))
+        .discord_webhook_url(&Actor::from(updated_by.clone()))
         .ok()
         .map(ToOwned::to_owned)
-        .and_then(WebhookUrl::into_inner)
+        .and_then(DiscordWebhookUrl::into_inner)
         .map(NonEmptyString::into_inner);
 
     sqlx::query(
@@ -464,11 +464,11 @@ async fn update_form_root(
     .await?;
 
     sqlx::query(
-        r#"INSERT INTO form_webhooks (form_id, url) VALUES (?, ?)
+        r#"INSERT INTO form_discord_webhooks (form_id, url) VALUES (?, ?)
         ON DUPLICATE KEY UPDATE url = VALUES(url)"#,
     )
     .bind(form_id)
-    .bind(webhook_url)
+    .bind(discord_webhook_url)
     .execute(&mut **txn)
     .await?;
 
@@ -518,8 +518,8 @@ async fn copy_active_form_to_archive(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO archived_form_webhooks (id, form_id, url)
-        SELECT id, form_id, url FROM form_webhooks WHERE form_id = ?",
+        r"INSERT INTO archived_form_discord_webhooks (id, form_id, url)
+        SELECT id, form_id, url FROM form_discord_webhooks WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
@@ -633,8 +633,8 @@ async fn restore_archived_form_to_active(
     .await?;
 
     sqlx::query(
-        r"INSERT INTO form_webhooks (form_id, url)
-        SELECT form_id, url FROM archived_form_webhooks WHERE form_id = ?",
+        r"INSERT INTO form_discord_webhooks (form_id, url)
+        SELECT form_id, url FROM archived_form_discord_webhooks WHERE form_id = ?",
     )
     .bind(&form_id)
     .execute(&mut **txn)
@@ -734,9 +734,9 @@ impl FormDatabase for ConnectionPool {
                     r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
             f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                    f.created_at, f.updated_at, w.url AS webhook_url
+                    f.created_at, f.updated_at, w.url AS discord_webhook_url
                     FROM form_meta_data f
-                    LEFT JOIN form_webhooks w ON f.id = w.form_id
+                    LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
                     ORDER BY f.id
                     LIMIT ? OFFSET ?",
                 )
@@ -791,12 +791,12 @@ impl FormDatabase for ConnectionPool {
                         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
             f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                        f.created_at, f.updated_at, w.url AS webhook_url,
+                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
                         f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
-                        LEFT JOIN archived_form_webhooks w ON f.id = w.form_id
+                        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
                         WHERE f.title LIKE ? OR f.description LIKE ?
                         ORDER BY f.archived_at DESC, f.id
                         LIMIT ? OFFSET ?",
@@ -812,12 +812,12 @@ impl FormDatabase for ConnectionPool {
                         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
             f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                        f.created_at, f.updated_at, w.url AS webhook_url,
+                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
                         f.archived_at, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
-                        LEFT JOIN archived_form_webhooks w ON f.id = w.form_id
+                        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
                         ORDER BY f.archived_at DESC, f.id
                         LIMIT ? OFFSET ?",
                     )

@@ -61,11 +61,11 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             "Invalid answer acceptance period.",
             "INVALID_ANSWER_ACCEPTANCE_PERIOD",
         ),
-        DomainError::InvalidWebhookUrl => problem_response(
+        DomainError::InvalidDiscordWebhookUrl => problem_response(
             StatusCode::BAD_REQUEST,
             "Bad Request",
-            "Invalid webhook url. (Seichi-Portal only supports Discord webhook)",
-            "INVALID_WEBHOOK_URL",
+            "Invalid Discord webhook url. (Seichi-Portal only supports Discord webhook)",
+            "INVALID_DISCORD_WEBHOOK_URL",
         ),
         DomainError::InvalidEntity { message } => problem_response(
             StatusCode::UNPROCESSABLE_ENTITY,

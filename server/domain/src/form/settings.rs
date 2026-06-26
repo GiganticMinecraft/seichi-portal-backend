@@ -14,7 +14,7 @@ use crate::{form::is_administrator, user::models::Actor};
 #[derive(UnsafeFromRawParts, Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct FormSettings {
     #[serde(default)]
-    webhook_url: WebhookUrl,
+    discord_webhook_url: DiscordWebhookUrl,
     #[serde(default)]
     visibility: Visibility,
 }
@@ -22,14 +22,14 @@ pub struct FormSettings {
 impl FormSettings {
     pub fn new() -> Self {
         Self {
-            webhook_url: WebhookUrl::try_new(None).unwrap(),
+            discord_webhook_url: DiscordWebhookUrl::try_new(None).unwrap(),
             visibility: Visibility::PUBLIC,
         }
     }
 
-    pub fn webhook_url(&self, actor: &Actor) -> Result<&WebhookUrl, DomainError> {
+    pub fn discord_webhook_url(&self, actor: &Actor) -> Result<&DiscordWebhookUrl, DomainError> {
         if matches!(actor, Actor::System) || is_administrator(actor) {
-            Ok(&self.webhook_url)
+            Ok(&self.discord_webhook_url)
         } else {
             Err(DomainError::Forbidden)
         }
@@ -39,9 +39,9 @@ impl FormSettings {
         &self.visibility
     }
 
-    pub fn change_webhook_url(self, webhook_url: WebhookUrl) -> Self {
+    pub fn change_discord_webhook_url(self, discord_webhook_url: DiscordWebhookUrl) -> Self {
         Self {
-            webhook_url,
+            discord_webhook_url,
             ..self
         }
     }
@@ -55,14 +55,14 @@ impl FormSettings {
 #[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
 ))]
-pub struct WebhookUrl(Option<NonEmptyString>);
+pub struct DiscordWebhookUrl(Option<NonEmptyString>);
 
-impl WebhookUrl {
+impl DiscordWebhookUrl {
     pub fn try_new(url: Option<NonEmptyString>) -> Result<Self, DomainError> {
         if let Some(url) = &url {
             let regex = Regex::new("https://discord.com/api/webhooks/.*").unwrap();
             if !regex.is_match(url) {
-                return Err(DomainError::InvalidWebhookUrl);
+                return Err(DomainError::InvalidDiscordWebhookUrl);
             }
         }
 

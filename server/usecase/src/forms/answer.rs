@@ -24,7 +24,9 @@ use errors::{
 use futures::{StreamExt, stream};
 
 use crate::{
-    forms::answer_webhook::{AnswerWebhookField, AnswerWebhookNotification, AnswerWebhookNotifier},
+    forms::discord_answer_webhook::{
+        DiscordAnswerWebhookField, DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier,
+    },
     models::AnswerDetails,
     user_reference_resolver::resolve_user_references,
 };
@@ -41,7 +43,7 @@ pub struct AnswerUseCase<
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
-    pub answer_webhook_notifier: Option<&'a dyn AnswerWebhookNotifier>,
+    pub discord_answer_webhook_notifier: Option<&'a dyn DiscordAnswerWebhookNotifier>,
 }
 
 impl<
@@ -99,18 +101,18 @@ impl<
         })
     }
 
-    async fn notify_answer_webhook(
+    async fn notify_discord_answer_webhook(
         &self,
         form: &Allowed<ActiveForm, Read>,
         answer_entry: &Allowed<AnswerEntry, domain::types::authorization_guard::Create>,
         respondent: String,
     ) {
-        let Some(notifier) = self.answer_webhook_notifier else {
+        let Some(notifier) = self.discord_answer_webhook_notifier else {
             return;
         };
-        let Some(webhook_url) = form
+        let Some(discord_webhook_url) = form
             .settings()
-            .webhook_url(&Actor::System)
+            .discord_webhook_url(&Actor::System)
             .ok()
             .cloned()
             .and_then(|url| url.into_inner())
@@ -139,17 +141,17 @@ impl<
                     .map(|question| question.title().to_owned().into_inner())
                     .unwrap_or_else(|| "不明な質問".to_string());
 
-                AnswerWebhookField::new(question_title, content.answer.clone())
+                DiscordAnswerWebhookField::new(question_title, content.answer.clone())
             })
             .collect::<Vec<_>>();
         let fields = [
             vec![
-                AnswerWebhookField::new(
+                DiscordAnswerWebhookField::new(
                     "フォーム名".to_string(),
                     form.title().to_owned().into_inner().into_inner(),
                 ),
-                AnswerWebhookField::new("タイトル".to_string(), answer_title),
-                AnswerWebhookField::new("回答者".to_string(), respondent),
+                DiscordAnswerWebhookField::new("タイトル".to_string(), answer_title),
+                DiscordAnswerWebhookField::new("回答者".to_string(), respondent),
             ],
             answer_fields,
         ]
@@ -158,8 +160,8 @@ impl<
         .collect();
 
         notifier
-            .notify_answer_posted(AnswerWebhookNotification {
-                webhook_url,
+            .notify_answer_posted(DiscordAnswerWebhookNotification {
+                discord_webhook_url,
                 answer_url,
                 form_id,
                 answer_id,
@@ -202,7 +204,7 @@ impl<
             .post(&form, &answer_entry)
             .await?;
 
-        self.notify_answer_webhook(&form, &answer_entry, user.name().to_string())
+        self.notify_discord_answer_webhook(&form, &answer_entry, user.name().to_string())
             .await;
 
         Ok(())
@@ -247,7 +249,7 @@ impl<
             .post(&form, &answer_entry)
             .await?;
 
-        self.notify_answer_webhook(&form, &answer_entry, respondent)
+        self.notify_discord_answer_webhook(&form, &answer_entry, respondent)
             .await;
 
         Ok(())

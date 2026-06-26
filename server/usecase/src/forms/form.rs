@@ -2,8 +2,9 @@ use chrono::Utc;
 use domain::{
     form::models::{
         ActiveForm, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, ArchivedForm,
-        DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId,
-        FormSettings, FormTitle, Question, QuestionSet, Visibility, WebhookUrl,
+        DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
+        FormLabelAssignment, FormLabelId, FormSettings, FormTitle, Question, QuestionSet,
+        Visibility,
     },
     repository::{
         form::{
@@ -60,7 +61,7 @@ impl<
         title: FormTitle,
         description: FormDescription,
         questions: NonEmptyVec<Question>,
-        webhook: Option<WebhookUrl>,
+        discord_webhook_url: Option<DiscordWebhookUrl>,
         visibility: Option<Visibility>,
         allow_temporary_answers: Option<bool>,
         answer_visibility: Option<AnswerVisibility>,
@@ -71,8 +72,10 @@ impl<
         let user_as_user = Actor::from(user.clone());
 
         let form_settings = FormSettings::new();
-        let form_settings = match webhook {
-            Some(webhook) => form_settings.change_webhook_url(webhook),
+        let form_settings = match discord_webhook_url {
+            Some(discord_webhook_url) => {
+                form_settings.change_discord_webhook_url(discord_webhook_url)
+            }
             None => form_settings,
         };
         let form_settings = match visibility {
@@ -335,7 +338,7 @@ impl<
         title: Option<FormTitle>,
         description: Option<FormDescription>,
         acceptance_period: Option<AnswerAcceptancePeriod>,
-        webhook: Option<WebhookUrl>,
+        discord_webhook_url: Option<DiscordWebhookUrl>,
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
         allow_temporary_answers: Option<bool>,
@@ -405,9 +408,11 @@ impl<
                 None => current_settings,
                 Some(visibility) => current_settings.change_visibility(visibility),
             };
-            let updated_settings = match webhook {
+            let updated_settings = match discord_webhook_url {
                 None => updated_settings,
-                Some(webhook) => updated_settings.change_webhook_url(webhook),
+                Some(discord_webhook_url) => {
+                    updated_settings.change_discord_webhook_url(discord_webhook_url)
+                }
             };
 
             let updated_answer_settings = form.answer_settings().to_owned();

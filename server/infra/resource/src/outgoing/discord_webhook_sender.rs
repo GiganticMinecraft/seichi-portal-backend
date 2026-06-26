@@ -30,7 +30,7 @@ impl DiscordWebhookField {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiscordWebhookMessage {
-    pub webhook_url: String,
+    pub discord_webhook_url: String,
     pub title: String,
     pub link_url: String,
     pub fields: Vec<DiscordWebhookField>,
@@ -67,11 +67,11 @@ impl DiscordWebhookSender {
     }
 
     async fn send(&self, message: DiscordWebhookMessage) -> Result<(), DiscordWebhookSendError> {
-        let webhook_url = message.webhook_url.clone();
+        let discord_webhook_url = message.discord_webhook_url.clone();
         let request = DiscordWebhookRequest::from(message);
         let response = self
             .client
-            .post(webhook_url)
+            .post(discord_webhook_url)
             .json(&request)
             .send()
             .await

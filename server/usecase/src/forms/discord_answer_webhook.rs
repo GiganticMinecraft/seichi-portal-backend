@@ -1,27 +1,27 @@
 use async_trait::async_trait;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AnswerWebhookField {
+pub struct DiscordAnswerWebhookField {
     pub name: String,
     pub value: String,
 }
 
-impl AnswerWebhookField {
+impl DiscordAnswerWebhookField {
     pub fn new(name: String, value: String) -> Self {
         Self { name, value }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AnswerWebhookNotification {
-    pub webhook_url: String,
+pub struct DiscordAnswerWebhookNotification {
+    pub discord_webhook_url: String,
     pub answer_url: String,
     pub form_id: String,
     pub answer_id: String,
-    pub fields: Vec<AnswerWebhookField>,
+    pub fields: Vec<DiscordAnswerWebhookField>,
 }
 
 #[async_trait]
-pub trait AnswerWebhookNotifier: Send + Sync {
-    async fn notify_answer_posted(&self, notification: AnswerWebhookNotification);
+pub trait DiscordAnswerWebhookNotifier: Send + Sync {
+    async fn notify_answer_posted(&self, notification: DiscordAnswerWebhookNotification);
 }

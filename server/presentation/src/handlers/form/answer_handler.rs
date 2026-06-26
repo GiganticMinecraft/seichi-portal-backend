@@ -25,7 +25,7 @@ use serde_json::json;
 use tracing::warn;
 use usecase::forms::{
     answer::AnswerUseCase,
-    answer_webhook::{AnswerWebhookNotification, AnswerWebhookNotifier},
+    discord_answer_webhook::{DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier},
 };
 
 use crate::schemas::error_responses::*;
@@ -50,37 +50,37 @@ type ResourceAnswerUseCase<'a> = AnswerUseCase<
 
 fn build_answer_use_case<'a>(
     repository: &'a RealInfrastructureRepository,
-    answer_webhook_notifier: Option<&'a dyn AnswerWebhookNotifier>,
+    discord_answer_webhook_notifier: Option<&'a dyn DiscordAnswerWebhookNotifier>,
 ) -> ResourceAnswerUseCase<'a> {
     AnswerUseCase {
         active_form_repository: repository.active_form_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        answer_webhook_notifier,
+        discord_answer_webhook_notifier,
     }
 }
 
-struct ResourceAnswerWebhookNotifier {
+struct ResourceDiscordAnswerWebhookNotifier {
     sender: DiscordWebhookSender,
 }
 
-impl ResourceAnswerWebhookNotifier {
+impl ResourceDiscordAnswerWebhookNotifier {
     fn new(sender: DiscordWebhookSender) -> Self {
         Self { sender }
     }
 }
 
 #[async_trait]
-impl AnswerWebhookNotifier for ResourceAnswerWebhookNotifier {
-    async fn notify_answer_posted(&self, notification: AnswerWebhookNotification) {
+impl DiscordAnswerWebhookNotifier for ResourceDiscordAnswerWebhookNotifier {
+    async fn notify_answer_posted(&self, notification: DiscordAnswerWebhookNotification) {
         let sender = self.sender.clone();
         tokio::spawn(async move {
             let form_id = notification.form_id.clone();
             let answer_id = notification.answer_id.clone();
             let attempts = DiscordWebhookSender::retry_policy().max_attempts();
             let message = DiscordWebhookMessage {
-                webhook_url: notification.webhook_url,
+                discord_webhook_url: notification.discord_webhook_url,
                 title: "回答が送信されました".to_string(),
                 link_url: notification.answer_url,
                 fields: notification
@@ -96,7 +96,7 @@ impl AnswerWebhookNotifier for ResourceAnswerWebhookNotifier {
                     answer_id,
                     attempts,
                     error = %error,
-                    "failed to send answer webhook after retries"
+                    "failed to send Discord answer webhook after retries"
                 );
             }
         });
@@ -315,8 +315,10 @@ pub async fn post_answer_handler(
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<AnswerCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
-    let webhook_notifier = ResourceAnswerWebhookNotifier::new(DiscordWebhookSender::new());
-    let form_answer_use_case = build_answer_use_case(&repository, Some(&webhook_notifier));
+    let discord_answer_webhook_notifier =
+        ResourceDiscordAnswerWebhookNotifier::new(DiscordWebhookSender::new());
+    let form_answer_use_case =
+        build_answer_use_case(&repository, Some(&discord_answer_webhook_notifier));
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
@@ -362,8 +364,10 @@ pub async fn post_temporary_answer_handler(
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<TemporaryAnswerCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, Response> {
-    let webhook_notifier = ResourceAnswerWebhookNotifier::new(DiscordWebhookSender::new());
-    let form_answer_use_case = build_answer_use_case(&repository, Some(&webhook_notifier));
+    let discord_answer_webhook_notifier =
+        ResourceDiscordAnswerWebhookNotifier::new(DiscordWebhookSender::new());
+    let form_answer_use_case =
+        build_answer_use_case(&repository, Some(&discord_answer_webhook_notifier));
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;

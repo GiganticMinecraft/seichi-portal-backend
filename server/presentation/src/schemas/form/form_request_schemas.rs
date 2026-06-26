@@ -2,8 +2,8 @@ use domain::form::question::{ChoiceId, QuestionId, QuestionType};
 use domain::form::{
     answer::{AnswerLabelId, AnswerTitle},
     models::{
-        AnswerAcceptancePeriod, AnswerVisibility, DefaultAnswerTitle, FormLabelId, FormTitle,
-        Visibility, WebhookUrl,
+        AnswerAcceptancePeriod, AnswerVisibility, DefaultAnswerTitle, DiscordWebhookUrl,
+        FormLabelId, FormTitle, Visibility,
     },
 };
 use serde::{Deserialize, Deserializer};
@@ -50,7 +50,7 @@ pub struct AnswerAcceptancePeriodInput {
 pub struct FormSettingsSchema {
     #[serde(default)]
     #[schema(value_type = Option<Option<String>>)]
-    pub webhook_url: Option<WebhookUrlSchema>,
+    pub discord_webhook_url: Option<DiscordWebhookUrlSchema>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub visibility: Option<Visibility>,
@@ -61,9 +61,9 @@ pub struct FormSettingsSchema {
 }
 
 #[derive(Clone, Debug)]
-pub struct WebhookUrlSchema(pub(crate) Option<WebhookUrl>);
+pub struct DiscordWebhookUrlSchema(pub(crate) Option<DiscordWebhookUrl>);
 
-impl<'de> Deserialize<'de> for WebhookUrlSchema {
+impl<'de> Deserialize<'de> for DiscordWebhookUrlSchema {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -73,12 +73,12 @@ impl<'de> Deserialize<'de> for WebhookUrlSchema {
             Some(url) => {
                 let non_empty_url =
                     NonEmptyString::try_new(url).map_err(serde::de::Error::custom)?;
-                let webhook_url =
-                    WebhookUrl::try_new(Some(non_empty_url)).map_err(serde::de::Error::custom)?;
+                let discord_webhook_url = DiscordWebhookUrl::try_new(Some(non_empty_url))
+                    .map_err(serde::de::Error::custom)?;
 
-                Ok(WebhookUrlSchema(Some(webhook_url)))
+                Ok(DiscordWebhookUrlSchema(Some(discord_webhook_url)))
             }
-            None => Ok(WebhookUrlSchema(None)),
+            None => Ok(DiscordWebhookUrlSchema(None)),
         }
     }
 }

@@ -65,12 +65,12 @@ CREATE TABLE IF NOT EXISTS form_choices(
     FOREIGN KEY fk_form_choices_question_id(question_id) REFERENCES form_questions(question_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS form_webhooks(
+CREATE TABLE IF NOT EXISTS form_discord_webhooks(
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
     url TEXT,
-    UNIQUE KEY uk_form_webhooks_form_id(form_id),
-    FOREIGN KEY fk_form_webhooks_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
+    UNIQUE KEY uk_form_discord_webhooks_form_id(form_id),
+    FOREIGN KEY fk_form_discord_webhooks_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS answers(
@@ -189,12 +189,12 @@ CREATE TABLE IF NOT EXISTS archived_form_choices(
     FOREIGN KEY fk_archived_form_choices_question_id(question_id) REFERENCES archived_form_questions(question_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS archived_form_webhooks(
+CREATE TABLE IF NOT EXISTS archived_form_discord_webhooks(
     id INT NOT NULL PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
     url TEXT,
-    UNIQUE KEY uk_archived_form_webhooks_form_id(form_id),
-    FOREIGN KEY fk_archived_form_webhooks_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
+    UNIQUE KEY uk_archived_form_discord_webhooks_form_id(form_id),
+    FOREIGN KEY fk_archived_form_discord_webhooks_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS archived_answers(
