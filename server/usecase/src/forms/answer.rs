@@ -91,7 +91,7 @@ impl<
                     .cloned()
                     .ok_or(Error::from(errors::usecase::UseCaseError::UserNotFound))?,
             ),
-            AnswerAuthor::TemporaryAnswerAuthor(temporary_user) => {
+            AnswerAuthor::Temporary(temporary_user) => {
                 Actor::TemporaryAnswerAuthor(temporary_user.clone())
             }
         };

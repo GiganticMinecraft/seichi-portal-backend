@@ -315,9 +315,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             AnswerAuthorRecord::AuthenticatedUser(user) => {
                 AnswerAuthor::AuthenticatedUser(*user.id())
             }
-            AnswerAuthorRecord::TemporaryAnswerAuthor(user) => {
-                AnswerAuthor::TemporaryAnswerAuthor(user)
-            }
+            AnswerAuthorRecord::TemporaryAnswerAuthor(user) => AnswerAuthor::Temporary(user),
         };
         unsafe {
             Ok(AnswerEntry::from_raw_parts(

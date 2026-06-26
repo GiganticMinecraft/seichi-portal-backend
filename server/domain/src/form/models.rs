@@ -162,7 +162,7 @@ impl ActiveForm {
         posted_answers: PostedAnswerContents,
     ) -> Result<AnswerEntry, DomainError> {
         let actor = Actor::from(temporary_user.clone());
-        let author = AnswerAuthor::TemporaryAnswerAuthor(temporary_user);
+        let author = AnswerAuthor::Temporary(temporary_user);
 
         if !self.answer_settings.can_accept_answer(&author, &actor) {
             return Err(DomainError::Forbidden);

@@ -31,7 +31,7 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
             Some(user_id.to_string()),
             None,
         ),
-        AnswerAuthor::TemporaryAnswerAuthor(temporary_user) => (
+        AnswerAuthor::Temporary(temporary_user) => (
             "TEMPORARY_USER".to_string(),
             None,
             Some(temporary_user.id().to_string()),

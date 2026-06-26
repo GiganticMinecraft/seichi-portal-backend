@@ -305,7 +305,7 @@ pub enum AnswerAuthor {
     #[serde(rename = "AUTHENTICATED_USER")]
     AuthenticatedUser { user: User },
     #[serde(rename = "TEMPORARY_USER")]
-    TemporaryAnswerAuthor {
+    Temporary {
         temporary_user: TemporaryAnswerAuthor,
     },
 }
@@ -314,7 +314,7 @@ impl From<Actor> for AnswerAuthor {
     fn from(val: Actor) -> Self {
         match val {
             Actor::AccountUser(user) => AnswerAuthor::AuthenticatedUser { user: user.into() },
-            Actor::TemporaryAnswerAuthor(temporary_user) => AnswerAuthor::TemporaryAnswerAuthor {
+            Actor::TemporaryAnswerAuthor(temporary_user) => AnswerAuthor::Temporary {
                 temporary_user: temporary_user.into(),
             },
             Actor::Anonymous => {

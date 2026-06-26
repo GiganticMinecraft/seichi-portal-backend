@@ -148,7 +148,7 @@ impl AnswerSettings {
             (AnswerAuthor::AuthenticatedUser(user_id), Actor::AccountUser(user)) => {
                 *user_id == *user.id() && (is_within_period || user.role() == &Role::Administrator)
             }
-            (AnswerAuthor::TemporaryAnswerAuthor(_), Actor::TemporaryAnswerAuthor(_)) => {
+            (AnswerAuthor::Temporary(_), Actor::TemporaryAnswerAuthor(_)) => {
                 self.allow_temporary_answers && is_within_period
             }
             _ => false,
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn temporary_answer_creation_requires_allow_flag() {
         let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
-        let author = AnswerAuthor::TemporaryAnswerAuthor(TemporaryAnswerAuthor::new(
+        let author = AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn temporary_answer_creation_succeeds_when_allowed_and_within_period() {
         let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap());
-        let author = AnswerAuthor::TemporaryAnswerAuthor(TemporaryAnswerAuthor::new(
+        let author = AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));
@@ -248,7 +248,7 @@ mod tests {
             )
             .unwrap(),
         );
-        let author = AnswerAuthor::TemporaryAnswerAuthor(TemporaryAnswerAuthor::new(
+        let author = AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
         ));

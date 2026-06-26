@@ -47,21 +47,21 @@ impl TemporaryAnswerAuthor {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum AnswerAuthor {
     AuthenticatedUser(UserId),
-    TemporaryAnswerAuthor(TemporaryAnswerAuthor),
+    Temporary(TemporaryAnswerAuthor),
 }
 
 impl AnswerAuthor {
     pub fn authenticated_user_id(&self) -> Option<UserId> {
         match self {
             Self::AuthenticatedUser(user_id) => Some(*user_id),
-            Self::TemporaryAnswerAuthor(_) => None,
+            Self::Temporary(_) => None,
         }
     }
 
     pub fn temporary_user(&self) -> Option<&TemporaryAnswerAuthor> {
         match self {
             Self::AuthenticatedUser(_) => None,
-            Self::TemporaryAnswerAuthor(user) => Some(user),
+            Self::Temporary(user) => Some(user),
         }
     }
 }
