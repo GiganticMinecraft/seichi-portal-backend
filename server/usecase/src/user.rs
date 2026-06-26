@@ -116,17 +116,23 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         actor: &ActiveUser,
         uuid: Uuid,
     ) -> Result<(), Error> {
-        if actor.role() != &Role::Administrator {
-            return Err(errors::domain::DomainError::Forbidden.into());
-        }
+        let actor_ref = Actor::from(actor.clone());
 
         self.repository
             .find_by(uuid)
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
+        let Some(restriction) = self
+            .repository
+            .fetch_active_answer_submission_restriction(uuid)
+            .await?
+        else {
+            return Ok(());
+        };
+
         self.repository
-            .lift_answer_submission_restriction(uuid, actor)
+            .lift_answer_submission_restriction(restriction.into_delete().try_delete(actor_ref)?)
             .await
     }
 
@@ -145,7 +151,7 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .fetch_active_answer_submission_restriction(uuid)
             .await?
             .map(|restriction| {
-                AuthorizationGuard::<_, Read>::from(restriction)
+                restriction
                     .try_read(actor_ref.clone())
                     .map(|restriction| restriction.into_inner())
             })

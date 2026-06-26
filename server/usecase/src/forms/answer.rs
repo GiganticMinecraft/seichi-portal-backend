@@ -190,7 +190,13 @@ impl<
         let restriction = self
             .user_repository
             .fetch_active_answer_submission_restriction(user.id().into_inner())
-            .await?;
+            .await?
+            .map(|restriction| {
+                restriction
+                    .try_read(actor.clone())
+                    .map(|restriction| restriction.into_inner())
+            })
+            .transpose()?;
         let submitter = AnswerSubmitter::try_new(user.clone(), restriction, Utc::now())?;
 
         let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(

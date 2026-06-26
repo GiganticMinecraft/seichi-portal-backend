@@ -520,7 +520,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn fetch_active_answer_submission_restriction(
         &self,
         user_id: Uuid,
-    ) -> Result<Option<AnswerSubmissionRestriction>, Error> {
+    ) -> Result<Option<AuthorizationGuard<AnswerSubmissionRestriction, Read>>, Error> {
         Ok(self
             .answer_submission_restrictions
             .lock()
@@ -530,7 +530,8 @@ impl UserRepository for InMemoryUserRepository {
                 restriction.user_id().into_inner() == user_id
                     && restriction.is_active_at(chrono::Utc::now())
             })
-            .cloned())
+            .cloned()
+            .map(Into::into))
     }
 
     async fn restrict_answer_submission(
@@ -546,13 +547,12 @@ impl UserRepository for InMemoryUserRepository {
 
     async fn lift_answer_submission_restriction(
         &self,
-        user_id: Uuid,
-        _actor: &ActiveUser,
+        restriction: Allowed<AnswerSubmissionRestriction, Delete>,
     ) -> Result<(), Error> {
         self.answer_submission_restrictions
             .lock()
             .unwrap()
-            .retain(|restriction| restriction.user_id().into_inner() != user_id);
+            .retain(|stored| stored.user_id() != restriction.user_id());
         Ok(())
     }
 

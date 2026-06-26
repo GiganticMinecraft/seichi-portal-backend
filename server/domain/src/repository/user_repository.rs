@@ -24,15 +24,14 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn fetch_active_answer_submission_restriction(
         &self,
         user_id: Uuid,
-    ) -> Result<Option<AnswerSubmissionRestriction>, Error>;
+    ) -> Result<Option<AuthorizationGuard<AnswerSubmissionRestriction, Read>>, Error>;
     async fn restrict_answer_submission(
         &self,
         restriction: Allowed<AnswerSubmissionRestriction, Create>,
     ) -> Result<(), Error>;
     async fn lift_answer_submission_restriction(
         &self,
-        user_id: Uuid,
-        actor: &ActiveUser,
+        restriction: Allowed<AnswerSubmissionRestriction, Delete>,
     ) -> Result<(), Error>;
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<ActiveUser>, Error>;
     async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<ActiveUser, Read>>, Error>;
