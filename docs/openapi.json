@@ -4692,6 +4692,16 @@
           "errorCode": {
             "type": "string"
           },
+          "restriction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ErrorRestriction"
+              }
+            ]
+          },
           "status": {
             "type": "integer",
             "format": "int32",
@@ -4701,6 +4711,24 @@
             "type": "string"
           },
           "type": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorRestriction": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reason": {
             "type": "string"
           }
         }

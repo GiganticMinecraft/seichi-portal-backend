@@ -2,8 +2,8 @@ use chrono::Utc;
 use domain::{
     form::{
         answer::{
-            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
-            PostedAnswerContents,
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerSubmitter, AnswerTitle,
+            FormAnswerContent, PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
@@ -15,7 +15,7 @@ use domain::{
     },
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, Read},
-    user::models::{ActiveUser, Actor, AnswerSubmitter, TemporaryUser, User},
+    user::models::{ActiveUser, Actor, TemporaryUser, User},
 };
 use errors::{
     Error,

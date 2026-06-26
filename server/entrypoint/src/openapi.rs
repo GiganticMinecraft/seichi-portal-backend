@@ -10,6 +10,7 @@ use utoipa_axum::routes;
     info(title = "Seichi Portal API", version = "1.0.0"),
     components(schemas(
         presentation::schemas::error_response::ErrorResponse,
+        presentation::schemas::error_response::ErrorRestriction,
         presentation::schemas::user::UserInfoResponse,
         presentation::schemas::user::UserSchema,
         presentation::schemas::user::AnswerSubmissionRestrictionRequest,

@@ -537,7 +537,10 @@ impl UserRepository for InMemoryUserRepository {
         &self,
         restriction: Allowed<AnswerSubmissionRestriction, Create>,
     ) -> Result<(), Error> {
-        self.save_answer_submission_restriction(restriction.into_inner());
+        let restriction = restriction.into_inner();
+        let mut restrictions = self.answer_submission_restrictions.lock().unwrap();
+        restrictions.retain(|stored| stored.user_id() != restriction.user_id());
+        restrictions.push(restriction);
         Ok(())
     }
 

@@ -17,17 +17,16 @@ pub use crate::form::{
     settings::{DiscordWebhookUrl, FormSettings, Visibility},
 };
 
-use crate::user::models::{AnswerSubmitter, TemporaryUser};
 use crate::{
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
+        answer::{AnswerAuthor, AnswerEntry, AnswerSubmitter, AnswerTitle, PostedAnswerContents},
         is_administrator,
     },
     types::authorization_guard::{
         Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Create, Read, SelfGuarded,
         Update,
     },
-    user::models::{Actor, UserId},
+    user::models::{Actor, TemporaryUser, UserId},
 };
 
 pub type FormId = types::Id<ActiveForm>;
@@ -140,13 +139,13 @@ impl ActiveForm {
 
     fn try_accept_answer_from_submitter(
         &self,
-        submitter: &AnswerSubmitter,
+        submitter: AnswerSubmitter,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<AnswerEntry, DomainError> {
-        let user = submitter.user();
+        let user = submitter.into_user();
         let author = AnswerAuthor::AuthenticatedUser(*user.id());
-        let actor = Actor::from(user.clone());
+        let actor = Actor::from(user);
 
         if !self.answer_settings.can_accept_answer(&author, &actor) {
             return Err(DomainError::Forbidden);
@@ -183,7 +182,7 @@ impl Allowed<ActiveForm, Read> {
     ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
         let entry =
             self.value()
-                .try_accept_answer_from_submitter(&submitter, title, posted_answers)?;
+                .try_accept_answer_from_submitter(submitter, title, posted_answers)?;
         self.authorize_create(entry)
     }
 
@@ -318,11 +317,11 @@ mod tests {
     use super::*;
     use crate::{
         form::{
-            answer::{FormAnswerContent, FormAnswerContentId},
+            answer::{AnswerSubmitter, FormAnswerContent, FormAnswerContentId},
             question::{Question, QuestionId, QuestionType},
         },
         types::authorization_guard::{AuthorizationGuard, Read},
-        user::models::{ActiveUser, AnswerSubmitter, Role, TemporaryUser},
+        user::models::{ActiveUser, Role, TemporaryUser},
     };
     use chrono::Duration;
     use types::non_empty_vec::NonEmptyVec;

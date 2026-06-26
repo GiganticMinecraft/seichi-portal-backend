@@ -135,7 +135,7 @@ impl UserDatabase for ConnectionPool {
     ) -> Result<Option<AnswerSubmissionRestriction>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let row = sqlx::query(
+                let row = sqlx::query!(
                     r#"
                     SELECT id, user_id, reason, restricted_by, restricted_at, expires_at
                     FROM answer_submission_restrictions
@@ -145,30 +145,24 @@ impl UserDatabase for ConnectionPool {
                     ORDER BY restricted_at DESC
                     LIMIT 1
                     "#,
+                    user_id.to_string(),
                 )
-                .bind(user_id.to_string())
                 .fetch_optional(&mut **txn)
                 .await?;
 
                 row.map(|row| {
                     Ok::<_, InfraError>(unsafe {
                         AnswerSubmissionRestriction::from_raw_parts(
-                            AnswerSubmissionRestrictionId::from(Uuid::parse_str(
-                                &row.try_get::<String, _>("id")?,
+                            AnswerSubmissionRestrictionId::from(Uuid::parse_str(&row.id)?),
+                            Uuid::parse_str(&row.user_id)?.into(),
+                            AnswerSubmissionRestrictionReason::new(row.reason.try_into().map_err(
+                                |err: errors::validation::ValidationError| InfraError::Unexpected {
+                                    cause: err.to_string(),
+                                },
                             )?),
-                            Uuid::parse_str(&row.try_get::<String, _>("user_id")?)?.into(),
-                            AnswerSubmissionRestrictionReason::new(
-                                row.try_get::<String, _>("reason")?.try_into().map_err(
-                                    |err: errors::validation::ValidationError| {
-                                        InfraError::Unexpected {
-                                            cause: err.to_string(),
-                                        }
-                                    },
-                                )?,
-                            ),
-                            Uuid::parse_str(&row.try_get::<String, _>("restricted_by")?)?.into(),
-                            row.try_get("restricted_at")?,
-                            row.try_get("expires_at")?,
+                            Uuid::parse_str(&row.restricted_by)?.into(),
+                            row.restricted_at.and_utc(),
+                            row.expires_at.map(|expires_at| expires_at.and_utc()),
                         )
                     })
                 })
@@ -191,7 +185,7 @@ impl UserDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                sqlx::query(
+                sqlx::query!(
                     r#"
                     UPDATE answer_submission_restrictions
                     SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
@@ -199,25 +193,25 @@ impl UserDatabase for ConnectionPool {
                       AND lifted_at IS NULL
                       AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
                     "#,
+                    restricted_by,
+                    user_id,
                 )
-                .bind(&restricted_by)
-                .bind(&user_id)
                 .execute(&mut **txn)
                 .await?;
 
-                sqlx::query(
+                sqlx::query!(
                     r#"
                     INSERT INTO answer_submission_restrictions
                         (id, user_id, reason, restricted_by, restricted_at, expires_at)
                     VALUES (?, ?, ?, ?, ?, ?)
                     "#,
+                    restriction_id,
+                    user_id,
+                    reason,
+                    restricted_by,
+                    restricted_at,
+                    expires_at,
                 )
-                .bind(restriction_id)
-                .bind(user_id)
-                .bind(reason)
-                .bind(restricted_by)
-                .bind(restricted_at)
-                .bind(expires_at)
                 .execute(&mut **txn)
                 .await?;
 
@@ -234,7 +228,7 @@ impl UserDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                sqlx::query(
+                sqlx::query!(
                     r#"
                     UPDATE answer_submission_restrictions
                     SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
@@ -242,9 +236,9 @@ impl UserDatabase for ConnectionPool {
                       AND lifted_at IS NULL
                       AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
                     "#,
+                    lifted_by.to_string(),
+                    user_id.to_string(),
                 )
-                .bind(lifted_by.to_string())
-                .bind(user_id.to_string())
                 .execute(&mut **txn)
                 .await?;
 
