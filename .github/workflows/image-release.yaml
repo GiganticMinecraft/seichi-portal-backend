@@ -20,15 +20,14 @@ jobs:
     env:
       RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
-      - parallel:
-          - name: Checkout
-            uses: actions/checkout@master
-          - name: Setup rust toolchain
-            uses: dtolnay/rust-toolchain@stable
-            with:
-              toolchain: ${{ env.RUST_VERSION }}
-              target: ${{ matrix.cross-target }}
-              components: clippy, rustfmt
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Setup rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          target: ${{ matrix.cross-target }}
+          components: clippy, rustfmt
       - name: Build binary using cross
         uses: actions-rs/cargo@v1
         with:
