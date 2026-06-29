@@ -20,14 +20,15 @@ jobs:
     env:
       RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Setup rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          target: ${{ matrix.cross-target }}
-          components: clippy, rustfmt
+      - parallel:
+          - name: Checkout
+            uses: actions/checkout@master
+          - name: Setup rust toolchain
+            uses: dtolnay/rust-toolchain@stable
+            with:
+              toolchain: ${{ env.RUST_VERSION }}
+              target: ${{ matrix.cross-target }}
+              components: clippy, rustfmt
       - name: Build binary using cross
         uses: actions-rs/cargo@v1
         with:
@@ -47,26 +48,30 @@ jobs:
     env:
       image_name: seichi-portal-backend
     steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - uses: actions/download-artifact@v8
-        with:
-          name: x86_64-unknown-linux-gnu
-          path: docker/artifacts/x86_64-unknown-linux-gnu
-      - uses: actions/download-artifact@v8
-        with:
-          name: aarch64-unknown-linux-gnu
-          path: docker/artifacts/aarch64-unknown-linux-gnu
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - parallel:
+          - name: Checkout
+            uses: actions/checkout@master
+          - name: Set up QEMU
+            uses: docker/setup-qemu-action@v4
+          - name: Set up Docker Buildx
+            uses: docker/setup-buildx-action@v4
+          - name: Login to GitHub Container Registry
+            uses: docker/login-action@v4
+            with:
+              registry: ghcr.io
+              username: ${{ github.repository_owner }}
+              password: ${{ secrets.GITHUB_TOKEN }}
+
+      - parallel:
+          - uses: actions/download-artifact@v8
+            with:
+              name: x86_64-unknown-linux-gnu
+              path: docker/artifacts/x86_64-unknown-linux-gnu
+          - uses: actions/download-artifact@v8
+            with:
+              name: aarch64-unknown-linux-gnu
+              path: docker/artifacts/aarch64-unknown-linux-gnu
+
       - id: prepare_image_id
         name: Prepare image id's components
         run: |
