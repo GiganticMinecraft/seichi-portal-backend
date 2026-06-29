@@ -27,7 +27,7 @@ anyhow = "1.0.103"
 async-trait = "0.1.89"
 sqlx = { version = "0.9.0", features = ["runtime-tokio", "tls-rustls-ring", "mysql", "macros", "chrono", "uuid", "migrate"] }
 tracing = "0.1.44"
-mockall = "0.14.0"
+mockall = "0.15.0"
 envy = "0.4.2"
 test-case = "3.3.1"
 strum = "0.28.0"
