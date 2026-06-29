@@ -34,25 +34,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: echo "RUST_VERSION=$(sed -n 's/channel = "\(.*\)\"/\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
-      - uses: actions/cache@v6
-        with:
-          key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cache/sccache/
-            target/
-          restore-keys: |
-            rust-${{ env.RUST_VERSION }}-build-
-            rust-${{ env.RUST_VERSION }}-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: clippy, rustfmt
-      - uses: mozilla-actions/sccache-action@v0.0.10
-        with:
-          version: "v0.10.0"
+
+      - parallel:
+          - uses: actions/cache@v6
+            with:
+              key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
+              path: |
+                ~/.cargo/registry/index/
+                ~/.cargo/registry/cache/
+                ~/.cargo/git/db/
+                ~/.cache/sccache/
+                target/
+              restore-keys: |
+                rust-${{ env.RUST_VERSION }}-build-
+                rust-${{ env.RUST_VERSION }}-
+          - uses: dtolnay/rust-toolchain@stable
+            with:
+              toolchain: ${{ env.RUST_VERSION }}
+              components: clippy, rustfmt
+          - uses: mozilla-actions/sccache-action@v0.0.10
+            with:
+              version: "v0.10.0"
+
       - run: |
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
@@ -107,21 +110,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: echo "RUST_VERSION=$(sed -n 's/channel = \"\(.*\)\"/\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
-      - uses: actions/cache@v6
-        with:
-          key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cache/sccache/
-            target/
-          restore-keys: |
-            rust-${{ env.RUST_VERSION }}-build-
-            rust-${{ env.RUST_VERSION }}-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
+
+      - parallel:
+          - uses: actions/cache@v6
+            with:
+              key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
+              path: |
+                ~/.cargo/registry/index/
+                ~/.cargo/registry/cache/
+                ~/.cargo/git/db/
+                ~/.cache/sccache/
+                target/
+              restore-keys: |
+                rust-${{ env.RUST_VERSION }}-build-
+                rust-${{ env.RUST_VERSION }}-
+          - uses: dtolnay/rust-toolchain@stable
+            with:
+              toolchain: ${{ env.RUST_VERSION }}
+
       - name: Install sqlx CLI
         run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features rustls,mysql
       - name: Apply migrations
