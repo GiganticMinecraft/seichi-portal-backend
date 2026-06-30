@@ -11,7 +11,7 @@ use domain::search::models::{
     NumberOfRecordsPerAggregate, UserSearchHit,
 };
 use domain::{
-    account::models::{AccountUser, DiscordAccountLink, Role},
+    account::models::{AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId},
     form::{
         answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerSubmitterRestriction},
         comment::{Comment, CommentId},
@@ -212,6 +212,22 @@ pub trait UserDatabase: Send + Sync {
     async fn find_by_ids(&self, uuids: Vec<Uuid>) -> Result<Vec<AccountUser>, InfraError>;
     async fn upsert_user(&self, user: &AccountUser) -> Result<(), InfraError>;
     async fn patch_user_role(&self, uuid: Uuid, role: Role) -> Result<(), InfraError>;
+    async fn create_user_group(&self, group: &UserGroup) -> Result<(), InfraError>;
+    async fn update_user_group(&self, group: &UserGroup) -> Result<(), InfraError>;
+    async fn delete_user_group(&self, group_id: UserGroupId) -> Result<(), InfraError>;
+    async fn find_user_group(&self, group_id: UserGroupId)
+    -> Result<Option<UserGroup>, InfraError>;
+    async fn fetch_user_groups(&self) -> Result<Vec<UserGroup>, InfraError>;
+    async fn add_user_to_group(
+        &self,
+        group_id: UserGroupId,
+        user_id: Uuid,
+    ) -> Result<(), InfraError>;
+    async fn remove_user_from_group(
+        &self,
+        group_id: UserGroupId,
+        user_id: Uuid,
+    ) -> Result<(), InfraError>;
     async fn fetch_all_users(&self) -> Result<Vec<AccountUser>, InfraError>;
     async fn start_user_session(
         &self,

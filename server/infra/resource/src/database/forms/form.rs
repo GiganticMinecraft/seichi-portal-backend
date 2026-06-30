@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use domain::account::models::UserGroupId;
 use domain::form::{
     answer::AnswerEntry,
-    models::{DiscordWebhookUrl, FormLabelId},
+    models::{AllowedUserGroups, DiscordWebhookUrl, FormLabelId},
     question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
@@ -157,10 +158,48 @@ async fn active_form_record_from_row(
         acceptance_period_start_at: row.acceptance_period_start_at,
         acceptance_period_end_at: row.acceptance_period_end_at,
         default_answer_title: row.default_answer_title,
+        allowed_group_ids: fetch_form_group_restriction_ids(
+            txn,
+            "form_allowed_user_groups",
+            form_id,
+        )
+        .await?,
+        answer_submitter_group_ids: fetch_form_group_restriction_ids(
+            txn,
+            "form_answer_submitter_groups",
+            form_id,
+        )
+        .await?,
+        answer_reader_group_ids: fetch_form_group_restriction_ids(
+            txn,
+            "form_answer_reader_groups",
+            form_id,
+        )
+        .await?,
         questions: get_questions_txn_with_tables(txn, form_id, "form_questions", "form_choices")
             .await?,
         label_ids,
     })
+}
+
+async fn fetch_form_group_restriction_ids(
+    txn: &mut DatabaseTransaction,
+    table_name: &str,
+    form_id: FormId,
+) -> Result<Vec<UserGroupId>, InfraError> {
+    let sql = format!("SELECT group_id FROM {table_name} WHERE form_id = ? ORDER BY id ASC");
+    let rows = sqlx::query(AssertSqlSafe(&*sql))
+        .bind(form_id.into_inner().to_string())
+        .fetch_all(&mut **txn)
+        .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>(UserGroupId::from(Uuid::parse_str(
+                &row.try_get::<String, _>("group_id")?,
+            )?))
+        })
+        .collect()
 }
 
 async fn archived_form_record_from_row(
@@ -193,6 +232,24 @@ async fn archived_form_record_from_row(
             acceptance_period_start_at: row.form.acceptance_period_start_at,
             acceptance_period_end_at: row.form.acceptance_period_end_at,
             default_answer_title: row.form.default_answer_title,
+            allowed_group_ids: fetch_form_group_restriction_ids(
+                txn,
+                "archived_form_allowed_user_groups",
+                form_id,
+            )
+            .await?,
+            answer_submitter_group_ids: fetch_form_group_restriction_ids(
+                txn,
+                "archived_form_answer_submitter_groups",
+                form_id,
+            )
+            .await?,
+            answer_reader_group_ids: fetch_form_group_restriction_ids(
+                txn,
+                "archived_form_answer_reader_groups",
+                form_id,
+            )
+            .await?,
             questions: get_questions_txn_with_tables(
                 txn,
                 form_id,
@@ -526,6 +583,8 @@ async fn copy_active_form_to_archive(
     .execute(&mut **txn)
     .await?;
 
+    copy_form_group_restrictions_to_archive(txn, &form_id).await?;
+
     sqlx::query(
         r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM answers WHERE form_id = ?",
@@ -641,6 +700,8 @@ async fn restore_archived_form_to_active(
     .execute(&mut **txn)
     .await?;
 
+    restore_form_group_restrictions_from_archive(txn, &form_id).await?;
+
     sqlx::query(
         r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM archived_answers WHERE form_id = ?",
@@ -705,6 +766,78 @@ async fn restore_archived_form_to_active(
     Ok(())
 }
 
+async fn copy_form_group_restrictions_to_archive(
+    txn: &mut DatabaseTransaction,
+    form_id: &str,
+) -> Result<(), InfraError> {
+    copy_group_restriction_table(
+        txn,
+        "archived_form_allowed_user_groups",
+        "form_allowed_user_groups",
+        form_id,
+    )
+    .await?;
+    copy_group_restriction_table(
+        txn,
+        "archived_form_answer_submitter_groups",
+        "form_answer_submitter_groups",
+        form_id,
+    )
+    .await?;
+    copy_group_restriction_table(
+        txn,
+        "archived_form_answer_reader_groups",
+        "form_answer_reader_groups",
+        form_id,
+    )
+    .await
+}
+
+async fn restore_form_group_restrictions_from_archive(
+    txn: &mut DatabaseTransaction,
+    form_id: &str,
+) -> Result<(), InfraError> {
+    copy_group_restriction_table(
+        txn,
+        "form_allowed_user_groups",
+        "archived_form_allowed_user_groups",
+        form_id,
+    )
+    .await?;
+    copy_group_restriction_table(
+        txn,
+        "form_answer_submitter_groups",
+        "archived_form_answer_submitter_groups",
+        form_id,
+    )
+    .await?;
+    copy_group_restriction_table(
+        txn,
+        "form_answer_reader_groups",
+        "archived_form_answer_reader_groups",
+        form_id,
+    )
+    .await
+}
+
+async fn copy_group_restriction_table(
+    txn: &mut DatabaseTransaction,
+    destination_table: &str,
+    source_table: &str,
+    form_id: &str,
+) -> Result<(), InfraError> {
+    let sql = format!(
+        "INSERT INTO {destination_table} (form_id, group_id)
+        SELECT form_id, group_id FROM {source_table} WHERE form_id = ?"
+    );
+    query(AssertSqlSafe(&*sql))
+        .bind(form_id)
+        .execute(&mut **txn)
+        .await?;
+
+    Ok(())
+}
+
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
@@ -717,6 +850,7 @@ impl FormDatabase for ConnectionPool {
                 insert_form_root(txn, &form, &user).await?;
                 sync_questions(txn, &form).await?;
                 sync_label_ids(txn, &form).await?;
+                sync_form_group_restrictions(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -921,6 +1055,7 @@ impl FormDatabase for ConnectionPool {
                 update_form_root(txn, &form, &updated_by).await?;
                 sync_questions(txn, &form).await?;
                 sync_label_ids(txn, &form).await?;
+                sync_form_group_restrictions(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -988,6 +1123,67 @@ async fn sync_label_ids(
     label_ids
         .into_iter()
         .flat_map(|label_id| [form_id.clone(), label_id])
+        .fold(query(AssertSqlSafe(&*sql)), |query, value| {
+            query.bind(value)
+        })
+        .execute(&mut **txn)
+        .await?;
+
+    Ok(())
+}
+
+async fn sync_form_group_restrictions(
+    txn: &mut DatabaseTransaction,
+    form: &ActiveForm,
+) -> Result<(), InfraError> {
+    sync_group_restriction_ids(
+        txn,
+        "form_allowed_user_groups",
+        *form.id(),
+        form.settings().allowed_user_groups(),
+    )
+    .await?;
+    sync_group_restriction_ids(
+        txn,
+        "form_answer_submitter_groups",
+        *form.id(),
+        form.answer_settings().submitter_groups(),
+    )
+    .await?;
+    sync_group_restriction_ids(
+        txn,
+        "form_answer_reader_groups",
+        *form.id(),
+        form.answer_settings().reader_groups(),
+    )
+    .await
+}
+
+async fn sync_group_restriction_ids(
+    txn: &mut DatabaseTransaction,
+    table_name: &str,
+    form_id: FormId,
+    group_ids: &AllowedUserGroups,
+) -> Result<(), InfraError> {
+    let form_id = form_id.into_inner().to_string();
+    let delete_sql = format!("DELETE FROM {table_name} WHERE form_id = ?");
+    query(AssertSqlSafe(&*delete_sql))
+        .bind(form_id.clone())
+        .execute(&mut **txn)
+        .await?;
+
+    if group_ids.as_slice().is_empty() {
+        return Ok(());
+    }
+
+    let sql = format!(
+        "INSERT INTO {table_name} (form_id, group_id) VALUES {}",
+        std::iter::repeat_n("(?, ?)", group_ids.as_slice().len()).join(", ")
+    );
+    group_ids
+        .as_slice()
+        .iter()
+        .flat_map(|group_id| [form_id.clone(), group_id.to_string()])
         .fold(query(AssertSqlSafe(&*sql)), |query, value| {
             query.bind(value)
         })

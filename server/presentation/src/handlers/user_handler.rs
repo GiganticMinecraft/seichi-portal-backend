@@ -20,8 +20,8 @@ use uuid::Uuid;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::user::{
-    AnswerSubmitterRestrictionRequest, AnswerSubmitterRestrictionResponse, UserInfoResponse,
-    UserSchema, UserUpdateSchema,
+    AnswerSubmitterRestrictionRequest, AnswerSubmitterRestrictionResponse, UserGroupRequest,
+    UserGroupSchema, UserInfoResponse, UserSchema, UserUpdateSchema,
 };
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 use axum::extract::rejection::{JsonRejection, PathRejection};
@@ -62,6 +62,65 @@ impl IntoResponse for PatchUserRoleResponse {
 pub enum UserListResponse {
     #[response(status = 200, description = "The request has succeeded.")]
     Ok(Vec<UserSchema>),
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum UserGroupListResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<UserGroupSchema>),
+}
+
+impl IntoResponse for UserGroupListResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum UserGroupResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(UserGroupSchema),
+    #[response(status = 201, description = "The resource has been created.")]
+    Created(UserGroupSchema),
+}
+
+impl IntoResponse for UserGroupResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+            Self::Created(body) => (StatusCode::CREATED, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum UserGroupMembershipResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(UserSchema),
+}
+
+impl IntoResponse for UserGroupMembershipResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum DeleteUserGroupResponse {
+    #[response(status = 204, description = "The resource has been deleted.")]
+    NoContent,
+}
+
+impl IntoResponse for DeleteUserGroupResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::NoContent => StatusCode::NO_CONTENT.into_response(),
+        }
+    }
 }
 
 #[derive(utoipa::IntoResponses)]
@@ -136,6 +195,13 @@ pub async fn get_my_user_info(
         id: user_profile.user.id().to_string(),
         name: user_profile.user.name().to_owned(),
         role: user_profile.user.role().to_string(),
+        groups: user_profile
+            .user
+            .groups()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect(),
         discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
         discord_username: discord_user_id_with_name.map(|(_, name)| name),
     }))
@@ -184,6 +250,13 @@ pub async fn get_user_info(
         id: user_profile.user.id().to_string(),
         name: user_profile.user.name().to_owned(),
         role: user_profile.user.role().to_string(),
+        groups: user_profile
+            .user
+            .groups()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect(),
         discord_user_id: discord_user_id_with_name.to_owned().map(|(id, _)| id),
         discord_username: discord_user_id_with_name.map(|(_, name)| name),
     }))
@@ -260,6 +333,222 @@ pub async fn user_list(
     Ok(UserListResponse::Ok(
         users.into_iter().map(Into::into).collect(),
     ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/user-groups",
+    summary = "ユーザーグループの作成",
+    request_body = UserGroupRequest,
+    responses(
+        UserGroupResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "User Groups"
+)]
+pub async fn create_user_group(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    json: Result<Json<UserGroupRequest>, JsonRejection>,
+) -> Result<UserGroupResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+    let Json(request) = json.map_err_to_error().map_err(handle_error)?;
+
+    let group = user_use_case
+        .create_user_group(&actor, request.name)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UserGroupResponse::Created(group.into()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/user-groups",
+    summary = "ユーザーグループの一覧取得",
+    responses(
+        UserGroupListResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "User Groups"
+)]
+pub async fn user_group_list(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+) -> Result<UserGroupListResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+
+    let groups = user_use_case
+        .fetch_user_groups(&actor)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UserGroupListResponse::Ok(
+        groups.into_iter().map(Into::into).collect(),
+    ))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/user-groups/{group_id}",
+    summary = "ユーザーグループの更新",
+    params(
+        ("group_id" = String, Path, description = "User group UUID"),
+    ),
+    request_body = UserGroupRequest,
+    responses(
+        UserGroupResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        UnprocessableEntity,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "User Groups"
+)]
+pub async fn update_user_group(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+    json: Result<Json<UserGroupRequest>, JsonRejection>,
+) -> Result<UserGroupResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+    let Path(group_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Json(request) = json.map_err_to_error().map_err(handle_error)?;
+
+    let group = user_use_case
+        .update_user_group(&actor, group_id.into(), request.name)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UserGroupResponse::Ok(group.into()))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/user-groups/{group_id}",
+    summary = "ユーザーグループの削除",
+    params(
+        ("group_id" = String, Path, description = "User group UUID"),
+    ),
+    responses(
+        DeleteUserGroupResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "User Groups"
+)]
+pub async fn delete_user_group(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+) -> Result<DeleteUserGroupResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+    let Path(group_id) = path.map_err_to_error().map_err(handle_error)?;
+
+    user_use_case
+        .delete_user_group(&actor, group_id.into())
+        .await
+        .map_err(handle_error)?;
+
+    Ok(DeleteUserGroupResponse::NoContent)
+}
+
+#[utoipa::path(
+    put,
+    path = "/user-groups/{group_id}/users/{user_id}",
+    summary = "ユーザーをグループに追加",
+    params(
+        ("group_id" = String, Path, description = "User group UUID"),
+        ("user_id" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        UserGroupMembershipResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "User Groups"
+)]
+pub async fn add_user_to_group(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(Uuid, Uuid)>, PathRejection>,
+) -> Result<UserGroupMembershipResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+    let Path((group_id, user_id)) = path.map_err_to_error().map_err(handle_error)?;
+
+    let user = user_use_case
+        .add_user_to_group(&actor, group_id.into(), user_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UserGroupMembershipResponse::Ok(user.into()))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/user-groups/{group_id}/users/{user_id}",
+    summary = "ユーザーをグループから削除",
+    params(
+        ("group_id" = String, Path, description = "User group UUID"),
+        ("user_id" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        UserGroupMembershipResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "User Groups"
+)]
+pub async fn remove_user_from_group(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(Uuid, Uuid)>, PathRejection>,
+) -> Result<UserGroupMembershipResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+    let Path((group_id, user_id)) = path.map_err_to_error().map_err(handle_error)?;
+
+    let user = user_use_case
+        .remove_user_from_group(&actor, group_id.into(), user_id)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UserGroupMembershipResponse::Ok(user.into()))
 }
 
 #[utoipa::path(

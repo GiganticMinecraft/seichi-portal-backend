@@ -1,3 +1,4 @@
+use domain::account::models::UserGroupId;
 use domain::form::question::{ChoiceId, QuestionId, QuestionType};
 use domain::form::{
     answer::{AnswerLabelId, AnswerTitle},
@@ -38,6 +39,12 @@ pub struct AnswerSettingsSchema {
     #[serde(default)]
     #[schema(value_type = Option<AnswerAcceptancePeriodInput>)]
     pub acceptance_period: Option<AnswerAcceptancePeriod>,
+    #[serde(default)]
+    #[schema(value_type = Option<Vec<String>>)]
+    pub submitter_group_ids: Option<Vec<UserGroupId>>,
+    #[serde(default)]
+    #[schema(value_type = Option<Vec<String>>)]
+    pub reader_group_ids: Option<Vec<UserGroupId>>,
 }
 
 #[derive(utoipa::ToSchema)]
@@ -54,6 +61,9 @@ pub struct FormSettingsSchema {
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub visibility: Option<Visibility>,
+    #[serde(default)]
+    #[schema(value_type = Option<Vec<String>>)]
+    pub allowed_group_ids: Option<Vec<UserGroupId>>,
     #[serde(default)]
     pub allow_temporary_answers: Option<bool>,
     #[serde(default)]

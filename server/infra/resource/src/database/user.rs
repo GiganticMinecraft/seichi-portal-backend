@@ -3,7 +3,9 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use chrono::Utc;
 use domain::{
-    account::models::{AccountUser, DiscordAccountLink, Role},
+    account::models::{
+        AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
+    },
     form::answer::{
         AnswerSubmitterRestriction, AnswerSubmitterRestrictionId, AnswerSubmitterRestrictionReason,
     },
@@ -13,6 +15,7 @@ use itertools::Itertools;
 use redis::Commands;
 use sha256::digest;
 use sqlx::{AssertSqlSafe, Row, query};
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 use crate::{
@@ -23,6 +26,38 @@ use crate::{
     },
     records::DiscordUserRecord,
 };
+
+async fn fetch_groups_by_user_id(
+    txn: &mut crate::database::connection::DatabaseTransaction,
+    user_id: Uuid,
+) -> Result<Vec<UserGroup>, InfraError> {
+    let rows = sqlx::query!(
+        r#"SELECT g.id, g.name
+        FROM user_groups g
+        INNER JOIN user_group_memberships m ON g.id = m.group_id
+        WHERE m.user_id = ?
+        ORDER BY g.name ASC, g.id ASC"#,
+        user_id.to_string(),
+    )
+    .fetch_all(&mut **txn)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| user_group_from_parts(row.id, row.name))
+        .collect()
+}
+
+fn user_group_from_parts(id: String, name: String) -> Result<UserGroup, InfraError> {
+    let name = NonEmptyString::try_new(name).map_err(|error| InfraError::Unexpected {
+        cause: error.to_string(),
+    })?;
+
+    Ok(
+        unsafe {
+            UserGroup::from_raw_parts(Uuid::parse_str(&id)?.into(), UserGroupName::new(name))
+        },
+    )
+}
 
 #[async_trait]
 impl UserDatabase for ConnectionPool {
@@ -37,15 +72,18 @@ impl UserDatabase for ConnectionPool {
                     .fetch_optional(&mut **txn)
                     .await?;
 
-                    let user = query
-                        .map(|row| {
-                            Ok::<AccountUser, InfraError>(AccountUser::new(
+                    let user = match query {
+                        Some(row) => {
+                            let groups = fetch_groups_by_user_id(txn, uuid).await?;
+                            Some(AccountUser::with_groups(
                                 row.name,
                                 uuid.into(),
                                 Role::from_str(&row.role)?,
+                                groups,
                             ))
-                        })
-                        .transpose()?;
+                        }
+                        None => None,
+                    };
 
                     Ok::<_, InfraError>(user)
                 })
@@ -73,18 +111,22 @@ impl UserDatabase for ConnectionPool {
                     .fetch_all(&mut **txn)
                     .await?;
 
-                rows.into_iter()
-                    .map(|row| {
-                        let id: String = row.try_get("id")?;
-                        let name: String = row.try_get("name")?;
-                        let role: String = row.try_get("role")?;
-                        Ok::<AccountUser, InfraError>(AccountUser::new(
-                            name,
-                            Uuid::parse_str(&id)?.into(),
-                            Role::from_str(&role)?,
-                        ))
-                    })
-                    .collect::<Result<Vec<AccountUser>, _>>()
+                let mut users = Vec::new();
+                for row in rows {
+                    let id: String = row.try_get("id")?;
+                    let name: String = row.try_get("name")?;
+                    let role: String = row.try_get("role")?;
+                    let user_id = Uuid::parse_str(&id)?;
+                    let groups = fetch_groups_by_user_id(txn, user_id).await?;
+                    users.push(AccountUser::with_groups(
+                        name,
+                        user_id.into(),
+                        Role::from_str(&role)?,
+                        groups,
+                    ));
+                }
+
+                Ok::<_, InfraError>(users)
             })
         })
         .await
@@ -131,6 +173,142 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
+    async fn create_user_group(&self, group: &UserGroup) -> Result<(), InfraError> {
+        let group_id = group.id().to_string();
+        let group_name = group.name().to_string();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!(
+                    "INSERT INTO user_groups (id, name) VALUES (?, ?)",
+                    group_id,
+                    group_name,
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
+    async fn update_user_group(&self, group: &UserGroup) -> Result<(), InfraError> {
+        let group_id = group.id().to_string();
+        let group_name = group.name().to_string();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!(
+                    "UPDATE user_groups SET name = ? WHERE id = ?",
+                    group_name,
+                    group_id,
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
+    async fn delete_user_group(&self, group_id: UserGroupId) -> Result<(), InfraError> {
+        let group_id = group_id.to_string();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!("DELETE FROM user_groups WHERE id = ?", group_id)
+                    .execute(&mut **txn)
+                    .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
+    async fn find_user_group(
+        &self,
+        group_id: UserGroupId,
+    ) -> Result<Option<UserGroup>, InfraError> {
+        let group_id = group_id.to_string();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!("SELECT id, name FROM user_groups WHERE id = ?", group_id)
+                    .fetch_optional(&mut **txn)
+                    .await?
+                    .map(|row| user_group_from_parts(row.id, row.name))
+                    .transpose()
+            })
+        })
+        .await
+    }
+
+    async fn fetch_user_groups(&self) -> Result<Vec<UserGroup>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!("SELECT id, name FROM user_groups ORDER BY name ASC, id ASC")
+                    .fetch_all(&mut **txn)
+                    .await?
+                    .into_iter()
+                    .map(|row| user_group_from_parts(row.id, row.name))
+                    .collect()
+            })
+        })
+        .await
+    }
+
+    async fn add_user_to_group(
+        &self,
+        group_id: UserGroupId,
+        user_id: Uuid,
+    ) -> Result<(), InfraError> {
+        let group_id = group_id.to_string();
+        let user_id = user_id.to_string();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!(
+                    r#"INSERT IGNORE INTO user_group_memberships (group_id, user_id)
+                    VALUES (?, ?)"#,
+                    group_id,
+                    user_id,
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
+    async fn remove_user_from_group(
+        &self,
+        group_id: UserGroupId,
+        user_id: Uuid,
+    ) -> Result<(), InfraError> {
+        let group_id = group_id.to_string();
+        let user_id = user_id.to_string();
+
+        self.read_write_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query!(
+                    "DELETE FROM user_group_memberships WHERE group_id = ? AND user_id = ?",
+                    group_id,
+                    user_id,
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                Ok::<(), InfraError>(())
+            })
+        })
+        .await
+    }
+
     async fn fetch_all_users(&self) -> Result<Vec<AccountUser>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -138,16 +316,17 @@ impl UserDatabase for ConnectionPool {
                     .fetch_all(&mut **txn)
                     .await?;
 
-                let users = query
-                    .into_iter()
-                    .map(|row| {
-                        Ok::<AccountUser, InfraError>(AccountUser::new(
-                            row.name,
-                            Uuid::parse_str(&row.id)?.into(),
-                            Role::from_str(&row.role)?,
-                        ))
-                    })
-                    .collect::<Result<Vec<AccountUser>, InfraError>>()?;
+                let mut users = Vec::new();
+                for row in query {
+                    let user_id = Uuid::parse_str(&row.id)?;
+                    let groups = fetch_groups_by_user_id(txn, user_id).await?;
+                    users.push(AccountUser::with_groups(
+                        row.name,
+                        user_id.into(),
+                        Role::from_str(&row.role)?,
+                        groups,
+                    ));
+                }
 
                 Ok::<_, InfraError>(users)
             })
@@ -179,9 +358,12 @@ impl UserDatabase for ConnectionPool {
         let mut redis_connection = redis_connection().await;
 
         let result: Option<String> = redis_connection.get(&session_id)?;
-        let user = result.and_then(|s| serde_json::from_str::<AccountUser>(&s).ok());
+        let Some(cached_user) = result.and_then(|s| serde_json::from_str::<AccountUser>(&s).ok())
+        else {
+            return Ok(None);
+        };
 
-        Ok(user)
+        self.find_by(cached_user.id().into_inner()).await
     }
 
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError> {

@@ -2,10 +2,14 @@
 use common::test_utils::arbitrary_uuid_v4;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
+use domain_derive::UnsafeFromRawParts;
+#[cfg(test)]
+use proptest::strategy::Strategy;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
+use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
 use crate::{
@@ -37,11 +41,27 @@ pub struct AccountUser {
     id: UserId,
     #[serde(default)]
     role: Role,
+    #[serde(default)]
+    groups: Vec<UserGroup>,
 }
 
 impl AccountUser {
     pub fn new(name: String, id: UserId, role: Role) -> Self {
-        Self { name, id, role }
+        Self {
+            name,
+            id,
+            role,
+            groups: Vec::new(),
+        }
+    }
+
+    pub fn with_groups(name: String, id: UserId, role: Role, groups: Vec<UserGroup>) -> Self {
+        Self {
+            name,
+            id,
+            role,
+            groups,
+        }
     }
 }
 
@@ -83,6 +103,74 @@ pub enum Role {
     #[serde(rename = "STANDARD_USER")]
     #[strum(serialize = "STANDARD_USER")]
     StandardUser,
+}
+
+pub type UserGroupId = types::Id<UserGroup>;
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Clone, DerivingVia, Debug, PartialEq)]
+#[deriving(
+    From,
+    Into,
+    IntoInner(via: NonEmptyString),
+    Serialize(via: NonEmptyString),
+    Deserialize(via: NonEmptyString)
+)]
+pub struct UserGroupName(#[underlying] NonEmptyString);
+
+impl UserGroupName {
+    pub fn new(name: NonEmptyString) -> Self {
+        Self(name)
+    }
+}
+
+impl std::fmt::Display for UserGroupName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.as_str())
+    }
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+pub struct UserGroup {
+    #[cfg_attr(
+        test,
+        proptest(strategy = "arbitrary_uuid_v4().prop_map(UserGroupId::from)")
+    )]
+    #[serde(default)]
+    id: UserGroupId,
+    name: UserGroupName,
+}
+
+impl UserGroup {
+    pub fn new(name: UserGroupName) -> Self {
+        Self {
+            id: UserGroupId::new(),
+            name,
+        }
+    }
+}
+
+impl AuthorizationRole for UserGroup {
+    type Role = SelfGuarded;
+}
+
+impl AuthorizationGuardDefinitions for UserGroup {
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::AccountUser(actor) if actor.role == Role::Administrator)
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::AccountUser(actor) if actor.role == Role::Administrator)
+    }
+
+    fn can_update(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::AccountUser(actor) if actor.role == Role::Administrator)
+    }
+
+    fn can_delete(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::AccountUser(actor) if actor.role == Role::Administrator)
+    }
 }
 
 #[derive(Deserialize)]

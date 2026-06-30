@@ -153,6 +153,12 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
             "User not found.",
             "USER_NOT_FOUND",
         ),
+        UseCaseError::UserGroupNotFound => problem_response(
+            StatusCode::NOT_FOUND,
+            "Not Found",
+            "User group not found.",
+            "USER_GROUP_NOT_FOUND",
+        ),
         UseCaseError::DiscordNotLinked => problem_response(
             StatusCode::FORBIDDEN,
             "Forbidden",

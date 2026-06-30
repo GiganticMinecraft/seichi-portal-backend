@@ -4,7 +4,7 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    account::models::{AccountUser, DiscordAccountLink, DiscordUser},
+    account::models::{AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 
@@ -21,6 +21,24 @@ pub trait UserRepository: Send + Sync + 'static {
     ) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error>;
     async fn upsert_user(&self, user: Allowed<AccountUser, Create>) -> Result<(), Error>;
     async fn patch_user_role(&self, user: Allowed<AccountUser, Update>) -> Result<(), Error>;
+    async fn create_user_group(&self, group: Allowed<UserGroup, Create>) -> Result<(), Error>;
+    async fn update_user_group(&self, group: Allowed<UserGroup, Update>) -> Result<(), Error>;
+    async fn delete_user_group(&self, group: Allowed<UserGroup, Delete>) -> Result<(), Error>;
+    async fn find_user_group(
+        &self,
+        group_id: UserGroupId,
+    ) -> Result<Option<AuthorizationGuard<UserGroup, Read>>, Error>;
+    async fn fetch_user_groups(&self) -> Result<Vec<AuthorizationGuard<UserGroup, Read>>, Error>;
+    async fn add_user_to_group(
+        &self,
+        group: Allowed<UserGroup, Update>,
+        user: Allowed<AccountUser, Update>,
+    ) -> Result<(), Error>;
+    async fn remove_user_from_group(
+        &self,
+        group: Allowed<UserGroup, Update>,
+        user: Allowed<AccountUser, Update>,
+    ) -> Result<(), Error>;
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<AccountUser>, Error>;
     async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error>;
     async fn start_user_session(

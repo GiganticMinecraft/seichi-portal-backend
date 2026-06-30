@@ -3,8 +3,8 @@ use domain::{
     account::models::AccountUser,
     auth::Actor,
     form::models::{
-        ActiveForm, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, ArchivedForm,
-        DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
+        ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility,
+        ArchivedForm, DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
         FormLabelAssignment, FormLabelId, FormSettings, FormTitle, Question, QuestionSet,
         Visibility,
     },
@@ -23,7 +23,7 @@ use domain::{
 use errors::{
     Error,
     domain::DomainError,
-    usecase::UseCaseError::{FormNotFound, LabelNotFound, UserNotFound},
+    usecase::UseCaseError::{FormNotFound, LabelNotFound, UserGroupNotFound, UserNotFound},
 };
 use std::collections::{BTreeSet, HashMap};
 use types::non_empty_vec::NonEmptyVec;
@@ -56,6 +56,22 @@ impl<
     R6: UserRepository,
 > FormUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
+    async fn validate_allowed_user_groups(
+        &self,
+        actor: &Actor,
+        groups: &AllowedUserGroups,
+    ) -> Result<(), Error> {
+        for group_id in groups.as_slice() {
+            self.user_repository
+                .find_user_group(*group_id)
+                .await?
+                .ok_or(Error::from(UserGroupNotFound))?
+                .try_read(actor.clone())?;
+        }
+
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn create_form(
         &self,
@@ -64,13 +80,28 @@ impl<
         questions: NonEmptyVec<Question>,
         discord_webhook_url: Option<DiscordWebhookUrl>,
         visibility: Option<Visibility>,
+        allowed_user_groups: Option<AllowedUserGroups>,
         allow_temporary_answers: Option<bool>,
         answer_visibility: Option<AnswerVisibility>,
+        answer_submitter_groups: Option<AllowedUserGroups>,
+        answer_reader_groups: Option<AllowedUserGroups>,
         acceptance_period: Option<AnswerAcceptancePeriod>,
         default_answer_title: Option<DefaultAnswerTitle>,
         user: &AccountUser,
     ) -> Result<ActiveForm, Error> {
         let user_as_user = Actor::from(user.clone());
+        if let Some(groups) = &allowed_user_groups {
+            self.validate_allowed_user_groups(&user_as_user, groups)
+                .await?;
+        }
+        if let Some(groups) = &answer_submitter_groups {
+            self.validate_allowed_user_groups(&user_as_user, groups)
+                .await?;
+        }
+        if let Some(groups) = &answer_reader_groups {
+            self.validate_allowed_user_groups(&user_as_user, groups)
+                .await?;
+        }
 
         let form_settings = FormSettings::new();
         let form_settings = match discord_webhook_url {
@@ -83,6 +114,12 @@ impl<
             Some(visibility) => form_settings.change_visibility(visibility),
             None => form_settings,
         };
+        let form_settings = match allowed_user_groups {
+            Some(allowed_user_groups) => {
+                form_settings.change_allowed_user_groups(allowed_user_groups)
+            }
+            None => form_settings,
+        };
 
         let answer_settings = AnswerSettings::default();
         let answer_settings = match allow_temporary_answers {
@@ -91,6 +128,14 @@ impl<
         };
         let answer_settings = match answer_visibility {
             Some(visibility) => answer_settings.change_visibility(visibility),
+            None => answer_settings,
+        };
+        let answer_settings = match answer_submitter_groups {
+            Some(groups) => answer_settings.change_submitter_groups(groups),
+            None => answer_settings,
+        };
+        let answer_settings = match answer_reader_groups {
+            Some(groups) => answer_settings.change_reader_groups(groups),
             None => answer_settings,
         };
         let answer_settings = match acceptance_period {
@@ -342,12 +387,28 @@ impl<
         discord_webhook_url: Option<DiscordWebhookUrl>,
         default_answer_title: Option<DefaultAnswerTitle>,
         visibility: Option<Visibility>,
+        allowed_user_groups: Option<AllowedUserGroups>,
         allow_temporary_answers: Option<bool>,
         answer_visibility: Option<AnswerVisibility>,
+        answer_submitter_groups: Option<AllowedUserGroups>,
+        answer_reader_groups: Option<AllowedUserGroups>,
         questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
         let actor_user = Actor::from(actor.clone());
+        if let Some(groups) = &allowed_user_groups {
+            self.validate_allowed_user_groups(&actor_user, groups)
+                .await?;
+        }
+        if let Some(groups) = &answer_submitter_groups {
+            self.validate_allowed_user_groups(&actor_user, groups)
+                .await?;
+        }
+        if let Some(groups) = &answer_reader_groups {
+            self.validate_allowed_user_groups(&actor_user, groups)
+                .await?;
+        }
+
         let current_form = self
             .active_form_repository
             .get(form_id)
@@ -409,6 +470,10 @@ impl<
                 None => current_settings,
                 Some(visibility) => current_settings.change_visibility(visibility),
             };
+            let updated_settings = match allowed_user_groups {
+                None => updated_settings,
+                Some(groups) => updated_settings.change_allowed_user_groups(groups),
+            };
             let updated_settings = match discord_webhook_url {
                 None => updated_settings,
                 Some(discord_webhook_url) => {
@@ -420,6 +485,14 @@ impl<
             let updated_answer_settings = match answer_visibility {
                 None => updated_answer_settings,
                 Some(v) => updated_answer_settings.change_visibility(v),
+            };
+            let updated_answer_settings = match answer_submitter_groups {
+                None => updated_answer_settings,
+                Some(groups) => updated_answer_settings.change_submitter_groups(groups),
+            };
+            let updated_answer_settings = match answer_reader_groups {
+                None => updated_answer_settings,
+                Some(groups) => updated_answer_settings.change_reader_groups(groups),
             };
             let updated_answer_settings = match default_answer_title {
                 None => updated_answer_settings,
@@ -749,6 +822,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
                 &user,
             )
             .await
@@ -769,6 +845,9 @@ mod tests {
             .update_form(
                 &user,
                 form.id().to_owned(),
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,

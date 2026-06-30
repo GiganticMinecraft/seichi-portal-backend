@@ -13,6 +13,8 @@ use utoipa_axum::routes;
         presentation::schemas::error_response::ErrorRestriction,
         presentation::schemas::user::UserInfoResponse,
         presentation::schemas::user::UserSchema,
+        presentation::schemas::user::UserGroupRequest,
+        presentation::schemas::user::UserGroupSchema,
         presentation::schemas::user::AnswerSubmitterRestrictionRequest,
         presentation::schemas::user::AnswerSubmitterRestrictionResponse,
         presentation::schemas::form::form_response_schemas::AnswerComment,
@@ -59,6 +61,7 @@ use utoipa_axum::routes;
         (name = "Labels"),
         (name = "Messages"),
         (name = "Users"),
+        (name = "User Groups"),
         (name = "Search"),
         (name = "Notifications"),
         (name = "Session"),
@@ -156,6 +159,18 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         ))
         .routes(routes!(user_handler::get_my_user_info))
         .routes(routes!(user_handler::user_list))
+        .routes(routes!(
+            user_handler::create_user_group,
+            user_handler::user_group_list
+        ))
+        .routes(routes!(
+            user_handler::update_user_group,
+            user_handler::delete_user_group
+        ))
+        .routes(routes!(
+            user_handler::add_user_to_group,
+            user_handler::remove_user_from_group
+        ))
         .routes(routes!(
             user_handler::get_answer_submitter_restriction,
             user_handler::put_answer_submitter_restriction,

@@ -281,3 +281,71 @@ CREATE TABLE IF NOT EXISTS message_threads (
     FOREIGN KEY (answer_id) REFERENCES answers(id) ON DELETE CASCADE,
     FOREIGN KEY (answer_author_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS user_groups(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS user_group_memberships(
+    group_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    PRIMARY KEY (group_id, user_id),
+    INDEX idx_user_group_memberships_user_id(user_id),
+    FOREIGN KEY fk_user_group_memberships_group_id(group_id) REFERENCES user_groups(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_user_group_memberships_user_id(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS form_allowed_user_groups(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    group_id CHAR(36) NOT NULL,
+    UNIQUE KEY uk_form_allowed_user_groups(form_id, group_id),
+    FOREIGN KEY fk_form_allowed_user_groups_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_form_allowed_user_groups_group_id(group_id) REFERENCES user_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS form_answer_submitter_groups(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    group_id CHAR(36) NOT NULL,
+    UNIQUE KEY uk_form_answer_submitter_groups(form_id, group_id),
+    FOREIGN KEY fk_form_answer_submitter_groups_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_form_answer_submitter_groups_group_id(group_id) REFERENCES user_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS form_answer_reader_groups(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    group_id CHAR(36) NOT NULL,
+    UNIQUE KEY uk_form_answer_reader_groups(form_id, group_id),
+    FOREIGN KEY fk_form_answer_reader_groups_form_id(form_id) REFERENCES form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_form_answer_reader_groups_group_id(group_id) REFERENCES user_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_form_allowed_user_groups(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    group_id CHAR(36) NOT NULL,
+    UNIQUE KEY uk_archived_form_allowed_user_groups(form_id, group_id),
+    FOREIGN KEY fk_archived_form_allowed_user_groups_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_form_allowed_user_groups_group_id(group_id) REFERENCES user_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_form_answer_submitter_groups(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    group_id CHAR(36) NOT NULL,
+    UNIQUE KEY uk_archived_form_answer_submitter_groups(form_id, group_id),
+    FOREIGN KEY fk_archived_form_answer_submitter_groups_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_form_answer_submitter_groups_group_id(group_id) REFERENCES user_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS archived_form_answer_reader_groups(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    form_id CHAR(36) NOT NULL,
+    group_id CHAR(36) NOT NULL,
+    UNIQUE KEY uk_archived_form_answer_reader_groups(form_id, group_id),
+    FOREIGN KEY fk_archived_form_answer_reader_groups_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_archived_form_answer_reader_groups_group_id(group_id) REFERENCES user_groups(id) ON DELETE CASCADE
+);

@@ -14,7 +14,7 @@ pub use crate::form::{
     answer::{AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, DefaultAnswerTitle},
     label::{FormLabel, FormLabelAssignment, FormLabelId, FormLabelName},
     question::{Question, QuestionSet},
-    settings::{DiscordWebhookUrl, FormSettings, Visibility},
+    settings::{AllowedUserGroups, DiscordWebhookUrl, FormSettings, Visibility},
 };
 
 use crate::{
@@ -295,7 +295,8 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// - [`Administrator`](crate::account::models::Role::Administrator) である場合
     fn can_read(&self, actor: &Actor) -> bool {
         matches!(actor, Actor::System)
-            || self.settings.visibility() == &Visibility::PUBLIC
+            || (self.settings.visibility() == &Visibility::PUBLIC
+                && self.settings.allowed_user_groups().allows(actor))
             || is_administrator(actor)
     }
 
@@ -318,7 +319,7 @@ impl AuthorizationGuardDefinitions for ActiveForm {
 mod tests {
     use super::*;
     use crate::{
-        account::models::{AccountUser, Role},
+        account::models::{AccountUser, Role, UserGroup, UserGroupId, UserGroupName},
         form::answer::TemporaryAnswerAuthor,
         form::{
             answer::{AnswerSubmitter, FormAnswerContent, FormAnswerContentId},
@@ -360,6 +361,24 @@ mod tests {
 
     fn active_user(role: Role) -> AccountUser {
         AccountUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn user_group(seed: u128, name: &str) -> UserGroup {
+        unsafe {
+            UserGroup::from_raw_parts(
+                UserGroupId::from(Uuid::from_u128(seed)),
+                UserGroupName::new(name.to_string().try_into().unwrap()),
+            )
+        }
+    }
+
+    fn active_user_with_groups(role: Role, groups: Vec<UserGroup>) -> AccountUser {
+        AccountUser::with_groups(
+            "user".to_string(),
+            UserId::from(Uuid::new_v4()),
+            role,
+            groups,
+        )
     }
 
     fn sample_posted_answers(form: &ActiveForm) -> PostedAnswerContents {
@@ -437,6 +456,21 @@ mod tests {
             public_form_read_by(public_answer_form, Actor::from(other_user)).read_entry(entry);
 
         assert!(public_answer_result.is_ok());
+    }
+
+    #[test]
+    fn public_form_with_group_restriction_is_readable_by_group_member_only() {
+        let observer = user_group(10, "Observer");
+        let form = sample_form().change_settings(
+            FormSettings::new()
+                .change_allowed_user_groups(AllowedUserGroups::new(vec![*observer.id()])),
+        );
+        let member = active_user_with_groups(Role::StandardUser, vec![observer]);
+        let outsider = active_user(Role::StandardUser);
+
+        assert!(form.can_read(&Actor::from(member)));
+        assert!(!form.can_read(&Actor::from(outsider)));
+        assert!(form.can_read(&Actor::from(active_user(Role::Administrator))));
     }
 
     #[test]

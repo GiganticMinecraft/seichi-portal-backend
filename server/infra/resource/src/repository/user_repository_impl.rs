@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     account::models::{
-        AccountUser, DiscordAccountLink, DiscordUser, DiscordUserId, DiscordUserName,
+        AccountUser, DiscordAccountLink, DiscordUser, DiscordUserId, DiscordUserName, UserGroup,
+        UserGroupId,
     },
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
@@ -55,6 +56,77 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
                 user.value().id().into_inner(),
                 user.value().role().to_owned(),
             )
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn create_user_group(&self, group: Allowed<UserGroup, Create>) -> Result<(), Error> {
+        self.client
+            .user()
+            .create_user_group(group.value())
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn update_user_group(&self, group: Allowed<UserGroup, Update>) -> Result<(), Error> {
+        self.client
+            .user()
+            .update_user_group(group.value())
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_user_group(&self, group: Allowed<UserGroup, Delete>) -> Result<(), Error> {
+        self.client
+            .user()
+            .delete_user_group(*group.id())
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_user_group(
+        &self,
+        group_id: UserGroupId,
+    ) -> Result<Option<AuthorizationGuard<UserGroup, Read>>, Error> {
+        Ok(self
+            .client
+            .user()
+            .find_user_group(group_id)
+            .await?
+            .map(Into::into))
+    }
+
+    async fn fetch_user_groups(&self) -> Result<Vec<AuthorizationGuard<UserGroup, Read>>, Error> {
+        Ok(self
+            .client
+            .user()
+            .fetch_user_groups()
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
+    }
+
+    async fn add_user_to_group(
+        &self,
+        group: Allowed<UserGroup, Update>,
+        user: Allowed<AccountUser, Update>,
+    ) -> Result<(), Error> {
+        self.client
+            .user()
+            .add_user_to_group(*group.id(), user.id().into_inner())
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn remove_user_from_group(
+        &self,
+        group: Allowed<UserGroup, Update>,
+        user: Allowed<AccountUser, Update>,
+    ) -> Result<(), Error> {
+        self.client
+            .user()
+            .remove_user_from_group(*group.id(), user.id().into_inner())
             .await
             .map_err(Into::into)
     }

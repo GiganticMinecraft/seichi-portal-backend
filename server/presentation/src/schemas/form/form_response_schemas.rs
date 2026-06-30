@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use domain::account::models::UserGroupId;
 use domain::form::{
     answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
     models::{
@@ -43,6 +44,10 @@ pub struct AnswerSettingsSchema {
     pub default_answer_title: DefaultAnswerTitle,
     pub visibility: AnswerVisibility,
     pub acceptance_period: AnswerAcceptancePeriodSchema,
+    #[schema(value_type = Vec<String>)]
+    pub submitter_group_ids: Vec<UserGroupId>,
+    #[schema(value_type = Vec<String>)]
+    pub reader_group_ids: Vec<UserGroupId>,
 }
 
 impl AnswerSettingsSchema {
@@ -54,6 +59,8 @@ impl AnswerSettingsSchema {
                 start_at: answer_settings.acceptance_period().start_at().to_owned(),
                 end_at: answer_settings.acceptance_period().end_at().to_owned(),
             },
+            submitter_group_ids: answer_settings.submitter_groups().as_slice().to_vec(),
+            reader_group_ids: answer_settings.reader_groups().as_slice().to_vec(),
         }
     }
 }
@@ -64,6 +71,8 @@ pub struct FormSettingsSchema {
     pub discord_webhook_url: Option<Option<String>>,
     #[schema(value_type = String)]
     pub visibility: Visibility,
+    #[schema(value_type = Vec<String>)]
+    pub allowed_group_ids: Vec<UserGroupId>,
     pub allow_temporary_answers: bool,
     pub answer_settings: AnswerSettingsSchema,
 }
@@ -80,6 +89,7 @@ impl FormSettingsSchema {
                 .ok()
                 .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
             visibility: settings.visibility().to_owned(),
+            allowed_group_ids: settings.allowed_user_groups().as_slice().to_vec(),
             allow_temporary_answers: *answer_settings.allow_temporary_answers(),
             answer_settings: AnswerSettingsSchema::from_answer_settings(answer_settings),
         }
