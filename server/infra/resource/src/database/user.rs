@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
@@ -21,7 +22,7 @@ use uuid::Uuid;
 use crate::{
     database::{
         components::{AnswerSubmitterRestrictionDatabase, UserDatabase},
-        connection::{ConnectionPool, redis_connection},
+        connection::{ConnectionPool, DatabaseTransaction, redis_connection},
         count::count_as_u32,
     },
     records::DiscordUserRecord,
@@ -45,6 +46,40 @@ async fn fetch_groups_by_user_id(
     rows.into_iter()
         .map(|row| user_group_from_parts(row.id, row.name))
         .collect()
+}
+
+async fn fetch_groups_by_user_ids(
+    txn: &mut DatabaseTransaction,
+    user_ids: &[String],
+) -> Result<HashMap<String, Vec<UserGroup>>, InfraError> {
+    if user_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let sql = format!(
+        "SELECT m.user_id, g.id AS group_id, g.name AS group_name
+        FROM user_groups g
+        INNER JOIN user_group_memberships m ON g.id = m.group_id
+        WHERE m.user_id IN ({})
+        ORDER BY g.name ASC, g.id ASC",
+        std::iter::repeat_n("?", user_ids.len()).join(", ")
+    );
+
+    let rows = user_ids
+        .iter()
+        .fold(query(AssertSqlSafe(&*sql)), |query, uid| query.bind(uid))
+        .fetch_all(&mut **txn)
+        .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let user_id: String = row.try_get("user_id")?;
+            let group =
+                user_group_from_parts(row.try_get("group_id")?, row.try_get("group_name")?)?;
+            Ok::<_, InfraError>((user_id, group))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|pairs| pairs.into_iter().into_group_map())
 }
 
 fn user_group_from_parts(id: String, name: String) -> Result<UserGroup, InfraError> {
@@ -111,22 +146,23 @@ impl UserDatabase for ConnectionPool {
                     .fetch_all(&mut **txn)
                     .await?;
 
-                let mut users = Vec::new();
-                for row in rows {
-                    let id: String = row.try_get("id")?;
-                    let name: String = row.try_get("name")?;
-                    let role: String = row.try_get("role")?;
-                    let user_id = Uuid::parse_str(&id)?;
-                    let groups = fetch_groups_by_user_id(txn, user_id).await?;
-                    users.push(AccountUser::with_groups(
-                        name,
-                        user_id.into(),
-                        Role::from_str(&role)?,
-                        groups,
-                    ));
-                }
+                let mut groups_by_user = fetch_groups_by_user_ids(txn, &uuid_strings).await?;
 
-                Ok::<_, InfraError>(users)
+                rows.into_iter()
+                    .map(|row| {
+                        let id: String = row.try_get("id")?;
+                        let name: String = row.try_get("name")?;
+                        let role: String = row.try_get("role")?;
+                        let user_id = Uuid::parse_str(&id)?;
+                        let groups = groups_by_user.remove(&id).unwrap_or_default();
+                        Ok::<_, InfraError>(AccountUser::with_groups(
+                            name,
+                            user_id.into(),
+                            Role::from_str(&role)?,
+                            groups,
+                        ))
+                    })
+                    .collect()
             })
         })
         .await
@@ -312,23 +348,25 @@ impl UserDatabase for ConnectionPool {
     async fn fetch_all_users(&self) -> Result<Vec<AccountUser>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let query = sqlx::query!("SELECT id, name, role FROM users")
+                let rows = sqlx::query!("SELECT id, name, role FROM users")
                     .fetch_all(&mut **txn)
                     .await?;
 
-                let mut users = Vec::new();
-                for row in query {
-                    let user_id = Uuid::parse_str(&row.id)?;
-                    let groups = fetch_groups_by_user_id(txn, user_id).await?;
-                    users.push(AccountUser::with_groups(
-                        row.name,
-                        user_id.into(),
-                        Role::from_str(&row.role)?,
-                        groups,
-                    ));
-                }
+                let user_ids = rows.iter().map(|row| row.id.clone()).collect_vec();
+                let mut groups_by_user = fetch_groups_by_user_ids(txn, &user_ids).await?;
 
-                Ok::<_, InfraError>(users)
+                rows.into_iter()
+                    .map(|row| {
+                        let user_id = Uuid::parse_str(&row.id)?;
+                        let groups = groups_by_user.remove(&row.id).unwrap_or_default();
+                        Ok::<_, InfraError>(AccountUser::with_groups(
+                            row.name,
+                            user_id.into(),
+                            Role::from_str(&row.role)?,
+                            groups,
+                        ))
+                    })
+                    .collect()
             })
         })
         .await
