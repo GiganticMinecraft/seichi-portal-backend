@@ -85,7 +85,7 @@ impl DiscordAnswerWebhookNotifier for ResourceDiscordAnswerWebhookNotifier {
             let attempts = DiscordWebhookSender::retry_policy().max_attempts();
             let message = DiscordWebhookMessage {
                 discord_webhook_url: notification.discord_webhook_url,
-                title: "回答が送信されました".to_string(),
+                title: notification.title,
                 link_url: notification.answer_url,
                 fields: notification
                     .fields

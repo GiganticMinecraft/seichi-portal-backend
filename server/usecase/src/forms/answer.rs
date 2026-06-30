@@ -133,12 +133,12 @@ impl<
         let form_id = form.id().into_inner().to_string();
         let answer_id = answer_entry.id().into_inner().to_string();
         let answer_url = format!("{}/forms/{form_id}/answers/{answer_id}", FRONTEND.url);
-        let answer_title = answer_entry
+        let title = answer_entry
             .title()
             .to_owned()
             .into_inner()
             .map(|title| title.into_inner())
-            .unwrap_or_default();
+            .unwrap_or_else(|| "回答が送信されました".to_string());
         let questions = form.questions().as_slice();
         let answer_fields = answer_entry
             .contents()
@@ -159,7 +159,6 @@ impl<
                     "フォーム名".to_string(),
                     form.title().to_owned().into_inner().into_inner(),
                 ),
-                DiscordAnswerWebhookField::new("タイトル".to_string(), answer_title),
                 DiscordAnswerWebhookField::new("回答者".to_string(), respondent),
             ],
             answer_fields,
@@ -171,6 +170,7 @@ impl<
         notifier
             .notify_answer_posted(DiscordAnswerWebhookNotification {
                 discord_webhook_url,
+                title,
                 answer_url,
                 form_id,
                 answer_id,

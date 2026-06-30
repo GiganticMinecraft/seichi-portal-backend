@@ -15,6 +15,7 @@ impl DiscordAnswerWebhookField {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiscordAnswerWebhookNotification {
     pub discord_webhook_url: String,
+    pub title: String,
     pub answer_url: String,
     pub form_id: String,
     pub answer_id: String,
