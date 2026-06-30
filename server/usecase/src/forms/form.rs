@@ -83,8 +83,7 @@ impl<
         allowed_user_groups: Option<AllowedUserGroups>,
         allow_temporary_answers: Option<bool>,
         answer_visibility: Option<AnswerVisibility>,
-        answer_submitter_groups: Option<AllowedUserGroups>,
-        answer_reader_groups: Option<AllowedUserGroups>,
+        answer_groups: Option<AllowedUserGroups>,
         acceptance_period: Option<AnswerAcceptancePeriod>,
         default_answer_title: Option<DefaultAnswerTitle>,
         user: &AccountUser,
@@ -94,11 +93,7 @@ impl<
             self.validate_allowed_user_groups(&user_as_user, groups)
                 .await?;
         }
-        if let Some(groups) = &answer_submitter_groups {
-            self.validate_allowed_user_groups(&user_as_user, groups)
-                .await?;
-        }
-        if let Some(groups) = &answer_reader_groups {
+        if let Some(groups) = &answer_groups {
             self.validate_allowed_user_groups(&user_as_user, groups)
                 .await?;
         }
@@ -130,12 +125,8 @@ impl<
             Some(visibility) => answer_settings.change_visibility(visibility),
             None => answer_settings,
         };
-        let answer_settings = match answer_submitter_groups {
-            Some(groups) => answer_settings.change_submitter_groups(groups),
-            None => answer_settings,
-        };
-        let answer_settings = match answer_reader_groups {
-            Some(groups) => answer_settings.change_reader_groups(groups),
+        let answer_settings = match answer_groups {
+            Some(groups) => answer_settings.change_answer_groups(groups),
             None => answer_settings,
         };
         let answer_settings = match acceptance_period {
@@ -390,8 +381,7 @@ impl<
         allowed_user_groups: Option<AllowedUserGroups>,
         allow_temporary_answers: Option<bool>,
         answer_visibility: Option<AnswerVisibility>,
-        answer_submitter_groups: Option<AllowedUserGroups>,
-        answer_reader_groups: Option<AllowedUserGroups>,
+        answer_groups: Option<AllowedUserGroups>,
         questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
@@ -400,11 +390,7 @@ impl<
             self.validate_allowed_user_groups(&actor_user, groups)
                 .await?;
         }
-        if let Some(groups) = &answer_submitter_groups {
-            self.validate_allowed_user_groups(&actor_user, groups)
-                .await?;
-        }
-        if let Some(groups) = &answer_reader_groups {
+        if let Some(groups) = &answer_groups {
             self.validate_allowed_user_groups(&actor_user, groups)
                 .await?;
         }
@@ -486,13 +472,9 @@ impl<
                 None => updated_answer_settings,
                 Some(v) => updated_answer_settings.change_visibility(v),
             };
-            let updated_answer_settings = match answer_submitter_groups {
+            let updated_answer_settings = match answer_groups {
                 None => updated_answer_settings,
-                Some(groups) => updated_answer_settings.change_submitter_groups(groups),
-            };
-            let updated_answer_settings = match answer_reader_groups {
-                None => updated_answer_settings,
-                Some(groups) => updated_answer_settings.change_reader_groups(groups),
+                Some(groups) => updated_answer_settings.change_answer_groups(groups),
             };
             let updated_answer_settings = match default_answer_title {
                 None => updated_answer_settings,
@@ -824,7 +806,6 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
                 &user,
             )
             .await
@@ -845,7 +826,6 @@ mod tests {
             .update_form(
                 &user,
                 form.id().to_owned(),
-                None,
                 None,
                 None,
                 None,

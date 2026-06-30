@@ -100,9 +100,7 @@ pub struct AnswerSettings {
     acceptance_period: AnswerAcceptancePeriod,
     allow_temporary_answers: bool,
     #[serde(default)]
-    submitter_groups: AllowedUserGroups,
-    #[serde(default)]
-    reader_groups: AllowedUserGroups,
+    answer_groups: AllowedUserGroups,
 }
 
 impl AnswerSettings {
@@ -117,8 +115,7 @@ impl AnswerSettings {
             visibility,
             acceptance_period,
             allow_temporary_answers,
-            submitter_groups: AllowedUserGroups::unrestricted(),
-            reader_groups: AllowedUserGroups::unrestricted(),
+            answer_groups: AllowedUserGroups::unrestricted(),
         }
     }
 
@@ -147,16 +144,9 @@ impl AnswerSettings {
         }
     }
 
-    pub fn change_submitter_groups(self, submitter_groups: AllowedUserGroups) -> Self {
+    pub fn change_answer_groups(self, answer_groups: AllowedUserGroups) -> Self {
         Self {
-            submitter_groups,
-            ..self
-        }
-    }
-
-    pub fn change_reader_groups(self, reader_groups: AllowedUserGroups) -> Self {
-        Self {
-            reader_groups,
+            answer_groups,
             ..self
         }
     }
@@ -169,12 +159,12 @@ impl AnswerSettings {
             (AnswerAuthor::AuthenticatedUser(user_id), Actor::AccountUser(user)) => {
                 *user_id == *user.id()
                     && (is_within_period || user.role() == &Role::Administrator)
-                    && self.submitter_groups.allows(actor)
+                    && self.answer_groups.allows(actor)
             }
             (AnswerAuthor::Temporary(_), Actor::TemporaryAnswerAuthor(_)) => {
                 self.allow_temporary_answers
                     && is_within_period
-                    && self.submitter_groups.as_slice().is_empty()
+                    && self.answer_groups.as_slice().is_empty()
             }
             _ => false,
         }
@@ -186,7 +176,7 @@ impl AnswerSettings {
             Actor::AccountUser(user) => {
                 entry.author().authenticated_user_id() == Some(*user.id())
                     || (self.visibility == AnswerVisibility::PUBLIC
-                        && self.reader_groups.allows(actor))
+                        && self.answer_groups.allows(actor))
                     || user.role() == &Role::Administrator
             }
             Actor::System => true,
@@ -310,7 +300,7 @@ mod tests {
         let member = active_user_with_groups(Role::StandardUser, vec![observer.clone()]);
         let outsider = active_user(Role::StandardUser);
         let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap())
-            .change_submitter_groups(AllowedUserGroups::new(vec![*observer.id()]));
+            .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
 
         assert!(settings.can_accept_answer(
             &AnswerAuthor::AuthenticatedUser(*member.id()),
@@ -323,10 +313,10 @@ mod tests {
     }
 
     #[test]
-    fn temporary_answer_creation_is_denied_when_submitter_group_is_restricted() {
+    fn temporary_answer_creation_is_denied_when_answer_group_is_restricted() {
         let observer = user_group(10, "Observer");
         let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap())
-            .change_submitter_groups(AllowedUserGroups::new(vec![*observer.id()]));
+            .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
         let author = AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
             "guest".to_string(),
             "contact".to_string(),
@@ -396,7 +386,7 @@ mod tests {
             AnswerAcceptancePeriod::try_new(None, None).unwrap(),
             false,
         )
-        .change_reader_groups(AllowedUserGroups::new(vec![*observer.id()]));
+        .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
 
         assert!(settings.can_read_entry(&entry, &Actor::from(member)));
         assert!(!settings.can_read_entry(&entry, &Actor::from(outsider)));

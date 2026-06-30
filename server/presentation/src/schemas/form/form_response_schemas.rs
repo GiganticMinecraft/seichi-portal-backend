@@ -45,9 +45,7 @@ pub struct AnswerSettingsSchema {
     pub visibility: AnswerVisibility,
     pub acceptance_period: AnswerAcceptancePeriodSchema,
     #[schema(value_type = Vec<String>)]
-    pub submitter_group_ids: Vec<UserGroupId>,
-    #[schema(value_type = Vec<String>)]
-    pub reader_group_ids: Vec<UserGroupId>,
+    pub answer_group_ids: Vec<UserGroupId>,
 }
 
 impl AnswerSettingsSchema {
@@ -59,8 +57,7 @@ impl AnswerSettingsSchema {
                 start_at: answer_settings.acceptance_period().start_at().to_owned(),
                 end_at: answer_settings.acceptance_period().end_at().to_owned(),
             },
-            submitter_group_ids: answer_settings.submitter_groups().as_slice().to_vec(),
-            reader_group_ids: answer_settings.reader_groups().as_slice().to_vec(),
+            answer_group_ids: answer_settings.answer_groups().as_slice().to_vec(),
         }
     }
 }

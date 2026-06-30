@@ -27,11 +27,9 @@ DROP TABLE IF EXISTS
     temporary_users,
     answer_submitter_restrictions,
     users,
-    archived_form_answer_reader_groups,
-    archived_form_answer_submitter_groups,
+    archived_form_answer_groups,
     archived_form_allowed_user_groups,
-    form_answer_reader_groups,
-    form_answer_submitter_groups,
+    form_answer_groups,
     form_allowed_user_groups,
     user_group_memberships,
     user_groups;

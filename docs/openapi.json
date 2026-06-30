@@ -4938,30 +4938,23 @@
         "required": [
           "visibility",
           "acceptance_period",
-          "submitter_group_ids",
-          "reader_group_ids"
+          "answer_group_ids"
         ],
         "properties": {
           "acceptance_period": {
             "$ref": "#/components/schemas/AnswerAcceptancePeriodSchema"
+          },
+          "answer_group_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "default_answer_title": {
             "type": [
               "string",
               "null"
             ]
-          },
-          "reader_group_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "submitter_group_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "visibility": {
             "$ref": "#/components/schemas/AnswerVisibility"

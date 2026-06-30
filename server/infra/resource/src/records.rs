@@ -119,8 +119,7 @@ pub struct ActiveFormRecord {
     pub acceptance_period_end_at: Option<DateTime<Utc>>,
     pub default_answer_title: Option<String>,
     pub allowed_group_ids: Vec<UserGroupId>,
-    pub answer_submitter_group_ids: Vec<UserGroupId>,
-    pub answer_reader_group_ids: Vec<UserGroupId>,
+    pub answer_group_ids: Vec<UserGroupId>,
     pub questions: Vec<QuestionRecord>,
     pub label_ids: Vec<FormLabelId>,
 }
@@ -143,8 +142,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             acceptance_period_end_at,
             default_answer_title,
             allowed_group_ids,
-            answer_submitter_group_ids,
-            answer_reader_group_ids,
+            answer_group_ids,
             questions,
             label_ids,
         }: ActiveFormRecord,
@@ -165,8 +163,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             AnswerAcceptancePeriod::try_new(acceptance_period_start_at, acceptance_period_end_at)?,
             allow_temporary_answers,
         )
-        .change_submitter_groups(AllowedUserGroups::new(answer_submitter_group_ids))
-        .change_reader_groups(AllowedUserGroups::new(answer_reader_group_ids));
+        .change_answer_groups(AllowedUserGroups::new(answer_group_ids));
 
         Ok(unsafe {
             ActiveForm::from_raw_parts(

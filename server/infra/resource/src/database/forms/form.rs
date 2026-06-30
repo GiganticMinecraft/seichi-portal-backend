@@ -204,8 +204,7 @@ async fn build_active_form_record(
         acceptance_period_end_at: row.acceptance_period_end_at,
         default_answer_title: row.default_answer_title,
         allowed_group_ids: restrictions.allowed_group_ids,
-        answer_submitter_group_ids: restrictions.answer_submitter_group_ids,
-        answer_reader_group_ids: restrictions.answer_reader_group_ids,
+        answer_group_ids: restrictions.answer_group_ids,
         questions: get_questions_txn_with_tables(txn, form_id, questions_table, choices_table)
             .await?,
         label_ids,
@@ -224,18 +223,8 @@ async fn active_form_record_from_row(
             form_id,
         )
         .await?,
-        answer_submitter_group_ids: fetch_form_group_restriction_ids(
-            txn,
-            "form_answer_submitter_groups",
-            form_id,
-        )
-        .await?,
-        answer_reader_group_ids: fetch_form_group_restriction_ids(
-            txn,
-            "form_answer_reader_groups",
-            form_id,
-        )
-        .await?,
+        answer_group_ids: fetch_form_group_restriction_ids(txn, "form_answer_groups", form_id)
+            .await?,
     };
 
     let label_ids = fetch_label_ids(txn, "label_settings_for_forms", &row.id).await?;
@@ -274,8 +263,7 @@ async fn fetch_form_group_restriction_ids(
 #[derive(Default)]
 struct FormGroupRestrictions {
     allowed_group_ids: Vec<UserGroupId>,
-    answer_submitter_group_ids: Vec<UserGroupId>,
-    answer_reader_group_ids: Vec<UserGroupId>,
+    answer_group_ids: Vec<UserGroupId>,
 }
 
 async fn fetch_group_ids_batch(
@@ -316,18 +304,8 @@ async fn fetch_form_group_restrictions_batch(
 
     let mut allowed =
         fetch_group_ids_batch(txn, &format!("{table_prefix}allowed_user_groups"), form_ids).await?;
-    let mut submitter = fetch_group_ids_batch(
-        txn,
-        &format!("{table_prefix}answer_submitter_groups"),
-        form_ids,
-    )
-    .await?;
-    let mut reader = fetch_group_ids_batch(
-        txn,
-        &format!("{table_prefix}answer_reader_groups"),
-        form_ids,
-    )
-    .await?;
+    let mut answer =
+        fetch_group_ids_batch(txn, &format!("{table_prefix}answer_groups"), form_ids).await?;
 
     Ok(form_ids
         .iter()
@@ -336,8 +314,7 @@ async fn fetch_form_group_restrictions_batch(
                 fid.clone(),
                 FormGroupRestrictions {
                     allowed_group_ids: allowed.remove(fid).unwrap_or_default(),
-                    answer_submitter_group_ids: submitter.remove(fid).unwrap_or_default(),
-                    answer_reader_group_ids: reader.remove(fid).unwrap_or_default(),
+                    answer_group_ids: answer.remove(fid).unwrap_or_default(),
                 },
             )
         })
@@ -383,15 +360,9 @@ async fn archived_form_record_from_row(
             form_id,
         )
         .await?,
-        answer_submitter_group_ids: fetch_form_group_restriction_ids(
+        answer_group_ids: fetch_form_group_restriction_ids(
             txn,
-            "archived_form_answer_submitter_groups",
-            form_id,
-        )
-        .await?,
-        answer_reader_group_ids: fetch_form_group_restriction_ids(
-            txn,
-            "archived_form_answer_reader_groups",
+            "archived_form_answer_groups",
             form_id,
         )
         .await?,
@@ -923,15 +894,8 @@ async fn copy_form_group_restrictions_to_archive(
     .await?;
     copy_group_restriction_table(
         txn,
-        "archived_form_answer_submitter_groups",
-        "form_answer_submitter_groups",
-        form_id,
-    )
-    .await?;
-    copy_group_restriction_table(
-        txn,
-        "archived_form_answer_reader_groups",
-        "form_answer_reader_groups",
+        "archived_form_answer_groups",
+        "form_answer_groups",
         form_id,
     )
     .await
@@ -950,15 +914,8 @@ async fn restore_form_group_restrictions_from_archive(
     .await?;
     copy_group_restriction_table(
         txn,
-        "form_answer_submitter_groups",
-        "archived_form_answer_submitter_groups",
-        form_id,
-    )
-    .await?;
-    copy_group_restriction_table(
-        txn,
-        "form_answer_reader_groups",
-        "archived_form_answer_reader_groups",
+        "form_answer_groups",
+        "archived_form_answer_groups",
         form_id,
     )
     .await
@@ -1338,16 +1295,9 @@ async fn sync_form_group_restrictions(
     .await?;
     sync_group_restriction_ids(
         txn,
-        "form_answer_submitter_groups",
+        "form_answer_groups",
         *form.id(),
-        form.answer_settings().submitter_groups(),
-    )
-    .await?;
-    sync_group_restriction_ids(
-        txn,
-        "form_answer_reader_groups",
-        *form.id(),
-        form.answer_settings().reader_groups(),
+        form.answer_settings().answer_groups(),
     )
     .await
 }

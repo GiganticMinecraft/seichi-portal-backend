@@ -41,10 +41,7 @@ pub struct AnswerSettingsSchema {
     pub acceptance_period: Option<AnswerAcceptancePeriod>,
     #[serde(default)]
     #[schema(value_type = Option<Vec<String>>)]
-    pub submitter_group_ids: Option<Vec<UserGroupId>>,
-    #[serde(default)]
-    #[schema(value_type = Option<Vec<String>>)]
-    pub reader_group_ids: Option<Vec<UserGroupId>>,
+    pub answer_group_ids: Option<Vec<UserGroupId>>,
 }
 
 #[derive(utoipa::ToSchema)]
