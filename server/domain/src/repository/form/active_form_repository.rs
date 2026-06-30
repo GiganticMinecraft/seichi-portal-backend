@@ -4,7 +4,8 @@ use mockall::automock;
 
 use crate::{
     account::models::AccountUser,
-    form::models::{ActiveForm, FormId},
+    form::models::{ActiveForm, FormId, FormPagePosition},
+    pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 
@@ -18,9 +19,9 @@ pub trait ActiveFormRepository: Send + Sync + 'static {
     ) -> Result<(), Error>;
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error>;
+        request: PageRequest<FormPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<ActiveForm, Read>, FormPagePosition>, Error>;
+    async fn list_all(&self) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error>;
     async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<ActiveForm, Read>>, Error>;
     async fn update_form(
         &self,

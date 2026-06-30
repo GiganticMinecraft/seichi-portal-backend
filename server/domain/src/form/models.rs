@@ -33,6 +33,44 @@ use crate::{
 
 pub type FormId = types::Id<ActiveForm>;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FormPagePosition {
+    last_form_id: FormId,
+}
+
+impl FormPagePosition {
+    pub fn new(last_form_id: FormId) -> Self {
+        Self { last_form_id }
+    }
+
+    pub fn last_form_id(self) -> FormId {
+        self.last_form_id
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArchivedFormPagePosition {
+    last_archived_at: DateTime<Utc>,
+    last_form_id: FormId,
+}
+
+impl ArchivedFormPagePosition {
+    pub fn new(last_archived_at: DateTime<Utc>, last_form_id: FormId) -> Self {
+        Self {
+            last_archived_at,
+            last_form_id,
+        }
+    }
+
+    pub fn last_archived_at(self) -> DateTime<Utc> {
+        self.last_archived_at
+    }
+
+    pub fn last_form_id(self) -> FormId {
+        self.last_form_id
+    }
+}
+
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Debug, PartialOrd, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize, Deserialize)]

@@ -5,12 +5,13 @@ use domain::{
     form::answer::TemporaryAnswerAuthor,
     form::{
         answer::{
-            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerSubmitter, AnswerTitle,
-            FormAnswerContent, PostedAnswerContents,
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerPagePosition, AnswerSubmitter,
+            AnswerTitle, FormAnswerContent, PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
     },
+    pagination::{Page, PageRequest},
     repository::user_repository::UserRepository,
     repository::{
         answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
@@ -309,13 +310,18 @@ impl<
         &self,
         form_id: FormId,
         actor: &AccountUser,
-    ) -> Result<Vec<AnswerDetails>, Error> {
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<AnswerDetails, AnswerPagePosition>, Error> {
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
 
-        let visible_answers = self.answer_entry_repository.list_by_form(&form).await?;
+        let page = self
+            .answer_entry_repository
+            .list_by_form(&form, request)
+            .await?;
+        let (visible_answers, next) = page.into_parts();
 
-        stream::iter(visible_answers)
+        let answers = stream::iter(visible_answers)
             .then(|form_answer| async {
                 let answer_id = *form_answer.id();
                 let labels = self
@@ -336,28 +342,40 @@ impl<
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
             .into_iter()
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Page::new(answers, next))
     }
 
-    pub async fn get_all_answers(&self, user: &AccountUser) -> Result<Vec<AnswerDetails>, Error> {
-        let actor_ref = Actor::from(user.clone());
-        let readable_forms = self
+    async fn readable_forms(&self, actor: &Actor) -> Result<Vec<Allowed<ActiveForm, Read>>, Error> {
+        Ok(self
             .active_form_repository
-            .list(None, None)
+            .list_all()
             .await?
             .into_iter()
-            .filter_map(|form| form.try_read(actor_ref.clone()).ok())
-            .collect::<Vec<_>>();
+            .filter_map(|form| form.try_read(actor.clone()).ok())
+            .collect())
+    }
 
-        let visible_answers: Vec<(FormId, Allowed<AnswerEntry, Read>)> = self
+    pub async fn get_all_answers(
+        &self,
+        user: &AccountUser,
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<AnswerDetails, AnswerPagePosition>, Error> {
+        let actor_ref = Actor::from(user.clone());
+        let readable_forms = self.readable_forms(&actor_ref).await?;
+
+        let page = self
             .answer_entry_repository
-            .list_all(&readable_forms)
-            .await?
+            .list_all(&readable_forms, request)
+            .await?;
+        let (visible_answers, next) = page.into_parts();
+        let visible_answers: Vec<(FormId, Allowed<AnswerEntry, Read>)> = visible_answers
             .into_iter()
             .map(|entry| (*entry.value().form_id(), entry))
             .collect();
 
-        stream::iter(visible_answers)
+        let answers = stream::iter(visible_answers)
             .then(|(form_id, form_answer)| {
                 let user = user.clone();
                 async move {
@@ -391,7 +409,9 @@ impl<
                     })
                 )
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Page::new(answers, next))
     }
 
     pub async fn update_answer_meta(

@@ -18,7 +18,10 @@ use domain::{
         answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerSubmitterRestriction},
         comment::{Comment, CommentId},
         message::{Message, MessageId},
-        models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
+        models::{
+            ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
+            FormLabelName, FormPagePosition,
+        },
     },
     notification::models::NotificationPreference,
     pagination::{Page, PageRequest},
@@ -65,24 +68,30 @@ pub trait FormDatabase: Send + Sync {
     async fn create(&self, form: &ActiveForm, user: &AccountUser) -> Result<(), InfraError>;
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<ActiveFormRecord>, InfraError>;
+        request: PageRequest<FormPagePosition>,
+    ) -> Result<Page<ActiveFormRecord, FormPagePosition>, InfraError>;
+    async fn list_all(&self) -> Result<Vec<ActiveFormRecord>, InfraError>;
     async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormRecord>, InfraError>;
     async fn list_archived(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
+        request: PageRequest<ArchivedFormPagePosition>,
         query: Option<String>,
-    ) -> Result<Vec<ArchivedFormRecord>, InfraError>;
+    ) -> Result<Page<ArchivedFormRecord, ArchivedFormPagePosition>, InfraError>;
     async fn get_archived(&self, form_id: FormId)
     -> Result<Option<ArchivedFormRecord>, InfraError>;
     async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError>;
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &AccountUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
-    async fn list_answer_entries(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, InfraError>;
-    async fn list_all_answer_entries(&self) -> Result<Vec<AnswerEntry>, InfraError>;
+    async fn list_answer_entries(
+        &self,
+        form_id: FormId,
+        request: PageRequest<domain::form::answer::AnswerPagePosition>,
+    ) -> Result<Page<AnswerEntry, domain::form::answer::AnswerPagePosition>, InfraError>;
+    async fn list_all_answer_entries(
+        &self,
+        request: PageRequest<domain::form::answer::AnswerPagePosition>,
+    ) -> Result<Page<AnswerEntry, domain::form::answer::AnswerPagePosition>, InfraError>;
 }
 
 #[automock]

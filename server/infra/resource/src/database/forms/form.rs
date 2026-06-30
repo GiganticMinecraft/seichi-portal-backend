@@ -2,14 +2,18 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::account::models::UserGroupId;
 use domain::form::{
-    answer::AnswerEntry,
-    models::{AllowedUserGroups, DiscordWebhookUrl, FormLabelId},
+    answer::{AnswerEntry, AnswerPagePosition},
+    models::{
+        AllowedUserGroups, ArchivedFormPagePosition, DiscordWebhookUrl, FormLabelId,
+        FormPagePosition,
+    },
     question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
     account::models::{AccountUser, Role},
     auth::Actor,
     form::models::{ActiveForm, ArchivedForm, FormId},
+    pagination::{Page, PageRequest},
 };
 use errors::{Error, infra::InfraError};
 use futures::{TryStreamExt, stream};
@@ -421,12 +425,11 @@ fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, Infra
     })
 }
 
-/// 回答 ([`AnswerEntry`]) を取得する。`form_id` を指定するとそのフォームの回答だけを、
-/// `None` を指定すると全フォームの回答を取得する。
-async fn fetch_answer_entries(
+async fn fetch_answer_entries_page(
     txn: &mut DatabaseTransaction,
     form_id: Option<FormId>,
-) -> Result<Vec<AnswerEntry>, InfraError> {
+    request: PageRequest<AnswerPagePosition>,
+) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
     let base_query = r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
             users.name AS user_name, users.role AS user_role,
             temporary_user_id, temporary_users.name AS temporary_user_name,
@@ -434,16 +437,32 @@ async fn fetch_answer_entries(
             timestamp FROM answers
             LEFT JOIN users ON answers.user = users.id
             LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id";
-    let sql = match form_id {
-        Some(_) => format!("{base_query} WHERE form_id = ? ORDER BY answers.timestamp"),
-        None => format!("{base_query} ORDER BY answers.timestamp"),
+    let sql = match (form_id, request.after_position()) {
+        (Some(_), Some(_)) => {
+            format!(
+                "{base_query} WHERE form_id = ? AND answers.id > ? ORDER BY answers.id ASC LIMIT ?"
+            )
+        }
+        (Some(_), None) => {
+            format!("{base_query} WHERE form_id = ? ORDER BY answers.id ASC LIMIT ?")
+        }
+        (None, Some(_)) => {
+            format!("{base_query} WHERE answers.id > ? ORDER BY answers.id ASC LIMIT ?")
+        }
+        (None, None) => format!("{base_query} ORDER BY answers.id ASC LIMIT ?"),
     };
 
     let mut query = sqlx::query(AssertSqlSafe(&*sql));
     if let Some(form_id) = form_id {
         query = query.bind(form_id.into_inner().to_string());
     }
-    let answers = query.fetch_all(&mut **txn).await?;
+    if let Some(position) = request.after_position() {
+        query = query.bind(position.last_answer_id().into_inner().to_string());
+    }
+    let answers = query
+        .bind(i64::from(request.limit().overfetch_value()))
+        .fetch_all(&mut **txn)
+        .await?;
 
     let form_answer_records = answers
         .into_iter()
@@ -469,13 +488,19 @@ async fn fetch_answer_entries(
     let contents = fetch_real_answers_by_answer_ids(txn, &answer_ids).await?;
     let messages = fetch_messages_by_answer_ids(txn, &answer_ids).await?;
 
-    attach_entry_children(form_answer_records, contents, messages)?
+    let entries = attach_entry_children(form_answer_records, contents, messages)?
         .into_iter()
         .map(TryInto::<AnswerEntry>::try_into)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error: Error| InfraError::Unexpected {
             cause: error.to_string(),
-        })
+        })?;
+
+    Ok(Page::from_overfetched_items(
+        entries,
+        request.limit(),
+        |entry| AnswerPagePosition::new(*entry.id()),
+    ))
 }
 
 async fn fetch_form_row(
@@ -961,9 +986,97 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<ActiveFormRecord>, InfraError> {
+        request: PageRequest<FormPagePosition>,
+    ) -> Result<Page<ActiveFormRecord, FormPagePosition>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rows = if let Some(position) = request.after_position() {
+                    sqlx::query(
+                        r"SELECT f.id, f.title, f.description, f.visibility,
+            f.answer_visibility, f.allow_temporary_answers,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
+                    f.created_at, f.updated_at, w.url AS discord_webhook_url
+                    FROM form_meta_data f
+                    LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
+                    WHERE f.id > ?
+                    ORDER BY f.id
+                    LIMIT ?",
+                    )
+                    .bind(position.last_form_id().into_inner().to_string())
+                    .bind(i64::from(request.limit().overfetch_value()))
+                    .fetch_all(&mut **txn)
+                    .await?
+                } else {
+                    sqlx::query(
+                        r"SELECT f.id, f.title, f.description, f.visibility,
+            f.answer_visibility, f.allow_temporary_answers,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
+                    f.created_at, f.updated_at, w.url AS discord_webhook_url
+                    FROM form_meta_data f
+                    LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
+                    ORDER BY f.id
+                    LIMIT ?",
+                    )
+                    .bind(i64::from(request.limit().overfetch_value()))
+                    .fetch_all(&mut **txn)
+                    .await?
+                };
+
+                let form_rows = rows
+                    .into_iter()
+                    .map(form_row_from_db_row)
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let form_ids = form_rows.iter().map(|r| r.id.clone()).collect_vec();
+                let group_restrictions =
+                    fetch_form_group_restrictions_batch(txn, "form_", &form_ids).await?;
+                let labels_by_form =
+                    fetch_label_ids_batch(txn, "label_settings_for_forms", &form_ids).await?;
+
+                let records = stream::try_unfold(
+                    (
+                        form_rows.into_iter(),
+                        group_restrictions,
+                        labels_by_form,
+                        txn,
+                    ),
+                    |(mut rows, mut restrictions, mut labels, txn)| async move {
+                        let Some(row) = rows.next() else {
+                            return Ok::<_, InfraError>(None);
+                        };
+                        let r = restrictions.remove(&row.id).unwrap_or_default();
+                        let l = labels.remove(&row.id).unwrap_or_default();
+                        let record = build_active_form_record(
+                            txn,
+                            row,
+                            r,
+                            l,
+                            "form_questions",
+                            "form_choices",
+                        )
+                        .await?;
+                        Ok(Some((record, (rows, restrictions, labels, txn))))
+                    },
+                )
+                .try_collect()
+                .await?;
+
+                Ok::<_, InfraError>(Page::from_overfetched_items(
+                    records,
+                    request.limit(),
+                    |record: &ActiveFormRecord| {
+                        FormPagePosition::new(FormId::from(
+                            Uuid::parse_str(&record.id).expect("database form id must be uuid"),
+                        ))
+                    },
+                ))
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn list_all(&self) -> Result<Vec<ActiveFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = sqlx::query(
@@ -973,11 +1086,8 @@ impl FormDatabase for ConnectionPool {
                     f.created_at, f.updated_at, w.url AS discord_webhook_url
                     FROM form_meta_data f
                     LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
-                    ORDER BY f.id
-                    LIMIT ? OFFSET ?",
+                    ORDER BY f.id",
                 )
-                .bind(limit.unwrap_or(u32::MAX))
-                .bind(offset.unwrap_or(0))
                 .fetch_all(&mut **txn)
                 .await?;
 
@@ -1040,14 +1150,59 @@ impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
     async fn list_archived(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
+        request: PageRequest<ArchivedFormPagePosition>,
         query_text: Option<String>,
-    ) -> Result<Vec<ArchivedFormRecord>, InfraError> {
+    ) -> Result<Page<ArchivedFormRecord, ArchivedFormPagePosition>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = if let Some(query_text) = query_text {
                     let like = format!("%{query_text}%");
+                    if let Some(position) = request.after_position() {
+                        sqlx::query(
+                            r"SELECT f.id, f.title, f.description, f.visibility,
+            f.answer_visibility, f.allow_temporary_answers,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
+                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
+                        f.archived_at, u.name AS archived_by_name,
+                        u.id AS archived_by_id, u.role AS archived_by_role
+                        FROM archived_form_meta_data f
+                        INNER JOIN users u ON f.archived_by = u.id
+                        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
+                        WHERE (f.archived_at < ? OR (f.archived_at = ? AND f.id > ?))
+                            AND (f.title LIKE ? OR f.description LIKE ?)
+                        ORDER BY f.archived_at DESC, f.id ASC
+                        LIMIT ?",
+                        )
+                        .bind(position.last_archived_at())
+                        .bind(position.last_archived_at())
+                        .bind(position.last_form_id().into_inner().to_string())
+                        .bind(&like)
+                        .bind(&like)
+                        .bind(i64::from(request.limit().overfetch_value()))
+                        .fetch_all(&mut **txn)
+                        .await?
+                    } else {
+                        sqlx::query(
+                            r"SELECT f.id, f.title, f.description, f.visibility,
+            f.answer_visibility, f.allow_temporary_answers,
+            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
+                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
+                        f.archived_at, u.name AS archived_by_name,
+                        u.id AS archived_by_id, u.role AS archived_by_role
+                        FROM archived_form_meta_data f
+                        INNER JOIN users u ON f.archived_by = u.id
+                        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
+                        WHERE f.title LIKE ? OR f.description LIKE ?
+                        ORDER BY f.archived_at DESC, f.id ASC
+                        LIMIT ?",
+                        )
+                        .bind(&like)
+                        .bind(&like)
+                        .bind(i64::from(request.limit().overfetch_value()))
+                        .fetch_all(&mut **txn)
+                        .await?
+                    }
+                } else if let Some(position) = request.after_position() {
                     sqlx::query(
                         r"SELECT f.id, f.title, f.description, f.visibility,
             f.answer_visibility, f.allow_temporary_answers,
@@ -1058,14 +1213,14 @@ impl FormDatabase for ConnectionPool {
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
                         LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
-                        WHERE f.title LIKE ? OR f.description LIKE ?
-                        ORDER BY f.archived_at DESC, f.id
-                        LIMIT ? OFFSET ?",
+                        WHERE f.archived_at < ? OR (f.archived_at = ? AND f.id > ?)
+                        ORDER BY f.archived_at DESC, f.id ASC
+                        LIMIT ?",
                     )
-                    .bind(&like)
-                    .bind(&like)
-                    .bind(limit.unwrap_or(u32::MAX))
-                    .bind(offset.unwrap_or(0))
+                    .bind(position.last_archived_at())
+                    .bind(position.last_archived_at())
+                    .bind(position.last_form_id().into_inner().to_string())
+                    .bind(i64::from(request.limit().overfetch_value()))
                     .fetch_all(&mut **txn)
                     .await?
                 } else {
@@ -1079,11 +1234,10 @@ impl FormDatabase for ConnectionPool {
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
                         LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
-                        ORDER BY f.archived_at DESC, f.id
-                        LIMIT ? OFFSET ?",
+                        ORDER BY f.archived_at DESC, f.id ASC
+                        LIMIT ?",
                     )
-                    .bind(limit.unwrap_or(u32::MAX))
-                    .bind(offset.unwrap_or(0))
+                    .bind(i64::from(request.limit().overfetch_value()))
                     .fetch_all(&mut **txn)
                     .await?
                 };
@@ -1100,7 +1254,7 @@ impl FormDatabase for ConnectionPool {
                     fetch_label_ids_batch(txn, "archived_label_settings_for_forms", &form_ids)
                         .await?;
 
-                stream::try_unfold(
+                let records = stream::try_unfold(
                     (
                         form_rows.into_iter(),
                         group_restrictions,
@@ -1126,7 +1280,21 @@ impl FormDatabase for ConnectionPool {
                     },
                 )
                 .try_collect()
-                .await
+                .await?;
+
+                Ok::<_, InfraError>(Page::from_overfetched_items(
+                    records,
+                    request.limit(),
+                    |record: &ArchivedFormRecord| {
+                        ArchivedFormPagePosition::new(
+                            record.archived_at,
+                            FormId::from(
+                                Uuid::parse_str(&record.form.id)
+                                    .expect("database archived form id must be uuid"),
+                            ),
+                        )
+                    },
+                ))
             })
         })
         .await
@@ -1227,17 +1395,24 @@ impl FormDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn list_answer_entries(&self, form_id: FormId) -> Result<Vec<AnswerEntry>, InfraError> {
+    async fn list_answer_entries(
+        &self,
+        form_id: FormId,
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(async move { fetch_answer_entries(txn, Some(form_id)).await })
+            Box::pin(async move { fetch_answer_entries_page(txn, Some(form_id), request).await })
         })
         .await
     }
 
     #[tracing::instrument]
-    async fn list_all_answer_entries(&self) -> Result<Vec<AnswerEntry>, InfraError> {
+    async fn list_all_answer_entries(
+        &self,
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(async move { fetch_answer_entries(txn, None).await })
+            Box::pin(async move { fetch_answer_entries_page(txn, None, request).await })
         })
         .await
     }

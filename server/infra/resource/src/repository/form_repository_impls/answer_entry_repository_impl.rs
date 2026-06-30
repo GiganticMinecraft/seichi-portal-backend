@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use domain::{
     form::{
-        answer::{AnswerEntry, AnswerId},
+        answer::{AnswerEntry, AnswerId, AnswerPagePosition},
         models::ActiveForm,
     },
+    pagination::{Page, PageRequest},
     repository::form::answer_entry_repository::AnswerEntryRepository,
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
 use errors::Error;
-use uuid::Uuid;
 
 use crate::{
     database::{
@@ -47,47 +47,44 @@ where
     async fn list_by_form(
         &self,
         form: &Allowed<ActiveForm, Read>,
-    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
-        let entries = self.client.form().list_answer_entries(*form.id()).await?;
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
+        let page = self
+            .client
+            .form()
+            .list_answer_entries(*form.id(), request)
+            .await?;
+        let (entries, next) = page.into_parts();
 
-        Ok(form.readable_entries(entries))
+        Ok(Page::new(form.readable_entries(entries), next))
     }
 
     #[tracing::instrument(skip(self, forms))]
     async fn list_all(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
-    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         if forms.is_empty() {
-            return Ok(Vec::new());
+            return Ok(Page::new(Vec::new(), None));
         }
 
-        let mut entries_by_form = self
-            .client
-            .form()
-            .list_all_answer_entries()
-            .await?
-            .into_iter()
-            .fold(
-                HashMap::<Uuid, Vec<AnswerEntry>>::new(),
-                |mut acc, entry| {
-                    acc.entry(entry.form_id().into_inner())
-                        .or_default()
-                        .push(entry);
-                    acc
-                },
-            );
-
-        Ok(forms
+        let page = self.client.form().list_all_answer_entries(request).await?;
+        let (entries, next) = page.into_parts();
+        let forms_by_id = forms
             .iter()
-            .flat_map(|form| {
-                form.readable_entries(
-                    entries_by_form
-                        .remove(&form.id().into_inner())
-                        .unwrap_or_default(),
-                )
+            .map(|form| (form.id().into_inner(), form))
+            .collect::<HashMap<_, _>>();
+        let authorized_entries = entries
+            .into_iter()
+            .filter_map(|entry| {
+                forms_by_id
+                    .get(&entry.form_id().into_inner())
+                    .map(|form| form.read_entry(entry))
             })
-            .collect())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Page::new(authorized_entries, next))
     }
 
     #[tracing::instrument(skip(self, _form, answer_entry))]

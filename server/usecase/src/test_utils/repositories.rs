@@ -4,8 +4,11 @@ use domain::{
         AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserPagePosition,
     },
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerSubmitterRestriction},
-        models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId},
+        answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerSubmitterRestriction},
+        models::{
+            ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
+            FormPagePosition,
+        },
     },
     notification::models::NotificationPreference,
     pagination::{Page, PageRequest},
@@ -27,18 +30,6 @@ use std::sync::Mutex;
 use uuid::Uuid;
 
 use crate::forms::form::FormUseCase;
-
-fn paginate<T>(
-    items: impl IntoIterator<Item = T>,
-    offset: Option<u32>,
-    limit: Option<u32>,
-) -> Vec<T> {
-    let items = items.into_iter().skip(offset.unwrap_or(0) as usize);
-    match limit {
-        Some(limit) => items.take(limit as usize).collect(),
-        None => items.collect(),
-    }
-}
 
 fn not_found_error(entity: &str, id: impl std::fmt::Display) -> Error {
     errors::domain::DomainError::InvalidEntity {
@@ -133,21 +124,43 @@ impl ActiveFormRepository for InMemoryActiveFormRepository {
 
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
-        let forms = self
+        request: PageRequest<FormPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<ActiveForm, Read>, FormPagePosition>, Error> {
+        let mut forms = self
             .forms
             .lock()
             .unwrap()
             .iter()
             .cloned()
             .collect::<Vec<_>>();
+        forms.sort_by_key(|form| form.id().into_inner());
 
-        Ok(paginate(forms, offset, limit)
-            .into_iter()
-            .map(AuthorizationGuard::from)
-            .collect())
+        if let Some(position) = request.after_position() {
+            forms.retain(|form| *form.id() > position.last_form_id());
+        }
+
+        let page = Page::from_overfetched_items(forms, request.limit(), |form| {
+            FormPagePosition::new(*form.id())
+        });
+        let (forms, next) = page.into_parts();
+
+        Ok(Page::new(
+            forms.into_iter().map(AuthorizationGuard::from).collect(),
+            next,
+        ))
+    }
+
+    async fn list_all(&self) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
+        let mut forms = self
+            .forms
+            .lock()
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        forms.sort_by_key(|form| form.id().into_inner());
+
+        Ok(forms.into_iter().map(AuthorizationGuard::from).collect())
     }
 
     async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<ActiveForm, Read>>, Error> {
@@ -257,24 +270,47 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
     async fn list_by_form(
         &self,
         form: &Allowed<ActiveForm, Read>,
-    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
-        Ok(form.readable_entries(
-            self.answers
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|answer| answer.form_id() == form.id())
-                .cloned()
-                .collect(),
-        ))
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
+        let mut answers = self
+            .answers
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|answer| answer.form_id() == form.id())
+            .cloned()
+            .collect::<Vec<_>>();
+        answers.sort_by_key(|answer| answer.id().into_inner());
+
+        if let Some(position) = request.after_position() {
+            answers.retain(|answer| *answer.id() > position.last_answer_id());
+        }
+
+        let page = Page::from_overfetched_items(answers, request.limit(), |answer| {
+            AnswerPagePosition::new(*answer.id())
+        });
+        let (answers, next) = page.into_parts();
+
+        Ok(Page::new(form.readable_entries(answers), next))
     }
 
     async fn list_all(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
-    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
-        let answers = self.answers.lock().unwrap();
-        Ok(forms
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
+        let mut answers = self.answers.lock().unwrap().clone();
+        answers.sort_by_key(|answer| answer.id().into_inner());
+
+        if let Some(position) = request.after_position() {
+            answers.retain(|answer| *answer.id() > position.last_answer_id());
+        }
+
+        let page = Page::from_overfetched_items(answers, request.limit(), |answer| {
+            AnswerPagePosition::new(*answer.id())
+        });
+        let (answers, next) = page.into_parts();
+        let readable_answers = forms
             .iter()
             .flat_map(|form| {
                 form.readable_entries(
@@ -285,7 +321,9 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
                         .collect(),
                 )
             })
-            .collect())
+            .collect::<Vec<_>>();
+
+        Ok(Page::new(readable_answers, next))
     }
 
     async fn post(
@@ -331,10 +369,9 @@ pub(crate) struct InMemoryArchivedFormRepository {
 impl ArchivedFormRepository for InMemoryArchivedFormRepository {
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
+        request: PageRequest<ArchivedFormPagePosition>,
         query: Option<String>,
-    ) -> Result<Vec<AuthorizationGuard<ArchivedForm, Read>>, Error> {
+    ) -> Result<Page<AuthorizationGuard<ArchivedForm, Read>, ArchivedFormPagePosition>, Error> {
         let mut forms = self
             .forms
             .lock()
@@ -359,12 +396,30 @@ impl ArchivedFormRepository for InMemoryArchivedFormRepository {
                 None => true,
             })
             .collect::<Vec<_>>();
-        forms.sort_by(|left, right| right.archived_at().cmp(left.archived_at()));
+        forms.sort_by(|left, right| {
+            right
+                .archived_at()
+                .cmp(left.archived_at())
+                .then_with(|| left.form().id().cmp(right.form().id()))
+        });
 
-        Ok(paginate(forms, offset, limit)
-            .into_iter()
-            .map(AuthorizationGuard::from)
-            .collect())
+        if let Some(position) = request.after_position() {
+            forms.retain(|form| {
+                *form.archived_at() < position.last_archived_at()
+                    || (*form.archived_at() == position.last_archived_at()
+                        && *form.form().id() > position.last_form_id())
+            });
+        }
+
+        let page = Page::from_overfetched_items(forms, request.limit(), |form| {
+            ArchivedFormPagePosition::new(*form.archived_at(), *form.form().id())
+        });
+        let (forms, next) = page.into_parts();
+
+        Ok(Page::new(
+            forms.into_iter().map(AuthorizationGuard::from).collect(),
+            next,
+        ))
     }
 
     async fn get(

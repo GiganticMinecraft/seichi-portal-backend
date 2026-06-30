@@ -3,18 +3,20 @@ use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use domain::form::answer::{FormAnswerContent, FormAnswerContentId};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use domain::form::answer::{AnswerPagePosition, FormAnswerContent, FormAnswerContentId};
 use domain::{
     account::models::AccountUser,
     form::answer::TemporaryAnswerAuthor,
     form::{answer::AnswerId, models::FormId},
+    pagination::{PageLimit, PageRequest},
     repository::Repositories,
 };
-use errors::ErrorExtra;
+use errors::{Error, ErrorExtra, presentation::PresentationError};
 use itertools::Itertools;
 use resource::{
     outgoing::discord_webhook_sender::{
@@ -22,6 +24,7 @@ use resource::{
     },
     repository::{RealInfrastructureRepository, Repository},
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::warn;
 use usecase::forms::{
@@ -34,9 +37,9 @@ use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
         form_request_schemas::{
-            AnswerCreateSchema, AnswerUpdateSchema, TemporaryAnswerCreateSchema,
+            AnswerCreateSchema, AnswerListQuery, AnswerUpdateSchema, TemporaryAnswerCreateSchema,
         },
-        form_response_schemas::FormAnswer,
+        form_response_schemas::{AnswerListPageResponse, FormAnswer},
     },
 };
 
@@ -110,7 +113,7 @@ impl DiscordAnswerWebhookNotifier for ResourceDiscordAnswerWebhookNotifier {
 #[derive(utoipa::IntoResponses)]
 pub enum GetAllAnswersResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Vec<FormAnswer>),
+    Ok(AnswerListPageResponse),
 }
 
 impl IntoResponse for GetAllAnswersResponse {
@@ -138,7 +141,7 @@ impl IntoResponse for GetAnswerResponse {
 #[derive(utoipa::IntoResponses)]
 pub enum GetAnswersByFormResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Vec<FormAnswer>),
+    Ok(AnswerListPageResponse),
 }
 
 impl IntoResponse for GetAnswersByFormResponse {
@@ -163,10 +166,60 @@ impl IntoResponse for UpdateAnswerResponse {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+struct AnswerListCursor {
+    after_answer_id: uuid::Uuid,
+}
+
+fn bad_query(message: impl Into<String>) -> Error {
+    Error::from(PresentationError::QueryRejection {
+        cause: message.into(),
+    })
+}
+
+fn decode_answer_list_cursor(cursor: &str) -> Result<AnswerPagePosition, Error> {
+    let decoded = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+    let cursor = serde_json::from_slice::<AnswerListCursor>(&decoded)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(AnswerPagePosition::new(cursor.after_answer_id.into()))
+}
+
+fn encode_answer_list_cursor(position: AnswerPagePosition) -> Result<String, Error> {
+    let cursor = AnswerListCursor {
+        after_answer_id: position.last_answer_id().into_inner(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn answer_list_page_request(
+    query: AnswerListQuery,
+) -> Result<PageRequest<AnswerPagePosition>, Error> {
+    let limit = match query.limit {
+        Some(limit) => PageLimit::try_new(limit)
+            .map_err(|err| bad_query(format!("Invalid limit: {}.", err.value())))?,
+        None => PageLimit::default_limit(),
+    };
+    let after = query
+        .cursor
+        .as_deref()
+        .map(decode_answer_list_cursor)
+        .transpose()?;
+
+    Ok(PageRequest::new(after, limit))
+}
+
 #[utoipa::path(
     get,
     path = "/forms/answers",
     summary = "すべての回答をフォームを横断して取得",
+    params(
+        AnswerListQuery,
+    ),
     responses(
         GetAllAnswersResponse,
         BadRequest,
@@ -180,16 +233,24 @@ impl IntoResponse for UpdateAnswerResponse {
 pub async fn get_all_answers(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
+    query: Result<Query<AnswerListQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Result<GetAllAnswersResponse, Response> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
+    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
+    let request = answer_list_page_request(query).map_err(handle_error)?;
 
-    let answers = form_answer_use_case
-        .get_all_answers(&user)
+    let page = form_answer_use_case
+        .get_all_answers(&user, request)
         .await
         .map_err(handle_error)?;
+    let (answers, next) = page.into_parts();
+    let next_cursor = next
+        .map(encode_answer_list_cursor)
+        .transpose()
+        .map_err(handle_error)?;
 
-    Ok(GetAllAnswersResponse::Ok(
-        answers
+    Ok(GetAllAnswersResponse::Ok(AnswerListPageResponse {
+        items: answers
             .into_iter()
             .map(|answer_details| {
                 FormAnswer::new(
@@ -200,7 +261,8 @@ pub async fn get_all_answers(
                 )
             })
             .collect_vec(),
-    ))
+        next_cursor,
+    }))
 }
 
 #[utoipa::path(
@@ -251,6 +313,7 @@ pub async fn get_answer_handler(
     summary = "回答の一覧取得",
     params(
         ("id" = String, Path, description = "Form ID"),
+        AnswerListQuery,
     ),
     responses(
         GetAnswersByFormResponse,
@@ -268,18 +331,26 @@ pub async fn get_answer_by_form_id_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
+    query: Result<Query<AnswerListQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Result<GetAnswersByFormResponse, Response> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
+    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
+    let request = answer_list_page_request(query).map_err(handle_error)?;
 
-    let answers = form_answer_use_case
-        .get_answers_by_form_id(form_id, &user)
+    let page = form_answer_use_case
+        .get_answers_by_form_id(form_id, &user, request)
         .await
         .map_err(handle_error)?;
+    let (answers, next) = page.into_parts();
+    let next_cursor = next
+        .map(encode_answer_list_cursor)
+        .transpose()
+        .map_err(handle_error)?;
 
-    Ok(GetAnswersByFormResponse::Ok(
-        answers
+    Ok(GetAnswersByFormResponse::Ok(AnswerListPageResponse {
+        items: answers
             .into_iter()
             .map(|answer_details| {
                 FormAnswer::new(
@@ -290,7 +361,8 @@ pub async fn get_answer_by_form_id_handler(
                 )
             })
             .collect_vec(),
-    ))
+        next_cursor,
+    }))
 }
 
 #[utoipa::path(
