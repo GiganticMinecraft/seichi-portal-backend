@@ -6,10 +6,12 @@ use chrono::Utc;
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
+        UserPagePosition,
     },
     form::answer::{
         AnswerSubmitterRestriction, AnswerSubmitterRestrictionId, AnswerSubmitterRestrictionReason,
     },
+    pagination::{Page, PageRequest},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -28,8 +30,14 @@ use crate::{
     records::DiscordUserRecord,
 };
 
+struct UserRow {
+    id: String,
+    name: String,
+    role: String,
+}
+
 async fn fetch_groups_by_user_id(
-    txn: &mut crate::database::connection::DatabaseTransaction,
+    txn: &mut DatabaseTransaction,
     user_id: Uuid,
 ) -> Result<Vec<UserGroup>, InfraError> {
     let rows = sqlx::query!(
@@ -367,6 +375,66 @@ impl UserDatabase for ConnectionPool {
                         ))
                     })
                     .collect()
+            })
+        })
+        .await
+    }
+
+    async fn fetch_users_page(
+        &self,
+        request: PageRequest<UserPagePosition>,
+    ) -> Result<Page<AccountUser, UserPagePosition>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let limit = i64::from(request.limit().overfetch_value());
+                let rows = if let Some(position) = request.after_position() {
+                    let after_user_id = position.last_user_id().to_string();
+                    sqlx::query_as!(
+                        UserRow,
+                        r#"SELECT id, name, role
+                        FROM users
+                        WHERE id > ?
+                        ORDER BY id ASC
+                        LIMIT ?"#,
+                        after_user_id,
+                        limit,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await?
+                } else {
+                    sqlx::query_as!(
+                        UserRow,
+                        r#"SELECT id, name, role
+                        FROM users
+                        ORDER BY id ASC
+                        LIMIT ?"#,
+                        limit,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await?
+                };
+
+                let user_ids = rows.iter().map(|row| row.id.clone()).collect_vec();
+                let mut groups_by_user = fetch_groups_by_user_ids(txn, &user_ids).await?;
+                let users = rows
+                    .into_iter()
+                    .map(|row| {
+                        let user_id = Uuid::parse_str(&row.id)?;
+                        let groups = groups_by_user.remove(&row.id).unwrap_or_default();
+                        Ok::<_, InfraError>(AccountUser::with_groups(
+                            row.name,
+                            user_id.into(),
+                            Role::from_str(&row.role)?,
+                            groups,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                Ok::<_, InfraError>(Page::from_overfetched_items(
+                    users,
+                    request.limit(),
+                    |user| UserPagePosition::new(*user.id()),
+                ))
             })
         })
         .await

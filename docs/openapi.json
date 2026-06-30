@@ -4144,16 +4144,36 @@
         ],
         "summary": "ユーザーの一覧取得",
         "operationId": "user_list",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of users to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor returned by the previous page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "The request has succeeded.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserSchema"
-                  }
+                  "$ref": "#/components/schemas/UserListPageResponse"
                 }
               }
             }

@@ -1,11 +1,14 @@
 use async_trait::async_trait;
 use domain::{
-    account::models::{AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId},
+    account::models::{
+        AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserPagePosition,
+    },
     form::{
         answer::{AnswerEntry, AnswerId, AnswerSubmitterRestriction},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId},
     },
     notification::models::NotificationPreference,
+    pagination::{Page, PageRequest},
     repository::{
         answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
         form::{
@@ -620,6 +623,28 @@ impl UserRepository for InMemoryUserRepository {
             .cloned()
             .map(AuthorizationGuard::from)
             .collect())
+    }
+
+    async fn fetch_users_page(
+        &self,
+        request: PageRequest<UserPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<AccountUser, Read>, UserPagePosition>, Error> {
+        let mut users = self.users.lock().unwrap().clone();
+        users.sort_by_key(|user| user.id().into_inner());
+
+        if let Some(position) = request.after_position() {
+            users.retain(|user| *user.id() > position.last_user_id());
+        }
+
+        let page = Page::from_overfetched_items(users, request.limit(), |user| {
+            UserPagePosition::new(*user.id())
+        });
+        let (users, next) = page.into_parts();
+
+        Ok(Page::new(
+            users.into_iter().map(AuthorizationGuard::from).collect(),
+            next,
+        ))
     }
 
     async fn start_user_session(

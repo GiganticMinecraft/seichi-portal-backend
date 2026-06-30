@@ -34,6 +34,21 @@ pub struct UserId(
     Uuid,
 );
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UserPagePosition {
+    last_user_id: UserId,
+}
+
+impl UserPagePosition {
+    pub fn new(last_user_id: UserId) -> Self {
+        Self { last_user_id }
+    }
+
+    pub fn last_user_id(self) -> UserId {
+        self.last_user_id
+    }
+}
+
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Debug, Clone)]
 pub struct AccountUser {
