@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     account::models::AccountUser,
-    form::models::{ActiveForm, ArchivedForm, FormId},
+    form::models::{ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormPagePosition},
+    pagination::{Page, PageRequest},
     repository::form::{
         active_form_repository::ActiveFormRepository,
         archived_form_repository::ArchivedFormRepository,
@@ -36,12 +37,26 @@ where
     #[tracing::instrument(skip(self))]
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
+        request: PageRequest<FormPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<ActiveForm, Read>, FormPagePosition>, Error> {
+        let page = self.client.form().list(request).await?;
+        let (forms, next) = page.into_parts();
+        let forms = forms
+            .into_iter()
+            .map(TryInto::<ActiveForm>::try_into)
+            .map(|form| {
+                form.map(|form| AuthorizationGuard::<ActiveForm, Create>::from(form).into_read())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Page::new(forms, next))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn list_all(&self) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
         self.client
             .form()
-            .list(offset, limit)
+            .list_all()
             .await?
             .into_iter()
             .map(TryInto::<ActiveForm>::try_into)
@@ -91,20 +106,20 @@ where
     #[tracing::instrument(skip(self))]
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
+        request: PageRequest<ArchivedFormPagePosition>,
         query: Option<String>,
-    ) -> Result<Vec<AuthorizationGuard<ArchivedForm, Read>>, Error> {
-        self.client
-            .form()
-            .list_archived(offset, limit, query)
-            .await?
+    ) -> Result<Page<AuthorizationGuard<ArchivedForm, Read>, ArchivedFormPagePosition>, Error> {
+        let page = self.client.form().list_archived(request, query).await?;
+        let (forms, next) = page.into_parts();
+        let forms = forms
             .into_iter()
             .map(TryInto::<ArchivedForm>::try_into)
             .map(|form| {
                 form.map(|form| AuthorizationGuard::<ArchivedForm, Create>::from(form).into_read())
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Page::new(forms, next))
     }
 
     #[tracing::instrument(skip(self))]

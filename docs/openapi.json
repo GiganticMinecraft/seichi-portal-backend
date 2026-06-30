@@ -18,31 +18,29 @@
         "operationId": "archived_form_list_handler",
         "parameters": [
           {
-            "name": "offset",
+            "name": "limit",
             "in": "query",
-            "description": "Offset for pagination",
+            "description": "Maximum number of forms to return",
             "required": false,
             "schema": {
               "type": "integer",
               "format": "int32",
-              "minimum": 0
+              "maximum": 100,
+              "minimum": 1
             }
           },
           {
-            "name": "limit",
+            "name": "cursor",
             "in": "query",
-            "description": "Limit for pagination",
+            "description": "Cursor returned by the previous page",
             "required": false,
             "schema": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
+              "type": "string"
             }
           },
           {
             "name": "query",
             "in": "query",
-            "description": "Search query",
             "required": false,
             "schema": {
               "type": "string"
@@ -55,10 +53,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ArchivedFormSchema"
-                  }
+                  "$ref": "#/components/schemas/ArchivedFormListPageResponse"
                 }
               }
             }
@@ -287,25 +282,24 @@
         "operationId": "form_list_handler",
         "parameters": [
           {
-            "name": "offset",
+            "name": "limit",
             "in": "query",
-            "description": "Offset for pagination",
+            "description": "Maximum number of forms to return",
             "required": false,
             "schema": {
               "type": "integer",
               "format": "int32",
-              "minimum": 0
+              "maximum": 100,
+              "minimum": 1
             }
           },
           {
-            "name": "limit",
+            "name": "cursor",
             "in": "query",
-            "description": "Limit for pagination",
+            "description": "Cursor returned by the previous page",
             "required": false,
             "schema": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
+              "type": "string"
             }
           }
         ],
@@ -315,10 +309,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FormSchema"
-                  }
+                  "$ref": "#/components/schemas/FormListPageResponse"
                 }
               }
             }
@@ -463,16 +454,36 @@
         ],
         "summary": "すべての回答をフォームを横断して取得",
         "operationId": "get_all_answers",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of answers to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor returned by the previous page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "The request has succeeded.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FormAnswer"
-                  }
+                  "$ref": "#/components/schemas/AnswerListPageResponse"
                 }
               }
             }
@@ -1914,6 +1925,27 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of answers to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor returned by the previous page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1922,10 +1954,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FormAnswer"
-                  }
+                  "$ref": "#/components/schemas/AnswerListPageResponse"
                 }
               }
             }

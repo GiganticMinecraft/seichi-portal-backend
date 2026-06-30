@@ -20,6 +20,21 @@ use crate::{
 
 pub type AnswerId = types::Id<AnswerEntry>;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AnswerPagePosition {
+    last_answer_id: AnswerId,
+}
+
+impl AnswerPagePosition {
+    pub fn new(last_answer_id: AnswerId) -> Self {
+        Self { last_answer_id }
+    }
+
+    pub fn last_answer_id(self) -> AnswerId {
+        self.last_answer_id
+    }
+}
+
 #[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, PartialEq, Debug)]
 pub struct AnswerEntry {
     id: AnswerId,

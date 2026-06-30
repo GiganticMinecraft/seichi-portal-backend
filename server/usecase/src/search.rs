@@ -9,12 +9,16 @@ use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
 use domain::{
     account::models::AccountUser,
     auth::Actor,
-    form::answer::{AnswerEntry, AnswerId},
+    form::{
+        answer::{AnswerEntry, AnswerId},
+        models::ActiveForm,
+    },
+    pagination::{PageLimit, PageRequest},
     repository::{
         form::active_form_repository::ActiveFormRepository, search_repository::SearchRepository,
     },
     search::models::SearchableFieldsWithOperation,
-    types::authorization_guard::{Allowed, Read},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Read},
 };
 use errors::Error;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
@@ -63,6 +67,36 @@ impl<
             .iter()
             .find(|entry| *entry.value().id() == answer_id)
             .cloned()
+    }
+
+    async fn list_all_form_guards(
+        &self,
+    ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
+        self.active_form_repository.list_all().await
+    }
+
+    async fn list_all_answer_entries(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
+        let mut request = PageRequest::first(PageLimit::default_limit());
+        let mut answers = Vec::new();
+
+        loop {
+            let page = self
+                .answer_entry_repository
+                .list_all(forms, request)
+                .await?;
+            let (items, next) = page.into_parts();
+            answers.extend(items);
+
+            let Some(next) = next else {
+                break;
+            };
+            request = PageRequest::after(next, PageLimit::default_limit());
+        }
+
+        Ok(answers)
     }
 
     pub async fn cross_search(
@@ -155,16 +189,12 @@ impl<
             .await?;
 
         let readable_forms = self
-            .active_form_repository
-            .list(None, None)
+            .list_all_form_guards()
             .await?
             .into_iter()
             .filter_map(|form| form.try_read(actor_ref.clone()).ok())
             .collect::<Vec<_>>();
-        let answer_entries = self
-            .answer_entry_repository
-            .list_all(&readable_forms)
-            .await?;
+        let answer_entries = self.list_all_answer_entries(&readable_forms).await?;
 
         let visible_answers = stream::iter(answers)
             .then(|entry| {
@@ -276,8 +306,7 @@ impl<
                         let system = Actor::System;
 
                         let form_guards = self
-                            .active_form_repository
-                            .list(None, None)
+                            .list_all_form_guards()
                             .await?
                             .into_iter()
                             .map(|guard| guard.try_read(system.clone()).map_err(Into::into))
@@ -299,8 +328,7 @@ impl<
                             })
                             .collect::<Result<Vec<_>, errors::Error>>()?;
 
-                        let answer_entries =
-                            self.answer_entry_repository.list_all(&form_guards).await?;
+                        let answer_entries = self.list_all_answer_entries(&form_guards).await?;
 
                         let answers = answer_entries
                             .iter()

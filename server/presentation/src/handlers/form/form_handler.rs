@@ -7,20 +7,27 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::IntoResponse,
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{DateTime, Utc};
 use domain::{
     account::models::AccountUser,
     auth::Actor,
     form::{
-        models::{ActiveForm, AllowedUserGroups, ArchivedForm, FormDescription, FormId, FormLabel},
+        models::{
+            ActiveForm, AllowedUserGroups, ArchivedForm, ArchivedFormPagePosition, FormDescription,
+            FormId, FormLabel, FormPagePosition,
+        },
         question::{Choice, Question, QuestionSet, QuestionType},
     },
+    pagination::{PageLimit, PageRequest},
     repository::Repositories,
 };
-use errors::{ErrorExtra, domain::DomainError};
+use errors::{Error, ErrorExtra, domain::DomainError, presentation::PresentationError};
 use resource::{
     database::connection::ConnectionPool,
     repository::{RealInfrastructureRepository, Repository},
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use types::non_empty_vec::NonEmptyVec;
 use usecase::{
@@ -33,14 +40,14 @@ use crate::schemas::{
     error_responses::*,
     form::{
         form_request_schemas::{
-            ChoiceSchema, FormCreateSchema, FormUpdateSchema, OffsetAndLimit, QuestionSchema,
+            ArchivedFormListQuery, ChoiceSchema, FormCreateSchema, FormListQuery, FormUpdateSchema,
+            QuestionSchema,
         },
         form_response_schemas::{
-            ArchivedFormSchema, FormMetaSchema, FormSchema, FormSettingsSchema,
-            QuestionResponseSchema,
+            ArchivedFormListPageResponse, ArchivedFormSchema, FormListPageResponse, FormMetaSchema,
+            FormSchema, FormSettingsSchema, QuestionResponseSchema,
         },
     },
-    search_schemas::SearchQuery,
 };
 
 #[derive(utoipa::IntoResponses)]
@@ -72,7 +79,7 @@ impl IntoResponse for CreateFormResponse {
 #[derive(utoipa::IntoResponses)]
 pub enum FormListResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Vec<FormSchema>),
+    Ok(FormListPageResponse),
 }
 
 impl IntoResponse for FormListResponse {
@@ -114,7 +121,7 @@ impl IntoResponse for UpdateFormResponse {
 #[derive(utoipa::IntoResponses)]
 pub enum ArchivedFormListResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Vec<ArchivedFormSchema>),
+    Ok(ArchivedFormListPageResponse),
 }
 
 impl IntoResponse for ArchivedFormListResponse {
@@ -209,6 +216,97 @@ fn archived_form_schema_from_parts(
             .collect(),
         labels,
     }
+}
+
+#[derive(Deserialize, Serialize)]
+struct FormListCursor {
+    after_form_id: uuid::Uuid,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ArchivedFormListCursor {
+    after_archived_at: DateTime<Utc>,
+    after_form_id: uuid::Uuid,
+}
+
+fn bad_query(message: impl Into<String>) -> Error {
+    Error::from(PresentationError::QueryRejection {
+        cause: message.into(),
+    })
+}
+
+fn decode_form_list_cursor(cursor: &str) -> Result<FormPagePosition, Error> {
+    let decoded = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+    let cursor = serde_json::from_slice::<FormListCursor>(&decoded)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(FormPagePosition::new(cursor.after_form_id.into()))
+}
+
+fn encode_form_list_cursor(position: FormPagePosition) -> Result<String, Error> {
+    let cursor = FormListCursor {
+        after_form_id: position.last_form_id().into_inner(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn form_list_page_request(query: &FormListQuery) -> Result<PageRequest<FormPagePosition>, Error> {
+    let limit = match query.limit {
+        Some(limit) => PageLimit::try_new(limit)
+            .map_err(|err| bad_query(format!("Invalid limit: {}.", err.value())))?,
+        None => PageLimit::default_limit(),
+    };
+    let after = query
+        .cursor
+        .as_deref()
+        .map(decode_form_list_cursor)
+        .transpose()?;
+
+    Ok(PageRequest::new(after, limit))
+}
+
+fn decode_archived_form_list_cursor(cursor: &str) -> Result<ArchivedFormPagePosition, Error> {
+    let decoded = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+    let cursor = serde_json::from_slice::<ArchivedFormListCursor>(&decoded)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(ArchivedFormPagePosition::new(
+        cursor.after_archived_at,
+        cursor.after_form_id.into(),
+    ))
+}
+
+fn encode_archived_form_list_cursor(position: ArchivedFormPagePosition) -> Result<String, Error> {
+    let cursor = ArchivedFormListCursor {
+        after_archived_at: position.last_archived_at(),
+        after_form_id: position.last_form_id().into_inner(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn archived_form_list_page_request(
+    query: &ArchivedFormListQuery,
+) -> Result<PageRequest<ArchivedFormPagePosition>, Error> {
+    let limit = match query.limit {
+        Some(limit) => PageLimit::try_new(limit)
+            .map_err(|err| bad_query(format!("Invalid limit: {}.", err.value())))?,
+        None => PageLimit::default_limit(),
+    };
+    let after = query
+        .cursor
+        .as_deref()
+        .map(decode_archived_form_list_cursor)
+        .transpose()?;
+
+    Ok(PageRequest::new(after, limit))
 }
 
 #[utoipa::path(
@@ -315,8 +413,7 @@ pub async fn create_form_handler(
     path = "/forms",
     summary = "フォームの一覧取得",
     params(
-        ("offset" = Option<u32>, Query, description = "Offset for pagination"),
-        ("limit" = Option<u32>, Query, description = "Limit for pagination"),
+        FormListQuery,
     ),
     responses(
         FormListResponse,
@@ -331,13 +428,20 @@ pub async fn create_form_handler(
 pub async fn form_list_handler(
     Extension(actor): Extension<Actor>,
     State(repository): State<RealInfrastructureRepository>,
-    Query(offset_and_limit): Query<OffsetAndLimit>,
+    query: Result<Query<FormListQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Result<FormListResponse, Response> {
     let form_use_case = build_form_use_case(&repository);
+    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
+    let request = form_list_page_request(&query).map_err(handle_error)?;
 
-    let forms = form_use_case
-        .form_list(&actor, offset_and_limit.offset, offset_and_limit.limit)
+    let page = form_use_case
+        .form_list(&actor, request)
         .await
+        .map_err(handle_error)?;
+    let (forms, next) = page.into_parts();
+    let next_cursor = next
+        .map(encode_form_list_cursor)
+        .transpose()
         .map_err(handle_error)?;
 
     let response_schema = forms
@@ -345,7 +449,10 @@ pub async fn form_list_handler(
         .map(|(form, labels)| form_schema(&actor, &form, labels))
         .collect::<Vec<_>>();
 
-    Ok(FormListResponse::Ok(response_schema))
+    Ok(FormListResponse::Ok(FormListPageResponse {
+        items: response_schema,
+        next_cursor,
+    }))
 }
 
 #[utoipa::path(
@@ -541,9 +648,7 @@ pub async fn update_form_handler(
     path = "/archived-forms",
     summary = "アーカイブ済みフォームの一覧取得",
     params(
-        ("offset" = Option<u32>, Query, description = "Offset for pagination"),
-        ("limit" = Option<u32>, Query, description = "Limit for pagination"),
-        ("query" = Option<String>, Query, description = "Search query"),
+        ArchivedFormListQuery,
     ),
     responses(
         ArchivedFormListResponse,
@@ -558,24 +663,20 @@ pub async fn update_form_handler(
 pub async fn archived_form_list_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-    Query(offset_and_limit): Query<OffsetAndLimit>,
-    query: Result<Query<SearchQuery>, axum::extract::rejection::QueryRejection>,
+    query: Result<Query<ArchivedFormListQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Result<ArchivedFormListResponse, Response> {
     let form_use_case = build_form_use_case(&repository);
-    let query = query
-        .map_err_to_error()
-        .map_err(handle_error)?
-        .query
-        .clone();
+    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
+    let request = archived_form_list_page_request(&query).map_err(handle_error)?;
 
-    let forms = form_use_case
-        .archived_form_list(
-            &user,
-            offset_and_limit.offset,
-            offset_and_limit.limit,
-            query.map(|q| q.into_inner()),
-        )
+    let page = form_use_case
+        .archived_form_list(&user, request, query.query.clone())
         .await
+        .map_err(handle_error)?;
+    let (forms, next) = page.into_parts();
+    let next_cursor = next
+        .map(encode_archived_form_list_cursor)
+        .transpose()
         .map_err(handle_error)?;
 
     let actor = Actor::from(user);
@@ -591,7 +692,10 @@ pub async fn archived_form_list_handler(
         })
         .collect::<Vec<_>>();
 
-    Ok(ArchivedFormListResponse::Ok(response_schema))
+    Ok(ArchivedFormListResponse::Ok(ArchivedFormListPageResponse {
+        items: response_schema,
+        next_cursor,
+    }))
 }
 
 #[utoipa::path(

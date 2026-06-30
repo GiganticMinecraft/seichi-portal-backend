@@ -124,6 +124,12 @@ pub struct FormSchema {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct FormListPageResponse {
+    pub items: Vec<FormSchema>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct ArchivedFormSchema {
     #[schema(value_type = String, format = "uuid")]
     pub id: FormId,
@@ -139,6 +145,12 @@ pub struct ArchivedFormSchema {
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct ArchivedFormListPageResponse {
+    pub items: Vec<ArchivedFormSchema>,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -399,6 +411,12 @@ pub struct FormAnswer {
     title: Option<String>,
     answers: Vec<AnswerContent>,
     labels: Vec<AnswerLabels>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerListPageResponse {
+    pub items: Vec<FormAnswer>,
+    pub next_cursor: Option<String>,
 }
 
 impl FormAnswer {

@@ -4,9 +4,10 @@ use mockall::automock;
 
 use crate::{
     form::{
-        answer::{AnswerEntry, AnswerId},
+        answer::{AnswerEntry, AnswerId, AnswerPagePosition},
         models::ActiveForm,
     },
+    pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
 
@@ -21,11 +22,13 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
     async fn list_by_form(
         &self,
         form: &Allowed<ActiveForm, Read>,
-    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error>;
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error>;
     async fn list_all(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
-    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error>;
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error>;
     async fn post(
         &self,
         form: &Allowed<ActiveForm, Read>,

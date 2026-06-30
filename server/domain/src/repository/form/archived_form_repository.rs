@@ -3,7 +3,8 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::models::{ArchivedForm, FormId},
+    form::models::{ArchivedForm, ArchivedFormPagePosition, FormId},
+    pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 
@@ -12,10 +13,9 @@ use crate::{
 pub trait ArchivedFormRepository: Send + Sync + 'static {
     async fn list(
         &self,
-        offset: Option<u32>,
-        limit: Option<u32>,
+        request: PageRequest<ArchivedFormPagePosition>,
         query: Option<String>,
-    ) -> Result<Vec<AuthorizationGuard<ArchivedForm, Read>>, Error>;
+    ) -> Result<Page<AuthorizationGuard<ArchivedForm, Read>, ArchivedFormPagePosition>, Error>;
     async fn get(
         &self,
         id: FormId,

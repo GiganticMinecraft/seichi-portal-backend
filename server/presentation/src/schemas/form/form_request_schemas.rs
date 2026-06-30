@@ -11,10 +11,35 @@ use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 
-#[derive(Deserialize, Debug, utoipa::ToSchema)]
-pub struct OffsetAndLimit {
-    pub offset: Option<u32>,
+#[derive(Deserialize, Debug, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct FormListQuery {
+    /// Maximum number of forms to return
+    #[param(minimum = 1, maximum = 100)]
     pub limit: Option<u32>,
+    /// Cursor returned by the previous page
+    pub cursor: Option<String>,
+}
+
+#[derive(Deserialize, Debug, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ArchivedFormListQuery {
+    /// Maximum number of forms to return
+    #[param(minimum = 1, maximum = 100)]
+    pub limit: Option<u32>,
+    /// Cursor returned by the previous page
+    pub cursor: Option<String>,
+    pub query: Option<String>,
+}
+
+#[derive(Deserialize, Debug, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct AnswerListQuery {
+    /// Maximum number of answers to return
+    #[param(minimum = 1, maximum = 100)]
+    pub limit: Option<u32>,
+    /// Cursor returned by the previous page
+    pub cursor: Option<String>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]

@@ -4,10 +4,11 @@ use domain::{
     auth::Actor,
     form::models::{
         ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility,
-        ArchivedForm, DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
-        FormLabelAssignment, FormLabelId, FormSettings, FormTitle, Question, QuestionSet,
-        Visibility,
+        ArchivedForm, ArchivedFormPagePosition, DefaultAnswerTitle, DiscordWebhookUrl,
+        FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormPagePosition,
+        FormSettings, FormTitle, Question, QuestionSet, Visibility,
     },
+    pagination::{Page, PageLimit, PageRequest},
     repository::{
         form::{
             active_form_repository::ActiveFormRepository,
@@ -169,13 +170,11 @@ impl<
     pub async fn form_list(
         &self,
         actor: &Actor,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> Result<Vec<(ActiveForm, Vec<FormLabel>)>, Error> {
-        let forms = self
-            .active_form_repository
-            .list(offset, limit)
-            .await?
+        request: PageRequest<FormPagePosition>,
+    ) -> Result<Page<(ActiveForm, Vec<FormLabel>), FormPagePosition>, Error> {
+        let page = self.active_form_repository.list(request).await?;
+        let (forms, next) = page.into_parts();
+        let forms = forms
             .into_iter()
             .flat_map(|form| form.try_read(actor.clone()).map(|form| form.into_inner()))
             .collect::<Vec<_>>();
@@ -203,7 +202,7 @@ impl<
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(forms_with_labels)
+        Ok(Page::new(forms_with_labels, next))
     }
 
     pub async fn get_form(
@@ -236,15 +235,13 @@ impl<
     pub async fn archived_form_list(
         &self,
         actor: &AccountUser,
-        offset: Option<u32>,
-        limit: Option<u32>,
+        request: PageRequest<ArchivedFormPagePosition>,
         query: Option<String>,
-    ) -> Result<Vec<ArchivedFormDetails>, Error> {
+    ) -> Result<Page<ArchivedFormDetails, ArchivedFormPagePosition>, Error> {
         let actor_user = Actor::from(actor.clone());
-        let forms = self
-            .archived_form_repository
-            .list(offset, limit, query)
-            .await?
+        let page = self.archived_form_repository.list(request, query).await?;
+        let (forms, next) = page.into_parts();
+        let forms = forms
             .into_iter()
             .flat_map(|form| {
                 form.try_read(actor_user.clone())
@@ -287,7 +284,8 @@ impl<
             })
             .collect::<Vec<_>>();
 
-        futures::future::try_join_all(forms_with_labels).await
+        let forms_with_labels = futures::future::try_join_all(forms_with_labels).await?;
+        Ok(Page::new(forms_with_labels, next))
     }
 
     pub async fn get_archived_form(
@@ -421,8 +419,12 @@ impl<
 
             if !self
                 .answer_entry_repository
-                .list_by_form(&current_form_read)
+                .list_by_form(
+                    &current_form_read,
+                    PageRequest::first(PageLimit::default_limit()),
+                )
                 .await?
+                .items()
                 .is_empty()
             {
                 validate_answered_form_question_update(&current_questions, questions.as_slice())?;
