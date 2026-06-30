@@ -14,6 +14,7 @@ use crate::{
     account::models::Role,
     auth::Actor,
     form::answer::{AnswerAuthor, AnswerEntry},
+    form::settings::AllowedUserGroups,
 };
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -98,6 +99,8 @@ pub struct AnswerSettings {
     visibility: AnswerVisibility,
     acceptance_period: AnswerAcceptancePeriod,
     allow_temporary_answers: bool,
+    #[serde(default)]
+    answer_groups: AllowedUserGroups,
 }
 
 impl AnswerSettings {
@@ -112,6 +115,7 @@ impl AnswerSettings {
             visibility,
             acceptance_period,
             allow_temporary_answers,
+            answer_groups: AllowedUserGroups::unrestricted(),
         }
     }
 
@@ -140,16 +144,27 @@ impl AnswerSettings {
         }
     }
 
+    pub fn change_answer_groups(self, answer_groups: AllowedUserGroups) -> Self {
+        Self {
+            answer_groups,
+            ..self
+        }
+    }
+
     /// `actor` が `author` として回答を作成してよいかを、受付期間と一時回答の可否から判定します。
     pub(crate) fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
         let is_within_period = self.acceptance_period.is_within_period(Utc::now());
 
         match (author, actor) {
             (AnswerAuthor::AuthenticatedUser(user_id), Actor::AccountUser(user)) => {
-                *user_id == *user.id() && (is_within_period || user.role() == &Role::Administrator)
+                *user_id == *user.id()
+                    && (is_within_period || user.role() == &Role::Administrator)
+                    && self.answer_groups.allows(actor)
             }
             (AnswerAuthor::Temporary(_), Actor::TemporaryAnswerAuthor(_)) => {
-                self.allow_temporary_answers && is_within_period
+                self.allow_temporary_answers
+                    && is_within_period
+                    && self.answer_groups.as_slice().is_empty()
             }
             _ => false,
         }
@@ -160,7 +175,8 @@ impl AnswerSettings {
         match actor {
             Actor::AccountUser(user) => {
                 entry.author().authenticated_user_id() == Some(*user.id())
-                    || self.visibility == AnswerVisibility::PUBLIC
+                    || (self.visibility == AnswerVisibility::PUBLIC
+                        && self.answer_groups.allows(actor))
                     || user.role() == &Role::Administrator
             }
             Actor::System => true,
@@ -173,7 +189,7 @@ impl AnswerSettings {
 mod tests {
     use super::*;
     use crate::{
-        account::models::{AccountUser, UserId},
+        account::models::{AccountUser, UserGroup, UserGroupId, UserGroupName, UserId},
         form::answer::TemporaryAnswerAuthor,
         form::{
             answer::{AnswerTitle, PostedAnswerContents},
@@ -197,6 +213,24 @@ mod tests {
 
     fn active_user(role: Role) -> AccountUser {
         AccountUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
+    }
+
+    fn user_group(seed: u128, name: &str) -> UserGroup {
+        unsafe {
+            UserGroup::from_raw_parts(
+                UserGroupId::from(Uuid::from_u128(seed)),
+                UserGroupName::new(name.to_string().try_into().unwrap()),
+            )
+        }
+    }
+
+    fn active_user_with_groups(role: Role, groups: Vec<UserGroup>) -> AccountUser {
+        AccountUser::with_groups(
+            "user".to_string(),
+            UserId::from(Uuid::new_v4()),
+            role,
+            groups,
+        )
     }
 
     fn answer_entry(author: AnswerAuthor) -> AnswerEntry {
@@ -261,6 +295,41 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_answer_creation_can_be_restricted_to_group_members() {
+        let observer = user_group(10, "Observer");
+        let member = active_user_with_groups(Role::StandardUser, vec![observer.clone()]);
+        let outsider = active_user(Role::StandardUser);
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap())
+            .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
+
+        assert!(settings.can_accept_answer(
+            &AnswerAuthor::AuthenticatedUser(*member.id()),
+            &Actor::from(member)
+        ));
+        assert!(!settings.can_accept_answer(
+            &AnswerAuthor::AuthenticatedUser(*outsider.id()),
+            &Actor::from(outsider)
+        ));
+    }
+
+    #[test]
+    fn temporary_answer_creation_is_denied_when_answer_group_is_restricted() {
+        let observer = user_group(10, "Observer");
+        let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap())
+            .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
+        let author = AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+        let actor = Actor::from(TemporaryAnswerAuthor::new(
+            "guest".to_string(),
+            "contact".to_string(),
+        ));
+
+        assert!(!settings.can_accept_answer(&author, &actor));
+    }
+
+    #[test]
     fn private_entry_is_readable_by_its_author() {
         let author = active_user(Role::StandardUser);
         let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
@@ -302,5 +371,25 @@ mod tests {
         );
 
         assert!(settings.can_read_entry(&entry, &Actor::from(other)));
+    }
+
+    #[test]
+    fn public_entry_with_group_restriction_is_readable_by_group_member_only() {
+        let observer = user_group(10, "Observer");
+        let author = active_user(Role::StandardUser);
+        let member = active_user_with_groups(Role::StandardUser, vec![observer.clone()]);
+        let outsider = active_user(Role::StandardUser);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = AnswerSettings::new(
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PUBLIC,
+            AnswerAcceptancePeriod::try_new(None, None).unwrap(),
+            false,
+        )
+        .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(member)));
+        assert!(!settings.can_read_entry(&entry, &Actor::from(outsider)));
+        assert!(settings.can_read_entry(&entry, &Actor::from(active_user(Role::Administrator))));
     }
 }

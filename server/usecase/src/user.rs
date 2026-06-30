@@ -1,5 +1,7 @@
 use domain::{
-    account::models::{AccountUser, DiscordAccountLink, Role},
+    account::models::{
+        AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
+    },
     auth::Actor,
     repository::user_repository::UserRepository,
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
@@ -55,8 +57,12 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
         let current_user = current_user_guard.try_read(actor_ref.clone())?.into_inner();
-        let new_role_user =
-            AccountUser::new(current_user.name().to_owned(), *current_user.id(), role);
+        let new_role_user = AccountUser::with_groups(
+            current_user.name().to_owned(),
+            *current_user.id(),
+            role,
+            current_user.groups().to_vec(),
+        );
 
         self.repository
             .patch_user_role(
@@ -75,6 +81,149 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .try_read(actor_ref.clone())
             .map(|user| user.into_inner())
             .map_err(Into::into)
+    }
+
+    pub async fn create_user_group(
+        &self,
+        actor: &AccountUser,
+        name: UserGroupName,
+    ) -> Result<UserGroup, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        let group = UserGroup::new(name);
+        let group_id = *group.id();
+
+        self.repository
+            .create_user_group(
+                AuthorizationGuard::<_, Create>::from(group).try_create(actor_ref.clone())?,
+            )
+            .await?;
+
+        self.repository
+            .find_user_group(group_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserGroupNotFound))?
+            .try_read(actor_ref)
+            .map(|group| group.into_inner())
+            .map_err(Into::into)
+    }
+
+    pub async fn update_user_group(
+        &self,
+        actor: &AccountUser,
+        group_id: UserGroupId,
+        name: UserGroupName,
+    ) -> Result<UserGroup, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        let current_group = self
+            .repository
+            .find_user_group(group_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserGroupNotFound))?
+            .try_read(actor_ref.clone())?
+            .into_inner();
+        let updated_group = unsafe { UserGroup::from_raw_parts(*current_group.id(), name) };
+
+        self.repository
+            .update_user_group(
+                AuthorizationGuard::<_, Update>::from(updated_group)
+                    .try_update(actor_ref.clone())?,
+            )
+            .await?;
+
+        self.repository
+            .find_user_group(group_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserGroupNotFound))?
+            .try_read(actor_ref)
+            .map(|group| group.into_inner())
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_user_group(
+        &self,
+        actor: &AccountUser,
+        group_id: UserGroupId,
+    ) -> Result<(), Error> {
+        let actor_ref = Actor::from(actor.clone());
+        let group = self
+            .repository
+            .find_user_group(group_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserGroupNotFound))?;
+
+        self.repository
+            .delete_user_group(group.into_delete().try_delete(actor_ref)?)
+            .await
+    }
+
+    pub async fn fetch_user_groups(&self, actor: &AccountUser) -> Result<Vec<UserGroup>, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        self.repository
+            .fetch_user_groups()
+            .await?
+            .into_iter()
+            .map(|guard| {
+                guard
+                    .try_read(actor_ref.clone())
+                    .map(|group| group.into_inner())
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub async fn add_user_to_group(
+        &self,
+        actor: &AccountUser,
+        group_id: UserGroupId,
+        user_id: Uuid,
+    ) -> Result<AccountUser, Error> {
+        self.update_user_group_membership(actor, group_id, user_id, true)
+            .await
+    }
+
+    pub async fn remove_user_from_group(
+        &self,
+        actor: &AccountUser,
+        group_id: UserGroupId,
+        user_id: Uuid,
+    ) -> Result<AccountUser, Error> {
+        self.update_user_group_membership(actor, group_id, user_id, false)
+            .await
+    }
+
+    async fn update_user_group_membership(
+        &self,
+        actor: &AccountUser,
+        group_id: UserGroupId,
+        user_id: Uuid,
+        should_belong: bool,
+    ) -> Result<AccountUser, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        let group = self
+            .repository
+            .find_user_group(group_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserGroupNotFound))?;
+        let user = self
+            .repository
+            .find_by(user_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        let allowed_group = group.into_update().try_update(actor_ref.clone())?;
+        let allowed_user = user.into_update().try_update(actor_ref.clone())?;
+
+        if should_belong {
+            self.repository
+                .add_user_to_group(allowed_group, allowed_user)
+                .await?;
+        } else {
+            self.repository
+                .remove_user_from_group(allowed_group, allowed_user)
+                .await?;
+        }
+
+        self.find_by(actor, user_id).await
     }
 
     pub async fn fetch_all_users(&self, actor: &AccountUser) -> Result<Vec<AccountUser>, Error> {

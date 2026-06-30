@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user_groups SET name = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3e7a78167137d6c8d20864b66d1a8eb2dd7daf8dec7d7fd5a1c5ac715a4e8662"
+}

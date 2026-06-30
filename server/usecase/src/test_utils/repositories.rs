@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    account::models::{AccountUser, DiscordAccountLink, DiscordUser},
+    account::models::{AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId},
     form::{
         answer::{AnswerEntry, AnswerId, AnswerSubmitterRestriction},
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId},
@@ -451,6 +451,7 @@ impl NotificationRepository for InMemoryNotificationRepository {
 #[derive(Default)]
 pub(crate) struct InMemoryUserRepository {
     users: Mutex<Vec<AccountUser>>,
+    groups: Mutex<Vec<UserGroup>>,
     sessions: Mutex<Vec<(String, AccountUser)>>,
 }
 
@@ -505,6 +506,105 @@ impl UserRepository for InMemoryUserRepository {
         } else {
             Err(not_found_error("AccountUser", user.id()))
         }
+    }
+
+    async fn create_user_group(&self, group: Allowed<UserGroup, Create>) -> Result<(), Error> {
+        self.groups.lock().unwrap().push(group.into_inner());
+        Ok(())
+    }
+
+    async fn update_user_group(&self, group: Allowed<UserGroup, Update>) -> Result<(), Error> {
+        let group = group.into_inner();
+        let mut groups = self.groups.lock().unwrap();
+        if let Some(stored_group) = groups.iter_mut().find(|stored| stored.id() == group.id()) {
+            *stored_group = group;
+            Ok(())
+        } else {
+            Err(not_found_error("UserGroup", group.id()))
+        }
+    }
+
+    async fn delete_user_group(&self, group: Allowed<UserGroup, Delete>) -> Result<(), Error> {
+        self.groups
+            .lock()
+            .unwrap()
+            .retain(|stored| stored.id() != group.id());
+        Ok(())
+    }
+
+    async fn find_user_group(
+        &self,
+        group_id: UserGroupId,
+    ) -> Result<Option<AuthorizationGuard<UserGroup, Read>>, Error> {
+        Ok(self
+            .groups
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|group| *group.id() == group_id)
+            .cloned()
+            .map(AuthorizationGuard::from))
+    }
+
+    async fn fetch_user_groups(&self) -> Result<Vec<AuthorizationGuard<UserGroup, Read>>, Error> {
+        Ok(self
+            .groups
+            .lock()
+            .unwrap()
+            .iter()
+            .cloned()
+            .map(AuthorizationGuard::from)
+            .collect())
+    }
+
+    async fn add_user_to_group(
+        &self,
+        group: Allowed<UserGroup, Update>,
+        user: Allowed<AccountUser, Update>,
+    ) -> Result<(), Error> {
+        let mut users = self.users.lock().unwrap();
+        let Some(stored_user) = users.iter_mut().find(|stored| stored.id() == user.id()) else {
+            return Err(not_found_error("AccountUser", user.id()));
+        };
+        if !stored_user
+            .groups()
+            .iter()
+            .any(|stored| stored.id() == group.id())
+        {
+            let mut groups = stored_user.groups().to_vec();
+            groups.push(group.into_inner());
+            *stored_user = AccountUser::with_groups(
+                stored_user.name().to_owned(),
+                *stored_user.id(),
+                stored_user.role().to_owned(),
+                groups,
+            );
+        }
+        Ok(())
+    }
+
+    async fn remove_user_from_group(
+        &self,
+        group: Allowed<UserGroup, Update>,
+        user: Allowed<AccountUser, Update>,
+    ) -> Result<(), Error> {
+        let mut users = self.users.lock().unwrap();
+        let Some(stored_user) = users.iter_mut().find(|stored| stored.id() == user.id()) else {
+            return Err(not_found_error("AccountUser", user.id()));
+        };
+        let groups = stored_user
+            .groups()
+            .iter()
+            .filter(|stored| stored.id() != group.id())
+            .cloned()
+            .collect();
+        *stored_user = AccountUser::with_groups(
+            stored_user.name().to_owned(),
+            *stored_user.id(),
+            stored_user.role().to_owned(),
+            groups,
+        );
+        Ok(())
     }
 
     async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<Option<AccountUser>, Error> {

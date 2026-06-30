@@ -8,7 +8,39 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
-use crate::{auth::Actor, form::is_administrator};
+use crate::{account::models::UserGroupId, auth::Actor, form::is_administrator};
+
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq, Eq)]
+pub struct AllowedUserGroups(Vec<UserGroupId>);
+
+impl AllowedUserGroups {
+    pub fn new(group_ids: Vec<UserGroupId>) -> Self {
+        let mut group_ids = group_ids;
+        group_ids.sort_by_key(|id| id.into_inner());
+        group_ids.dedup();
+        Self(group_ids)
+    }
+
+    pub fn unrestricted() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn as_slice(&self) -> &[UserGroupId] {
+        &self.0
+    }
+
+    pub fn allows(&self, actor: &Actor) -> bool {
+        if self.0.is_empty() || matches!(actor, Actor::System) || is_administrator(actor) {
+            return true;
+        }
+
+        matches!(actor, Actor::AccountUser(user) if user
+            .groups()
+            .iter()
+            .any(|group| self.0.contains(group.id())))
+    }
+}
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(UnsafeFromRawParts, Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
@@ -17,6 +49,8 @@ pub struct FormSettings {
     discord_webhook_url: DiscordWebhookUrl,
     #[serde(default)]
     visibility: Visibility,
+    #[serde(default)]
+    allowed_user_groups: AllowedUserGroups,
 }
 
 impl FormSettings {
@@ -24,6 +58,7 @@ impl FormSettings {
         Self {
             discord_webhook_url: DiscordWebhookUrl::try_new(None).unwrap(),
             visibility: Visibility::PUBLIC,
+            allowed_user_groups: AllowedUserGroups::unrestricted(),
         }
     }
 
@@ -39,6 +74,10 @@ impl FormSettings {
         &self.visibility
     }
 
+    pub fn allowed_user_groups(&self) -> &AllowedUserGroups {
+        &self.allowed_user_groups
+    }
+
     pub fn change_discord_webhook_url(self, discord_webhook_url: DiscordWebhookUrl) -> Self {
         Self {
             discord_webhook_url,
@@ -48,6 +87,13 @@ impl FormSettings {
 
     pub fn change_visibility(self, visibility: Visibility) -> Self {
         Self { visibility, ..self }
+    }
+
+    pub fn change_allowed_user_groups(self, allowed_user_groups: AllowedUserGroups) -> Self {
+        Self {
+            allowed_user_groups,
+            ..self
+        }
     }
 }
 

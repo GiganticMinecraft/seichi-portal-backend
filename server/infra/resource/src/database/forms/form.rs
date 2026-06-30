@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use domain::account::models::UserGroupId;
 use domain::form::{
     answer::AnswerEntry,
-    models::{DiscordWebhookUrl, FormLabelId},
+    models::{AllowedUserGroups, DiscordWebhookUrl, FormLabelId},
     question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
@@ -14,7 +15,7 @@ use errors::{Error, infra::InfraError};
 use futures::{TryStreamExt, stream};
 use itertools::Itertools;
 use sqlx::{AssertSqlSafe, MySqlConnection, Row, mysql::MySqlRow, query};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
@@ -128,21 +129,66 @@ async fn get_questions_txn_with_tables(
         .collect::<Result<Vec<QuestionRecord>, _>>()
 }
 
-async fn active_form_record_from_row(
+async fn fetch_label_ids(
+    txn: &mut DatabaseTransaction,
+    labels_table: &str,
+    form_id: &str,
+) -> Result<Vec<FormLabelId>, InfraError> {
+    let labels_sql =
+        format!("SELECT label_id FROM {labels_table} WHERE form_id = ? ORDER BY id ASC");
+    sqlx::query(AssertSqlSafe(&*labels_sql))
+        .bind(form_id)
+        .fetch_all(&mut **txn)
+        .await?
+        .into_iter()
+        .map(|r| {
+            Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(
+                &r.try_get::<String, _>("label_id")?,
+            )?))
+        })
+        .collect()
+}
+
+async fn fetch_label_ids_batch(
+    txn: &mut DatabaseTransaction,
+    labels_table: &str,
+    form_ids: &[String],
+) -> Result<HashMap<String, Vec<FormLabelId>>, InfraError> {
+    if form_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = std::iter::repeat_n("?", form_ids.len()).join(", ");
+    let sql = format!(
+        "SELECT form_id, label_id FROM {labels_table} WHERE form_id IN ({placeholders}) ORDER BY id ASC"
+    );
+
+    let rows = form_ids
+        .iter()
+        .fold(query(AssertSqlSafe(&*sql)), |q, fid| q.bind(fid))
+        .fetch_all(&mut **txn)
+        .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let form_id: String = row.try_get("form_id")?;
+            let label_id =
+                FormLabelId::from(Uuid::parse_str(&row.try_get::<String, _>("label_id")?)?);
+            Ok::<_, InfraError>((form_id, label_id))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|pairs| pairs.into_iter().into_group_map())
+}
+
+async fn build_active_form_record(
     txn: &mut DatabaseTransaction,
     row: FormRow,
+    restrictions: FormGroupRestrictions,
+    label_ids: Vec<FormLabelId>,
+    questions_table: &str,
+    choices_table: &str,
 ) -> Result<ActiveFormRecord, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.id)?);
-    let form_id_string = form_id.into_inner().to_string();
-    let label_ids = sqlx::query!(
-        "SELECT label_id FROM label_settings_for_forms WHERE form_id = ? ORDER BY id ASC",
-        form_id_string,
-    )
-    .fetch_all(&mut **txn)
-    .await?
-    .into_iter()
-    .map(|row| Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(&row.label_id)?)))
-    .collect::<Result<Vec<_>, _>>()?;
 
     Ok(ActiveFormRecord {
         id: row.id,
@@ -157,9 +203,148 @@ async fn active_form_record_from_row(
         acceptance_period_start_at: row.acceptance_period_start_at,
         acceptance_period_end_at: row.acceptance_period_end_at,
         default_answer_title: row.default_answer_title,
-        questions: get_questions_txn_with_tables(txn, form_id, "form_questions", "form_choices")
+        allowed_group_ids: restrictions.allowed_group_ids,
+        answer_group_ids: restrictions.answer_group_ids,
+        questions: get_questions_txn_with_tables(txn, form_id, questions_table, choices_table)
             .await?,
         label_ids,
+    })
+}
+
+async fn active_form_record_from_row(
+    txn: &mut DatabaseTransaction,
+    row: FormRow,
+) -> Result<ActiveFormRecord, InfraError> {
+    let form_id = FormId::from(Uuid::parse_str(&row.id)?);
+    let restrictions = FormGroupRestrictions {
+        allowed_group_ids: fetch_form_group_restriction_ids(
+            txn,
+            "form_allowed_user_groups",
+            form_id,
+        )
+        .await?,
+        answer_group_ids: fetch_form_group_restriction_ids(txn, "form_answer_groups", form_id)
+            .await?,
+    };
+
+    let label_ids = fetch_label_ids(txn, "label_settings_for_forms", &row.id).await?;
+
+    build_active_form_record(
+        txn,
+        row,
+        restrictions,
+        label_ids,
+        "form_questions",
+        "form_choices",
+    )
+    .await
+}
+
+async fn fetch_form_group_restriction_ids(
+    txn: &mut DatabaseTransaction,
+    table_name: &str,
+    form_id: FormId,
+) -> Result<Vec<UserGroupId>, InfraError> {
+    let sql = format!("SELECT group_id FROM {table_name} WHERE form_id = ? ORDER BY id ASC");
+    let rows = sqlx::query(AssertSqlSafe(&*sql))
+        .bind(form_id.into_inner().to_string())
+        .fetch_all(&mut **txn)
+        .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok::<_, InfraError>(UserGroupId::from(Uuid::parse_str(
+                &row.try_get::<String, _>("group_id")?,
+            )?))
+        })
+        .collect()
+}
+
+#[derive(Default)]
+struct FormGroupRestrictions {
+    allowed_group_ids: Vec<UserGroupId>,
+    answer_group_ids: Vec<UserGroupId>,
+}
+
+async fn fetch_group_ids_batch(
+    txn: &mut DatabaseTransaction,
+    table_name: &str,
+    form_ids: &[String],
+) -> Result<HashMap<String, Vec<UserGroupId>>, InfraError> {
+    let placeholders = std::iter::repeat_n("?", form_ids.len()).join(", ");
+    let sql = format!(
+        "SELECT form_id, group_id FROM {table_name} WHERE form_id IN ({placeholders}) ORDER BY id ASC"
+    );
+
+    let rows = form_ids
+        .iter()
+        .fold(query(AssertSqlSafe(&*sql)), |q, fid| q.bind(fid))
+        .fetch_all(&mut **txn)
+        .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let form_id: String = row.try_get("form_id")?;
+            let group_id =
+                UserGroupId::from(Uuid::parse_str(&row.try_get::<String, _>("group_id")?)?);
+            Ok::<_, InfraError>((form_id, group_id))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|pairs| pairs.into_iter().into_group_map())
+}
+
+async fn fetch_form_group_restrictions_batch(
+    txn: &mut DatabaseTransaction,
+    table_prefix: &str,
+    form_ids: &[String],
+) -> Result<HashMap<String, FormGroupRestrictions>, InfraError> {
+    if form_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut allowed =
+        fetch_group_ids_batch(txn, &format!("{table_prefix}allowed_user_groups"), form_ids).await?;
+    let mut answer =
+        fetch_group_ids_batch(txn, &format!("{table_prefix}answer_groups"), form_ids).await?;
+
+    Ok(form_ids
+        .iter()
+        .map(|fid| {
+            (
+                fid.clone(),
+                FormGroupRestrictions {
+                    allowed_group_ids: allowed.remove(fid).unwrap_or_default(),
+                    answer_group_ids: answer.remove(fid).unwrap_or_default(),
+                },
+            )
+        })
+        .collect())
+}
+
+async fn build_archived_form_record(
+    txn: &mut DatabaseTransaction,
+    row: ArchivedFormRow,
+    restrictions: FormGroupRestrictions,
+    label_ids: Vec<FormLabelId>,
+    questions_table: &str,
+    choices_table: &str,
+) -> Result<ArchivedFormRecord, InfraError> {
+    let form = build_active_form_record(
+        txn,
+        row.form,
+        restrictions,
+        label_ids,
+        questions_table,
+        choices_table,
+    )
+    .await?;
+
+    Ok(ArchivedFormRecord {
+        form,
+        archived_at: row.archived_at,
+        archived_by_name: row.archived_by_name,
+        archived_by_id: row.archived_by_id,
+        archived_by_role: row.archived_by_role,
     })
 }
 
@@ -168,45 +353,32 @@ async fn archived_form_record_from_row(
     row: ArchivedFormRow,
 ) -> Result<ArchivedFormRecord, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.form.id)?);
-    let form_id_string = form_id.into_inner().to_string();
-    let label_ids = sqlx::query!(
-        "SELECT label_id FROM archived_label_settings_for_forms WHERE form_id = ? ORDER BY id ASC",
-        form_id_string,
-    )
-    .fetch_all(&mut **txn)
-    .await?
-    .into_iter()
-    .map(|row| Ok::<_, InfraError>(FormLabelId::from(Uuid::parse_str(&row.label_id)?)))
-    .collect::<Result<Vec<_>, _>>()?;
+    let restrictions = FormGroupRestrictions {
+        allowed_group_ids: fetch_form_group_restriction_ids(
+            txn,
+            "archived_form_allowed_user_groups",
+            form_id,
+        )
+        .await?,
+        answer_group_ids: fetch_form_group_restriction_ids(
+            txn,
+            "archived_form_answer_groups",
+            form_id,
+        )
+        .await?,
+    };
 
-    Ok(ArchivedFormRecord {
-        form: ActiveFormRecord {
-            id: row.form.id,
-            title: row.form.title,
-            description: row.form.description,
-            created_at: row.form.created_at,
-            updated_at: row.form.updated_at,
-            discord_webhook_url: row.form.discord_webhook_url,
-            visibility: row.form.visibility,
-            answer_visibility: row.form.answer_visibility,
-            allow_temporary_answers: row.form.allow_temporary_answers,
-            acceptance_period_start_at: row.form.acceptance_period_start_at,
-            acceptance_period_end_at: row.form.acceptance_period_end_at,
-            default_answer_title: row.form.default_answer_title,
-            questions: get_questions_txn_with_tables(
-                txn,
-                form_id,
-                "archived_form_questions",
-                "archived_form_choices",
-            )
-            .await?,
-            label_ids,
-        },
-        archived_at: row.archived_at,
-        archived_by_name: row.archived_by_name,
-        archived_by_id: row.archived_by_id,
-        archived_by_role: row.archived_by_role,
-    })
+    let label_ids = fetch_label_ids(txn, "archived_label_settings_for_forms", &row.form.id).await?;
+
+    build_archived_form_record(
+        txn,
+        row,
+        restrictions,
+        label_ids,
+        "archived_form_questions",
+        "archived_form_choices",
+    )
+    .await
 }
 
 fn form_row_from_db_row(row: MySqlRow) -> Result<FormRow, InfraError> {
@@ -526,6 +698,8 @@ async fn copy_active_form_to_archive(
     .execute(&mut **txn)
     .await?;
 
+    copy_form_group_restrictions_to_archive(txn, &form_id).await?;
+
     sqlx::query(
         r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM answers WHERE form_id = ?",
@@ -641,6 +815,8 @@ async fn restore_archived_form_to_active(
     .execute(&mut **txn)
     .await?;
 
+    restore_form_group_restrictions_from_archive(txn, &form_id).await?;
+
     sqlx::query(
         r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM archived_answers WHERE form_id = ?",
@@ -705,6 +881,64 @@ async fn restore_archived_form_to_active(
     Ok(())
 }
 
+async fn copy_form_group_restrictions_to_archive(
+    txn: &mut DatabaseTransaction,
+    form_id: &str,
+) -> Result<(), InfraError> {
+    copy_group_restriction_table(
+        txn,
+        "archived_form_allowed_user_groups",
+        "form_allowed_user_groups",
+        form_id,
+    )
+    .await?;
+    copy_group_restriction_table(
+        txn,
+        "archived_form_answer_groups",
+        "form_answer_groups",
+        form_id,
+    )
+    .await
+}
+
+async fn restore_form_group_restrictions_from_archive(
+    txn: &mut DatabaseTransaction,
+    form_id: &str,
+) -> Result<(), InfraError> {
+    copy_group_restriction_table(
+        txn,
+        "form_allowed_user_groups",
+        "archived_form_allowed_user_groups",
+        form_id,
+    )
+    .await?;
+    copy_group_restriction_table(
+        txn,
+        "form_answer_groups",
+        "archived_form_answer_groups",
+        form_id,
+    )
+    .await
+}
+
+async fn copy_group_restriction_table(
+    txn: &mut DatabaseTransaction,
+    destination_table: &str,
+    source_table: &str,
+    form_id: &str,
+) -> Result<(), InfraError> {
+    let sql = format!(
+        "INSERT INTO {destination_table} (form_id, group_id)
+        SELECT form_id, group_id FROM {source_table} WHERE form_id = ?"
+    );
+    query(AssertSqlSafe(&*sql))
+        .bind(form_id)
+        .execute(&mut **txn)
+        .await?;
+
+    Ok(())
+}
+
 #[async_trait]
 impl FormDatabase for ConnectionPool {
     #[tracing::instrument]
@@ -717,6 +951,7 @@ impl FormDatabase for ConnectionPool {
                 insert_form_root(txn, &form, &user).await?;
                 sync_questions(txn, &form).await?;
                 sync_label_ids(txn, &form).await?;
+                sync_form_group_restrictions(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -746,17 +981,42 @@ impl FormDatabase for ConnectionPool {
                 .fetch_all(&mut **txn)
                 .await?;
 
-                stream::try_unfold((rows.into_iter(), txn), |(mut rows, txn)| async move {
-                    match rows.next() {
-                        Some(row) => {
-                            let record =
-                                active_form_record_from_row(txn, form_row_from_db_row(row)?)
-                                    .await?;
-                            Ok::<_, InfraError>(Some((record, (rows, txn))))
-                        }
-                        None => Ok::<_, InfraError>(None),
-                    }
-                })
+                let form_rows = rows
+                    .into_iter()
+                    .map(form_row_from_db_row)
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let form_ids = form_rows.iter().map(|r| r.id.clone()).collect_vec();
+                let group_restrictions =
+                    fetch_form_group_restrictions_batch(txn, "form_", &form_ids).await?;
+                let labels_by_form =
+                    fetch_label_ids_batch(txn, "label_settings_for_forms", &form_ids).await?;
+
+                stream::try_unfold(
+                    (
+                        form_rows.into_iter(),
+                        group_restrictions,
+                        labels_by_form,
+                        txn,
+                    ),
+                    |(mut rows, mut restrictions, mut labels, txn)| async move {
+                        let Some(row) = rows.next() else {
+                            return Ok::<_, InfraError>(None);
+                        };
+                        let r = restrictions.remove(&row.id).unwrap_or_default();
+                        let l = labels.remove(&row.id).unwrap_or_default();
+                        let record = build_active_form_record(
+                            txn,
+                            row,
+                            r,
+                            l,
+                            "form_questions",
+                            "form_choices",
+                        )
+                        .await?;
+                        Ok(Some((record, (rows, restrictions, labels, txn))))
+                    },
+                )
                 .try_collect()
                 .await
             })
@@ -828,19 +1088,43 @@ impl FormDatabase for ConnectionPool {
                     .await?
                 };
 
-                stream::try_unfold((rows.into_iter(), txn), |(mut rows, txn)| async move {
-                    match rows.next() {
-                        Some(row) => {
-                            let record = archived_form_record_from_row(
-                                txn,
-                                archived_form_row_from_db_row(row)?,
-                            )
-                            .await?;
-                            Ok::<_, InfraError>(Some((record, (rows, txn))))
-                        }
-                        None => Ok::<_, InfraError>(None),
-                    }
-                })
+                let form_rows = rows
+                    .into_iter()
+                    .map(archived_form_row_from_db_row)
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let form_ids = form_rows.iter().map(|r| r.form.id.clone()).collect_vec();
+                let group_restrictions =
+                    fetch_form_group_restrictions_batch(txn, "archived_form_", &form_ids).await?;
+                let labels_by_form =
+                    fetch_label_ids_batch(txn, "archived_label_settings_for_forms", &form_ids)
+                        .await?;
+
+                stream::try_unfold(
+                    (
+                        form_rows.into_iter(),
+                        group_restrictions,
+                        labels_by_form,
+                        txn,
+                    ),
+                    |(mut rows, mut restrictions, mut labels, txn)| async move {
+                        let Some(row) = rows.next() else {
+                            return Ok::<_, InfraError>(None);
+                        };
+                        let r = restrictions.remove(&row.form.id).unwrap_or_default();
+                        let l = labels.remove(&row.form.id).unwrap_or_default();
+                        let record = build_archived_form_record(
+                            txn,
+                            row,
+                            r,
+                            l,
+                            "archived_form_questions",
+                            "archived_form_choices",
+                        )
+                        .await?;
+                        Ok(Some((record, (rows, restrictions, labels, txn))))
+                    },
+                )
                 .try_collect()
                 .await
             })
@@ -921,6 +1205,7 @@ impl FormDatabase for ConnectionPool {
                 update_form_root(txn, &form, &updated_by).await?;
                 sync_questions(txn, &form).await?;
                 sync_label_ids(txn, &form).await?;
+                sync_form_group_restrictions(txn, &form).await?;
                 Ok::<_, InfraError>(())
             })
         })
@@ -988,6 +1273,60 @@ async fn sync_label_ids(
     label_ids
         .into_iter()
         .flat_map(|label_id| [form_id.clone(), label_id])
+        .fold(query(AssertSqlSafe(&*sql)), |query, value| {
+            query.bind(value)
+        })
+        .execute(&mut **txn)
+        .await?;
+
+    Ok(())
+}
+
+async fn sync_form_group_restrictions(
+    txn: &mut DatabaseTransaction,
+    form: &ActiveForm,
+) -> Result<(), InfraError> {
+    sync_group_restriction_ids(
+        txn,
+        "form_allowed_user_groups",
+        *form.id(),
+        form.settings().allowed_user_groups(),
+    )
+    .await?;
+    sync_group_restriction_ids(
+        txn,
+        "form_answer_groups",
+        *form.id(),
+        form.answer_settings().answer_groups(),
+    )
+    .await
+}
+
+async fn sync_group_restriction_ids(
+    txn: &mut DatabaseTransaction,
+    table_name: &str,
+    form_id: FormId,
+    group_ids: &AllowedUserGroups,
+) -> Result<(), InfraError> {
+    let form_id = form_id.into_inner().to_string();
+    let delete_sql = format!("DELETE FROM {table_name} WHERE form_id = ?");
+    query(AssertSqlSafe(&*delete_sql))
+        .bind(form_id.clone())
+        .execute(&mut **txn)
+        .await?;
+
+    if group_ids.as_slice().is_empty() {
+        return Ok(());
+    }
+
+    let sql = format!(
+        "INSERT INTO {table_name} (form_id, group_id) VALUES {}",
+        std::iter::repeat_n("(?, ?)", group_ids.as_slice().len()).join(", ")
+    );
+    group_ids
+        .as_slice()
+        .iter()
+        .flat_map(|group_id| [form_id.clone(), group_id.to_string()])
         .fold(query(AssertSqlSafe(&*sql)), |query, value| {
             query.bind(value)
         })

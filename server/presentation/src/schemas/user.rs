@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use domain::account::models::Role;
+use domain::account::models::{Role, UserGroupName};
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
@@ -9,6 +9,7 @@ pub struct UserInfoResponse {
     pub id: String,
     pub name: String,
     pub role: String,
+    pub groups: Vec<UserGroupSchema>,
     pub discord_user_id: Option<String>,
     pub discord_username: Option<String>,
 }
@@ -18,6 +19,19 @@ pub struct UserSchema {
     pub id: String,
     pub name: String,
     pub role: String,
+    pub groups: Vec<UserGroupSchema>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct UserGroupSchema {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Deserialize, Debug, utoipa::ToSchema)]
+pub struct UserGroupRequest {
+    #[schema(value_type = String)]
+    pub name: UserGroupName,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
@@ -52,10 +66,22 @@ impl From<domain::form::answer::AnswerSubmitterRestriction> for AnswerSubmitterR
 
 impl From<domain::account::models::AccountUser> for UserSchema {
     fn from(val: domain::account::models::AccountUser) -> Self {
+        let groups = val.groups().iter().cloned().map(Into::into).collect();
+
         UserSchema {
             id: val.id().to_string(),
             name: val.name().to_owned(),
             role: val.role().to_string(),
+            groups,
+        }
+    }
+}
+
+impl From<domain::account::models::UserGroup> for UserGroupSchema {
+    fn from(value: domain::account::models::UserGroup) -> Self {
+        Self {
+            id: value.id().to_string(),
+            name: value.name().to_string(),
         }
     }
 }
