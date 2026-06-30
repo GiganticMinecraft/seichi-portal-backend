@@ -1,16 +1,17 @@
 ---
 name: seichi-portal-backend-coding-discipline
-description: Use when changing seichi-portal-backend Rust code that touches sqlx queries, database access, repositories, use cases, or authorization boundaries. Enforces typed sqlx query macros for static SQL and AuthorizationGuard/Allowed at Repository boundaries.
+description: Use when changing seichi-portal-backend Rust code that touches sqlx queries, database access, repositories, use cases, authorization boundaries, or domain type construction. Enforces typed sqlx query macros for static SQL, AuthorizationGuard/Allowed at Repository boundaries, and proper use of unsafe fn from_raw_parts for domain type reconstruction.
 ---
 
 # seichi-portal-backend コーディング規約
 
 ## Overview
 
-この skill は、seichi-portal-backend の実装で見落としやすい 2 つの規約を守るために使う。
+この skill は、seichi-portal-backend の実装で見落としやすい規約を守るために使う。
 
 - 静的に書ける SQL は `sqlx` の typed query マクロで検証する。
 - Repository の型シグネチャで、認可済みの値だけが危険な操作へ渡るようにする。
+- `unsafe fn from_raw_parts` は永続化済みデータの復元専用であり、`unsafe` を削除しない。
 
 ## `sqlx` typed query
 
@@ -105,6 +106,30 @@ async fn get_label_by_id(
     id: FormLabelId,
 ) -> Result<Option<AuthorizationGuard<FormLabel, Read>>, Error>;
 ```
+
+## `unsafe fn from_raw_parts` によるドメイン型の復元
+
+このプロジェクトでは、ドメイン型の多くに `#[derive(UnsafeFromRawParts)]` を付けている。これにより `unsafe fn from_raw_parts` が生成され、データベースなどの永続化済みデータからドメイン型を復元するために使う。
+
+### なぜ `unsafe` か
+
+ドメイン型のコンストラクタ（`new` や `create` など）はビジネスルールに基づくバリデーションやデフォルト値の設定を行う。一方、データベースから読み出した値はすでにバリデーション済みであり、コンストラクタを通すと不要な検証が走ったり、ID の再生成など意図しない副作用が起きる。
+
+`from_raw_parts` はこのバリデーションをスキップしてフィールドを直接セットする。Rust 標準ライブラリの `unsafe` とは異なりメモリ安全性の問題はないが、「信頼できるデータソースからの復元」という使用条件を呼び出し側に意識させるために `unsafe` を付けている。
+
+### 使ってよい場所
+
+- infra 層でデータベースの行をドメイン型に変換するとき（`TryFrom<Record>` の実装など）
+- テストコードでドメイン型のテストデータを組み立てるとき
+
+### 使ってはいけない場所
+
+- handler や usecase で新しいドメインオブジェクトを作るとき → コンストラクタを使う
+- ユーザー入力からドメイン型を組み立てるとき → バリデーション付きのコンストラクタを使う
+
+### `unsafe` ブロックを削除しない
+
+`from_raw_parts` の `unsafe` は意図的な設計判断であり、Rust 標準ライブラリの `unsafe` とは目的が異なる。「メモリ安全性に影響しないから `unsafe` は不要」という理由で削除しない。
 
 ## 実装後の確認
 
