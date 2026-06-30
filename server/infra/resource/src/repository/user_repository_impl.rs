@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, DiscordUser, DiscordUserId, DiscordUserName, UserGroup,
-        UserGroupId,
+        UserGroupId, UserPagePosition,
     },
+    pagination::{Page, PageRequest},
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
@@ -166,6 +167,19 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .into_iter()
             .map(Into::into)
             .collect_vec())
+    }
+
+    async fn fetch_users_page(
+        &self,
+        request: PageRequest<UserPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<AccountUser, Read>, UserPagePosition>, Error> {
+        let page = self.client.user().fetch_users_page(request).await?;
+        let (users, next) = page.into_parts();
+
+        Ok(Page::new(
+            users.into_iter().map(Into::into).collect_vec(),
+            next,
+        ))
     }
 
     async fn start_user_session(

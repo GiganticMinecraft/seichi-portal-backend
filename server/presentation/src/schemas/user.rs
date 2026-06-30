@@ -22,6 +22,22 @@ pub struct UserSchema {
     pub groups: Vec<UserGroupSchema>,
 }
 
+#[derive(Deserialize, Debug, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct UserListQuery {
+    /// Maximum number of users to return
+    #[param(minimum = 1, maximum = 100)]
+    pub limit: Option<u32>,
+    /// Cursor returned by the previous page
+    pub cursor: Option<String>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct UserListPageResponse {
+    pub items: Vec<UserSchema>,
+    pub next_cursor: Option<String>,
+}
+
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct UserGroupSchema {
     pub id: String,

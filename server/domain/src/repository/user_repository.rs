@@ -4,7 +4,10 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    account::models::{AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId},
+    account::models::{
+        AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserPagePosition,
+    },
+    pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 
@@ -41,6 +44,10 @@ pub trait UserRepository: Send + Sync + 'static {
     ) -> Result<(), Error>;
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<AccountUser>, Error>;
     async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error>;
+    async fn fetch_users_page(
+        &self,
+        request: PageRequest<UserPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<AccountUser, Read>, UserPagePosition>, Error>;
     async fn start_user_session(
         &self,
         xbox_token: String,

@@ -11,7 +11,9 @@ use domain::search::models::{
     NumberOfRecordsPerAggregate, UserSearchHit,
 };
 use domain::{
-    account::models::{AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId},
+    account::models::{
+        AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserPagePosition,
+    },
     form::{
         answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerSubmitterRestriction},
         comment::{Comment, CommentId},
@@ -19,6 +21,7 @@ use domain::{
         models::{ActiveForm, ArchivedForm, FormId, FormLabel, FormLabelId, FormLabelName},
     },
     notification::models::NotificationPreference,
+    pagination::{Page, PageRequest},
     search::models::SearchableFieldsWithOperation,
 };
 use errors::infra::InfraError;
@@ -229,6 +232,10 @@ pub trait UserDatabase: Send + Sync {
         user_id: Uuid,
     ) -> Result<(), InfraError>;
     async fn fetch_all_users(&self) -> Result<Vec<AccountUser>, InfraError>;
+    async fn fetch_users_page(
+        &self,
+        request: PageRequest<UserPagePosition>,
+    ) -> Result<Page<AccountUser, UserPagePosition>, InfraError>;
     async fn start_user_session(
         &self,
         xbox_token: String,

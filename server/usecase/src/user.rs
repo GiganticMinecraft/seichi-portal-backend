@@ -1,8 +1,10 @@
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
+        UserPagePosition,
     },
     auth::Actor,
+    pagination::{Page, PageRequest},
     repository::user_repository::UserRepository,
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
 };
@@ -239,6 +241,26 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
+    }
+
+    pub async fn fetch_users_page(
+        &self,
+        actor: &AccountUser,
+        request: PageRequest<UserPagePosition>,
+    ) -> Result<Page<AccountUser, UserPagePosition>, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        let page = self.repository.fetch_users_page(request).await?;
+        let (users, next) = page.into_parts();
+        let users = users
+            .into_iter()
+            .map(|guard| {
+                guard
+                    .try_read(actor_ref.clone())
+                    .map(|user| user.into_inner())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Page::new(users, next))
     }
 
     pub async fn fetch_user_by_xbox_token(

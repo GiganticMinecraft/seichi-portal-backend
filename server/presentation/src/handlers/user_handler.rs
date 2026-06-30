@@ -1,6 +1,7 @@
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::rejection::{JsonRejection, PathRejection, QueryRejection},
+    extract::{Path, Query, State},
     http::{HeaderValue, StatusCode, header},
     response::IntoResponse,
 };
@@ -8,12 +9,15 @@ use axum_extra::{
     TypedHeader,
     headers::{Authorization, authorization::Bearer},
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use domain::{
-    account::models::{AccountUser, UserSessionExpires},
+    account::models::{AccountUser, UserPagePosition, UserSessionExpires},
     form::answer::AnswerSubmitterRestrictionReason,
+    pagination::{PageLimit, PageRequest},
     repository::Repositories,
 };
 use resource::repository::RealInfrastructureRepository;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use usecase::{answer_submitter_restriction::AnswerSubmitterRestrictionUseCase, user::UserUseCase};
 use uuid::Uuid;
@@ -21,10 +25,10 @@ use uuid::Uuid;
 use crate::schemas::error_responses::*;
 use crate::schemas::user::{
     AnswerSubmitterRestrictionRequest, AnswerSubmitterRestrictionResponse, UserGroupRequest,
-    UserGroupSchema, UserInfoResponse, UserSchema, UserUpdateSchema,
+    UserGroupSchema, UserInfoResponse, UserListPageResponse, UserListQuery, UserSchema,
+    UserUpdateSchema,
 };
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
-use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use axum_extra::typed_header::TypedHeaderRejection;
 use errors::presentation::PresentationError;
@@ -61,7 +65,7 @@ impl IntoResponse for PatchUserRoleResponse {
 #[derive(utoipa::IntoResponses)]
 pub enum UserListResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Vec<UserSchema>),
+    Ok(UserListPageResponse),
 }
 
 #[derive(utoipa::IntoResponses)]
@@ -157,6 +161,51 @@ impl IntoResponse for UserListResponse {
             Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
         }
     }
+}
+
+#[derive(Deserialize, Serialize)]
+struct UserListCursor {
+    after_user_id: Uuid,
+}
+
+fn bad_query(message: impl Into<String>) -> Error {
+    Error::from(PresentationError::QueryRejection {
+        cause: message.into(),
+    })
+}
+
+fn decode_user_list_cursor(cursor: &str) -> Result<UserPagePosition, Error> {
+    let decoded = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+    let cursor = serde_json::from_slice::<UserListCursor>(&decoded)
+        .map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(UserPagePosition::new(cursor.after_user_id.into()))
+}
+
+fn encode_user_list_cursor(position: UserPagePosition) -> Result<String, Error> {
+    let cursor = UserListCursor {
+        after_user_id: position.last_user_id().into_inner(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| bad_query("Invalid cursor."))?;
+
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn user_list_page_request(query: UserListQuery) -> Result<PageRequest<UserPagePosition>, Error> {
+    let limit = match query.limit {
+        Some(limit) => PageLimit::try_new(limit)
+            .map_err(|err| bad_query(format!("Invalid limit: {}.", err.value())))?,
+        None => PageLimit::default_limit(),
+    };
+    let after = query
+        .cursor
+        .as_deref()
+        .map(decode_user_list_cursor)
+        .transpose()?;
+
+    Ok(PageRequest::new(after, limit))
 }
 
 #[utoipa::path(
@@ -308,6 +357,9 @@ pub async fn patch_user_role(
     get,
     path = "/users",
     summary = "ユーザーの一覧取得",
+    params(
+        UserListQuery,
+    ),
     responses(
         UserListResponse,
         BadRequest,
@@ -321,18 +373,28 @@ pub async fn patch_user_role(
 pub async fn user_list(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
+    query: Result<Query<UserListQuery>, QueryRejection>,
 ) -> Result<UserListResponse, Response> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
+    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
+    let request = user_list_page_request(query).map_err(handle_error)?;
 
-    let users = user_use_case
-        .fetch_all_users(&actor)
+    let page = user_use_case
+        .fetch_users_page(&actor, request)
         .await
         .map_err(handle_error)?;
-    Ok(UserListResponse::Ok(
-        users.into_iter().map(Into::into).collect(),
-    ))
+    let (users, next) = page.into_parts();
+    let next_cursor = next
+        .map(encode_user_list_cursor)
+        .transpose()
+        .map_err(handle_error)?;
+
+    Ok(UserListResponse::Ok(UserListPageResponse {
+        items: users.into_iter().map(Into::into).collect(),
+        next_cursor,
+    }))
 }
 
 #[utoipa::path(
