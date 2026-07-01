@@ -172,6 +172,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             user_handler::update_user_group,
             user_handler::delete_user_group
         ))
+        .routes(routes!(user_handler::user_group_user_list))
         .routes(routes!(
             user_handler::add_user_to_group,
             user_handler::remove_user_from_group

@@ -230,6 +230,10 @@ pub trait UserDatabase: Send + Sync {
     async fn find_user_group(&self, group_id: UserGroupId)
     -> Result<Option<UserGroup>, InfraError>;
     async fn fetch_user_groups(&self) -> Result<Vec<UserGroup>, InfraError>;
+    async fn fetch_users_by_group(
+        &self,
+        group_id: UserGroupId,
+    ) -> Result<Vec<AccountUser>, InfraError>;
     async fn add_user_to_group(
         &self,
         group_id: UserGroupId,

@@ -32,6 +32,10 @@ pub trait UserRepository: Send + Sync + 'static {
         group_id: UserGroupId,
     ) -> Result<Option<AuthorizationGuard<UserGroup, Read>>, Error>;
     async fn fetch_user_groups(&self) -> Result<Vec<AuthorizationGuard<UserGroup, Read>>, Error>;
+    async fn fetch_users_by_group(
+        &self,
+        group: Allowed<UserGroup, Read>,
+    ) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error>;
     async fn add_user_to_group(
         &self,
         group: Allowed<UserGroup, Update>,
