@@ -5,7 +5,7 @@ use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
 use domain::search::models::NumberOfRecords;
-use domain::search::models::{NumberOfRecordsPerAggregate, Operation};
+use domain::search::models::{NumberOfRecordsPerAggregate, Operation, UserSearchHit};
 use domain::{
     account::models::AccountUser,
     auth::Actor,
@@ -22,6 +22,7 @@ use domain::{
 };
 use errors::Error;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
@@ -99,6 +100,46 @@ impl<
         Ok(answers)
     }
 
+    async fn visible_users(
+        &self,
+        actor: &Actor,
+        users: Vec<UserSearchHit>,
+    ) -> Result<Vec<AccountUser>, Error> {
+        let user_ids = users
+            .iter()
+            .map(|user| user.user_id.into_inner())
+            .collect::<Vec<_>>();
+
+        let visible_users_by_id = self
+            .user_repository
+            .find_by_ids(user_ids)
+            .await?
+            .into_iter()
+            .filter_map(|guard| {
+                guard.try_read(actor.clone()).ok().map(|user| {
+                    let user = user.into_inner();
+                    (*user.id(), user)
+                })
+            })
+            .collect::<HashMap<_, _>>();
+
+        Ok(users
+            .into_iter()
+            .filter_map(|user| visible_users_by_id.get(&user.user_id).cloned())
+            .collect())
+    }
+
+    pub async fn search_users(
+        &self,
+        actor: &AccountUser,
+        query: String,
+    ) -> Result<Vec<AccountUser>, Error> {
+        let actor = Actor::from(actor.clone());
+        let users = self.search_repository.search_users(&query).await?;
+
+        self.visible_users(&actor, users).await
+    }
+
     pub async fn cross_search(
         &self,
         actor: &AccountUser,
@@ -134,23 +175,7 @@ impl<
             .try_collect()
             .await?;
 
-        let visible_users = stream::iter(users)
-            .then(|user| async move {
-                self.user_repository
-                    .find_by(user.user_id.into_inner())
-                    .await
-                    .map(|guard| {
-                        guard.and_then(|guard| {
-                            guard
-                                .try_read(actor_ref.clone())
-                                .ok()
-                                .map(|user| user.into_inner())
-                        })
-                    })
-            })
-            .try_filter_map(|visible| std::future::ready(Ok(visible)))
-            .try_collect()
-            .await?;
+        let visible_users = self.visible_users(actor_ref, users).await?;
 
         let visible_label_for_forms = stream::iter(label_for_forms)
             .then(|label| async move {

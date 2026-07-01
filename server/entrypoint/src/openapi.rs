@@ -55,6 +55,7 @@ use utoipa_axum::routes;
         presentation::schemas::notification::notification_response_schemas::NotificationSettingsResponse,
         presentation::schemas::search_schemas::CommentSchema,
         presentation::schemas::search_schemas::CrossSearchResult,
+        presentation::schemas::search_schemas::UserSearchResult,
     )),
     modifiers(&SecurityAddon),
     tags(
@@ -181,6 +182,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             user_handler::delete_answer_submitter_restriction
         ))
         .routes(routes!(search_handler::cross_search))
+        .routes(routes!(search_handler::search_users))
         .routes(routes!(message_handler::get_messages_handler))
         .routes(routes!(
             message_handler::update_message_handler,

@@ -13,6 +13,8 @@ use types::non_empty_string::NonEmptyString;
 use usecase::models::CrossSearchOutput;
 use uuid::Uuid;
 
+use crate::schemas::user::UserSchema;
+
 #[derive(Deserialize, Debug, PartialEq, utoipa::ToSchema)]
 pub struct SearchQuery {
     #[serde(default)]
@@ -66,4 +68,9 @@ impl From<CrossSearchOutput> for CrossSearchResult {
             comments: output.comments.into_iter().map(Into::into).collect_vec(),
         }
     }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct UserSearchResult {
+    pub users: Vec<UserSchema>,
 }
