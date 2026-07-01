@@ -12,7 +12,7 @@ use domain::{
     account::models::AccountUser, repository::Repositories,
     search::models::SearchableFieldsWithOperation,
 };
-use errors::{Error, ErrorExtra};
+use errors::{Error, ErrorExtra, presentation::PresentationError};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use tokio::sync::{Notify, mpsc::Receiver};
@@ -21,13 +21,19 @@ use usecase::search::SearchUseCase;
 use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::search_schemas::{CrossSearchResult, SearchQuery},
+    schemas::search_schemas::{CrossSearchResult, SearchQuery, UserSearchResult},
 };
 
 #[derive(utoipa::IntoResponses)]
 pub enum CrossSearchResponse {
     #[response(status = 200, description = "The request has succeeded.")]
     Ok(CrossSearchResult),
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum UserSearchResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(UserSearchResult),
 }
 
 impl IntoResponse for CrossSearchResponse {
@@ -38,12 +44,30 @@ impl IntoResponse for CrossSearchResponse {
     }
 }
 
+impl IntoResponse for UserSearchResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
+}
+
+fn query_string(search_query: SearchQuery) -> Option<String> {
+    search_query.query.map(|query| query.into_inner())
+}
+
+fn missing_query_response() -> Response {
+    handle_error(Error::from(PresentationError::QueryRejection {
+        cause: "query is required".to_string(),
+    }))
+}
+
 #[utoipa::path(
     get,
     path = "/search",
     summary = "横断検索を行う",
     params(
-        ("query" = Option<String>, Query, description = "Search query"),
+        ("query" = String, Query, description = "Search query"),
     ),
     responses(
         CrossSearchResponse,
@@ -71,24 +95,62 @@ pub async fn cross_search(
     };
 
     let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
+    let Some(query) = query_string(search_query) else {
+        return Err(missing_query_response());
+    };
 
-    match search_query {
-        SearchQuery { query: None } => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "errorCode": "BAD_REQUEST",
-                "reason": "query is required"
-            })),
-        )
-            .into_response()),
-        SearchQuery { query: Some(query) } => {
-            let result = search_use_case
-                .cross_search(&user, query.into_inner())
-                .await
-                .map_err(handle_error)?;
-            Ok(CrossSearchResponse::Ok(CrossSearchResult::from(result)))
-        }
-    }
+    let result = search_use_case
+        .cross_search(&user, query)
+        .await
+        .map_err(handle_error)?;
+    Ok(CrossSearchResponse::Ok(CrossSearchResult::from(result)))
+}
+
+#[utoipa::path(
+    get,
+    path = "/search/users",
+    summary = "ユーザー検索を行う",
+    params(
+        ("query" = String, Query, description = "Search query"),
+    ),
+    responses(
+        UserSearchResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Search"
+)]
+pub async fn search_users(
+    Extension(user): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    query: Result<Query<SearchQuery>, QueryRejection>,
+) -> Result<UserSearchResponse, Response> {
+    let search_use_case = SearchUseCase {
+        search_repository: repository.search_repository(),
+        active_form_repository: repository.active_form_repository(),
+        form_answer_label_repository: repository.answer_label_repository(),
+        form_label_repository: repository.form_label_repository(),
+        user_repository: repository.user_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
+        comment_repository: repository.comment_repository(),
+    };
+
+    let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
+    let Some(query) = query_string(search_query) else {
+        return Err(missing_query_response());
+    };
+
+    let users = search_use_case
+        .search_users(&user, query)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UserSearchResponse::Ok(UserSearchResult {
+        users: users.into_iter().map(Into::into).collect(),
+    }))
 }
 
 pub async fn start_sync(
