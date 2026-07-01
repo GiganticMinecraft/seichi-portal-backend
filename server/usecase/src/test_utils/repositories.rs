@@ -3,8 +3,12 @@ use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserPagePosition,
     },
+    auth::Actor,
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerSubmitterRestriction},
+        answer::{
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerSubmitterRestriction,
+            AnswerSubmitterRestrictionId,
+        },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
             FormPagePosition,
@@ -812,6 +816,7 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
             .lock()
             .unwrap()
             .iter()
+            .rev()
             .find(|restriction| {
                 restriction.submitter_id().into_inner() == submitter_id
                     && restriction.is_active_at(chrono::Utc::now())
@@ -820,13 +825,41 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
             .map(Into::into))
     }
 
+    async fn list_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Vec<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error> {
+        Ok(self
+            .restrictions
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .filter(|restriction| restriction.submitter_id().into_inner() == submitter_id)
+            .cloned()
+            .map(Into::into)
+            .collect())
+    }
+
     async fn restrict(
         &self,
         restriction: Allowed<AnswerSubmitterRestriction, Create>,
     ) -> Result<(), Error> {
         let restriction = restriction.into_inner();
         let mut restrictions = self.restrictions.lock().unwrap();
-        restrictions.retain(|stored| stored.submitter_id() != restriction.submitter_id());
+        restrictions
+            .iter_mut()
+            .filter(|stored| {
+                stored.submitter_id() == restriction.submitter_id()
+                    && stored.is_active_at(chrono::Utc::now())
+            })
+            .for_each(|stored| {
+                *stored = lifted_answer_submitter_restriction(
+                    stored,
+                    chrono::Utc::now(),
+                    *restriction.restricted_by(),
+                );
+            });
         restrictions.push(restriction);
         Ok(())
     }
@@ -835,10 +868,42 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
         &self,
         restriction: Allowed<AnswerSubmitterRestriction, Delete>,
     ) -> Result<(), Error> {
+        let lifted_by = match restriction.actor() {
+            Actor::AccountUser(user) => *user.id(),
+            _ => return Ok(()),
+        };
+
         self.restrictions
             .lock()
             .unwrap()
-            .retain(|stored| stored.submitter_id() != restriction.submitter_id());
+            .iter_mut()
+            .filter(|stored| {
+                stored.submitter_id() == restriction.submitter_id()
+                    && stored.is_active_at(chrono::Utc::now())
+            })
+            .for_each(|stored| {
+                *stored =
+                    lifted_answer_submitter_restriction(stored, chrono::Utc::now(), lifted_by);
+            });
         Ok(())
+    }
+}
+
+fn lifted_answer_submitter_restriction(
+    restriction: &AnswerSubmitterRestriction,
+    lifted_at: chrono::DateTime<chrono::Utc>,
+    lifted_by: domain::account::models::UserId,
+) -> AnswerSubmitterRestriction {
+    unsafe {
+        AnswerSubmitterRestriction::from_raw_parts(
+            AnswerSubmitterRestrictionId::from(restriction.id().into_inner()),
+            *restriction.submitter_id(),
+            restriction.reason().clone(),
+            *restriction.restricted_by(),
+            *restriction.restricted_at(),
+            *restriction.expires_at(),
+            Some(lifted_at),
+            Some(lifted_by),
+        )
     }
 }

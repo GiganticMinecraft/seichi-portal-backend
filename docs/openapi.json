@@ -4946,6 +4946,96 @@
           }
         ]
       }
+    },
+    "/api/v1/users/{uuid}/answer-submitter-restriction/history": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "回答投稿者の回答投稿制限履歴の取得",
+        "operationId": "get_answer_submitter_restriction_history",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "path",
+            "description": "User UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnswerSubmitterRestrictionHistoryResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server could not understand the request due to invalid syntax.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access is unauthorized.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access is forbidden.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The server cannot find the requested resource.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -5194,6 +5284,54 @@
           },
           "visibility": {
             "$ref": "#/components/schemas/AnswerVisibility"
+          }
+        }
+      },
+      "AnswerSubmitterRestrictionHistoryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "submitter_id",
+          "reason",
+          "restricted_by",
+          "restricted_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lifted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lifted_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "restricted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "restricted_by": {
+            "type": "string"
+          },
+          "submitter_id": {
+            "type": "string"
           }
         }
       },

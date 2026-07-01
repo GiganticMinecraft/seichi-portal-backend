@@ -18,6 +18,7 @@ use utoipa_axum::routes;
         presentation::schemas::user::UserGroupSchema,
         presentation::schemas::user::AnswerSubmitterRestrictionRequest,
         presentation::schemas::user::AnswerSubmitterRestrictionResponse,
+        presentation::schemas::user::AnswerSubmitterRestrictionHistoryResponse,
         presentation::schemas::form::form_response_schemas::AnswerComment,
         presentation::schemas::form::form_response_schemas::AnswerContent,
         presentation::schemas::form::form_response_schemas::AnswerLabels,
@@ -181,6 +182,9 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             user_handler::get_answer_submitter_restriction,
             user_handler::put_answer_submitter_restriction,
             user_handler::delete_answer_submitter_restriction
+        ))
+        .routes(routes!(
+            user_handler::get_answer_submitter_restriction_history
         ))
         .routes(routes!(search_handler::cross_search))
         .routes(routes!(search_handler::search_users))

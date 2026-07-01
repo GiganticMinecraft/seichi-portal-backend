@@ -29,6 +29,20 @@ impl<Client: DatabaseComponents + 'static> AnswerSubmitterRestrictionRepository
             .map(Into::into))
     }
 
+    async fn list_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Vec<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error> {
+        Ok(self
+            .client
+            .answer_submitter_restriction()
+            .list_by_submitter_id(submitter_id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
     async fn restrict(
         &self,
         restriction: Allowed<AnswerSubmitterRestriction, Create>,

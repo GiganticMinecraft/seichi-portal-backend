@@ -32,6 +32,8 @@ pub struct AnswerSubmitterRestriction {
     restricted_by: UserId,
     restricted_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
+    lifted_at: Option<DateTime<Utc>>,
+    lifted_by: Option<UserId>,
 }
 
 impl AnswerSubmitterRestriction {
@@ -56,11 +58,13 @@ impl AnswerSubmitterRestriction {
             restricted_by,
             restricted_at,
             expires_at,
+            lifted_at: None,
+            lifted_by: None,
         })
     }
 
     pub fn is_active_at(&self, now: DateTime<Utc>) -> bool {
-        self.expires_at.is_none_or(|expires_at| now < expires_at)
+        self.lifted_at.is_none() && self.expires_at.is_none_or(|expires_at| now < expires_at)
     }
 }
 
