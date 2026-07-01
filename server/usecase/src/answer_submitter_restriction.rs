@@ -98,4 +98,28 @@ impl<R1: UserRepository, R2: AnswerSubmitterRestrictionRepository>
             .transpose()
             .map_err(Into::into)
     }
+
+    pub async fn list_history(
+        &self,
+        actor: &AccountUser,
+        submitter_id: Uuid,
+    ) -> Result<Vec<AnswerSubmitterRestriction>, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        self.user_repository
+            .find_by(submitter_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?;
+
+        self.restriction_repository
+            .list_by_submitter_id(submitter_id)
+            .await?
+            .into_iter()
+            .map(|restriction| {
+                restriction
+                    .try_read(actor_ref.clone())
+                    .map(|restriction| restriction.into_inner())
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
 }

@@ -24,9 +24,9 @@ use uuid::Uuid;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::user::{
-    AnswerSubmitterRestrictionRequest, AnswerSubmitterRestrictionResponse, UserGroupRequest,
-    UserGroupSchema, UserInfoResponse, UserListPageResponse, UserListQuery, UserSchema,
-    UserUpdateSchema,
+    AnswerSubmitterRestrictionHistoryResponse, AnswerSubmitterRestrictionRequest,
+    AnswerSubmitterRestrictionResponse, UserGroupRequest, UserGroupSchema, UserInfoResponse,
+    UserListPageResponse, UserListQuery, UserSchema, UserUpdateSchema,
 };
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 use axum::response::Response;
@@ -148,6 +148,20 @@ pub enum GetAnswerSubmitterRestrictionResponse {
 }
 
 impl IntoResponse for GetAnswerSubmitterRestrictionResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetAnswerSubmitterRestrictionHistoryResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<AnswerSubmitterRestrictionHistoryResponse>),
+}
+
+impl IntoResponse for GetAnswerSubmitterRestrictionHistoryResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
@@ -701,6 +715,45 @@ pub async fn get_answer_submitter_restriction(
 
     Ok(GetAnswerSubmitterRestrictionResponse::Ok(
         restriction.map(Into::into),
+    ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/users/{uuid}/answer-submitter-restriction/history",
+    summary = "回答投稿者の回答投稿制限履歴の取得",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        GetAnswerSubmitterRestrictionHistoryResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
+pub async fn get_answer_submitter_restriction_history(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+) -> Result<GetAnswerSubmitterRestrictionHistoryResponse, Response> {
+    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+        user_repository: repository.user_repository(),
+        restriction_repository: repository.answer_submitter_restriction_repository(),
+    };
+
+    let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
+    let restrictions = restriction_use_case
+        .list_history(&actor, uuid)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(GetAnswerSubmitterRestrictionHistoryResponse::Ok(
+        restrictions.into_iter().map(Into::into).collect(),
     ))
 }
 

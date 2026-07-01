@@ -276,6 +276,10 @@ pub trait AnswerSubmitterRestrictionDatabase: Send + Sync {
         &self,
         submitter_id: Uuid,
     ) -> Result<Option<AnswerSubmitterRestriction>, InfraError>;
+    async fn list_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Vec<AnswerSubmitterRestriction>, InfraError>;
     async fn restrict(&self, restriction: &AnswerSubmitterRestriction) -> Result<(), InfraError>;
     async fn lift(&self, submitter_id: Uuid, lifted_by: Uuid) -> Result<(), InfraError>;
 }

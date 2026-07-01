@@ -16,6 +16,11 @@ pub trait AnswerSubmitterRestrictionRepository: Send + Sync + 'static {
         submitter_id: Uuid,
     ) -> Result<Option<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error>;
 
+    async fn list_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Vec<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error>;
+
     async fn restrict(
         &self,
         restriction: Allowed<AnswerSubmitterRestriction, Create>,
