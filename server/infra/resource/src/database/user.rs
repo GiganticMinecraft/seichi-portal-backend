@@ -304,6 +304,46 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
+    async fn fetch_users_by_group(
+        &self,
+        group_id: UserGroupId,
+    ) -> Result<Vec<AccountUser>, InfraError> {
+        let group_id = group_id.to_string();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rows = sqlx::query_as!(
+                    UserRow,
+                    r#"SELECT u.id, u.name, u.role
+                    FROM users u
+                    INNER JOIN user_group_memberships m ON u.id = m.user_id
+                    WHERE m.group_id = ?
+                    ORDER BY u.id ASC"#,
+                    group_id,
+                )
+                .fetch_all(&mut **txn)
+                .await?;
+
+                let user_ids = rows.iter().map(|row| row.id.clone()).collect_vec();
+                let mut groups_by_user = fetch_groups_by_user_ids(txn, &user_ids).await?;
+
+                rows.into_iter()
+                    .map(|row| {
+                        let user_id = Uuid::parse_str(&row.id)?;
+                        let groups = groups_by_user.remove(&row.id).unwrap_or_default();
+                        Ok::<_, InfraError>(AccountUser::with_groups(
+                            row.name,
+                            user_id.into(),
+                            Role::from_str(&row.role)?,
+                            groups,
+                        ))
+                    })
+                    .collect()
+            })
+        })
+        .await
+    }
+
     async fn add_user_to_group(
         &self,
         group_id: UserGroupId,

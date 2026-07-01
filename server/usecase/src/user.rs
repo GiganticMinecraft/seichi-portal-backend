@@ -173,6 +173,32 @@ impl<R: UserRepository> UserUseCase<'_, R> {
             .map_err(Into::into)
     }
 
+    pub async fn fetch_users_by_group(
+        &self,
+        actor: &AccountUser,
+        group_id: UserGroupId,
+    ) -> Result<Vec<AccountUser>, Error> {
+        let actor_ref = Actor::from(actor.clone());
+        let group = self
+            .repository
+            .find_user_group(group_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserGroupNotFound))?
+            .try_read(actor_ref.clone())?;
+
+        self.repository
+            .fetch_users_by_group(group)
+            .await?
+            .into_iter()
+            .map(|guard| {
+                guard
+                    .try_read(actor_ref.clone())
+                    .map(|user| user.into_inner())
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
     pub async fn add_user_to_group(
         &self,
         actor: &AccountUser,
@@ -372,5 +398,74 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         let user = allowed.into_inner();
 
         Ok(UserProfile { user, discord_user })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use domain::account::models::{Role, UserId};
+    use errors::usecase::UseCaseError;
+    use types::non_empty_string::NonEmptyString;
+
+    use super::*;
+    use crate::test_utils::repositories::FormUseCaseTestRepositories;
+
+    fn user(seed: u128, name: &str, role: Role) -> AccountUser {
+        AccountUser::new(name.to_string(), UserId::from(Uuid::from_u128(seed)), role)
+    }
+
+    fn group_name(name: &str) -> UserGroupName {
+        UserGroupName::new(NonEmptyString::try_new(name.to_string()).unwrap())
+    }
+
+    #[tokio::test]
+    async fn fetch_users_by_group_returns_only_group_members() {
+        let admin = user(1, "admin", Role::Administrator);
+        let member = user(2, "member", Role::StandardUser);
+        let outsider = user(3, "outsider", Role::StandardUser);
+        let repositories = FormUseCaseTestRepositories::default();
+        let usecase = UserUseCase {
+            repository: &repositories.user_repository,
+        };
+
+        usecase.upsert_user(&admin, admin.clone()).await.unwrap();
+        usecase.upsert_user(&member, member.clone()).await.unwrap();
+        usecase
+            .upsert_user(&outsider, outsider.clone())
+            .await
+            .unwrap();
+        let group = usecase
+            .create_user_group(&admin, group_name("members"))
+            .await
+            .unwrap();
+        usecase
+            .add_user_to_group(&admin, *group.id(), member.id().into_inner())
+            .await
+            .unwrap();
+
+        let users = usecase
+            .fetch_users_by_group(&admin, *group.id())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            users.into_iter().map(|user| *user.id()).collect::<Vec<_>>(),
+            vec![*member.id()]
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_users_by_group_returns_not_found_for_unknown_group() {
+        let admin = user(1, "admin", Role::Administrator);
+        let repositories = FormUseCaseTestRepositories::default();
+        let usecase = UserUseCase {
+            repository: &repositories.user_repository,
+        };
+
+        let result = usecase
+            .fetch_users_by_group(&admin, Uuid::from_u128(100).into())
+            .await;
+
+        assert_eq!(result, Err(Error::from(UseCaseError::UserGroupNotFound)));
     }
 }

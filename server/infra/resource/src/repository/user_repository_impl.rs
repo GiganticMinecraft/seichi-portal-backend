@@ -108,6 +108,20 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
             .collect_vec())
     }
 
+    async fn fetch_users_by_group(
+        &self,
+        group: Allowed<UserGroup, Read>,
+    ) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error> {
+        Ok(self
+            .client
+            .user()
+            .fetch_users_by_group(*group.id())
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect_vec())
+    }
+
     async fn add_user_to_group(
         &self,
         group: Allowed<UserGroup, Update>,

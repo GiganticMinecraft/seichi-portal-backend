@@ -615,6 +615,24 @@ impl UserRepository for InMemoryUserRepository {
             .collect())
     }
 
+    async fn fetch_users_by_group(
+        &self,
+        group: Allowed<UserGroup, Read>,
+    ) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error> {
+        let group_id = *group.id();
+        let mut users = self
+            .users
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|user| user.groups().iter().any(|group| *group.id() == group_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        users.sort_by_key(|user| user.id().into_inner());
+
+        Ok(users.into_iter().map(AuthorizationGuard::from).collect())
+    }
+
     async fn add_user_to_group(
         &self,
         group: Allowed<UserGroup, Update>,

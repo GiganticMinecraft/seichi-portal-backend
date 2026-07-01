@@ -83,6 +83,20 @@ impl IntoResponse for UserGroupListResponse {
 }
 
 #[derive(utoipa::IntoResponses)]
+pub enum UserGroupUserListResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<UserSchema>),
+}
+
+impl IntoResponse for UserGroupUserListResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
+#[derive(utoipa::IntoResponses)]
 pub enum UserGroupResponse {
     #[response(status = 200, description = "The request has succeeded.")]
     Ok(UserGroupSchema),
@@ -460,6 +474,44 @@ pub async fn user_group_list(
 
     Ok(UserGroupListResponse::Ok(
         groups.into_iter().map(Into::into).collect(),
+    ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/user-groups/{group_id}/users",
+    summary = "ユーザーグループに所属するユーザーの一覧取得",
+    params(
+        ("group_id" = String, Path, description = "User group UUID"),
+    ),
+    responses(
+        UserGroupUserListResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        NotFound,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "User Groups"
+)]
+pub async fn user_group_user_list(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+) -> Result<UserGroupUserListResponse, Response> {
+    let user_use_case = UserUseCase {
+        repository: repository.user_repository(),
+    };
+    let Path(group_id) = path.map_err_to_error().map_err(handle_error)?;
+
+    let users = user_use_case
+        .fetch_users_by_group(&actor, group_id.into())
+        .await
+        .map_err(handle_error)?;
+
+    Ok(UserGroupUserListResponse::Ok(
+        users.into_iter().map(Into::into).collect(),
     ))
 }
 
