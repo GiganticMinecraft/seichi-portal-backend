@@ -4982,6 +4982,26 @@
           }
         }
       },
+      "AnswerListPageResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FormAnswer"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "AnswerSettingsSchema": {
         "type": "object",
         "required": [
@@ -5080,6 +5100,26 @@
           "PUBLIC",
           "PRIVATE"
         ]
+      },
+      "ArchivedFormListPageResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArchivedFormSchema"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "ArchivedFormSchema": {
         "type": "object",
@@ -5453,6 +5493,26 @@
               {
                 "$ref": "#/components/schemas/NonEmptyString"
               }
+            ]
+          }
+        }
+      },
+      "FormListPageResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FormSchema"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         }
@@ -6119,6 +6179,26 @@
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "UserListPageResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserSchema"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
