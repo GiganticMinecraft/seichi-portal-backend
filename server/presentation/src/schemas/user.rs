@@ -67,6 +67,18 @@ pub struct AnswerSubmitterRestrictionResponse {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerSubmitterRestrictionHistoryResponse {
+    pub id: String,
+    pub submitter_id: String,
+    pub reason: String,
+    pub restricted_by: String,
+    pub restricted_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub lifted_at: Option<DateTime<Utc>>,
+    pub lifted_by: Option<String>,
+}
+
 impl From<domain::form::answer::AnswerSubmitterRestriction> for AnswerSubmitterRestrictionResponse {
     fn from(value: domain::form::answer::AnswerSubmitterRestriction) -> Self {
         Self {
@@ -76,6 +88,23 @@ impl From<domain::form::answer::AnswerSubmitterRestriction> for AnswerSubmitterR
             restricted_by: value.restricted_by().to_string(),
             restricted_at: *value.restricted_at(),
             expires_at: *value.expires_at(),
+        }
+    }
+}
+
+impl From<domain::form::answer::AnswerSubmitterRestriction>
+    for AnswerSubmitterRestrictionHistoryResponse
+{
+    fn from(value: domain::form::answer::AnswerSubmitterRestriction) -> Self {
+        Self {
+            id: value.id().to_string(),
+            submitter_id: value.submitter_id().to_string(),
+            reason: value.reason().to_owned().into_inner().into_inner(),
+            restricted_by: value.restricted_by().to_string(),
+            restricted_at: *value.restricted_at(),
+            expires_at: *value.expires_at(),
+            lifted_at: *value.lifted_at(),
+            lifted_by: value.lifted_by().map(|lifted_by| lifted_by.to_string()),
         }
     }
 }

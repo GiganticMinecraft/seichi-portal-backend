@@ -32,6 +32,8 @@ pub struct AnswerSubmitterRestriction {
     restricted_by: UserId,
     restricted_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
+    lifted_at: Option<DateTime<Utc>>,
+    lifted_by: Option<UserId>,
 }
 
 impl AnswerSubmitterRestriction {
@@ -56,11 +58,66 @@ impl AnswerSubmitterRestriction {
             restricted_by,
             restricted_at,
             expires_at,
+            lifted_at: None,
+            lifted_by: None,
         })
     }
 
     pub fn is_active_at(&self, now: DateTime<Utc>) -> bool {
-        self.expires_at.is_none_or(|expires_at| now < expires_at)
+        self.lifted_at.is_none() && self.expires_at.is_none_or(|expires_at| now < expires_at)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct AnswerSubmitterRestrictionHistory {
+    submitter_id: UserId,
+    restrictions: Vec<AnswerSubmitterRestriction>,
+}
+
+impl AnswerSubmitterRestrictionHistory {
+    pub fn new(
+        submitter_id: UserId,
+        restrictions: Vec<AnswerSubmitterRestriction>,
+    ) -> Result<Self, DomainError> {
+        if restrictions
+            .iter()
+            .any(|restriction| restriction.submitter_id != submitter_id)
+        {
+            return Err(DomainError::InvalidEntity {
+                message: "answer submitter restriction history must contain only restrictions for the submitter".to_string(),
+            });
+        }
+
+        Ok(Self {
+            submitter_id,
+            restrictions,
+        })
+    }
+
+    pub fn into_restrictions(self) -> Vec<AnswerSubmitterRestriction> {
+        self.restrictions
+    }
+}
+
+impl AuthorizationRole for AnswerSubmitterRestrictionHistory {
+    type Role = SelfGuarded;
+}
+
+impl AuthorizationGuardDefinitions for AnswerSubmitterRestrictionHistory {
+    fn can_create(&self, _actor: &Actor) -> bool {
+        false
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::AccountUser(user) if self.submitter_id == *user.id() || user.role() == &Role::Administrator)
+    }
+
+    fn can_update(&self, _actor: &Actor) -> bool {
+        false
+    }
+
+    fn can_delete(&self, _actor: &Actor) -> bool {
+        false
     }
 }
 

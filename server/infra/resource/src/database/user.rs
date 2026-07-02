@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
@@ -638,22 +638,55 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
                 .await?;
 
                 row.map(|row| {
-                    Ok::<_, InfraError>(unsafe {
-                        AnswerSubmitterRestriction::from_raw_parts(
-                            AnswerSubmitterRestrictionId::from(Uuid::parse_str(&row.id)?),
-                            Uuid::parse_str(&row.submitter_id)?.into(),
-                            AnswerSubmitterRestrictionReason::new(row.reason.try_into().map_err(
-                                |err: errors::validation::ValidationError| InfraError::Unexpected {
-                                    cause: err.to_string(),
-                                },
-                            )?),
-                            Uuid::parse_str(&row.restricted_by)?.into(),
-                            row.restricted_at.and_utc(),
-                            row.expires_at.map(|expires_at| expires_at.and_utc()),
-                        )
+                    answer_submitter_restriction_from_row(AnswerSubmitterRestrictionRowData {
+                        id: row.id,
+                        submitter_id: row.submitter_id,
+                        reason: row.reason,
+                        restricted_by: row.restricted_by,
+                        restricted_at: row.restricted_at,
+                        expires_at: row.expires_at,
+                        lifted_at: None,
+                        lifted_by: None,
                     })
                 })
                 .transpose()
+            })
+        })
+        .await
+    }
+
+    async fn list_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<Vec<AnswerSubmitterRestriction>, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let rows = sqlx::query!(
+                    r#"
+                    SELECT id, submitter_id, reason, restricted_by, restricted_at, expires_at, lifted_at, lifted_by
+                    FROM answer_submitter_restrictions
+                    WHERE submitter_id = ?
+                    ORDER BY restricted_at DESC
+                    "#,
+                    submitter_id.to_string(),
+                )
+                .fetch_all(&mut **txn)
+                .await?;
+
+                rows.into_iter()
+                    .map(|row| {
+                        answer_submitter_restriction_from_row(AnswerSubmitterRestrictionRowData {
+                            id: row.id,
+                            submitter_id: row.submitter_id,
+                            reason: row.reason,
+                            restricted_by: row.restricted_by,
+                            restricted_at: row.restricted_at,
+                            expires_at: row.expires_at,
+                            lifted_at: row.lifted_at,
+                            lifted_by: row.lifted_by,
+                        })
+                    })
+                    .collect()
             })
         })
         .await
@@ -727,4 +760,38 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
         })
         .await
     }
+}
+
+struct AnswerSubmitterRestrictionRowData {
+    id: String,
+    submitter_id: String,
+    reason: String,
+    restricted_by: String,
+    restricted_at: NaiveDateTime,
+    expires_at: Option<NaiveDateTime>,
+    lifted_at: Option<NaiveDateTime>,
+    lifted_by: Option<String>,
+}
+
+fn answer_submitter_restriction_from_row(
+    row: AnswerSubmitterRestrictionRowData,
+) -> Result<AnswerSubmitterRestriction, InfraError> {
+    Ok(unsafe {
+        AnswerSubmitterRestriction::from_raw_parts(
+            AnswerSubmitterRestrictionId::from(Uuid::parse_str(&row.id)?),
+            Uuid::parse_str(&row.submitter_id)?.into(),
+            AnswerSubmitterRestrictionReason::new(row.reason.try_into().map_err(
+                |err: errors::validation::ValidationError| InfraError::Unexpected {
+                    cause: err.to_string(),
+                },
+            )?),
+            Uuid::parse_str(&row.restricted_by)?.into(),
+            row.restricted_at.and_utc(),
+            row.expires_at.map(|expires_at| expires_at.and_utc()),
+            row.lifted_at.map(|lifted_at| lifted_at.and_utc()),
+            row.lifted_by
+                .map(|lifted_by| Uuid::parse_str(&lifted_by).map(Into::into))
+                .transpose()?,
+        )
+    })
 }

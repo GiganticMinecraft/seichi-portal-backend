@@ -1,0 +1,150 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                    SELECT id, submitter_id, reason, restricted_by, restricted_at, expires_at, lifted_at, lifted_by\n                    FROM answer_submitter_restrictions\n                    WHERE submitter_id = ?\n                    ORDER BY restricted_at DESC\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "submitter_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "submitter_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "reason",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "restricted_by",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "restricted_by"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "restricted_at",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "NOT_NULL | BINARY | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 26
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "restricted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_at",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "collation": 63,
+          "max_size": 26
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "lifted_at",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "collation": 63,
+          "max_size": 26
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "lifted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "lifted_by",
+        "type_info": {
+          "type": "String",
+          "flags": "MULTIPLE_KEY",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_submitter_restrictions",
+            "name": "lifted_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0259cc6587db947df1a818d3a48cee3e2e0827185b84985b5c54a85439980cc4"
+}

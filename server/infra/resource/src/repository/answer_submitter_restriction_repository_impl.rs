@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use domain::{
     auth::Actor,
-    form::answer::AnswerSubmitterRestriction,
+    form::answer::{AnswerSubmitterRestriction, AnswerSubmitterRestrictionHistory},
     repository::answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read},
 };
@@ -27,6 +27,20 @@ impl<Client: DatabaseComponents + 'static> AnswerSubmitterRestrictionRepository
             .fetch_active_by_submitter_id(submitter_id)
             .await?
             .map(Into::into))
+    }
+
+    async fn list_by_submitter_id(
+        &self,
+        submitter_id: Uuid,
+    ) -> Result<AuthorizationGuard<AnswerSubmitterRestrictionHistory, Read>, Error> {
+        Ok(AnswerSubmitterRestrictionHistory::new(
+            submitter_id.into(),
+            self.client
+                .answer_submitter_restriction()
+                .list_by_submitter_id(submitter_id)
+                .await?,
+        )?
+        .into())
     }
 
     async fn restrict(
