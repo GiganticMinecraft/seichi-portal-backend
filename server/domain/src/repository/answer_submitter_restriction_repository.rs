@@ -4,7 +4,7 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    form::answer::AnswerSubmitterRestriction,
+    form::answer::{AnswerSubmitterRestriction, AnswerSubmitterRestrictionHistory},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read},
 };
 
@@ -19,7 +19,7 @@ pub trait AnswerSubmitterRestrictionRepository: Send + Sync + 'static {
     async fn list_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Vec<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error>;
+    ) -> Result<AuthorizationGuard<AnswerSubmitterRestrictionHistory, Read>, Error>;
 
     async fn restrict(
         &self,

@@ -113,13 +113,56 @@ impl<R1: UserRepository, R2: AnswerSubmitterRestrictionRepository>
         self.restriction_repository
             .list_by_submitter_id(submitter_id)
             .await?
-            .into_iter()
-            .map(|restriction| {
-                restriction
-                    .try_read(actor_ref.clone())
-                    .map(|restriction| restriction.into_inner())
-            })
-            .collect::<Result<Vec<_>, _>>()
+            .try_read(actor_ref)
+            .map(|history| history.into_inner().into_restrictions())
             .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use domain::account::models::{Role, UserId};
+    use errors::domain::DomainError;
+
+    use super::*;
+    use crate::test_utils::repositories::FormUseCaseTestRepositories;
+
+    fn user(seed: u128, name: &str, role: Role) -> AccountUser {
+        AccountUser::new(name.to_string(), UserId::from(Uuid::from_u128(seed)), role)
+    }
+
+    #[tokio::test]
+    async fn list_history_rejects_other_standard_user_even_when_history_is_empty() {
+        let actor = user(1, "actor", Role::StandardUser);
+        let submitter = user(2, "submitter", Role::StandardUser);
+        let repositories = FormUseCaseTestRepositories::default();
+        repositories.user_repository.save_user(submitter.clone());
+        let usecase = AnswerSubmitterRestrictionUseCase {
+            user_repository: &repositories.user_repository,
+            restriction_repository: &repositories.answer_submitter_restriction_repository,
+        };
+
+        let result = usecase
+            .list_history(&actor, submitter.id().into_inner())
+            .await;
+
+        assert_eq!(result, Err(Error::from(DomainError::Forbidden)));
+    }
+
+    #[tokio::test]
+    async fn list_history_allows_submitter_to_read_empty_history() {
+        let submitter = user(1, "submitter", Role::StandardUser);
+        let repositories = FormUseCaseTestRepositories::default();
+        repositories.user_repository.save_user(submitter.clone());
+        let usecase = AnswerSubmitterRestrictionUseCase {
+            user_repository: &repositories.user_repository,
+            restriction_repository: &repositories.answer_submitter_restriction_repository,
+        };
+
+        let result = usecase
+            .list_history(&submitter, submitter.id().into_inner())
+            .await;
+
+        assert_eq!(result, Ok(vec![]));
     }
 }

@@ -7,7 +7,7 @@ use domain::{
     form::{
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerSubmitterRestriction,
-            AnswerSubmitterRestrictionId,
+            AnswerSubmitterRestrictionHistory, AnswerSubmitterRestrictionId,
         },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
@@ -517,6 +517,12 @@ pub(crate) struct InMemoryUserRepository {
     sessions: Mutex<Vec<(String, AccountUser)>>,
 }
 
+impl InMemoryUserRepository {
+    pub(crate) fn save_user(&self, user: AccountUser) {
+        self.users.lock().unwrap().push(user);
+    }
+}
+
 #[async_trait]
 impl UserRepository for InMemoryUserRepository {
     async fn find_by(
@@ -828,17 +834,19 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
     async fn list_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Vec<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error> {
-        Ok(self
-            .restrictions
-            .lock()
-            .unwrap()
-            .iter()
-            .rev()
-            .filter(|restriction| restriction.submitter_id().into_inner() == submitter_id)
-            .cloned()
-            .map(Into::into)
-            .collect())
+    ) -> Result<AuthorizationGuard<AnswerSubmitterRestrictionHistory, Read>, Error> {
+        Ok(AnswerSubmitterRestrictionHistory::new(
+            submitter_id.into(),
+            self.restrictions
+                .lock()
+                .unwrap()
+                .iter()
+                .rev()
+                .filter(|restriction| restriction.submitter_id().into_inner() == submitter_id)
+                .cloned()
+                .collect(),
+        )?
+        .into())
     }
 
     async fn restrict(

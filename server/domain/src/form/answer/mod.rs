@@ -14,6 +14,7 @@ pub use label::{AnswerLabel, AnswerLabelId};
 pub use settings::{AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, DefaultAnswerTitle};
 pub use submitter::AnswerSubmitter;
 pub use submitter_restriction::{
-    AnswerSubmitterRestriction, AnswerSubmitterRestrictionId, AnswerSubmitterRestrictionReason,
+    AnswerSubmitterRestriction, AnswerSubmitterRestrictionHistory, AnswerSubmitterRestrictionId,
+    AnswerSubmitterRestrictionReason,
 };
 pub use title::AnswerTitle;
