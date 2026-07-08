@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use domain::account::models::UserGroupId;
 use domain::form::{
     answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
+    comment::CommentId,
     models::{
         AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
         FormSettings, FormTitle, Visibility,
@@ -372,6 +373,8 @@ impl AnswerContent {
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct AnswerComment {
+    #[schema(value_type = String, format = "uuid")]
+    id: CommentId,
     content: String,
     timestamp: DateTime<Utc>,
     commented_by: User,
@@ -380,6 +383,7 @@ pub struct AnswerComment {
 impl From<CommentWithAuthor> for AnswerComment {
     fn from(val: CommentWithAuthor) -> Self {
         AnswerComment {
+            id: val.comment.comment_id().to_owned(),
             content: val.comment.content().to_string(),
             timestamp: val.comment.timestamp().to_owned(),
             commented_by: val.commented_by.into(),

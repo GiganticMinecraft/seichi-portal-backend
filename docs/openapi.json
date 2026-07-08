@@ -5119,6 +5119,7 @@
       "AnswerComment": {
         "type": "object",
         "required": [
+          "id",
           "content",
           "timestamp",
           "commented_by"
@@ -5129,6 +5130,10 @@
           },
           "content": {
             "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
           },
           "timestamp": {
             "type": "string",
