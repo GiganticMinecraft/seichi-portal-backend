@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use domain::account::models::UserGroupId;
 use domain::form::{
     answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
-    comment::CommentId,
+    comment::{CommentHistoryAction, CommentHistoryEntry, CommentId, HistoryUserSnapshot},
+    message::{MessageHistoryAction, MessageHistoryEntry, MessageHistoryUserSnapshot},
     models::{
         AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
         FormSettings, FormTitle, Visibility,
@@ -380,6 +381,121 @@ pub struct AnswerComment {
     commented_by: User,
 }
 
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct HistoryUser {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    name: String,
+    role: Role,
+}
+
+impl From<&HistoryUserSnapshot> for HistoryUser {
+    fn from(value: &HistoryUserSnapshot) -> Self {
+        Self {
+            id: value.id().to_string(),
+            name: value.name().to_owned(),
+            role: value.role().to_owned().into(),
+        }
+    }
+}
+
+impl From<&MessageHistoryUserSnapshot> for HistoryUser {
+    fn from(value: &MessageHistoryUserSnapshot) -> Self {
+        Self {
+            id: value.id().to_string(),
+            name: value.name().to_owned(),
+            role: value.role().to_owned().into(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum HistoryAction {
+    Update,
+    Delete,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct CommentHistoryResponseEntry {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    #[schema(value_type = String, format = "uuid")]
+    comment_id: String,
+    original_author: HistoryUser,
+    original_timestamp: DateTime<Utc>,
+    action: HistoryAction,
+    before_content: Option<String>,
+    after_content: Option<String>,
+    operated_by: HistoryUser,
+    operated_at: DateTime<Utc>,
+}
+
+impl From<CommentHistoryEntry> for CommentHistoryResponseEntry {
+    fn from(value: CommentHistoryEntry) -> Self {
+        Self {
+            id: value.id().to_string(),
+            comment_id: value.comment_id().to_string(),
+            original_author: value.original_author().into(),
+            original_timestamp: *value.original_timestamp(),
+            action: match value.action() {
+                CommentHistoryAction::Update => HistoryAction::Update,
+                CommentHistoryAction::Delete => HistoryAction::Delete,
+            },
+            before_content: value.before_content().to_owned(),
+            after_content: value.after_content().to_owned(),
+            operated_by: value.operated_by().into(),
+            operated_at: *value.operated_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct CommentHistoryPageResponse {
+    pub items: Vec<CommentHistoryResponseEntry>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct MessageHistoryResponseEntry {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    #[schema(value_type = String, format = "uuid")]
+    message_id: String,
+    original_author: HistoryUser,
+    original_timestamp: DateTime<Utc>,
+    action: HistoryAction,
+    before_body: Option<String>,
+    after_body: Option<String>,
+    operated_by: HistoryUser,
+    operated_at: DateTime<Utc>,
+}
+
+impl From<MessageHistoryEntry> for MessageHistoryResponseEntry {
+    fn from(value: MessageHistoryEntry) -> Self {
+        Self {
+            id: value.id().to_string(),
+            message_id: value.message_id().to_string(),
+            original_author: value.original_author().into(),
+            original_timestamp: *value.original_timestamp(),
+            action: match value.action() {
+                MessageHistoryAction::Update => HistoryAction::Update,
+                MessageHistoryAction::Delete => HistoryAction::Delete,
+            },
+            before_body: value.before_body().to_owned(),
+            after_body: value.after_body().to_owned(),
+            operated_by: value.operated_by().into(),
+            operated_at: *value.operated_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct MessageHistoryPageResponse {
+    pub items: Vec<MessageHistoryResponseEntry>,
+    pub next_cursor: Option<String>,
+}
+
 impl From<CommentWithAuthor> for AnswerComment {
     fn from(val: CommentWithAuthor) -> Self {
         AnswerComment {
@@ -447,6 +563,140 @@ impl FormAnswer {
                 .collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
         }
+    }
+}
+
+#[cfg(test)]
+mod history_response_tests {
+    use super::*;
+    use domain::{
+        account::models::{Role as DomainRole, UserId},
+        form::{
+            comment::{
+                CommentHistoryAction, CommentHistoryEntry, CommentHistoryId, CommentId,
+                HistoryUserSnapshot,
+            },
+            message::{
+                MessageHistoryAction, MessageHistoryEntry, MessageHistoryId,
+                MessageHistoryUserSnapshot, MessageId,
+            },
+        },
+    };
+
+    fn user_id() -> UserId {
+        Uuid::now_v7().into()
+    }
+
+    fn comment_history(
+        action: CommentHistoryAction,
+        before: Option<&str>,
+        after: Option<&str>,
+    ) -> CommentHistoryEntry {
+        let timestamp = Utc::now();
+        unsafe {
+            CommentHistoryEntry::from_raw_parts(
+                CommentHistoryId::new(),
+                domain::form::answer::AnswerId::new(),
+                CommentId::new(),
+                HistoryUserSnapshot::new(
+                    user_id(),
+                    "original author".to_string(),
+                    DomainRole::StandardUser,
+                ),
+                timestamp,
+                action,
+                before.map(str::to_owned),
+                after.map(str::to_owned),
+                HistoryUserSnapshot::new(
+                    user_id(),
+                    "operator".to_string(),
+                    DomainRole::Administrator,
+                ),
+                timestamp,
+            )
+        }
+    }
+
+    fn message_history(
+        action: MessageHistoryAction,
+        before: Option<&str>,
+        after: Option<&str>,
+    ) -> MessageHistoryEntry {
+        let timestamp = Utc::now();
+        unsafe {
+            MessageHistoryEntry::from_raw_parts(
+                MessageHistoryId::new(),
+                domain::form::answer::AnswerId::new(),
+                MessageId::new(),
+                MessageHistoryUserSnapshot::new(
+                    user_id(),
+                    "original author".to_string(),
+                    DomainRole::StandardUser,
+                ),
+                timestamp,
+                action,
+                before.map(str::to_owned),
+                after.map(str::to_owned),
+                MessageHistoryUserSnapshot::new(
+                    user_id(),
+                    "operator".to_string(),
+                    DomainRole::Administrator,
+                ),
+                timestamp,
+            )
+        }
+    }
+
+    #[test]
+    fn comment_update_history_response_keeps_before_and_after_content() {
+        let response = CommentHistoryResponseEntry::from(comment_history(
+            CommentHistoryAction::Update,
+            Some("before"),
+            Some("after"),
+        ));
+
+        assert_eq!(response.before_content.as_deref(), Some("before"));
+        assert_eq!(response.after_content.as_deref(), Some("after"));
+        assert!(matches!(response.action, HistoryAction::Update));
+    }
+
+    #[test]
+    fn comment_delete_history_response_does_not_expose_content() {
+        let response = CommentHistoryResponseEntry::from(comment_history(
+            CommentHistoryAction::Delete,
+            None,
+            None,
+        ));
+
+        assert_eq!(response.before_content, None);
+        assert_eq!(response.after_content, None);
+        assert!(matches!(response.action, HistoryAction::Delete));
+    }
+
+    #[test]
+    fn message_update_history_response_keeps_before_and_after_body() {
+        let response = MessageHistoryResponseEntry::from(message_history(
+            MessageHistoryAction::Update,
+            Some("before"),
+            Some("after"),
+        ));
+
+        assert_eq!(response.before_body.as_deref(), Some("before"));
+        assert_eq!(response.after_body.as_deref(), Some("after"));
+        assert!(matches!(response.action, HistoryAction::Update));
+    }
+
+    #[test]
+    fn message_delete_history_response_does_not_expose_body() {
+        let response = MessageHistoryResponseEntry::from(message_history(
+            MessageHistoryAction::Delete,
+            None,
+            None,
+        ));
+
+        assert_eq!(response.before_body, None);
+        assert_eq!(response.after_body, None);
+        assert!(matches!(response.action, HistoryAction::Delete));
     }
 }
 

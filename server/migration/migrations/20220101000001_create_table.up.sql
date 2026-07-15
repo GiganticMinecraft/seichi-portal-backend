@@ -125,6 +125,28 @@ CREATE TABLE IF NOT EXISTS form_answer_comments(
     FOREIGN KEY fk_form_answer_comments_commented_by(commented_by) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS form_answer_comment_history(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL,
+    comment_id CHAR(36) NOT NULL,
+    original_author_id CHAR(36) NOT NULL,
+    original_author_name TEXT NOT NULL,
+    original_author_role VARCHAR(32) NOT NULL,
+    original_timestamp TIMESTAMP NOT NULL,
+    action ENUM('UPDATE', 'DELETE') NOT NULL,
+    before_content TEXT,
+    after_content TEXT,
+    operated_by_id CHAR(36) NOT NULL,
+    operated_by_name TEXT NOT NULL,
+    operated_by_role VARCHAR(32) NOT NULL,
+    operated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_form_answer_comment_history_answer_id_id(answer_id, id),
+    CONSTRAINT chk_form_answer_comment_history_content CHECK (
+        (action = 'UPDATE' AND before_content IS NOT NULL AND after_content IS NOT NULL)
+        OR (action = 'DELETE' AND before_content IS NULL AND after_content IS NULL)
+    )
+);
+
 CREATE TABLE IF NOT EXISTS label_for_form_answers(
     id CHAR(36) NOT NULL PRIMARY KEY,
     name TEXT NOT NULL
@@ -159,6 +181,28 @@ CREATE TABLE IF NOT EXISTS messages(
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY fk_message_related_answer_id(related_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
     FOREIGN KEY fk_message_sender(sender) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS message_history(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    related_answer_id CHAR(36) NOT NULL,
+    message_id CHAR(36) NOT NULL,
+    original_author_id CHAR(36) NOT NULL,
+    original_author_name TEXT NOT NULL,
+    original_author_role VARCHAR(32) NOT NULL,
+    original_timestamp TIMESTAMP NOT NULL,
+    action ENUM('UPDATE', 'DELETE') NOT NULL,
+    before_body TEXT,
+    after_body TEXT,
+    operated_by_id CHAR(36) NOT NULL,
+    operated_by_name TEXT NOT NULL,
+    operated_by_role VARCHAR(32) NOT NULL,
+    operated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_message_history_answer_id_id(related_answer_id, id),
+    CONSTRAINT chk_message_history_body CHECK (
+        (action = 'UPDATE' AND before_body IS NOT NULL AND after_body IS NOT NULL)
+        OR (action = 'DELETE' AND before_body IS NULL AND after_body IS NULL)
+    )
 );
 
 CREATE TABLE IF NOT EXISTS archived_form_meta_data(

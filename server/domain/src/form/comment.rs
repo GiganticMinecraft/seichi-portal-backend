@@ -15,6 +15,71 @@ use crate::{
 };
 
 pub type CommentId = types::Id<Comment>;
+pub type CommentHistoryId = types::Id<CommentHistoryEntry>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommentHistoryPagePosition(CommentHistoryId);
+
+impl CommentHistoryPagePosition {
+    pub fn new(id: CommentHistoryId) -> Self {
+        Self(id)
+    }
+
+    pub fn id(&self) -> CommentHistoryId {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum CommentHistoryAction {
+    Update,
+    Delete,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Getters)]
+pub struct HistoryUserSnapshot {
+    id: UserId,
+    name: String,
+    role: Role,
+}
+
+impl HistoryUserSnapshot {
+    pub fn new(id: UserId, name: String, role: Role) -> Self {
+        Self { id, name, role }
+    }
+}
+
+#[derive(UnsafeFromRawParts, Clone, Debug, PartialEq, Getters)]
+pub struct CommentHistoryEntry {
+    id: CommentHistoryId,
+    #[getter(skip)]
+    answer_id: AnswerId,
+    comment_id: CommentId,
+    original_author: HistoryUserSnapshot,
+    original_timestamp: DateTime<Utc>,
+    action: CommentHistoryAction,
+    before_content: Option<String>,
+    after_content: Option<String>,
+    operated_by: HistoryUserSnapshot,
+    operated_at: DateTime<Utc>,
+}
+
+impl AuthorizationRole for CommentHistoryEntry {
+    type Role = ParentGuarded<AnswerEntry>;
+}
+
+impl BelongsTo<AnswerEntry> for CommentHistoryEntry {
+    fn belongs_to(&self, parent: &AnswerEntry) -> bool {
+        &self.answer_id == parent.id()
+    }
+}
+
+impl GuardedBy<AnswerEntry, Read> for CommentHistoryEntry {
+    fn is_allowed_for(&self, _parent: &AnswerEntry, _actor: &Actor) -> bool {
+        true
+    }
+}
 
 #[derive(DerivingVia, Debug, PartialEq)]
 #[deriving(Clone, From, Into, IntoInner, Serialize, Deserialize)]
@@ -307,6 +372,41 @@ mod tests {
         let other_readable_entry = read_entry_by(form, other_entry, Actor::from(commenter));
 
         let result = other_readable_entry.update_comment(comment, comment_content("after"));
+
+        assert!(matches!(result, Err(DomainError::NotFound)));
+    }
+
+    #[test]
+    fn comment_history_entry_for_another_answer_is_rejected() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let viewer = active_user("viewer", Role::StandardUser);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let readable_entry = read_entry_by(
+            form.clone(),
+            answer_entry(&form, &answer_author),
+            Actor::from(viewer),
+        );
+        let snapshot = HistoryUserSnapshot::new(
+            *answer_author.id(),
+            answer_author.name().to_owned(),
+            answer_author.role().to_owned(),
+        );
+        let history_entry = unsafe {
+            CommentHistoryEntry::from_raw_parts(
+                CommentHistoryId::new(),
+                AnswerId::new(),
+                CommentId::new(),
+                snapshot.clone(),
+                Utc::now(),
+                CommentHistoryAction::Update,
+                Some("before".to_string()),
+                Some("after".to_string()),
+                snapshot,
+                Utc::now(),
+            )
+        };
+
+        let result = readable_entry.authorize_comment_history_entry(history_entry);
 
         assert!(matches!(result, Err(DomainError::NotFound)));
     }

@@ -6,15 +6,80 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    account::models::{Role::Administrator, UserId},
+    account::models::{Role, Role::Administrator, UserId},
     auth::Actor,
-    form::message_thread::MessageThread,
+    form::{answer::AnswerId, message_thread::MessageThread},
     types::authorization_guard::{
-        AuthorizationRole, BelongsTo, Delete, GuardedBy, ParentGuarded, Update,
+        AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, Update,
     },
 };
 
 pub type MessageId = types::Id<Message>;
+pub type MessageHistoryId = types::Id<MessageHistoryEntry>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MessageHistoryPagePosition(MessageHistoryId);
+
+impl MessageHistoryPagePosition {
+    pub fn new(id: MessageHistoryId) -> Self {
+        Self(id)
+    }
+
+    pub fn id(&self) -> MessageHistoryId {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum MessageHistoryAction {
+    Update,
+    Delete,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Getters)]
+pub struct MessageHistoryUserSnapshot {
+    id: UserId,
+    name: String,
+    role: Role,
+}
+
+impl MessageHistoryUserSnapshot {
+    pub fn new(id: UserId, name: String, role: Role) -> Self {
+        Self { id, name, role }
+    }
+}
+
+#[derive(UnsafeFromRawParts, Clone, Debug, PartialEq, Getters)]
+pub struct MessageHistoryEntry {
+    id: MessageHistoryId,
+    #[getter(skip)]
+    answer_id: AnswerId,
+    message_id: MessageId,
+    original_author: MessageHistoryUserSnapshot,
+    original_timestamp: DateTime<Utc>,
+    action: MessageHistoryAction,
+    before_body: Option<String>,
+    after_body: Option<String>,
+    operated_by: MessageHistoryUserSnapshot,
+    operated_at: DateTime<Utc>,
+}
+
+impl AuthorizationRole for MessageHistoryEntry {
+    type Role = ParentGuarded<MessageThread>;
+}
+
+impl BelongsTo<MessageThread> for MessageHistoryEntry {
+    fn belongs_to(&self, parent: &MessageThread) -> bool {
+        &self.answer_id == parent.answer_id()
+    }
+}
+
+impl GuardedBy<MessageThread, Read> for MessageHistoryEntry {
+    fn is_allowed_for(&self, _parent: &MessageThread, _actor: &Actor) -> bool {
+        true
+    }
+}
 
 #[derive(DerivingVia, Debug, PartialEq)]
 #[deriving(Clone, From, Into, IntoInner, Serialize, Deserialize)]
@@ -40,6 +105,39 @@ pub struct Message {
     sender_id: UserId,
     body: MessageBody,
     timestamp: DateTime<Utc>,
+}
+
+/// 既存のメッセージスレッドへ投稿するメッセージと、その所属先を表す。
+#[derive(Getters, Debug)]
+pub struct MessagePost {
+    answer_id: crate::form::answer::AnswerId,
+    message: Message,
+}
+
+impl MessagePost {
+    pub(crate) fn new(answer_id: crate::form::answer::AnswerId, message: Message) -> Self {
+        Self { answer_id, message }
+    }
+
+    pub fn into_message(self) -> Message {
+        self.message
+    }
+}
+
+impl AuthorizationRole for MessagePost {
+    type Role = ParentGuarded<MessageThread>;
+}
+
+impl BelongsTo<MessageThread> for MessagePost {
+    fn belongs_to(&self, parent: &MessageThread) -> bool {
+        self.answer_id() == parent.answer_id()
+    }
+}
+
+impl GuardedBy<MessageThread, Create> for MessagePost {
+    fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
+        matches!(actor, Actor::AccountUser(user) if user.id() == self.message.sender_id())
+    }
 }
 
 impl Message {

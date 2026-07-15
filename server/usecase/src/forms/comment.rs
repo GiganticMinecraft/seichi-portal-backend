@@ -5,8 +5,9 @@ use domain::{
     auth::Actor,
     form::{
         answer::{AnswerEntry, AnswerId},
-        comment::{Comment, CommentId},
+        comment::{Comment, CommentHistoryEntry, CommentHistoryPagePosition, CommentId},
     },
+    pagination::{Page, PageRequest},
     repository::form::{
         active_form_repository::ActiveFormRepository,
         answer_entry_repository::AnswerEntryRepository, comment_repository::CommentRepository,
@@ -118,6 +119,19 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
         let comment = entry.create_comment(content)?;
 
         self.comment_repository.create(comment).await
+    }
+
+    pub async fn get_history(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        request: PageRequest<CommentHistoryPagePosition>,
+    ) -> Result<Page<Allowed<CommentHistoryEntry, Read>, CommentHistoryPagePosition>, Error> {
+        let entry = self
+            .read_answer_entry(&Actor::from(actor.clone()), form_id, answer_id)
+            .await?;
+        self.comment_repository.history(&entry, request).await
     }
 
     pub async fn update_comment(

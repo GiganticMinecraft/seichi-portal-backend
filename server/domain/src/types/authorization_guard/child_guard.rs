@@ -55,6 +55,14 @@ impl<T, A: Actions> Allowed<T, A> {
 }
 
 impl<T> Allowed<T, Update> {
+    /// 更新認可済みの親要素から、その配下に作成する子要素の認可済み値を作ります。
+    pub(crate) fn authorize_create<C>(&self, child: C) -> Result<Allowed<C, Create>, DomainError>
+    where
+        C: GuardedBy<T, Create>,
+    {
+        self.authorize_any(child)
+    }
+
     /// 更新認可済みの親要素から、子要素の更新認可済み値を作ります。
     pub(crate) fn authorize_update<C>(&self, child: C) -> Result<Allowed<C, Update>, DomainError>
     where

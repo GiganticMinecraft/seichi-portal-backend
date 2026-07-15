@@ -1,4 +1,6 @@
 DROP TABLE IF EXISTS
+    message_history,
+    form_answer_comment_history,
     message_threads,
     archived_label_settings_for_form_answers,
     archived_label_settings_for_forms,

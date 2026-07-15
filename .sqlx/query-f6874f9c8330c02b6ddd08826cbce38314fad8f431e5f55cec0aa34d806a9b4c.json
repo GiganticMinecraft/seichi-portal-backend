@@ -1,0 +1,99 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT m.related_answer_id, m.sender AS original_author_id,\n                        u.name AS original_author_name, u.role AS original_author_role,\n                        m.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM messages m INNER JOIN users u ON u.id = m.sender\n                    WHERE m.id = ? FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "related_answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.messages",
+            "name": "related_answer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "original_author_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.messages",
+            "name": "sender"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "original_author_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 64
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "original_author_role",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 52
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "timestamp!: chrono::DateTime<chrono::Utc>",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "NOT_NULL | UNSIGNED | BINARY | TIMESTAMP",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.messages",
+            "name": "timestamp"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f6874f9c8330c02b6ddd08826cbce38314fad8f431e5f55cec0aa34d806a9b4c"
+}

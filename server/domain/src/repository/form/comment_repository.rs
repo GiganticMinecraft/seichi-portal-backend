@@ -3,7 +3,11 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::{answer::AnswerEntry, comment::Comment},
+    form::{
+        answer::AnswerEntry,
+        comment::{Comment, CommentHistoryEntry, CommentHistoryPagePosition},
+    },
+    pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, Create, Delete, Read, Update},
 };
 
@@ -27,5 +31,10 @@ pub trait CommentRepository: Send + Sync + 'static {
     ) -> Result<Vec<Allowed<Comment, Read>>, Error>;
     async fn update(&self, comment: Allowed<Comment, Update>) -> Result<(), Error>;
     async fn delete(&self, comment: Allowed<Comment, Delete>) -> Result<(), Error>;
+    async fn history(
+        &self,
+        answer: &Allowed<AnswerEntry, Read>,
+        request: PageRequest<CommentHistoryPagePosition>,
+    ) -> Result<Page<Allowed<CommentHistoryEntry, Read>, CommentHistoryPagePosition>, Error>;
     async fn size(&self) -> Result<u32, Error>;
 }

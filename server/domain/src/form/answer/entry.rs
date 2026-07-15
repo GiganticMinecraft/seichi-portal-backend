@@ -9,7 +9,7 @@ use crate::{
     auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
-        comment::{Comment, CommentContent},
+        comment::{Comment, CommentContent, CommentHistoryEntry},
         models::{ActiveForm, FormId},
     },
     types::authorization_guard::{
@@ -104,6 +104,13 @@ impl Allowed<AnswerEntry, Read> {
         comment: Comment,
     ) -> Result<Allowed<Comment, Read>, DomainError> {
         self.authorize_read(comment)
+    }
+
+    pub fn authorize_comment_history_entry(
+        &self,
+        history_entry: CommentHistoryEntry,
+    ) -> Result<Allowed<CommentHistoryEntry, Read>, DomainError> {
+        self.authorize_read(history_entry)
     }
 
     pub fn create_comment(
