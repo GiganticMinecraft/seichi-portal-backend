@@ -56,40 +56,22 @@ where
 
     #[tracing::instrument(skip(self, comment))]
     async fn update(&self, comment: Allowed<Comment, Update>) -> Result<(), Error> {
-        let operated_by = match comment.actor() {
-            Actor::AccountUser(user) => user.clone(),
-            _ => {
-                return Err(InfraError::Unexpected {
-                    cause: "comment operation actor is not an account user".to_string(),
-                }
-                .into());
-            }
-        };
-        let comment = comment.into_inner();
+        let operated_by = account_user_actor(comment.actor())?;
 
         self.client
             .form_comment()
-            .update_comment_with_history(&comment, &operated_by)
+            .update_comment_with_history(comment.value(), operated_by)
             .await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self, comment))]
     async fn delete(&self, comment: Allowed<Comment, Delete>) -> Result<(), Error> {
-        let operated_by = match comment.actor() {
-            Actor::AccountUser(user) => user.clone(),
-            _ => {
-                return Err(InfraError::Unexpected {
-                    cause: "comment operation actor is not an account user".to_string(),
-                }
-                .into());
-            }
-        };
-        let comment = comment.into_inner();
+        let operated_by = account_user_actor(comment.actor())?;
 
         self.client
             .form_comment()
-            .delete_comment_with_history(*comment.comment_id(), &operated_by)
+            .delete_comment_with_history(*comment.value().comment_id(), operated_by)
             .await?;
         Ok(())
     }
@@ -163,5 +145,15 @@ where
     #[tracing::instrument(skip(self))]
     async fn size(&self) -> Result<u32, Error> {
         self.client.form_comment().size().await.map_err(Into::into)
+    }
+}
+
+fn account_user_actor(actor: &Actor) -> Result<&domain::account::models::AccountUser, Error> {
+    match actor {
+        Actor::AccountUser(user) => Ok(user),
+        _ => Err(InfraError::Unexpected {
+            cause: "comment operation actor is not an account user".to_string(),
+        }
+        .into()),
     }
 }

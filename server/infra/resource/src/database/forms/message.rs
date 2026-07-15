@@ -267,19 +267,50 @@ impl FormMessageDatabase for ConnectionPool {
             .after_position()
             .map(|position| position.id().to_string());
         let limit = request.limit();
-        let rows = self.read_only_transaction(|txn| Box::pin(async move {
-            sqlx::query_as!(
-                MessageHistoryRecord,
-                r"SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,
-                    original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
-                    action, before_body, after_body, operated_by_id, operated_by_name,
-                    operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
-                FROM message_history
-                WHERE related_answer_id = ? AND (? IS NULL OR id < ?)
-                ORDER BY id DESC LIMIT ?",
-                answer_id, after, after, request.limit().overfetch_value(),
-            ).fetch_all(&mut **txn).await.map_err(Into::<InfraError>::into)
-        })).await?;
+        let overfetch = limit.overfetch_value();
+        let rows = match after {
+            Some(after) => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        MessageHistoryRecord,
+                        r"SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, before_body, after_body, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM message_history
+                        WHERE related_answer_id = ? AND id < ?
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        after,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+            None => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        MessageHistoryRecord,
+                        r"SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, before_body, after_body, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM message_history
+                        WHERE related_answer_id = ?
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+        };
 
         Ok(Page::from_overfetched_items(rows, limit, |row| {
             MessageHistoryPagePosition::new(
