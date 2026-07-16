@@ -84,7 +84,11 @@ where
         let page = self
             .client
             .form_comment()
-            .get_history(*answer.value().id(), request)
+            .get_history(
+                *answer.value().id(),
+                request,
+                answer.can_read_deleted_comment_history(),
+            )
             .await?;
         let (records, next) = page.into_parts();
         let items = records

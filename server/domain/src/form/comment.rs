@@ -8,7 +8,10 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     account::models::{Role, UserId},
     auth::Actor,
-    form::answer::{AnswerEntry, AnswerId},
+    form::{
+        answer::{AnswerEntry, AnswerId},
+        is_administrator,
+    },
     types::authorization_guard::{
         AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, Update,
     },
@@ -76,9 +79,16 @@ impl BelongsTo<AnswerEntry> for CommentHistoryEntry {
 }
 
 impl GuardedBy<AnswerEntry, Read> for CommentHistoryEntry {
-    fn is_allowed_for(&self, _parent: &AnswerEntry, _actor: &Actor) -> bool {
-        true
+    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
+        match self.action {
+            CommentHistoryAction::Update => true,
+            CommentHistoryAction::Delete => can_read_deleted_comment_history(actor),
+        }
     }
+}
+
+pub(crate) fn can_read_deleted_comment_history(actor: &Actor) -> bool {
+    is_administrator(actor)
 }
 
 #[derive(DerivingVia, Debug, PartialEq)]
@@ -409,5 +419,52 @@ mod tests {
         let result = readable_entry.authorize_comment_history_entry(history_entry);
 
         assert!(matches!(result, Err(DomainError::NotFound)));
+    }
+
+    #[test]
+    fn comment_history_read_authorization_depends_on_action_and_actor_role() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let standard_user = active_user("viewer", Role::StandardUser);
+        let administrator = active_user("administrator", Role::Administrator);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let entry = answer_entry(&form, &answer_author);
+        let standard_readable_entry =
+            read_entry_by(form.clone(), entry.clone(), Actor::from(standard_user));
+        let admin_readable_entry = read_entry_by(form, entry.clone(), Actor::from(administrator));
+        let snapshot = HistoryUserSnapshot::new(
+            *answer_author.id(),
+            answer_author.name().to_owned(),
+            answer_author.role().to_owned(),
+        );
+        let history_entry = |action| unsafe {
+            CommentHistoryEntry::from_raw_parts(
+                CommentHistoryId::new(),
+                *entry.id(),
+                CommentId::new(),
+                snapshot.clone(),
+                Utc::now(),
+                action,
+                None,
+                None,
+                snapshot.clone(),
+                Utc::now(),
+            )
+        };
+
+        let standard_update = standard_readable_entry
+            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Update));
+        let standard_delete = standard_readable_entry
+            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Delete));
+        let admin_update = admin_readable_entry
+            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Update));
+        let admin_delete = admin_readable_entry
+            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Delete));
+
+        assert!(!standard_readable_entry.can_read_deleted_comment_history());
+        assert!(admin_readable_entry.can_read_deleted_comment_history());
+        assert!(standard_update.is_ok());
+        assert!(matches!(standard_delete, Err(DomainError::Forbidden)));
+        assert!(admin_update.is_ok());
+        assert!(admin_delete.is_ok());
     }
 }

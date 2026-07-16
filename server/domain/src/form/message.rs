@@ -8,7 +8,7 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     account::models::{Role, Role::Administrator, UserId},
     auth::Actor,
-    form::{answer::AnswerId, message_thread::MessageThread},
+    form::{answer::AnswerId, is_administrator, message_thread::MessageThread},
     types::authorization_guard::{
         AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, Update,
     },
@@ -76,9 +76,16 @@ impl BelongsTo<MessageThread> for MessageHistoryEntry {
 }
 
 impl GuardedBy<MessageThread, Read> for MessageHistoryEntry {
-    fn is_allowed_for(&self, _parent: &MessageThread, _actor: &Actor) -> bool {
-        true
+    fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
+        match self.action {
+            MessageHistoryAction::Update => true,
+            MessageHistoryAction::Delete => can_read_deleted_message_history(actor),
+        }
     }
+}
+
+pub(crate) fn can_read_deleted_message_history(actor: &Actor) -> bool {
+    is_administrator(actor)
 }
 
 #[derive(DerivingVia, Debug, PartialEq)]
@@ -186,8 +193,9 @@ mod tests {
     use crate::{
         account::models::{AccountUser, Role},
         form::answer::AnswerId,
-        types::authorization_guard::{AuthorizationGuard, Update},
+        types::authorization_guard::{AuthorizationGuard, Read, Update},
     };
+    use errors::domain::DomainError;
     use uuid::Uuid;
 
     #[test]
@@ -214,5 +222,62 @@ mod tests {
         let result = allowed_thread.authorize_update(foreign_message);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn message_history_read_authorization_depends_on_action_and_actor_role() {
+        let answer_id = AnswerId::new();
+        let author = AccountUser::new(
+            "author".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::StandardUser,
+        );
+        let administrator = AccountUser::new(
+            "administrator".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::Administrator,
+        );
+        let thread = MessageThread::new(answer_id, *author.id());
+        let standard_readable_thread = AuthorizationGuard::<_, Read>::from(thread.clone())
+            .try_read(Actor::from(author.clone()))
+            .unwrap();
+        let admin_readable_thread = AuthorizationGuard::<_, Read>::from(thread)
+            .try_read(Actor::from(administrator))
+            .unwrap();
+        let snapshot = MessageHistoryUserSnapshot::new(
+            *author.id(),
+            author.name().to_owned(),
+            author.role().to_owned(),
+        );
+        let history_entry = |action| unsafe {
+            MessageHistoryEntry::from_raw_parts(
+                MessageHistoryId::new(),
+                answer_id,
+                MessageId::new(),
+                snapshot.clone(),
+                Utc::now(),
+                action,
+                None,
+                None,
+                snapshot.clone(),
+                Utc::now(),
+            )
+        };
+
+        let standard_update = standard_readable_thread
+            .authorize_message_history_entry(history_entry(MessageHistoryAction::Update));
+        let standard_delete = standard_readable_thread
+            .authorize_message_history_entry(history_entry(MessageHistoryAction::Delete));
+        let admin_update = admin_readable_thread
+            .authorize_message_history_entry(history_entry(MessageHistoryAction::Update));
+        let admin_delete = admin_readable_thread
+            .authorize_message_history_entry(history_entry(MessageHistoryAction::Delete));
+
+        assert!(!standard_readable_thread.can_read_deleted_message_history());
+        assert!(admin_readable_thread.can_read_deleted_message_history());
+        assert!(standard_update.is_ok());
+        assert!(matches!(standard_delete, Err(DomainError::Forbidden)));
+        assert!(admin_update.is_ok());
+        assert!(admin_delete.is_ok());
     }
 }

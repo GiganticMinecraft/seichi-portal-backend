@@ -171,6 +171,7 @@ pub trait FormMessageDatabase: Send + Sync {
         &self,
         answer_id: AnswerId,
         request: PageRequest<MessageHistoryPagePosition>,
+        includes_deleted_history: bool,
     ) -> Result<Page<MessageHistoryRecord, MessageHistoryPagePosition>, InfraError>;
 }
 
@@ -210,6 +211,7 @@ pub trait FormCommentDatabase: Send + Sync {
         &self,
         answer_id: AnswerId,
         request: PageRequest<CommentHistoryPagePosition>,
+        includes_deleted_history: bool,
     ) -> Result<Page<CommentHistoryRecord, CommentHistoryPagePosition>, InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }

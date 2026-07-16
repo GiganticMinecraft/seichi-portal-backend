@@ -129,7 +129,11 @@ where
         let page = self
             .client
             .form_message()
-            .fetch_history(*message_thread.answer_id(), request)
+            .fetch_history(
+                *message_thread.answer_id(),
+                request,
+                message_thread.can_read_deleted_message_history(),
+            )
             .await?;
         let (records, next) = page.into_parts();
         let items = records

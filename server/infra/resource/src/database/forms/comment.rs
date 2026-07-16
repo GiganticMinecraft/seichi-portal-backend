@@ -247,6 +247,7 @@ impl FormCommentDatabase for ConnectionPool {
         &self,
         answer_id: AnswerId,
         request: PageRequest<CommentHistoryPagePosition>,
+        includes_deleted_history: bool,
     ) -> Result<Page<CommentHistoryRecord, CommentHistoryPagePosition>, InfraError> {
         let answer_id = answer_id.to_string();
         let after = request
@@ -254,8 +255,8 @@ impl FormCommentDatabase for ConnectionPool {
             .map(|position| position.id().to_string());
         let limit = request.limit();
         let overfetch = limit.overfetch_value();
-        let rows = match after {
-            Some(after) => {
+        let rows = match (includes_deleted_history, after) {
+            (true, Some(after)) => {
                 self.read_only_transaction(|txn| Box::pin(async move {
                     sqlx::query_as!(
                         CommentHistoryRecord,
@@ -276,7 +277,7 @@ impl FormCommentDatabase for ConnectionPool {
                 }))
                 .await?
             }
-            None => {
+            (true, None) => {
                 self.read_only_transaction(|txn| Box::pin(async move {
                     sqlx::query_as!(
                         CommentHistoryRecord,
@@ -286,6 +287,47 @@ impl FormCommentDatabase for ConnectionPool {
                             operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
                         FROM form_answer_comment_history
                         WHERE answer_id = ?
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+            (false, Some(after)) => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        CommentHistoryRecord,
+                        r"SELECT id, answer_id, comment_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, before_content, after_content, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM form_answer_comment_history
+                        WHERE answer_id = ? AND action = 'UPDATE' AND id < ?
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        after,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+            (false, None) => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        CommentHistoryRecord,
+                        r"SELECT id, answer_id, comment_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, before_content, after_content, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM form_answer_comment_history
+                        WHERE answer_id = ? AND action = 'UPDATE'
                         ORDER BY id DESC LIMIT ?",
                         answer_id,
                         overfetch,

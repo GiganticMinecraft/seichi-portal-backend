@@ -6,7 +6,10 @@ use crate::{
     auth::Actor,
     form::{
         answer::AnswerId,
-        message::{Message, MessageBody, MessageHistoryEntry, MessageId, MessagePost},
+        message::{
+            Message, MessageBody, MessageHistoryEntry, MessageId, MessagePost,
+            can_read_deleted_message_history,
+        },
     },
     types::authorization_guard::{
         Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Create, Delete, Read,
@@ -90,6 +93,10 @@ impl Allowed<MessageThread, Update> {
 }
 
 impl Allowed<MessageThread, Read> {
+    pub fn can_read_deleted_message_history(&self) -> bool {
+        can_read_deleted_message_history(self.actor())
+    }
+
     pub fn authorize_message_history_entry(
         &self,
         history_entry: MessageHistoryEntry,

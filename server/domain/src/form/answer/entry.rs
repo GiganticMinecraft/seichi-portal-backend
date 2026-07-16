@@ -9,7 +9,7 @@ use crate::{
     auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
-        comment::{Comment, CommentContent, CommentHistoryEntry},
+        comment::{Comment, CommentContent, CommentHistoryEntry, can_read_deleted_comment_history},
         models::{ActiveForm, FormId},
     },
     types::authorization_guard::{
@@ -99,6 +99,10 @@ impl GuardedBy<ActiveForm, Create> for AnswerEntry {
 }
 
 impl Allowed<AnswerEntry, Read> {
+    pub fn can_read_deleted_comment_history(&self) -> bool {
+        can_read_deleted_comment_history(self.actor())
+    }
+
     pub fn authorize_comment(
         &self,
         comment: Comment,
