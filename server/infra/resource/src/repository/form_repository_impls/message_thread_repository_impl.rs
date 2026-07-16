@@ -139,16 +139,11 @@ where
         let items = records
             .into_iter()
             .map(|record| {
-                let action = match record.action.as_str() {
-                    "UPDATE" => MessageHistoryAction::Update,
-                    "DELETE" => MessageHistoryAction::Delete,
-                    action => {
-                        return Err(InfraError::Unexpected {
-                            cause: format!("unknown message history action: {action}"),
-                        }
-                        .into());
-                    }
-                };
+                let action = message_history_action(
+                    record.action.as_str(),
+                    record.before_body,
+                    record.after_body,
+                )?;
                 let history_entry = unsafe {
                     MessageHistoryEntry::from_raw_parts(
                         Uuid::parse_str(&record.id)
@@ -170,8 +165,6 @@ where
                         ),
                         record.original_timestamp,
                         action,
-                        record.before_body,
-                        record.after_body,
                         MessageHistoryUserSnapshot::new(
                             Uuid::parse_str(&record.operated_by_id)
                                 .map_err(InfraError::from)?
@@ -189,6 +182,23 @@ where
             })
             .collect::<Result<Vec<_>, Error>>()?;
         Ok(Page::new(items, next))
+    }
+}
+
+fn message_history_action(
+    action: &str,
+    before_body: Option<String>,
+    after_body: Option<String>,
+) -> Result<MessageHistoryAction, InfraError> {
+    match (action, before_body, after_body) {
+        ("UPDATE", Some(before_body), Some(after_body)) => Ok(MessageHistoryAction::Update {
+            before_body,
+            after_body,
+        }),
+        ("DELETE", None, None) => Ok(MessageHistoryAction::Delete),
+        (action, _, _) => Err(InfraError::Unexpected {
+            cause: format!("invalid message history payload for action: {action}"),
+        }),
     }
 }
 

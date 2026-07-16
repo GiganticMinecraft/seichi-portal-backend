@@ -36,7 +36,10 @@ impl CommentHistoryPagePosition {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CommentHistoryAction {
-    Update,
+    Update {
+        before_content: String,
+        after_content: String,
+    },
     Delete,
 }
 
@@ -62,8 +65,6 @@ pub struct CommentHistoryEntry {
     original_author: HistoryUserSnapshot,
     original_timestamp: DateTime<Utc>,
     action: CommentHistoryAction,
-    before_content: Option<String>,
-    after_content: Option<String>,
     operated_by: HistoryUserSnapshot,
     operated_at: DateTime<Utc>,
 }
@@ -81,7 +82,7 @@ impl BelongsTo<AnswerEntry> for CommentHistoryEntry {
 impl GuardedBy<AnswerEntry, Read> for CommentHistoryEntry {
     fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
         match self.action {
-            CommentHistoryAction::Update => true,
+            CommentHistoryAction::Update { .. } => true,
             CommentHistoryAction::Delete => can_read_deleted_comment_history(actor),
         }
     }
@@ -408,9 +409,10 @@ mod tests {
                 CommentId::new(),
                 snapshot.clone(),
                 Utc::now(),
-                CommentHistoryAction::Update,
-                Some("before".to_string()),
-                Some("after".to_string()),
+                CommentHistoryAction::Update {
+                    before_content: "before".to_string(),
+                    after_content: "after".to_string(),
+                },
                 snapshot,
                 Utc::now(),
             )
@@ -444,19 +446,25 @@ mod tests {
                 snapshot.clone(),
                 Utc::now(),
                 action,
-                None,
-                None,
                 snapshot.clone(),
                 Utc::now(),
             )
         };
 
-        let standard_update = standard_readable_entry
-            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Update));
+        let standard_update = standard_readable_entry.authorize_comment_history_entry(
+            history_entry(CommentHistoryAction::Update {
+                before_content: "before".to_string(),
+                after_content: "after".to_string(),
+            }),
+        );
         let standard_delete = standard_readable_entry
             .authorize_comment_history_entry(history_entry(CommentHistoryAction::Delete));
-        let admin_update = admin_readable_entry
-            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Update));
+        let admin_update = admin_readable_entry.authorize_comment_history_entry(history_entry(
+            CommentHistoryAction::Update {
+                before_content: "before".to_string(),
+                after_content: "after".to_string(),
+            },
+        ));
         let admin_delete = admin_readable_entry
             .authorize_comment_history_entry(history_entry(CommentHistoryAction::Delete));
 

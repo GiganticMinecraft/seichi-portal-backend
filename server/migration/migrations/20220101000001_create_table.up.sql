@@ -140,11 +140,7 @@ CREATE TABLE IF NOT EXISTS form_answer_comment_history(
     operated_by_name TEXT NOT NULL,
     operated_by_role VARCHAR(32) NOT NULL,
     operated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_form_answer_comment_history_answer_id_id(answer_id, id),
-    CONSTRAINT chk_form_answer_comment_history_content CHECK (
-        (action = 'UPDATE' AND before_content IS NOT NULL AND after_content IS NOT NULL)
-        OR (action = 'DELETE' AND before_content IS NULL AND after_content IS NULL)
-    )
+    INDEX idx_form_answer_comment_history_answer_id_id(answer_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS label_for_form_answers(
@@ -198,11 +194,7 @@ CREATE TABLE IF NOT EXISTS message_history(
     operated_by_name TEXT NOT NULL,
     operated_by_role VARCHAR(32) NOT NULL,
     operated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_message_history_answer_id_id(related_answer_id, id),
-    CONSTRAINT chk_message_history_body CHECK (
-        (action = 'UPDATE' AND before_body IS NOT NULL AND after_body IS NOT NULL)
-        OR (action = 'DELETE' AND before_body IS NULL AND after_body IS NULL)
-    )
+    INDEX idx_message_history_answer_id_id(related_answer_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS archived_form_meta_data(

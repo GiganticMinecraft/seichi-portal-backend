@@ -33,7 +33,10 @@ impl MessageHistoryPagePosition {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum MessageHistoryAction {
-    Update,
+    Update {
+        before_body: String,
+        after_body: String,
+    },
     Delete,
 }
 
@@ -59,8 +62,6 @@ pub struct MessageHistoryEntry {
     original_author: MessageHistoryUserSnapshot,
     original_timestamp: DateTime<Utc>,
     action: MessageHistoryAction,
-    before_body: Option<String>,
-    after_body: Option<String>,
     operated_by: MessageHistoryUserSnapshot,
     operated_at: DateTime<Utc>,
 }
@@ -78,7 +79,7 @@ impl BelongsTo<MessageThread> for MessageHistoryEntry {
 impl GuardedBy<MessageThread, Read> for MessageHistoryEntry {
     fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
         match self.action {
-            MessageHistoryAction::Update => true,
+            MessageHistoryAction::Update { .. } => true,
             MessageHistoryAction::Delete => can_read_deleted_message_history(actor),
         }
     }
@@ -257,19 +258,25 @@ mod tests {
                 snapshot.clone(),
                 Utc::now(),
                 action,
-                None,
-                None,
                 snapshot.clone(),
                 Utc::now(),
             )
         };
 
-        let standard_update = standard_readable_thread
-            .authorize_message_history_entry(history_entry(MessageHistoryAction::Update));
+        let standard_update = standard_readable_thread.authorize_message_history_entry(
+            history_entry(MessageHistoryAction::Update {
+                before_body: "before".to_string(),
+                after_body: "after".to_string(),
+            }),
+        );
         let standard_delete = standard_readable_thread
             .authorize_message_history_entry(history_entry(MessageHistoryAction::Delete));
-        let admin_update = admin_readable_thread
-            .authorize_message_history_entry(history_entry(MessageHistoryAction::Update));
+        let admin_update = admin_readable_thread.authorize_message_history_entry(history_entry(
+            MessageHistoryAction::Update {
+                before_body: "before".to_string(),
+                after_body: "after".to_string(),
+            },
+        ));
         let admin_delete = admin_readable_thread
             .authorize_message_history_entry(history_entry(MessageHistoryAction::Delete));
 

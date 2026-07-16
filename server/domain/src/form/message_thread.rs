@@ -507,8 +507,6 @@ mod tests {
                 snapshot.clone(),
                 chrono::Utc::now(),
                 MessageHistoryAction::Delete,
-                None,
-                None,
                 snapshot,
                 chrono::Utc::now(),
             )

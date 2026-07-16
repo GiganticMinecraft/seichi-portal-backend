@@ -94,16 +94,11 @@ where
         let items = records
             .into_iter()
             .map(|record| {
-                let action = match record.action.as_str() {
-                    "UPDATE" => CommentHistoryAction::Update,
-                    "DELETE" => CommentHistoryAction::Delete,
-                    action => {
-                        return Err(InfraError::Unexpected {
-                            cause: format!("unknown comment history action: {action}"),
-                        }
-                        .into());
-                    }
-                };
+                let action = comment_history_action(
+                    record.action.as_str(),
+                    record.before_content,
+                    record.after_content,
+                )?;
                 let history_entry = unsafe {
                     CommentHistoryEntry::from_raw_parts(
                         Uuid::parse_str(&record.id)
@@ -125,8 +120,6 @@ where
                         ),
                         record.original_timestamp,
                         action,
-                        record.before_content,
-                        record.after_content,
                         HistoryUserSnapshot::new(
                             Uuid::parse_str(&record.operated_by_id)
                                 .map_err(InfraError::from)?
@@ -149,6 +142,23 @@ where
     #[tracing::instrument(skip(self))]
     async fn size(&self) -> Result<u32, Error> {
         self.client.form_comment().size().await.map_err(Into::into)
+    }
+}
+
+fn comment_history_action(
+    action: &str,
+    before_content: Option<String>,
+    after_content: Option<String>,
+) -> Result<CommentHistoryAction, InfraError> {
+    match (action, before_content, after_content) {
+        ("UPDATE", Some(before_content), Some(after_content)) => Ok(CommentHistoryAction::Update {
+            before_content,
+            after_content,
+        }),
+        ("DELETE", None, None) => Ok(CommentHistoryAction::Delete),
+        (action, _, _) => Err(InfraError::Unexpected {
+            cause: format!("invalid comment history payload for action: {action}"),
+        }),
     }
 }
 

@@ -433,17 +433,26 @@ pub struct CommentHistoryResponseEntry {
 
 impl From<CommentHistoryEntry> for CommentHistoryResponseEntry {
     fn from(value: CommentHistoryEntry) -> Self {
+        let (action, before_content, after_content) = match value.action() {
+            CommentHistoryAction::Update {
+                before_content,
+                after_content,
+            } => (
+                HistoryAction::Update,
+                Some(before_content.to_owned()),
+                Some(after_content.to_owned()),
+            ),
+            CommentHistoryAction::Delete => (HistoryAction::Delete, None, None),
+        };
+
         Self {
             id: value.id().to_string(),
             comment_id: value.comment_id().to_string(),
             original_author: value.original_author().into(),
             original_timestamp: *value.original_timestamp(),
-            action: match value.action() {
-                CommentHistoryAction::Update => HistoryAction::Update,
-                CommentHistoryAction::Delete => HistoryAction::Delete,
-            },
-            before_content: value.before_content().to_owned(),
-            after_content: value.after_content().to_owned(),
+            action,
+            before_content,
+            after_content,
             operated_by: value.operated_by().into(),
             operated_at: *value.operated_at(),
         }
@@ -473,17 +482,26 @@ pub struct MessageHistoryResponseEntry {
 
 impl From<MessageHistoryEntry> for MessageHistoryResponseEntry {
     fn from(value: MessageHistoryEntry) -> Self {
+        let (action, before_body, after_body) = match value.action() {
+            MessageHistoryAction::Update {
+                before_body,
+                after_body,
+            } => (
+                HistoryAction::Update,
+                Some(before_body.to_owned()),
+                Some(after_body.to_owned()),
+            ),
+            MessageHistoryAction::Delete => (HistoryAction::Delete, None, None),
+        };
+
         Self {
             id: value.id().to_string(),
             message_id: value.message_id().to_string(),
             original_author: value.original_author().into(),
             original_timestamp: *value.original_timestamp(),
-            action: match value.action() {
-                MessageHistoryAction::Update => HistoryAction::Update,
-                MessageHistoryAction::Delete => HistoryAction::Delete,
-            },
-            before_body: value.before_body().to_owned(),
-            after_body: value.after_body().to_owned(),
+            action,
+            before_body,
+            after_body,
             operated_by: value.operated_by().into(),
             operated_at: *value.operated_at(),
         }
@@ -563,140 +581,6 @@ impl FormAnswer {
                 .collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
         }
-    }
-}
-
-#[cfg(test)]
-mod history_response_tests {
-    use super::*;
-    use domain::{
-        account::models::{Role as DomainRole, UserId},
-        form::{
-            comment::{
-                CommentHistoryAction, CommentHistoryEntry, CommentHistoryId, CommentId,
-                HistoryUserSnapshot,
-            },
-            message::{
-                MessageHistoryAction, MessageHistoryEntry, MessageHistoryId,
-                MessageHistoryUserSnapshot, MessageId,
-            },
-        },
-    };
-
-    fn user_id() -> UserId {
-        Uuid::now_v7().into()
-    }
-
-    fn comment_history(
-        action: CommentHistoryAction,
-        before: Option<&str>,
-        after: Option<&str>,
-    ) -> CommentHistoryEntry {
-        let timestamp = Utc::now();
-        unsafe {
-            CommentHistoryEntry::from_raw_parts(
-                CommentHistoryId::new(),
-                domain::form::answer::AnswerId::new(),
-                CommentId::new(),
-                HistoryUserSnapshot::new(
-                    user_id(),
-                    "original author".to_string(),
-                    DomainRole::StandardUser,
-                ),
-                timestamp,
-                action,
-                before.map(str::to_owned),
-                after.map(str::to_owned),
-                HistoryUserSnapshot::new(
-                    user_id(),
-                    "operator".to_string(),
-                    DomainRole::Administrator,
-                ),
-                timestamp,
-            )
-        }
-    }
-
-    fn message_history(
-        action: MessageHistoryAction,
-        before: Option<&str>,
-        after: Option<&str>,
-    ) -> MessageHistoryEntry {
-        let timestamp = Utc::now();
-        unsafe {
-            MessageHistoryEntry::from_raw_parts(
-                MessageHistoryId::new(),
-                domain::form::answer::AnswerId::new(),
-                MessageId::new(),
-                MessageHistoryUserSnapshot::new(
-                    user_id(),
-                    "original author".to_string(),
-                    DomainRole::StandardUser,
-                ),
-                timestamp,
-                action,
-                before.map(str::to_owned),
-                after.map(str::to_owned),
-                MessageHistoryUserSnapshot::new(
-                    user_id(),
-                    "operator".to_string(),
-                    DomainRole::Administrator,
-                ),
-                timestamp,
-            )
-        }
-    }
-
-    #[test]
-    fn comment_update_history_response_keeps_before_and_after_content() {
-        let response = CommentHistoryResponseEntry::from(comment_history(
-            CommentHistoryAction::Update,
-            Some("before"),
-            Some("after"),
-        ));
-
-        assert_eq!(response.before_content.as_deref(), Some("before"));
-        assert_eq!(response.after_content.as_deref(), Some("after"));
-        assert!(matches!(response.action, HistoryAction::Update));
-    }
-
-    #[test]
-    fn comment_delete_history_response_does_not_expose_content() {
-        let response = CommentHistoryResponseEntry::from(comment_history(
-            CommentHistoryAction::Delete,
-            None,
-            None,
-        ));
-
-        assert_eq!(response.before_content, None);
-        assert_eq!(response.after_content, None);
-        assert!(matches!(response.action, HistoryAction::Delete));
-    }
-
-    #[test]
-    fn message_update_history_response_keeps_before_and_after_body() {
-        let response = MessageHistoryResponseEntry::from(message_history(
-            MessageHistoryAction::Update,
-            Some("before"),
-            Some("after"),
-        ));
-
-        assert_eq!(response.before_body.as_deref(), Some("before"));
-        assert_eq!(response.after_body.as_deref(), Some("after"));
-        assert!(matches!(response.action, HistoryAction::Update));
-    }
-
-    #[test]
-    fn message_delete_history_response_does_not_expose_body() {
-        let response = MessageHistoryResponseEntry::from(message_history(
-            MessageHistoryAction::Delete,
-            None,
-            None,
-        ));
-
-        assert_eq!(response.before_body, None);
-        assert_eq!(response.after_body, None);
-        assert!(matches!(response.action, HistoryAction::Delete));
     }
 }
 
