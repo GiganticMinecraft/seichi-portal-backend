@@ -5786,6 +5786,7 @@
           "original_author",
           "original_timestamp",
           "action",
+          "content",
           "operated_by",
           "operated_at"
         ],
@@ -5793,21 +5794,12 @@
           "action": {
             "$ref": "#/components/schemas/HistoryAction"
           },
-          "after_content": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "before_content": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "comment_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "content": {
+            "type": "string"
           },
           "id": {
             "type": "string",
@@ -6269,6 +6261,7 @@
       "HistoryAction": {
         "type": "string",
         "enum": [
+          "CREATE",
           "UPDATE",
           "DELETE"
         ]
@@ -6346,6 +6339,7 @@
           "original_author",
           "original_timestamp",
           "action",
+          "body",
           "operated_by",
           "operated_at"
         ],
@@ -6353,17 +6347,8 @@
           "action": {
             "$ref": "#/components/schemas/HistoryAction"
           },
-          "after_body": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "before_body": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "body": {
+            "type": "string"
           },
           "id": {
             "type": "string",

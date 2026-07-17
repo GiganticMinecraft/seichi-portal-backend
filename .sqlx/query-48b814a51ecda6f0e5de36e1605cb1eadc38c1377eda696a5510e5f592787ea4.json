@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, answer_id, comment_id, original_author_id, original_author_name,\n                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,\n                            action, before_content, after_content, operated_by_id, operated_by_name,\n                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`\n                        FROM form_answer_comment_history\n                        WHERE answer_id = ? AND id < ?\n                        ORDER BY id DESC LIMIT ?",
+  "query": "SELECT id, answer_id, comment_id, original_author_id, original_author_name,\n                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,\n                            action, content, operated_by_id, operated_by_name,\n                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`\n                        FROM form_answer_comment_history\n                        WHERE answer_id = ?\n                        ORDER BY id DESC LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -133,38 +133,22 @@
       },
       {
         "ordinal": 8,
-        "name": "before_content",
+        "name": "content",
         "type_info": {
           "type": "Blob",
-          "flags": "BLOB",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
           "collation": 224,
           "max_size": 262140
         },
         "origin": {
           "Table": {
             "table": "seichi_portal.form_answer_comment_history",
-            "name": "before_content"
+            "name": "content"
           }
         }
       },
       {
         "ordinal": 9,
-        "name": "after_content",
-        "type_info": {
-          "type": "Blob",
-          "flags": "BLOB",
-          "collation": 224,
-          "max_size": 262140
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
-            "name": "after_content"
-          }
-        }
-      },
-      {
-        "ordinal": 10,
         "name": "operated_by_id",
         "type_info": {
           "type": "String",
@@ -180,7 +164,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "operated_by_name",
         "type_info": {
           "type": "Blob",
@@ -196,7 +180,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "operated_by_role",
         "type_info": {
           "type": "VarString",
@@ -212,7 +196,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "operated_at!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -229,7 +213,7 @@
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 2
     },
     "nullable": [
       false,
@@ -240,13 +224,12 @@
       false,
       false,
       false,
-      true,
-      true,
+      false,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "e8396f31c2c87137b130c42d6f06166505617c6a611697504bda703adced121c"
+  "hash": "48b814a51ecda6f0e5de36e1605cb1eadc38c1377eda696a5510e5f592787ea4"
 }

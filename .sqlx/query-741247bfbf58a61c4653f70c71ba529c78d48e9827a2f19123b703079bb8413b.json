@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,\n                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,\n                            action, before_body, after_body, operated_by_id, operated_by_name,\n                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`\n                        FROM message_history\n                        WHERE related_answer_id = ?\n                        ORDER BY id DESC LIMIT ?",
+  "query": "SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,\n                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,\n                            action, body, operated_by_id, operated_by_name,\n                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`\n                        FROM message_history\n                        WHERE related_answer_id = ? AND id < ?\n                        ORDER BY id DESC LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -133,38 +133,22 @@
       },
       {
         "ordinal": 8,
-        "name": "before_body",
+        "name": "body",
         "type_info": {
           "type": "Blob",
-          "flags": "BLOB",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
           "collation": 224,
           "max_size": 262140
         },
         "origin": {
           "Table": {
             "table": "seichi_portal.message_history",
-            "name": "before_body"
+            "name": "body"
           }
         }
       },
       {
         "ordinal": 9,
-        "name": "after_body",
-        "type_info": {
-          "type": "Blob",
-          "flags": "BLOB",
-          "collation": 224,
-          "max_size": 262140
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.message_history",
-            "name": "after_body"
-          }
-        }
-      },
-      {
-        "ordinal": 10,
         "name": "operated_by_id",
         "type_info": {
           "type": "String",
@@ -180,7 +164,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "operated_by_name",
         "type_info": {
           "type": "Blob",
@@ -196,7 +180,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "operated_by_role",
         "type_info": {
           "type": "VarString",
@@ -212,7 +196,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "operated_at!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -229,7 +213,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       false,
@@ -240,13 +224,12 @@
       false,
       false,
       false,
-      true,
-      true,
+      false,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "cb3d40a036606c892eb2afa5fc8abded7f8f88964aa9b1b96c68026854960e2c"
+  "hash": "741247bfbf58a61c4653f70c71ba529c78d48e9827a2f19123b703079bb8413b"
 }

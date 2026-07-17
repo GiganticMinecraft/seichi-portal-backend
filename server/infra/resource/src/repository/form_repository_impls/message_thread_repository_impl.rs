@@ -1,11 +1,12 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::{
-    auth::Actor,
+    account::models::{AccountUser, UserSnapshot},
     form::{
         answer::AnswerId,
         message::{
-            Message, MessageHistoryAction, MessageHistoryEntry, MessageHistoryPagePosition,
-            MessageHistoryUserSnapshot, MessagePost,
+            DeletedMessage, Message, MessageBody, MessageHistoryAction, MessageHistoryEntry,
+            MessageHistoryPagePosition, MessagePost,
         },
         message_thread::MessageThread,
     },
@@ -32,21 +33,13 @@ where
 {
     #[tracing::instrument(skip(self))]
     async fn create(&self, message_thread: Allowed<MessageThread, Create>) -> Result<(), Error> {
+        let operated_by = account_user_snapshot(message_thread.actor())?;
         let thread = message_thread.into_inner();
-        let answer_id = thread.answer_id().into_inner().to_string();
-        let answer_author_id = thread.answer_author_id().to_string();
 
         self.client
             .form_message_thread()
-            .create_message_thread(&answer_id, &answer_author_id)
+            .create_message_thread(&thread, &operated_by)
             .await?;
-
-        for message in thread.messages() {
-            self.client
-                .form_message()
-                .post_message(message, *thread.answer_id())
-                .await?;
-        }
 
         Ok(())
     }
@@ -93,30 +86,34 @@ where
 
     #[tracing::instrument(skip(self))]
     async fn append(&self, post: Allowed<MessagePost, Create>) -> Result<(), Error> {
+        let operated_by = account_user_snapshot(post.actor())?;
         let post = post.into_inner();
         let answer_id = *post.answer_id();
         let message = post.into_message();
         self.client
             .form_message()
-            .post_message(&message, answer_id)
+            .post_message(&message, answer_id, &operated_by)
             .await?;
         Ok(())
     }
 
-    async fn update_message(&self, message: Allowed<Message, Update>) -> Result<(), Error> {
-        let operated_by = account_user_actor(message.actor())?;
+    async fn update_message(
+        &self,
+        message: Allowed<Message, Update>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        let operated_by = account_user(message.actor())?;
         self.client
             .form_message()
-            .update_message_with_history(message.value(), operated_by)
+            .update_message_with_history(message.value(), operated_by, updated_at)
             .await?;
         Ok(())
     }
 
-    async fn delete_message(&self, message: Allowed<Message, Delete>) -> Result<(), Error> {
-        let operated_by = account_user_actor(message.actor())?;
+    async fn delete_message(&self, message: Allowed<DeletedMessage, Delete>) -> Result<(), Error> {
         self.client
             .form_message()
-            .delete_message_with_history(*message.value().id(), operated_by)
+            .delete_message_with_history(message.value())
             .await?;
         Ok(())
     }
@@ -139,11 +136,7 @@ where
         let items = records
             .into_iter()
             .map(|record| {
-                let action = message_history_action(
-                    record.action.as_str(),
-                    record.before_body,
-                    record.after_body,
-                )?;
+                let action = message_history_action(record.action.as_str())?;
                 let history_entry = unsafe {
                     MessageHistoryEntry::from_raw_parts(
                         Uuid::parse_str(&record.id)
@@ -155,7 +148,7 @@ where
                         Uuid::parse_str(&record.message_id)
                             .map_err(InfraError::from)?
                             .into(),
-                        MessageHistoryUserSnapshot::new(
+                        UserSnapshot::new(
                             Uuid::parse_str(&record.original_author_id)
                                 .map_err(InfraError::from)?
                                 .into(),
@@ -165,7 +158,8 @@ where
                         ),
                         record.original_timestamp,
                         action,
-                        MessageHistoryUserSnapshot::new(
+                        MessageBody::new(record.body.try_into()?),
+                        UserSnapshot::new(
                             Uuid::parse_str(&record.operated_by_id)
                                 .map_err(InfraError::from)?
                                 .into(),
@@ -185,29 +179,27 @@ where
     }
 }
 
-fn message_history_action(
-    action: &str,
-    before_body: Option<String>,
-    after_body: Option<String>,
-) -> Result<MessageHistoryAction, InfraError> {
-    match (action, before_body, after_body) {
-        ("UPDATE", Some(before_body), Some(after_body)) => Ok(MessageHistoryAction::Update {
-            before_body,
-            after_body,
-        }),
-        ("DELETE", None, None) => Ok(MessageHistoryAction::Delete),
-        (action, _, _) => Err(InfraError::Unexpected {
+fn message_history_action(action: &str) -> Result<MessageHistoryAction, InfraError> {
+    match action {
+        "CREATE" => Ok(MessageHistoryAction::Create),
+        "UPDATE" => Ok(MessageHistoryAction::Update),
+        "DELETE" => Ok(MessageHistoryAction::Delete),
+        action => Err(InfraError::Unexpected {
             cause: format!("invalid message history payload for action: {action}"),
         }),
     }
 }
 
-fn account_user_actor(actor: &Actor) -> Result<&domain::account::models::AccountUser, Error> {
+fn account_user(actor: &domain::auth::Actor) -> Result<&AccountUser, Error> {
     match actor {
-        Actor::AccountUser(user) => Ok(user),
+        domain::auth::Actor::AccountUser(user) => Ok(user),
         _ => Err(InfraError::Unexpected {
             cause: "message operation actor is not an account user".to_string(),
         }
         .into()),
     }
+}
+
+fn account_user_snapshot(actor: &domain::auth::Actor) -> Result<UserSnapshot, Error> {
+    account_user(actor).map(UserSnapshot::from)
 }

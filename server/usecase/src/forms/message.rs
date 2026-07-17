@@ -1,3 +1,4 @@
+use chrono::Utc;
 use common::config::FRONTEND;
 use domain::form::message_thread::MessageThread;
 use domain::form::models::FormId;
@@ -236,7 +237,7 @@ impl<
 
             let updated = thread.authorize_message_update(*message_id, body)?;
             self.message_thread_repository
-                .update_message(updated)
+                .update_message(updated, Utc::now())
                 .await?;
         }
 
@@ -262,7 +263,7 @@ impl<
             .into_update()
             .try_update(actor_user)?;
 
-        let message = thread.authorize_message_delete(*message_id)?;
+        let message = thread.authorize_message_delete(*message_id, Utc::now())?;
         self.message_thread_repository.delete_message(message).await
     }
 

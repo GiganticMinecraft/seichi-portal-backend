@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::search::models::{
     AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
     NumberOfRecordsPerAggregate, UserSearchHit,
@@ -14,11 +15,13 @@ use domain::search::models::{
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserPagePosition,
+        UserSnapshot,
     },
     form::{
         answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerSubmitterRestriction},
-        comment::{Comment, CommentHistoryPagePosition, CommentId},
-        message::{Message, MessageHistoryPagePosition, MessageId},
+        comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
+        message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
+        message_thread::MessageThread,
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
             FormLabelName, FormPagePosition,
@@ -144,11 +147,17 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
 
 #[async_trait]
 pub trait FormMessageDatabase: Send + Sync {
-    async fn post_message(&self, message: &Message, answer_id: AnswerId) -> Result<(), InfraError>;
+    async fn post_message(
+        &self,
+        message: &Message,
+        answer_id: AnswerId,
+        operated_by: &UserSnapshot,
+    ) -> Result<(), InfraError>;
     async fn update_message_with_history(
         &self,
         message: &Message,
         operated_by: &AccountUser,
+        operated_at: DateTime<Utc>,
     ) -> Result<(), InfraError>;
     async fn fetch_messages_by_form_answer(
         &self,
@@ -162,11 +171,8 @@ pub trait FormMessageDatabase: Send + Sync {
         &self,
         message_id: &MessageId,
     ) -> Result<Option<MessageRecord>, InfraError>;
-    async fn delete_message_with_history(
-        &self,
-        message_id: MessageId,
-        operated_by: &AccountUser,
-    ) -> Result<(), InfraError>;
+    async fn delete_message_with_history(&self, message: &DeletedMessage)
+    -> Result<(), InfraError>;
     async fn fetch_history(
         &self,
         answer_id: AnswerId,
@@ -180,8 +186,8 @@ pub trait FormMessageDatabase: Send + Sync {
 pub trait FormMessageThreadDatabase: Send + Sync {
     async fn create_message_thread(
         &self,
-        answer_id: &str,
-        answer_author_id: &str,
+        message_thread: &MessageThread,
+        operated_by: &UserSnapshot,
     ) -> Result<(), InfraError>;
     async fn get_thread_author_by_answer_id(
         &self,
@@ -196,17 +202,19 @@ pub trait FormCommentDatabase: Send + Sync {
     -> Result<Option<CommentRecord>, InfraError>;
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentRecord>, InfraError>;
     async fn get_all_comments(&self) -> Result<Vec<CommentRecord>, InfraError>;
-    async fn create_comment(&self, comment: &Comment) -> Result<(), InfraError>;
+    async fn create_comment(
+        &self,
+        comment: &Comment,
+        operated_by: &UserSnapshot,
+    ) -> Result<(), InfraError>;
     async fn update_comment_with_history(
         &self,
         comment: &Comment,
         operated_by: &AccountUser,
+        operated_at: DateTime<Utc>,
     ) -> Result<(), InfraError>;
-    async fn delete_comment_with_history(
-        &self,
-        comment_id: CommentId,
-        operated_by: &AccountUser,
-    ) -> Result<(), InfraError>;
+    async fn delete_comment_with_history(&self, comment: &DeletedComment)
+    -> Result<(), InfraError>;
     async fn get_history(
         &self,
         answer_id: AnswerId,

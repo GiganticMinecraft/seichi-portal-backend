@@ -3,12 +3,13 @@ use crate::{
     records::{CommentHistoryRecord, CommentRecord},
 };
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::form::{
     answer::AnswerId,
-    comment::{Comment, CommentHistoryPagePosition, CommentId},
+    comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
 };
 use domain::{
-    account::models::AccountUser,
+    account::models::{AccountUser, UserSnapshot},
     pagination::{Page, PageRequest},
 };
 use errors::infra::InfraError;
@@ -81,20 +82,51 @@ impl FormCommentDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn create_comment(&self, comment: &Comment) -> Result<(), InfraError> {
+    async fn create_comment(
+        &self,
+        comment: &Comment,
+        operated_by: &UserSnapshot,
+    ) -> Result<(), InfraError> {
         let comment_id = comment.comment_id().into_inner().to_string();
         let answer_id = comment.answer_id().into_inner().to_string();
         let commented_by = comment.commented_by().to_string();
         let content = comment.content().to_owned().into_inner().into_inner();
+        let timestamp = *comment.timestamp();
+        let operator_id = operated_by.id().to_string();
+        let operator_name = operated_by.name().to_owned();
+        let operator_role = operated_by.role().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 sqlx::query!(
-                    "INSERT INTO form_answer_comments (id, answer_id, commented_by, content) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO form_answer_comments (id, answer_id, commented_by, content, timestamp) VALUES (?, ?, ?, ?, ?)",
                     comment_id,
                     answer_id,
                     commented_by,
                     content,
+                    timestamp,
+                )
+                .execute(&mut **txn)
+                .await?;
+
+                sqlx::query!(
+                    r"INSERT INTO form_answer_comment_history
+                    (id, answer_id, comment_id, original_author_id, original_author_name,
+                     original_author_role, original_timestamp, action, content,
+                     operated_by_id, operated_by_name, operated_by_role, operated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'CREATE', ?, ?, ?, ?, ?)",
+                    Uuid::now_v7().to_string(),
+                    answer_id,
+                    comment_id,
+                    commented_by,
+                    operator_name,
+                    operator_role,
+                    timestamp,
+                    content,
+                    operator_id,
+                    operator_name,
+                    operator_role,
+                    timestamp,
                 )
                 .execute(&mut **txn)
                 .await?;
@@ -110,6 +142,7 @@ impl FormCommentDatabase for ConnectionPool {
         &self,
         comment: &Comment,
         operated_by: &AccountUser,
+        operated_at: DateTime<Utc>,
     ) -> Result<(), InfraError> {
         let comment_id = comment.comment_id().to_string();
         let answer_id = comment.answer_id().to_string();
@@ -137,7 +170,9 @@ impl FormCommentDatabase for ConnectionPool {
                 })?;
                 if current.answer_id != answer_id {
                     return Err(InfraError::Unexpected {
-                        cause: format!("comment {comment_id} does not belong to answer {answer_id}"),
+                        cause: format!(
+                            "comment {comment_id} does not belong to answer {answer_id}"
+                        ),
                     });
                 }
                 if current.content == new_content {
@@ -148,13 +183,21 @@ impl FormCommentDatabase for ConnectionPool {
                 sqlx::query!(
                     r"INSERT INTO form_answer_comment_history
                     (id, answer_id, comment_id, original_author_id, original_author_name,
-                     original_author_role, original_timestamp, action, before_content, after_content,
-                     operated_by_id, operated_by_name, operated_by_role)
+                     original_author_role, original_timestamp, action, content,
+                     operated_by_id, operated_by_name, operated_by_role, operated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, 'UPDATE', ?, ?, ?, ?, ?)",
-                    history_id, answer_id, comment_id, current.original_author_id,
-                    current.original_author_name, current.original_author_role,
-                    current.timestamp, current.content, new_content, operator_id, operator_name,
+                    history_id,
+                    answer_id,
+                    comment_id,
+                    current.original_author_id,
+                    current.original_author_name,
+                    current.original_author_role,
+                    current.timestamp,
+                    new_content,
+                    operator_id,
+                    operator_name,
                     operator_role,
+                    operated_at,
                 )
                 .execute(&mut **txn)
                 .await?;
@@ -167,7 +210,9 @@ impl FormCommentDatabase for ConnectionPool {
                 .await?;
                 if result.rows_affected() != 1 {
                     return Err(InfraError::Unexpected {
-                        cause: format!("comment {comment_id} update affected an unexpected number of rows"),
+                        cause: format!(
+                            "comment {comment_id} update affected an unexpected number of rows"
+                        ),
                     });
                 }
 
@@ -177,23 +222,28 @@ impl FormCommentDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip(self, operated_by))]
+    #[tracing::instrument(skip(self, deleted))]
     async fn delete_comment_with_history(
         &self,
-        comment_id: CommentId,
-        operated_by: &AccountUser,
+        deleted: &DeletedComment,
     ) -> Result<(), InfraError> {
-        let comment_id = comment_id.to_string();
-        let operator_id = operated_by.id().to_string();
-        let operator_name = operated_by.name().to_owned();
-        let operator_role = operated_by.role().to_string();
+        let comment = deleted.comment();
+        let comment_id = comment.comment_id().to_string();
+        let expected_answer_id = comment.answer_id().to_string();
+        let expected_author_id = comment.commented_by().to_string();
+        let expected_content = comment.content().to_string();
+        let expected_timestamp = *comment.timestamp();
+        let operator_id = deleted.deleted_by().id().to_string();
+        let operator_name = deleted.deleted_by().name().to_owned();
+        let operator_role = deleted.deleted_by().role().to_string();
+        let deleted_at = *deleted.deleted_at();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 let current = sqlx::query!(
                     r"SELECT c.answer_id, c.commented_by AS original_author_id,
                     u.name AS original_author_name, u.role AS original_author_role,
-                    c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    c.content, c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                 FROM form_answer_comments c
                 INNER JOIN users u ON u.id = c.commented_by
                 WHERE c.id = ? FOR UPDATE",
@@ -205,13 +255,23 @@ impl FormCommentDatabase for ConnectionPool {
                     cause: format!("comment {comment_id} was not found while deleting"),
                 })?;
 
+                if current.answer_id != expected_answer_id
+                    || current.original_author_id != expected_author_id
+                    || current.content != expected_content
+                    || current.timestamp != expected_timestamp
+                {
+                    return Err(InfraError::Unexpected {
+                        cause: format!("comment {comment_id} changed before deletion"),
+                    });
+                }
+
                 let history_id = Uuid::now_v7().to_string();
                 sqlx::query!(
                     r"INSERT INTO form_answer_comment_history
                 (id, answer_id, comment_id, original_author_id, original_author_name,
-                 original_author_role, original_timestamp, action,
-                 operated_by_id, operated_by_name, operated_by_role)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'DELETE', ?, ?, ?)",
+                 original_author_role, original_timestamp, action, content,
+                 operated_by_id, operated_by_name, operated_by_role, operated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'DELETE', ?, ?, ?, ?, ?)",
                     history_id,
                     current.answer_id,
                     comment_id,
@@ -219,9 +279,11 @@ impl FormCommentDatabase for ConnectionPool {
                     current.original_author_name,
                     current.original_author_role,
                     current.timestamp,
+                    current.content,
                     operator_id,
                     operator_name,
                     operator_role,
+                    deleted_at,
                 )
                 .execute(&mut **txn)
                 .await?;
@@ -262,7 +324,7 @@ impl FormCommentDatabase for ConnectionPool {
                         CommentHistoryRecord,
                         r"SELECT id, answer_id, comment_id, original_author_id, original_author_name,
                             original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
-                            action, before_content, after_content, operated_by_id, operated_by_name,
+                            action, content, operated_by_id, operated_by_name,
                             operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
                         FROM form_answer_comment_history
                         WHERE answer_id = ? AND id < ?
@@ -283,7 +345,7 @@ impl FormCommentDatabase for ConnectionPool {
                         CommentHistoryRecord,
                         r"SELECT id, answer_id, comment_id, original_author_id, original_author_name,
                             original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
-                            action, before_content, after_content, operated_by_id, operated_by_name,
+                            action, content, operated_by_id, operated_by_name,
                             operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
                         FROM form_answer_comment_history
                         WHERE answer_id = ?
@@ -303,10 +365,10 @@ impl FormCommentDatabase for ConnectionPool {
                         CommentHistoryRecord,
                         r"SELECT id, answer_id, comment_id, original_author_id, original_author_name,
                             original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
-                            action, before_content, after_content, operated_by_id, operated_by_name,
+                            action, content, operated_by_id, operated_by_name,
                             operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
                         FROM form_answer_comment_history
-                        WHERE answer_id = ? AND action = 'UPDATE' AND id < ?
+                        WHERE answer_id = ? AND action != 'DELETE' AND id < ?
                         ORDER BY id DESC LIMIT ?",
                         answer_id,
                         after,
@@ -324,10 +386,10 @@ impl FormCommentDatabase for ConnectionPool {
                         CommentHistoryRecord,
                         r"SELECT id, answer_id, comment_id, original_author_id, original_author_name,
                             original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
-                            action, before_content, after_content, operated_by_id, operated_by_name,
+                            action, content, operated_by_id, operated_by_name,
                             operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
                         FROM form_answer_comment_history
-                        WHERE answer_id = ? AND action = 'UPDATE'
+                        WHERE answer_id = ? AND action != 'DELETE'
                         ORDER BY id DESC LIMIT ?",
                         answer_id,
                         overfetch,

@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
-use domain::account::models::UserGroupId;
+use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
     answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
-    comment::{CommentHistoryAction, CommentHistoryEntry, CommentId, HistoryUserSnapshot},
-    message::{MessageHistoryAction, MessageHistoryEntry, MessageHistoryUserSnapshot},
+    comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
+    message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
         AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
         FormSettings, FormTitle, Visibility,
@@ -389,18 +389,8 @@ pub struct HistoryUser {
     role: Role,
 }
 
-impl From<&HistoryUserSnapshot> for HistoryUser {
-    fn from(value: &HistoryUserSnapshot) -> Self {
-        Self {
-            id: value.id().to_string(),
-            name: value.name().to_owned(),
-            role: value.role().to_owned().into(),
-        }
-    }
-}
-
-impl From<&MessageHistoryUserSnapshot> for HistoryUser {
-    fn from(value: &MessageHistoryUserSnapshot) -> Self {
+impl From<&UserSnapshot> for HistoryUser {
+    fn from(value: &UserSnapshot) -> Self {
         Self {
             id: value.id().to_string(),
             name: value.name().to_owned(),
@@ -412,6 +402,7 @@ impl From<&MessageHistoryUserSnapshot> for HistoryUser {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum HistoryAction {
+    Create,
     Update,
     Delete,
 }
@@ -425,24 +416,17 @@ pub struct CommentHistoryResponseEntry {
     original_author: HistoryUser,
     original_timestamp: DateTime<Utc>,
     action: HistoryAction,
-    before_content: Option<String>,
-    after_content: Option<String>,
+    content: String,
     operated_by: HistoryUser,
     operated_at: DateTime<Utc>,
 }
 
 impl From<CommentHistoryEntry> for CommentHistoryResponseEntry {
     fn from(value: CommentHistoryEntry) -> Self {
-        let (action, before_content, after_content) = match value.action() {
-            CommentHistoryAction::Update {
-                before_content,
-                after_content,
-            } => (
-                HistoryAction::Update,
-                Some(before_content.to_owned()),
-                Some(after_content.to_owned()),
-            ),
-            CommentHistoryAction::Delete => (HistoryAction::Delete, None, None),
+        let action = match value.action() {
+            CommentHistoryAction::Create => HistoryAction::Create,
+            CommentHistoryAction::Update => HistoryAction::Update,
+            CommentHistoryAction::Delete => HistoryAction::Delete,
         };
 
         Self {
@@ -451,8 +435,7 @@ impl From<CommentHistoryEntry> for CommentHistoryResponseEntry {
             original_author: value.original_author().into(),
             original_timestamp: *value.original_timestamp(),
             action,
-            before_content,
-            after_content,
+            content: value.content().to_string(),
             operated_by: value.operated_by().into(),
             operated_at: *value.operated_at(),
         }
@@ -474,24 +457,17 @@ pub struct MessageHistoryResponseEntry {
     original_author: HistoryUser,
     original_timestamp: DateTime<Utc>,
     action: HistoryAction,
-    before_body: Option<String>,
-    after_body: Option<String>,
+    body: String,
     operated_by: HistoryUser,
     operated_at: DateTime<Utc>,
 }
 
 impl From<MessageHistoryEntry> for MessageHistoryResponseEntry {
     fn from(value: MessageHistoryEntry) -> Self {
-        let (action, before_body, after_body) = match value.action() {
-            MessageHistoryAction::Update {
-                before_body,
-                after_body,
-            } => (
-                HistoryAction::Update,
-                Some(before_body.to_owned()),
-                Some(after_body.to_owned()),
-            ),
-            MessageHistoryAction::Delete => (HistoryAction::Delete, None, None),
+        let action = match value.action() {
+            MessageHistoryAction::Create => HistoryAction::Create,
+            MessageHistoryAction::Update => HistoryAction::Update,
+            MessageHistoryAction::Delete => HistoryAction::Delete,
         };
 
         Self {
@@ -500,8 +476,7 @@ impl From<MessageHistoryEntry> for MessageHistoryResponseEntry {
             original_author: value.original_author().into(),
             original_timestamp: *value.original_timestamp(),
             action,
-            before_body,
-            after_body,
+            body: value.body().as_str().to_owned(),
             operated_by: value.operated_by().into(),
             operated_at: *value.operated_at(),
         }

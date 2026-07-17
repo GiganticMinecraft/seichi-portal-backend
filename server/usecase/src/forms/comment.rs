@@ -1,3 +1,4 @@
+use chrono::Utc;
 use domain::form::comment::CommentContent;
 use domain::form::models::FormId;
 use domain::{
@@ -156,7 +157,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
 
         if let Some(content) = content {
             let updated = entry.update_comment(current_comment.into_inner(), content)?;
-            self.comment_repository.update(updated).await?;
+            self.comment_repository.update(updated, Utc::now()).await?;
         }
 
         Ok(())
@@ -181,7 +182,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
             .find(|comment| *comment.value().comment_id() == comment_id)
             .ok_or(Error::from(CommentNotFound))?;
 
-        let comment = entry.delete_comment(comment.into_inner())?;
+        let comment = entry.delete_comment(comment.into_inner(), Utc::now())?;
 
         self.comment_repository.delete(comment).await
     }

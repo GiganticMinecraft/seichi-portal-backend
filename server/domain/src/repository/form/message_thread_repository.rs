@@ -1,11 +1,14 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use errors::Error;
 use mockall::automock;
 
 use crate::{
     form::{
         answer::AnswerId,
-        message::{Message, MessageHistoryEntry, MessageHistoryPagePosition, MessagePost},
+        message::{
+            DeletedMessage, Message, MessageHistoryEntry, MessageHistoryPagePosition, MessagePost,
+        },
         message_thread::MessageThread,
     },
     pagination::{Page, PageRequest},
@@ -21,8 +24,12 @@ pub trait MessageThreadRepository: Send + Sync + 'static {
         answer_id: AnswerId,
     ) -> Result<Option<AuthorizationGuard<MessageThread, Read>>, Error>;
     async fn append(&self, post: Allowed<MessagePost, Create>) -> Result<(), Error>;
-    async fn update_message(&self, message: Allowed<Message, Update>) -> Result<(), Error>;
-    async fn delete_message(&self, message: Allowed<Message, Delete>) -> Result<(), Error>;
+    async fn update_message(
+        &self,
+        message: Allowed<Message, Update>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<(), Error>;
+    async fn delete_message(&self, message: Allowed<DeletedMessage, Delete>) -> Result<(), Error>;
     async fn history(
         &self,
         message_thread: &Allowed<MessageThread, Read>,

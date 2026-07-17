@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    account::models::{Role, Role::Administrator, UserId},
+    account::models::{Role, UserId, UserSnapshot},
     auth::Actor,
     form::{answer::AnswerId, is_administrator, message_thread::MessageThread},
     types::authorization_guard::{
@@ -33,24 +33,9 @@ impl MessageHistoryPagePosition {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum MessageHistoryAction {
-    Update {
-        before_body: String,
-        after_body: String,
-    },
+    Create,
+    Update,
     Delete,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Getters)]
-pub struct MessageHistoryUserSnapshot {
-    id: UserId,
-    name: String,
-    role: Role,
-}
-
-impl MessageHistoryUserSnapshot {
-    pub fn new(id: UserId, name: String, role: Role) -> Self {
-        Self { id, name, role }
-    }
 }
 
 #[derive(UnsafeFromRawParts, Clone, Debug, PartialEq, Getters)]
@@ -59,10 +44,11 @@ pub struct MessageHistoryEntry {
     #[getter(skip)]
     answer_id: AnswerId,
     message_id: MessageId,
-    original_author: MessageHistoryUserSnapshot,
+    original_author: UserSnapshot,
     original_timestamp: DateTime<Utc>,
     action: MessageHistoryAction,
-    operated_by: MessageHistoryUserSnapshot,
+    body: MessageBody,
+    operated_by: UserSnapshot,
     operated_at: DateTime<Utc>,
 }
 
@@ -79,7 +65,7 @@ impl BelongsTo<MessageThread> for MessageHistoryEntry {
 impl GuardedBy<MessageThread, Read> for MessageHistoryEntry {
     fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
         match self.action {
-            MessageHistoryAction::Update { .. } => true,
+            MessageHistoryAction::Create | MessageHistoryAction::Update => true,
             MessageHistoryAction::Delete => can_read_deleted_message_history(actor),
         }
     }
@@ -161,6 +147,53 @@ impl Message {
     pub fn update_body(self, body: MessageBody) -> Self {
         Self { body, ..self }
     }
+
+    pub(crate) fn delete(
+        self,
+        answer_id: AnswerId,
+        deleted_at: DateTime<Utc>,
+        deleted_by: UserSnapshot,
+    ) -> DeletedMessage {
+        DeletedMessage {
+            answer_id,
+            message: self,
+            deleted_at,
+            deleted_by,
+        }
+    }
+}
+
+/// 削除されたメッセージと、削除時点の操作情報を表す。
+#[derive(Getters, Debug, PartialEq)]
+pub struct DeletedMessage {
+    answer_id: AnswerId,
+    message: Message,
+    deleted_at: DateTime<Utc>,
+    deleted_by: UserSnapshot,
+}
+
+impl AuthorizationRole for DeletedMessage {
+    type Role = ParentGuarded<MessageThread>;
+}
+
+impl BelongsTo<MessageThread> for DeletedMessage {
+    fn belongs_to(&self, parent: &MessageThread) -> bool {
+        &self.answer_id == parent.answer_id() && self.message.belongs_to(parent)
+    }
+}
+
+impl GuardedBy<MessageThread, Delete> for DeletedMessage {
+    fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::AccountUser(user)
+                if (user.id() == self.message.sender_id()
+                    || user.role() == &Role::Administrator)
+                    && user.id() == self.deleted_by.id()
+                    && user.name() == self.deleted_by.name()
+                    && user.role() == self.deleted_by.role()
+        )
+    }
 }
 
 impl BelongsTo<MessageThread> for Message {
@@ -175,16 +208,6 @@ impl BelongsTo<MessageThread> for Message {
 impl GuardedBy<MessageThread, Update> for Message {
     fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
         matches!(actor, Actor::AccountUser(user) if self.sender_id() == user.id())
-    }
-}
-
-impl GuardedBy<MessageThread, Delete> for Message {
-    fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
-        matches!(
-            actor,
-            Actor::AccountUser(user)
-                if self.sender_id() == user.id() || user.role() == &Administrator
-        )
     }
 }
 
@@ -226,6 +249,39 @@ mod tests {
     }
 
     #[test]
+    fn message_delete_rejects_deleted_by_snapshot_that_differs_from_actor() {
+        let user = AccountUser::new(
+            "sender".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::StandardUser,
+        );
+        let answer_id = AnswerId::new();
+        let message = Message::new(
+            *user.id(),
+            MessageBody::new("delete me".to_string().try_into().unwrap()),
+        );
+        let thread = MessageThread::new(answer_id, *user.id()).add_message(message.clone());
+        let actor = Actor::from(user.clone());
+        let deleted_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+        let snapshot_with_different_name = UserSnapshot::new(
+            *user.id(),
+            "different-name".to_string(),
+            user.role().to_owned(),
+        );
+        let snapshot_with_different_role =
+            UserSnapshot::new(*user.id(), user.name().to_owned(), Role::Administrator);
+
+        let different_name =
+            message
+                .clone()
+                .delete(answer_id, deleted_at, snapshot_with_different_name);
+        let different_role = message.delete(answer_id, deleted_at, snapshot_with_different_role);
+
+        assert!(!different_name.is_allowed_for(&thread, &actor));
+        assert!(!different_role.is_allowed_for(&thread, &actor));
+    }
+
+    #[test]
     fn message_history_read_authorization_depends_on_action_and_actor_role() {
         let answer_id = AnswerId::new();
         let author = AccountUser::new(
@@ -245,7 +301,7 @@ mod tests {
         let admin_readable_thread = AuthorizationGuard::<_, Read>::from(thread)
             .try_read(Actor::from(administrator))
             .unwrap();
-        let snapshot = MessageHistoryUserSnapshot::new(
+        let snapshot = UserSnapshot::new(
             *author.id(),
             author.name().to_owned(),
             author.role().to_owned(),
@@ -258,30 +314,26 @@ mod tests {
                 snapshot.clone(),
                 Utc::now(),
                 action,
+                MessageBody::new("state".to_string().try_into().unwrap()),
                 snapshot.clone(),
                 Utc::now(),
             )
         };
 
-        let standard_update = standard_readable_thread.authorize_message_history_entry(
-            history_entry(MessageHistoryAction::Update {
-                before_body: "before".to_string(),
-                after_body: "after".to_string(),
-            }),
-        );
+        let standard_create = standard_readable_thread
+            .authorize_message_history_entry(history_entry(MessageHistoryAction::Create));
+        let standard_update = standard_readable_thread
+            .authorize_message_history_entry(history_entry(MessageHistoryAction::Update));
         let standard_delete = standard_readable_thread
             .authorize_message_history_entry(history_entry(MessageHistoryAction::Delete));
-        let admin_update = admin_readable_thread.authorize_message_history_entry(history_entry(
-            MessageHistoryAction::Update {
-                before_body: "before".to_string(),
-                after_body: "after".to_string(),
-            },
-        ));
+        let admin_update = admin_readable_thread
+            .authorize_message_history_entry(history_entry(MessageHistoryAction::Update));
         let admin_delete = admin_readable_thread
             .authorize_message_history_entry(history_entry(MessageHistoryAction::Delete));
 
         assert!(!standard_readable_thread.can_read_deleted_message_history());
         assert!(admin_readable_thread.can_read_deleted_message_history());
+        assert!(standard_create.is_ok());
         assert!(standard_update.is_ok());
         assert!(matches!(standard_delete, Err(DomainError::Forbidden)));
         assert!(admin_update.is_ok());

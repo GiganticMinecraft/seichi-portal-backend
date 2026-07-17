@@ -5,11 +5,14 @@ use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    account::models::Role,
+    account::models::{Role, UserSnapshot},
     auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
-        comment::{Comment, CommentContent, CommentHistoryEntry, can_read_deleted_comment_history},
+        comment::{
+            Comment, CommentContent, CommentHistoryEntry, DeletedComment,
+            can_read_deleted_comment_history,
+        },
         models::{ActiveForm, FormId},
     },
     types::authorization_guard::{
@@ -142,7 +145,12 @@ impl Allowed<AnswerEntry, Read> {
     pub fn delete_comment(
         &self,
         comment: Comment,
-    ) -> Result<Allowed<Comment, Delete>, DomainError> {
-        self.authorize_delete(comment)
+        deleted_at: DateTime<Utc>,
+    ) -> Result<Allowed<DeletedComment, Delete>, DomainError> {
+        let deleted_by = match self.actor() {
+            Actor::AccountUser(user) => UserSnapshot::from(user),
+            _ => return Err(DomainError::Forbidden),
+        };
+        self.authorize_delete(comment.delete(deleted_at, deleted_by))
     }
 }

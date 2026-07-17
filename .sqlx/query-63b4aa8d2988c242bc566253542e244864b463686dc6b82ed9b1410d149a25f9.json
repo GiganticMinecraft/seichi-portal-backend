@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_answer_comments (id, answer_id, commented_by, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "63b4aa8d2988c242bc566253542e244864b463686dc6b82ed9b1410d149a25f9"
+}

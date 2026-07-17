@@ -80,6 +80,26 @@ impl AccountUser {
     }
 }
 
+/// ユーザーのある時点での表示情報を保持する。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Getters)]
+pub struct UserSnapshot {
+    id: UserId,
+    name: String,
+    role: Role,
+}
+
+impl UserSnapshot {
+    pub fn new(id: UserId, name: String, role: Role) -> Self {
+        Self { id, name, role }
+    }
+}
+
+impl From<&AccountUser> for UserSnapshot {
+    fn from(user: &AccountUser) -> Self {
+        Self::new(*user.id(), user.name().to_owned(), user.role().to_owned())
+    }
+}
+
 impl PartialEq for AccountUser {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id

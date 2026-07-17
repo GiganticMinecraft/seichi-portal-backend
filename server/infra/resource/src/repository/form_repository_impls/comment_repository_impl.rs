@@ -1,11 +1,12 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::{
-    auth::Actor,
+    account::models::UserSnapshot,
     form::{
         answer::AnswerEntry,
         comment::{
-            Comment, CommentHistoryAction, CommentHistoryEntry, CommentHistoryPagePosition,
-            HistoryUserSnapshot,
+            Comment, CommentContent, CommentHistoryAction, CommentHistoryEntry,
+            CommentHistoryPagePosition, DeletedComment,
         },
     },
     pagination::{Page, PageRequest},
@@ -31,9 +32,13 @@ where
 {
     #[tracing::instrument(skip(self, comment))]
     async fn create(&self, comment: Allowed<Comment, Create>) -> Result<(), Error> {
+        let operated_by = account_user_snapshot(comment.actor())?;
         let comment = comment.into_inner();
 
-        self.client.form_comment().create_comment(&comment).await?;
+        self.client
+            .form_comment()
+            .create_comment(&comment, &operated_by)
+            .await?;
         Ok(())
     }
 
@@ -55,23 +60,25 @@ where
     }
 
     #[tracing::instrument(skip(self, comment))]
-    async fn update(&self, comment: Allowed<Comment, Update>) -> Result<(), Error> {
-        let operated_by = account_user_actor(comment.actor())?;
+    async fn update(
+        &self,
+        comment: Allowed<Comment, Update>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        let operated_by = account_user(comment.actor())?;
 
         self.client
             .form_comment()
-            .update_comment_with_history(comment.value(), operated_by)
+            .update_comment_with_history(comment.value(), operated_by, updated_at)
             .await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self, comment))]
-    async fn delete(&self, comment: Allowed<Comment, Delete>) -> Result<(), Error> {
-        let operated_by = account_user_actor(comment.actor())?;
-
+    async fn delete(&self, comment: Allowed<DeletedComment, Delete>) -> Result<(), Error> {
         self.client
             .form_comment()
-            .delete_comment_with_history(*comment.value().comment_id(), operated_by)
+            .delete_comment_with_history(comment.value())
             .await?;
         Ok(())
     }
@@ -94,11 +101,7 @@ where
         let items = records
             .into_iter()
             .map(|record| {
-                let action = comment_history_action(
-                    record.action.as_str(),
-                    record.before_content,
-                    record.after_content,
-                )?;
+                let action = comment_history_action(record.action.as_str())?;
                 let history_entry = unsafe {
                     CommentHistoryEntry::from_raw_parts(
                         Uuid::parse_str(&record.id)
@@ -110,7 +113,7 @@ where
                         Uuid::parse_str(&record.comment_id)
                             .map_err(InfraError::from)?
                             .into(),
-                        HistoryUserSnapshot::new(
+                        UserSnapshot::new(
                             Uuid::parse_str(&record.original_author_id)
                                 .map_err(InfraError::from)?
                                 .into(),
@@ -120,7 +123,8 @@ where
                         ),
                         record.original_timestamp,
                         action,
-                        HistoryUserSnapshot::new(
+                        CommentContent::new(record.content.try_into()?),
+                        UserSnapshot::new(
                             Uuid::parse_str(&record.operated_by_id)
                                 .map_err(InfraError::from)?
                                 .into(),
@@ -145,29 +149,29 @@ where
     }
 }
 
-fn comment_history_action(
-    action: &str,
-    before_content: Option<String>,
-    after_content: Option<String>,
-) -> Result<CommentHistoryAction, InfraError> {
-    match (action, before_content, after_content) {
-        ("UPDATE", Some(before_content), Some(after_content)) => Ok(CommentHistoryAction::Update {
-            before_content,
-            after_content,
-        }),
-        ("DELETE", None, None) => Ok(CommentHistoryAction::Delete),
-        (action, _, _) => Err(InfraError::Unexpected {
+fn comment_history_action(action: &str) -> Result<CommentHistoryAction, InfraError> {
+    match action {
+        "CREATE" => Ok(CommentHistoryAction::Create),
+        "UPDATE" => Ok(CommentHistoryAction::Update),
+        "DELETE" => Ok(CommentHistoryAction::Delete),
+        action => Err(InfraError::Unexpected {
             cause: format!("invalid comment history payload for action: {action}"),
         }),
     }
 }
 
-fn account_user_actor(actor: &Actor) -> Result<&domain::account::models::AccountUser, Error> {
+fn account_user(
+    actor: &domain::auth::Actor,
+) -> Result<&domain::account::models::AccountUser, Error> {
     match actor {
-        Actor::AccountUser(user) => Ok(user),
+        domain::auth::Actor::AccountUser(user) => Ok(user),
         _ => Err(InfraError::Unexpected {
             cause: "comment operation actor is not an account user".to_string(),
         }
         .into()),
     }
+}
+
+fn account_user_snapshot(actor: &domain::auth::Actor) -> Result<UserSnapshot, Error> {
+    account_user(actor).map(UserSnapshot::from)
 }

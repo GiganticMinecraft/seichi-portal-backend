@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO message_history\n                    (id, related_answer_id, message_id, original_author_id, original_author_name,\n                     original_author_role, original_timestamp, action, body,\n                     operated_by_id, operated_by_name, operated_by_role, operated_at)\n                    VALUES (?, ?, ?, ?, ?, ?, ?, 'UPDATE', ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "04becff14c0b13c721fbfb0df4943d23e709796fa6608d741fb5f5fa2485dc6a"
+}

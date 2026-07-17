@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    account::models::{Role, UserId},
+    account::models::{Role, UserId, UserSnapshot},
     auth::Actor,
     form::{
         answer::{AnswerEntry, AnswerId},
@@ -36,24 +36,9 @@ impl CommentHistoryPagePosition {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CommentHistoryAction {
-    Update {
-        before_content: String,
-        after_content: String,
-    },
+    Create,
+    Update,
     Delete,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Getters)]
-pub struct HistoryUserSnapshot {
-    id: UserId,
-    name: String,
-    role: Role,
-}
-
-impl HistoryUserSnapshot {
-    pub fn new(id: UserId, name: String, role: Role) -> Self {
-        Self { id, name, role }
-    }
 }
 
 #[derive(UnsafeFromRawParts, Clone, Debug, PartialEq, Getters)]
@@ -62,10 +47,11 @@ pub struct CommentHistoryEntry {
     #[getter(skip)]
     answer_id: AnswerId,
     comment_id: CommentId,
-    original_author: HistoryUserSnapshot,
+    original_author: UserSnapshot,
     original_timestamp: DateTime<Utc>,
     action: CommentHistoryAction,
-    operated_by: HistoryUserSnapshot,
+    content: CommentContent,
+    operated_by: UserSnapshot,
     operated_at: DateTime<Utc>,
 }
 
@@ -82,7 +68,7 @@ impl BelongsTo<AnswerEntry> for CommentHistoryEntry {
 impl GuardedBy<AnswerEntry, Read> for CommentHistoryEntry {
     fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
         match self.action {
-            CommentHistoryAction::Update { .. } => true,
+            CommentHistoryAction::Create | CommentHistoryAction::Update => true,
             CommentHistoryAction::Delete => can_read_deleted_comment_history(actor),
         }
     }
@@ -125,6 +111,50 @@ impl Comment {
     pub fn with_updated_content(self, content: CommentContent) -> Self {
         Self { content, ..self }
     }
+
+    pub(crate) fn delete(
+        self,
+        deleted_at: DateTime<Utc>,
+        deleted_by: UserSnapshot,
+    ) -> DeletedComment {
+        DeletedComment {
+            comment: self,
+            deleted_at,
+            deleted_by,
+        }
+    }
+}
+
+/// 削除されたコメントと、削除時点の操作情報を表す。
+#[derive(Getters, Debug, PartialEq)]
+pub struct DeletedComment {
+    comment: Comment,
+    deleted_at: DateTime<Utc>,
+    deleted_by: UserSnapshot,
+}
+
+impl AuthorizationRole for DeletedComment {
+    type Role = ParentGuarded<AnswerEntry>;
+}
+
+impl BelongsTo<AnswerEntry> for DeletedComment {
+    fn belongs_to(&self, parent: &AnswerEntry) -> bool {
+        self.comment.belongs_to(parent)
+    }
+}
+
+impl GuardedBy<AnswerEntry, Delete> for DeletedComment {
+    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::AccountUser(user)
+                if (user.id() == self.comment.commented_by()
+                    || user.role() == &Role::Administrator)
+                    && user.id() == self.deleted_by.id()
+                    && user.name() == self.deleted_by.name()
+                    && user.role() == self.deleted_by.role()
+        )
+    }
 }
 
 impl AuthorizationRole for Comment {
@@ -152,16 +182,6 @@ impl GuardedBy<AnswerEntry, Create> for Comment {
 impl GuardedBy<AnswerEntry, Update> for Comment {
     fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
         matches!(actor, Actor::AccountUser(user) if user.id() == self.commented_by())
-    }
-}
-
-impl GuardedBy<AnswerEntry, Delete> for Comment {
-    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
-        matches!(
-            actor,
-            Actor::AccountUser(user)
-                if user.id() == self.commented_by() || user.role() == &Role::Administrator
-        )
     }
 }
 
@@ -357,14 +377,66 @@ mod tests {
         let admin_readable_entry =
             read_entry_by(form.clone(), entry.clone(), Actor::from(administrator));
         let other_readable_entry = read_entry_by(form, entry, Actor::from(other_user));
+        let deleted_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
 
-        let owner_result = owner_readable_entry.delete_comment(comment.clone());
-        let admin_result = admin_readable_entry.delete_comment(comment.clone());
-        let other_result = other_readable_entry.delete_comment(comment);
+        let owner_result = owner_readable_entry.delete_comment(comment.clone(), deleted_at);
+        let admin_result = admin_readable_entry.delete_comment(comment.clone(), deleted_at);
+        let other_result = other_readable_entry.delete_comment(comment.clone(), deleted_at);
 
-        assert!(owner_result.is_ok());
-        assert!(admin_result.is_ok());
+        let owner_deleted = owner_result.unwrap();
+        assert_eq!(owner_deleted.value().comment(), &comment);
+        assert_eq!(owner_deleted.value().deleted_at(), &deleted_at);
+        assert_eq!(
+            owner_deleted.value().deleted_by(),
+            &UserSnapshot::from(match owner_deleted.actor() {
+                Actor::AccountUser(user) => user,
+                _ => unreachable!(),
+            })
+        );
+        let admin_deleted = admin_result.unwrap();
+        assert_eq!(admin_deleted.value().comment(), &comment);
+        assert_eq!(admin_deleted.value().deleted_at(), &deleted_at);
+        assert_eq!(
+            admin_deleted.value().deleted_by(),
+            &UserSnapshot::from(match admin_deleted.actor() {
+                Actor::AccountUser(user) => user,
+                _ => unreachable!(),
+            })
+        );
         assert!(matches!(other_result, Err(DomainError::Forbidden)));
+    }
+
+    #[test]
+    fn comment_delete_rejects_deleted_by_snapshot_that_differs_from_actor() {
+        let answer_author = active_user("author", Role::StandardUser);
+        let commenter = active_user("commenter", Role::StandardUser);
+        let form = sample_form(AnswerVisibility::PUBLIC);
+        let entry = answer_entry(&form, &answer_author);
+        let comment =
+            create_comment_by(form.clone(), entry.clone(), commenter.clone(), "delete me");
+        let readable_entry = read_entry_by(form, entry, Actor::from(commenter.clone()));
+        let deleted_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+        let snapshot_with_different_name = UserSnapshot::new(
+            *commenter.id(),
+            "different-name".to_string(),
+            commenter.role().to_owned(),
+        );
+        let snapshot_with_different_role = UserSnapshot::new(
+            *commenter.id(),
+            commenter.name().to_owned(),
+            Role::Administrator,
+        );
+
+        let different_name = readable_entry.authorize_delete(
+            comment
+                .clone()
+                .delete(deleted_at, snapshot_with_different_name),
+        );
+        let different_role = readable_entry
+            .authorize_delete(comment.delete(deleted_at, snapshot_with_different_role));
+
+        assert!(matches!(different_name, Err(DomainError::Forbidden)));
+        assert!(matches!(different_role, Err(DomainError::Forbidden)));
     }
 
     #[test]
@@ -382,9 +454,13 @@ mod tests {
         );
         let other_readable_entry = read_entry_by(form, other_entry, Actor::from(commenter));
 
-        let result = other_readable_entry.update_comment(comment, comment_content("after"));
+        let update_result =
+            other_readable_entry.update_comment(comment.clone(), comment_content("after"));
+        let delete_result = other_readable_entry
+            .delete_comment(comment, DateTime::from_timestamp(1_700_000_000, 0).unwrap());
 
-        assert!(matches!(result, Err(DomainError::NotFound)));
+        assert!(matches!(update_result, Err(DomainError::NotFound)));
+        assert!(matches!(delete_result, Err(DomainError::NotFound)));
     }
 
     #[test]
@@ -397,7 +473,7 @@ mod tests {
             answer_entry(&form, &answer_author),
             Actor::from(viewer),
         );
-        let snapshot = HistoryUserSnapshot::new(
+        let snapshot = UserSnapshot::new(
             *answer_author.id(),
             answer_author.name().to_owned(),
             answer_author.role().to_owned(),
@@ -409,10 +485,8 @@ mod tests {
                 CommentId::new(),
                 snapshot.clone(),
                 Utc::now(),
-                CommentHistoryAction::Update {
-                    before_content: "before".to_string(),
-                    after_content: "after".to_string(),
-                },
+                CommentHistoryAction::Update,
+                comment_content("state"),
                 snapshot,
                 Utc::now(),
             )
@@ -433,7 +507,7 @@ mod tests {
         let standard_readable_entry =
             read_entry_by(form.clone(), entry.clone(), Actor::from(standard_user));
         let admin_readable_entry = read_entry_by(form, entry.clone(), Actor::from(administrator));
-        let snapshot = HistoryUserSnapshot::new(
+        let snapshot = UserSnapshot::new(
             *answer_author.id(),
             answer_author.name().to_owned(),
             answer_author.role().to_owned(),
@@ -446,30 +520,26 @@ mod tests {
                 snapshot.clone(),
                 Utc::now(),
                 action,
+                comment_content("state"),
                 snapshot.clone(),
                 Utc::now(),
             )
         };
 
-        let standard_update = standard_readable_entry.authorize_comment_history_entry(
-            history_entry(CommentHistoryAction::Update {
-                before_content: "before".to_string(),
-                after_content: "after".to_string(),
-            }),
-        );
+        let standard_create = standard_readable_entry
+            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Create));
+        let standard_update = standard_readable_entry
+            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Update));
         let standard_delete = standard_readable_entry
             .authorize_comment_history_entry(history_entry(CommentHistoryAction::Delete));
-        let admin_update = admin_readable_entry.authorize_comment_history_entry(history_entry(
-            CommentHistoryAction::Update {
-                before_content: "before".to_string(),
-                after_content: "after".to_string(),
-            },
-        ));
+        let admin_update = admin_readable_entry
+            .authorize_comment_history_entry(history_entry(CommentHistoryAction::Update));
         let admin_delete = admin_readable_entry
             .authorize_comment_history_entry(history_entry(CommentHistoryAction::Delete));
 
         assert!(!standard_readable_entry.can_read_deleted_comment_history());
         assert!(admin_readable_entry.can_read_deleted_comment_history());
+        assert!(standard_create.is_ok());
         assert!(standard_update.is_ok());
         assert!(matches!(standard_delete, Err(DomainError::Forbidden)));
         assert!(admin_update.is_ok());

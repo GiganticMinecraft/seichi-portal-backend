@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, answer_id, comment_id, original_author_id, original_author_name,\n                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,\n                            action, before_content, after_content, operated_by_id, operated_by_name,\n                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`\n                        FROM form_answer_comment_history\n                        WHERE answer_id = ? AND action = 'UPDATE' AND id < ?\n                        ORDER BY id DESC LIMIT ?",
+  "query": "SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,\n                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,\n                            action, body, operated_by_id, operated_by_name,\n                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`\n                        FROM message_history\n                        WHERE related_answer_id = ?\n                        ORDER BY id DESC LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -14,7 +14,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "id"
           }
         }
@@ -30,14 +30,14 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
-            "name": "answer_id"
+            "table": "seichi_portal.message_history",
+            "name": "related_answer_id"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "comment_id",
+        "name": "message_id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
@@ -46,8 +46,8 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
-            "name": "comment_id"
+            "table": "seichi_portal.message_history",
+            "name": "message_id"
           }
         }
       },
@@ -62,7 +62,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "original_author_id"
           }
         }
@@ -78,7 +78,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "original_author_name"
           }
         }
@@ -94,7 +94,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "original_author_role"
           }
         }
@@ -110,7 +110,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "original_timestamp"
           }
         }
@@ -126,45 +126,29 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "action"
           }
         }
       },
       {
         "ordinal": 8,
-        "name": "before_content",
+        "name": "body",
         "type_info": {
           "type": "Blob",
-          "flags": "BLOB",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
           "collation": 224,
           "max_size": 262140
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
-            "name": "before_content"
+            "table": "seichi_portal.message_history",
+            "name": "body"
           }
         }
       },
       {
         "ordinal": 9,
-        "name": "after_content",
-        "type_info": {
-          "type": "Blob",
-          "flags": "BLOB",
-          "collation": 224,
-          "max_size": 262140
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
-            "name": "after_content"
-          }
-        }
-      },
-      {
-        "ordinal": 10,
         "name": "operated_by_id",
         "type_info": {
           "type": "String",
@@ -174,13 +158,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "operated_by_id"
           }
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "operated_by_name",
         "type_info": {
           "type": "Blob",
@@ -190,13 +174,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "operated_by_name"
           }
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "operated_by_role",
         "type_info": {
           "type": "VarString",
@@ -206,13 +190,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "operated_by_role"
           }
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "operated_at!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -222,14 +206,14 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comment_history",
+            "table": "seichi_portal.message_history",
             "name": "operated_at"
           }
         }
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 2
     },
     "nullable": [
       false,
@@ -240,13 +224,12 @@
       false,
       false,
       false,
-      true,
-      true,
+      false,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "cf4a869cd4c583393b32f154e2d3118e6c1708a9e63651722378268a6ee66ef0"
+  "hash": "8bd9654fd46a34c6984270c6cae9cfe22605852f67e606c7b8560e7c13cc2c55"
 }
