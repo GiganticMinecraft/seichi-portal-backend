@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE form_answer_comments SET content = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "25c01164f3f6ea36fd50f02fd5bbc14e5cad34f702be6cdf81044aa8fab175a2"
+}

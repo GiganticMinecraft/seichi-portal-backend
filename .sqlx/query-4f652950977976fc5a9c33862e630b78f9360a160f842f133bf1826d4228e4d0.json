@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO message_threads (answer_id, answer_author_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4f652950977976fc5a9c33862e630b78f9360a160f842f133bf1826d4228e4d0"
+}

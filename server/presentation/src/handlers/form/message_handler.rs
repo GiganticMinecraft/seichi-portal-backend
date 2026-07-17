@@ -1,15 +1,17 @@
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use domain::{
     account::models::AccountUser,
     form::{
         answer::AnswerId,
-        message::{MessageBody, MessageId},
+        message::{MessageBody, MessageHistoryPagePosition, MessageId},
     },
+    pagination::{PageLimit, PageRequest},
     repository::Repositories,
 };
 use itertools::Itertools;
@@ -22,8 +24,8 @@ use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
-        form_request_schemas::{MessageUpdateSchema, PostedMessageSchema},
-        form_response_schemas::{MessageContentSchema, SenderSchema},
+        form_request_schemas::{HistoryListQuery, MessageUpdateSchema, PostedMessageSchema},
+        form_response_schemas::{MessageContentSchema, MessageHistoryPageResponse, SenderSchema},
     },
 };
 
@@ -40,11 +42,61 @@ impl IntoResponse for GetMessagesResponse {
         }
     }
 }
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct MessageHistoryCursor {
+    after_history_id: uuid::Uuid,
+}
+
+fn history_page_request(
+    query: HistoryListQuery,
+) -> Result<PageRequest<MessageHistoryPagePosition>, Error> {
+    let limit = match query.limit {
+        Some(limit) => PageLimit::try_new(limit).map_err(|error| {
+            Error::from(PresentationError::QueryRejection {
+                cause: format!("Invalid limit: {}.", error.value()),
+            })
+        })?,
+        None => PageLimit::default_limit(),
+    };
+    let after = query
+        .cursor
+        .as_deref()
+        .map(|cursor| {
+            let decoded = URL_SAFE_NO_PAD.decode(cursor).map_err(|_| {
+                Error::from(PresentationError::QueryRejection {
+                    cause: "Invalid cursor.".to_string(),
+                })
+            })?;
+            let cursor: MessageHistoryCursor = serde_json::from_slice(&decoded).map_err(|_| {
+                Error::from(PresentationError::QueryRejection {
+                    cause: "Invalid cursor.".to_string(),
+                })
+            })?;
+            Ok::<_, Error>(MessageHistoryPagePosition::new(
+                cursor.after_history_id.into(),
+            ))
+        })
+        .transpose()?;
+    Ok(PageRequest::new(after, limit))
+}
+
+fn encode_history_cursor(position: MessageHistoryPagePosition) -> Result<String, Error> {
+    let bytes = serde_json::to_vec(&MessageHistoryCursor {
+        after_history_id: position.id().into_inner(),
+    })
+    .map_err(|_| {
+        Error::from(PresentationError::QueryRejection {
+            cause: "Invalid cursor.".to_string(),
+        })
+    })?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
 use axum::extract::rejection::{JsonRejection, PathRejection};
 use axum::response::Response;
 use domain::form::models::FormId;
 use domain::notification::notificator::Notificator;
-use errors::ErrorExtra;
+use errors::{Error, ErrorExtra, presentation::PresentationError};
 
 pub struct RealInfrastructureRepositoryWithNotificator<N: Notificator> {
     pub repository: RealInfrastructureRepository,
@@ -58,6 +110,47 @@ impl<N: Notificator> RealInfrastructureRepositoryWithNotificator<N> {
             notificator,
         }
     }
+}
+
+#[utoipa::path(
+    get,
+    path = "/forms/{form_id}/answers/{answer_id}/messages/history",
+    summary = "メッセージの変更履歴を取得",
+    params(("form_id" = String, Path), ("answer_id" = String, Path), HistoryListQuery),
+    responses((status = 200, body = MessageHistoryPageResponse), BadRequest, Unauthorized, Forbidden, NotFound, InternalServerError),
+    security(("bearer" = [])),
+    tag = "Messages"
+)]
+pub async fn get_message_history(
+    Extension(user): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
+    query: Query<HistoryListQuery>,
+) -> Result<Json<MessageHistoryPageResponse>, Response> {
+    let use_case = MessageUseCase {
+        notification_repository: repository.notification_repository(),
+        active_form_repository: repository.active_form_repository(),
+        user_repository: repository.user_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
+        message_thread_repository: repository.message_thread_repository(),
+    };
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
+    let request = history_page_request(query.0).map_err(handle_error)?;
+    let page = use_case
+        .get_history(&user, form_id, answer_id, request)
+        .await
+        .map_err(handle_error)?;
+    let (items, next) = page.into_parts();
+    Ok(Json(MessageHistoryPageResponse {
+        items: items
+            .into_iter()
+            .map(|entry| entry.into_inner().into())
+            .collect(),
+        next_cursor: next
+            .map(encode_history_cursor)
+            .transpose()
+            .map_err(handle_error)?,
+    }))
 }
 
 #[utoipa::path(

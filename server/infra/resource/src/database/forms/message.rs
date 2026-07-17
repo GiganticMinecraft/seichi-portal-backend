@@ -1,24 +1,38 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::form::{
     answer::{AnswerEntry, AnswerId},
-    message::{Message, MessageId},
+    message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
+};
+use domain::{
+    account::models::{AccountUser, UserSnapshot},
+    pagination::{Page, PageRequest},
 };
 use errors::infra::InfraError;
+use uuid::Uuid;
 
 use crate::{
     database::{components::FormMessageDatabase, connection::ConnectionPool},
-    records::MessageRecord,
+    records::{MessageHistoryRecord, MessageRecord},
 };
 
 #[async_trait]
 impl FormMessageDatabase for ConnectionPool {
     #[tracing::instrument]
-    async fn post_message(&self, message: &Message, answer_id: AnswerId) -> Result<(), InfraError> {
+    async fn post_message(
+        &self,
+        message: &Message,
+        answer_id: AnswerId,
+        operated_by: &UserSnapshot,
+    ) -> Result<(), InfraError> {
         let id = message.id().to_string().to_owned();
         let related_answer_id = answer_id.into_inner().to_string();
         let sender = message.sender_id().to_string();
         let body = message.body().as_str().to_owned();
         let timestamp = message.timestamp().to_owned();
+        let operator_id = operated_by.id().to_string();
+        let operator_name = operated_by.name().to_owned();
+        let operator_role = operated_by.role().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -33,26 +47,100 @@ impl FormMessageDatabase for ConnectionPool {
                 .execute(&mut **txn)
                 .await?;
 
+                sqlx::query!(
+                    r"INSERT INTO message_history
+                    (id, related_answer_id, message_id, original_author_id, original_author_name,
+                     original_author_role, original_timestamp, action, body,
+                     operated_by_id, operated_by_name, operated_by_role, operated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'CREATE', ?, ?, ?, ?, ?)",
+                    Uuid::now_v7().to_string(),
+                    related_answer_id,
+                    id,
+                    sender,
+                    operator_name,
+                    operator_role,
+                    timestamp,
+                    body,
+                    operator_id,
+                    operator_name,
+                    operator_role,
+                    timestamp,
+                )
+                .execute(&mut **txn)
+                .await?;
+
                 Ok::<_, InfraError>(())
             })
         }).await
     }
 
     #[tracing::instrument]
-    async fn update_message_body(
+    async fn update_message_with_history(
         &self,
-        message_id: MessageId,
-        body: String,
+        message: &Message,
+        operated_by: &AccountUser,
+        operated_at: DateTime<Utc>,
     ) -> Result<(), InfraError> {
+        let message_id = message.id().to_string();
+        let new_body = message.body().as_str().to_owned();
+        let operator_id = operated_by.id().to_string();
+        let operator_name = operated_by.name().to_owned();
+        let operator_role = operated_by.role().to_string();
         self.read_write_transaction(|txn| {
             Box::pin(async move {
+                let current = sqlx::query!(
+                    r"SELECT m.related_answer_id, m.sender AS original_author_id,
+                        u.name AS original_author_name, u.role AS original_author_role,
+                        m.body, m.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM messages m INNER JOIN users u ON u.id = m.sender
+                    WHERE m.id = ? FOR UPDATE",
+                    message_id,
+                )
+                .fetch_optional(&mut **txn)
+                .await?
+                .ok_or_else(|| InfraError::Unexpected {
+                    cause: format!("message {message_id} was not found while updating"),
+                })?;
+                if current.body == new_body {
+                    return Ok(());
+                }
+
+                let history_id = Uuid::now_v7().to_string();
                 sqlx::query!(
-                    "UPDATE messages SET body = ? WHERE id = ?",
-                    body,
-                    message_id.to_string(),
+                    r"INSERT INTO message_history
+                    (id, related_answer_id, message_id, original_author_id, original_author_name,
+                     original_author_role, original_timestamp, action, body,
+                     operated_by_id, operated_by_name, operated_by_role, operated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'UPDATE', ?, ?, ?, ?, ?)",
+                    history_id,
+                    current.related_answer_id,
+                    message_id,
+                    current.original_author_id,
+                    current.original_author_name,
+                    current.original_author_role,
+                    current.timestamp,
+                    new_body,
+                    operator_id,
+                    operator_name,
+                    operator_role,
+                    operated_at,
                 )
                 .execute(&mut **txn)
                 .await?;
+                let result = sqlx::query!(
+                    "UPDATE messages SET body = ? WHERE id = ?",
+                    new_body,
+                    message_id
+                )
+                .execute(&mut **txn)
+                .await?;
+                if result.rows_affected() != 1 {
+                    return Err(InfraError::Unexpected {
+                        cause: format!(
+                            "message {message_id} update affected an unexpected number of rows"
+                        ),
+                    });
+                }
 
                 Ok::<_, InfraError>(())
             })
@@ -139,16 +227,188 @@ impl FormMessageDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn delete_message(&self, message_id: MessageId) -> Result<(), InfraError> {
+    async fn delete_message_with_history(
+        &self,
+        deleted: &DeletedMessage,
+    ) -> Result<(), InfraError> {
+        let message = deleted.message();
+        let message_id = message.id().to_string();
+        let expected_answer_id = deleted.answer_id().to_string();
+        let expected_author_id = message.sender_id().to_string();
+        let expected_body = message.body().as_str().to_owned();
+        let expected_timestamp = *message.timestamp();
+        let operator_id = deleted.deleted_by().id().to_string();
+        let operator_name = deleted.deleted_by().name().to_owned();
+        let operator_role = deleted.deleted_by().role().to_string();
+        let deleted_at = *deleted.deleted_at();
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                sqlx::query!("DELETE FROM messages WHERE id = ?", message_id.to_string(),)
+                let current = sqlx::query!(
+                    r"SELECT m.related_answer_id, m.sender AS original_author_id,
+                        u.name AS original_author_name, u.role AS original_author_role,
+                        m.body, m.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM messages m INNER JOIN users u ON u.id = m.sender
+                    WHERE m.id = ? FOR UPDATE",
+                    message_id,
+                )
+                .fetch_optional(&mut **txn)
+                .await?
+                .ok_or_else(|| InfraError::Unexpected {
+                    cause: format!("message {message_id} was not found while deleting"),
+                })?;
+
+                if current.related_answer_id != expected_answer_id
+                    || current.original_author_id != expected_author_id
+                    || current.body != expected_body
+                    || current.timestamp != expected_timestamp
+                {
+                    return Err(InfraError::Unexpected {
+                        cause: format!("message {message_id} changed before deletion"),
+                    });
+                }
+
+                let history_id = Uuid::now_v7().to_string();
+                sqlx::query!(
+                    r"INSERT INTO message_history
+                    (id, related_answer_id, message_id, original_author_id, original_author_name,
+                     original_author_role, original_timestamp, action, body,
+                     operated_by_id, operated_by_name, operated_by_role, operated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'DELETE', ?, ?, ?, ?, ?)",
+                    history_id,
+                    current.related_answer_id,
+                    message_id,
+                    current.original_author_id,
+                    current.original_author_name,
+                    current.original_author_role,
+                    current.timestamp,
+                    current.body,
+                    operator_id,
+                    operator_name,
+                    operator_role,
+                    deleted_at,
+                )
+                .execute(&mut **txn)
+                .await?;
+                let result = sqlx::query!("DELETE FROM messages WHERE id = ?", message_id)
                     .execute(&mut **txn)
                     .await?;
+                if result.rows_affected() != 1 {
+                    return Err(InfraError::Unexpected {
+                        cause: format!(
+                            "message {message_id} delete affected an unexpected number of rows"
+                        ),
+                    });
+                }
 
                 Ok::<_, InfraError>(())
             })
         })
         .await
+    }
+
+    async fn fetch_history(
+        &self,
+        answer_id: AnswerId,
+        request: PageRequest<MessageHistoryPagePosition>,
+        includes_deleted_history: bool,
+    ) -> Result<Page<MessageHistoryRecord, MessageHistoryPagePosition>, InfraError> {
+        let answer_id = answer_id.to_string();
+        let after = request
+            .after_position()
+            .map(|position| position.id().to_string());
+        let limit = request.limit();
+        let overfetch = limit.overfetch_value();
+        let rows = match (includes_deleted_history, after) {
+            (true, Some(after)) => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        MessageHistoryRecord,
+                        r"SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, body, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM message_history
+                        WHERE related_answer_id = ? AND id < ?
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        after,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+            (true, None) => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        MessageHistoryRecord,
+                        r"SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, body, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM message_history
+                        WHERE related_answer_id = ?
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+            (false, Some(after)) => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        MessageHistoryRecord,
+                        r"SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, body, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM message_history
+                        WHERE related_answer_id = ? AND action != 'DELETE' AND id < ?
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        after,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+            (false, None) => {
+                self.read_only_transaction(|txn| Box::pin(async move {
+                    sqlx::query_as!(
+                        MessageHistoryRecord,
+                        r"SELECT id, related_answer_id AS answer_id, message_id, original_author_id, original_author_name,
+                            original_author_role, original_timestamp AS `original_timestamp!: chrono::DateTime<chrono::Utc>`,
+                            action, body, operated_by_id, operated_by_name,
+                            operated_by_role, operated_at AS `operated_at!: chrono::DateTime<chrono::Utc>`
+                        FROM message_history
+                        WHERE related_answer_id = ? AND action != 'DELETE'
+                        ORDER BY id DESC LIMIT ?",
+                        answer_id,
+                        overfetch,
+                    )
+                    .fetch_all(&mut **txn)
+                    .await
+                    .map_err(Into::<InfraError>::into)
+                }))
+                .await?
+            }
+        };
+
+        Ok(Page::from_overfetched_items(rows, limit, |row| {
+            MessageHistoryPagePosition::new(
+                Uuid::parse_str(&row.id)
+                    .expect("history IDs stored by this service are valid UUIDs")
+                    .into(),
+            )
+        }))
     }
 }

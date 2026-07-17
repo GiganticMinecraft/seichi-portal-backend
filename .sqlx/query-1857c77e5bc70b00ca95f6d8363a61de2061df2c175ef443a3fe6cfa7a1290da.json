@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT answer_author_id FROM message_threads WHERE answer_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "answer_author_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.message_threads",
+            "name": "answer_author_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1857c77e5bc70b00ca95f6d8363a61de2061df2c175ef443a3fe6cfa7a1290da"
+}

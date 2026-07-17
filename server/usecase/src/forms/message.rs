@@ -1,3 +1,4 @@
+use chrono::Utc;
 use common::config::FRONTEND;
 use domain::form::message_thread::MessageThread;
 use domain::form::models::FormId;
@@ -8,9 +9,12 @@ use domain::{
     auth::Actor,
     form::{
         answer::{AnswerEntry, AnswerId},
-        message::{Message, MessageBody, MessageId},
+        message::{
+            Message, MessageBody, MessageHistoryEntry, MessageHistoryPagePosition, MessageId,
+        },
     },
     notification::models::NotificationPreference,
+    pagination::{Page, PageRequest},
     repository::{
         form::{
             active_form_repository::ActiveFormRepository,
@@ -103,8 +107,8 @@ impl<
         {
             Some(thread_guard) => {
                 let thread = thread_guard.into_update().try_update(actor_user.clone())?;
-                let updated = thread.map(|t| t.add_message(message));
-                self.message_thread_repository.update(updated).await
+                let post = thread.authorize_message_post(message)?;
+                self.message_thread_repository.append(post).await
             }
             None => {
                 let answer_author_id = form_answer
@@ -231,8 +235,10 @@ impl<
                 .into_update()
                 .try_update(actor_user)?;
 
-            let updated = thread.update_message_body(*message_id, body)?;
-            self.message_thread_repository.update(updated).await?;
+            let updated = thread.authorize_message_update(*message_id, body)?;
+            self.message_thread_repository
+                .update_message(updated, Utc::now())
+                .await?;
         }
 
         Ok(())
@@ -257,8 +263,30 @@ impl<
             .into_update()
             .try_update(actor_user)?;
 
-        let message = thread.authorize_message_delete(*message_id)?;
-        let updated = thread.remove_message(message);
-        self.message_thread_repository.update(updated).await
+        let message = thread.authorize_message_delete(*message_id, Utc::now())?;
+        self.message_thread_repository.delete_message(message).await
+    }
+
+    pub async fn get_history(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        request: PageRequest<MessageHistoryPagePosition>,
+    ) -> Result<Page<Allowed<MessageHistoryEntry, Read>, MessageHistoryPagePosition>, Error> {
+        let actor_user = Actor::from(actor.clone());
+        self.read_answer_entry(&actor_user, form_id, answer_id)
+            .await?;
+        let Some(thread) = self
+            .message_thread_repository
+            .get_by_answer_id(answer_id)
+            .await?
+        else {
+            return Ok(Page::new(Vec::new(), None));
+        };
+        let thread = thread.try_read(actor_user)?;
+        self.message_thread_repository
+            .history(&thread, request)
+            .await
     }
 }

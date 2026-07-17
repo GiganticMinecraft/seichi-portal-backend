@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
-use domain::account::models::UserGroupId;
+use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
     answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
-    comment::CommentId,
+    comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
+    message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
         AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
         FormSettings, FormTitle, Visibility,
@@ -378,6 +379,114 @@ pub struct AnswerComment {
     content: String,
     timestamp: DateTime<Utc>,
     commented_by: User,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct HistoryUser {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    name: String,
+    role: Role,
+}
+
+impl From<&UserSnapshot> for HistoryUser {
+    fn from(value: &UserSnapshot) -> Self {
+        Self {
+            id: value.id().to_string(),
+            name: value.name().to_owned(),
+            role: value.role().to_owned().into(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum HistoryAction {
+    Create,
+    Update,
+    Delete,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct CommentHistoryResponseEntry {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    #[schema(value_type = String, format = "uuid")]
+    comment_id: String,
+    original_author: HistoryUser,
+    original_timestamp: DateTime<Utc>,
+    action: HistoryAction,
+    content: String,
+    operated_by: HistoryUser,
+    operated_at: DateTime<Utc>,
+}
+
+impl From<CommentHistoryEntry> for CommentHistoryResponseEntry {
+    fn from(value: CommentHistoryEntry) -> Self {
+        let action = match value.action() {
+            CommentHistoryAction::Create => HistoryAction::Create,
+            CommentHistoryAction::Update => HistoryAction::Update,
+            CommentHistoryAction::Delete => HistoryAction::Delete,
+        };
+
+        Self {
+            id: value.id().to_string(),
+            comment_id: value.comment_id().to_string(),
+            original_author: value.original_author().into(),
+            original_timestamp: *value.original_timestamp(),
+            action,
+            content: value.content().to_string(),
+            operated_by: value.operated_by().into(),
+            operated_at: *value.operated_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct CommentHistoryPageResponse {
+    pub items: Vec<CommentHistoryResponseEntry>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct MessageHistoryResponseEntry {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    #[schema(value_type = String, format = "uuid")]
+    message_id: String,
+    original_author: HistoryUser,
+    original_timestamp: DateTime<Utc>,
+    action: HistoryAction,
+    body: String,
+    operated_by: HistoryUser,
+    operated_at: DateTime<Utc>,
+}
+
+impl From<MessageHistoryEntry> for MessageHistoryResponseEntry {
+    fn from(value: MessageHistoryEntry) -> Self {
+        let action = match value.action() {
+            MessageHistoryAction::Create => HistoryAction::Create,
+            MessageHistoryAction::Update => HistoryAction::Update,
+            MessageHistoryAction::Delete => HistoryAction::Delete,
+        };
+
+        Self {
+            id: value.id().to_string(),
+            message_id: value.message_id().to_string(),
+            original_author: value.original_author().into(),
+            original_timestamp: *value.original_timestamp(),
+            action,
+            body: value.body().as_str().to_owned(),
+            operated_by: value.operated_by().into(),
+            operated_at: *value.operated_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct MessageHistoryPageResponse {
+    pub items: Vec<MessageHistoryResponseEntry>,
+    pub next_cursor: Option<String>,
 }
 
 impl From<CommentWithAuthor> for AnswerComment {

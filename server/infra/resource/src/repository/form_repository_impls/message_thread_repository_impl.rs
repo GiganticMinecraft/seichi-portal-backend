@@ -1,11 +1,20 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::{
-    form::{answer::AnswerId, message_thread::MessageThread},
+    account::models::{AccountUser, UserSnapshot},
+    form::{
+        answer::AnswerId,
+        message::{
+            DeletedMessage, Message, MessageBody, MessageHistoryAction, MessageHistoryEntry,
+            MessageHistoryPagePosition, MessagePost,
+        },
+        message_thread::MessageThread,
+    },
+    pagination::{Page, PageRequest},
     repository::form::message_thread_repository::MessageThreadRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 use errors::{Error, infra::InfraError};
-use std::collections::HashSet;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -24,21 +33,13 @@ where
 {
     #[tracing::instrument(skip(self))]
     async fn create(&self, message_thread: Allowed<MessageThread, Create>) -> Result<(), Error> {
+        let operated_by = account_user_snapshot(message_thread.actor())?;
         let thread = message_thread.into_inner();
-        let answer_id = thread.answer_id().into_inner().to_string();
-        let answer_author_id = thread.answer_author_id().to_string();
 
         self.client
             .form_message_thread()
-            .create_message_thread(&answer_id, &answer_author_id)
+            .create_message_thread(&thread, &operated_by)
             .await?;
-
-        for message in thread.messages() {
-            self.client
-                .form_message()
-                .post_message(message, *thread.answer_id())
-                .await?;
-        }
 
         Ok(())
     }
@@ -84,47 +85,121 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    async fn update(&self, message_thread: Allowed<MessageThread, Update>) -> Result<(), Error> {
-        let thread = message_thread.into_inner();
-
-        let existing = self
-            .client
+    async fn append(&self, post: Allowed<MessagePost, Create>) -> Result<(), Error> {
+        let operated_by = account_user_snapshot(post.actor())?;
+        let post = post.into_inner();
+        let answer_id = *post.answer_id();
+        let message = post.into_message();
+        self.client
             .form_message()
-            .fetch_messages_by_answer_id(*thread.answer_id())
+            .post_message(&message, answer_id, &operated_by)
             .await?;
-
-        let current_ids: HashSet<String> = thread
-            .messages()
-            .iter()
-            .map(|m| m.id().into_inner().to_string())
-            .collect();
-
-        for record in &existing {
-            if !current_ids.contains(&record.id) {
-                self.client
-                    .form_message()
-                    .delete_message(Uuid::from_str(&record.id).map_err(InfraError::from)?.into())
-                    .await?;
-            }
-        }
-
-        let existing_ids: HashSet<String> = existing.into_iter().map(|r| r.id).collect();
-
-        for message in thread.messages() {
-            let msg_id_str = message.id().into_inner().to_string();
-            if existing_ids.contains(&msg_id_str) {
-                self.client
-                    .form_message()
-                    .update_message_body(*message.id(), message.body().as_str().to_owned())
-                    .await?;
-            } else {
-                self.client
-                    .form_message()
-                    .post_message(message, *thread.answer_id())
-                    .await?;
-            }
-        }
-
         Ok(())
     }
+
+    async fn update_message(
+        &self,
+        message: Allowed<Message, Update>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        let operated_by = account_user(message.actor())?;
+        self.client
+            .form_message()
+            .update_message_with_history(message.value(), operated_by, updated_at)
+            .await?;
+        Ok(())
+    }
+
+    async fn delete_message(&self, message: Allowed<DeletedMessage, Create>) -> Result<(), Error> {
+        self.client
+            .form_message()
+            .delete_message_with_history(message.value())
+            .await?;
+        Ok(())
+    }
+
+    async fn history(
+        &self,
+        message_thread: &Allowed<MessageThread, Read>,
+        request: PageRequest<MessageHistoryPagePosition>,
+    ) -> Result<Page<Allowed<MessageHistoryEntry, Read>, MessageHistoryPagePosition>, Error> {
+        let page = self
+            .client
+            .form_message()
+            .fetch_history(
+                *message_thread.answer_id(),
+                request,
+                message_thread.can_read_deleted_message_history(),
+            )
+            .await?;
+        let (records, next) = page.into_parts();
+        let items = records
+            .into_iter()
+            .map(|record| {
+                let action = message_history_action(record.action.as_str())?;
+                let history_entry = unsafe {
+                    MessageHistoryEntry::from_raw_parts(
+                        Uuid::parse_str(&record.id)
+                            .map_err(InfraError::from)?
+                            .into(),
+                        Uuid::parse_str(&record.answer_id)
+                            .map_err(InfraError::from)?
+                            .into(),
+                        Uuid::parse_str(&record.message_id)
+                            .map_err(InfraError::from)?
+                            .into(),
+                        UserSnapshot::new(
+                            Uuid::parse_str(&record.original_author_id)
+                                .map_err(InfraError::from)?
+                                .into(),
+                            record.original_author_name,
+                            domain::account::models::Role::from_str(&record.original_author_role)
+                                .map_err(InfraError::from)?,
+                        ),
+                        record.original_timestamp,
+                        action,
+                        MessageBody::new(record.body.try_into()?),
+                        UserSnapshot::new(
+                            Uuid::parse_str(&record.operated_by_id)
+                                .map_err(InfraError::from)?
+                                .into(),
+                            record.operated_by_name,
+                            domain::account::models::Role::from_str(&record.operated_by_role)
+                                .map_err(InfraError::from)?,
+                        ),
+                        record.operated_at,
+                    )
+                };
+                message_thread
+                    .authorize_message_history_entry(history_entry)
+                    .map_err(Error::from)
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        Ok(Page::new(items, next))
+    }
+}
+
+fn message_history_action(action: &str) -> Result<MessageHistoryAction, InfraError> {
+    match action {
+        "CREATE" => Ok(MessageHistoryAction::Create),
+        "UPDATE" => Ok(MessageHistoryAction::Update),
+        "DELETE" => Ok(MessageHistoryAction::Delete),
+        action => Err(InfraError::Unexpected {
+            cause: format!("invalid message history payload for action: {action}"),
+        }),
+    }
+}
+
+fn account_user(actor: &domain::auth::Actor) -> Result<&AccountUser, Error> {
+    match actor {
+        domain::auth::Actor::AccountUser(user) => Ok(user),
+        _ => Err(InfraError::Unexpected {
+            cause: "message operation actor is not an account user".to_string(),
+        }
+        .into()),
+    }
+}
+
+fn account_user_snapshot(actor: &domain::auth::Actor) -> Result<UserSnapshot, Error> {
+    account_user(actor).map(UserSnapshot::from)
 }

@@ -259,6 +259,22 @@ pub struct CommentRecord {
     pub commented_by_role: String,
 }
 
+pub struct CommentHistoryRecord {
+    pub id: String,
+    pub answer_id: String,
+    pub comment_id: String,
+    pub original_author_id: String,
+    pub original_author_name: String,
+    pub original_author_role: String,
+    pub original_timestamp: DateTime<Utc>,
+    pub action: String,
+    pub content: String,
+    pub operated_by_id: String,
+    pub operated_by_name: String,
+    pub operated_by_role: String,
+    pub operated_at: DateTime<Utc>,
+}
+
 impl TryFrom<CommentRecord> for Comment {
     type Error = Error;
 
@@ -392,6 +408,22 @@ pub struct MessageRecord {
     pub sender_role: String,
     pub body: String,
     pub timestamp: DateTime<Utc>,
+}
+
+pub struct MessageHistoryRecord {
+    pub id: String,
+    pub answer_id: String,
+    pub message_id: String,
+    pub original_author_id: String,
+    pub original_author_name: String,
+    pub original_author_role: String,
+    pub original_timestamp: DateTime<Utc>,
+    pub action: String,
+    pub body: String,
+    pub operated_by_id: String,
+    pub operated_by_name: String,
+    pub operated_by_role: String,
+    pub operated_at: DateTime<Utc>,
 }
 
 impl TryFrom<MessageRecord> for Message {

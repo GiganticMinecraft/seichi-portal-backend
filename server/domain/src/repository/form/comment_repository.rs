@@ -1,10 +1,15 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::{answer::AnswerEntry, comment::Comment},
-    types::authorization_guard::{Allowed, Create, Delete, Read, Update},
+    form::{
+        answer::AnswerEntry,
+        comment::{Comment, CommentHistoryEntry, CommentHistoryPagePosition, DeletedComment},
+    },
+    pagination::{Page, PageRequest},
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
 
 /// [`Comment`] を集約ルートとして永続化するためのリポジトリ。
@@ -25,7 +30,16 @@ pub trait CommentRepository: Send + Sync + 'static {
         &self,
         answer: &Allowed<AnswerEntry, Read>,
     ) -> Result<Vec<Allowed<Comment, Read>>, Error>;
-    async fn update(&self, comment: Allowed<Comment, Update>) -> Result<(), Error>;
-    async fn delete(&self, comment: Allowed<Comment, Delete>) -> Result<(), Error>;
+    async fn update(
+        &self,
+        comment: Allowed<Comment, Update>,
+        updated_at: DateTime<Utc>,
+    ) -> Result<(), Error>;
+    async fn delete(&self, comment: Allowed<DeletedComment, Create>) -> Result<(), Error>;
+    async fn history(
+        &self,
+        answer: &Allowed<AnswerEntry, Read>,
+        request: PageRequest<CommentHistoryPagePosition>,
+    ) -> Result<Page<Allowed<CommentHistoryEntry, Read>, CommentHistoryPagePosition>, Error>;
     async fn size(&self) -> Result<u32, Error>;
 }

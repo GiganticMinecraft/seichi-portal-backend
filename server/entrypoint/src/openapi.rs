@@ -155,6 +155,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             comment_handler::get_form_comment,
             comment_handler::post_form_comment
         ))
+        .routes(routes!(comment_handler::get_comment_history))
         .routes(routes!(
             comment_handler::update_form_comment,
             comment_handler::delete_form_comment_handler
@@ -189,6 +190,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         .routes(routes!(search_handler::cross_search))
         .routes(routes!(search_handler::search_users))
         .routes(routes!(message_handler::get_messages_handler))
+        .routes(routes!(message_handler::get_message_history))
         .routes(routes!(
             message_handler::update_message_handler,
             message_handler::delete_message_handler

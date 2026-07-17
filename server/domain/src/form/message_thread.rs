@@ -1,15 +1,20 @@
+use chrono::{DateTime, Utc};
 use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
 
 use crate::{
-    account::models::{Role::Administrator, UserId},
+    account::models::{Role::Administrator, UserId, UserSnapshot},
     auth::Actor,
     form::{
         answer::AnswerId,
-        message::{Message, MessageBody, MessageId},
+        message::{
+            DeletedMessage, Message, MessageBody, MessageHistoryEntry, MessageId, MessagePost,
+            can_read_deleted_message_history,
+        },
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Delete, SelfGuarded, Update,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, BelongsTo, Create, Delete,
+        DeleteTransition, GuardedBy, ParentGuarded, Read, SelfGuarded, Update,
     },
 };
 
@@ -18,6 +23,49 @@ pub struct MessageThread {
     answer_id: AnswerId,
     answer_author_id: UserId,
     messages: Vec<Message>,
+}
+
+struct MessageDeletionTarget {
+    answer_id: AnswerId,
+    message: Message,
+}
+
+impl AuthorizationRole for MessageDeletionTarget {
+    type Role = ParentGuarded<MessageThread>;
+}
+
+impl BelongsTo<MessageThread> for MessageDeletionTarget {
+    fn belongs_to(&self, parent: &MessageThread) -> bool {
+        &self.answer_id == parent.answer_id() && self.message.belongs_to(parent)
+    }
+}
+
+impl GuardedBy<MessageThread, Delete> for MessageDeletionTarget {
+    fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::AccountUser(user)
+                if self.message.sender_id() == user.id() || user.role() == &Administrator
+        )
+    }
+}
+
+impl DeleteTransition for MessageDeletionTarget {
+    type Created = DeletedMessage;
+    type Context = DateTime<Utc>;
+
+    fn transition(
+        self,
+        deleted_at: Self::Context,
+        actor: &Actor,
+    ) -> Result<Self::Created, DomainError> {
+        let deleted_by = match actor {
+            Actor::AccountUser(user) => UserSnapshot::from(user),
+            _ => return Err(DomainError::Forbidden),
+        };
+
+        Ok(self.message.delete(self.answer_id, deleted_at, deleted_by))
+    }
 }
 
 impl MessageThread {
@@ -51,63 +99,59 @@ impl MessageThread {
     pub fn find_message(&self, message_id: MessageId) -> Option<&Message> {
         self.messages.iter().find(|m| *m.id() == message_id)
     }
-
-    fn apply_message_update(self, message_id: MessageId, new_body: MessageBody) -> Self {
-        let messages = self
-            .messages
-            .into_iter()
-            .map(|m| {
-                if *m.id() == message_id {
-                    m.update_body(new_body.clone())
-                } else {
-                    m
-                }
-            })
-            .collect();
-        Self { messages, ..self }
-    }
-
-    fn apply_message_removal(self, message_id: MessageId) -> Self {
-        Self {
-            messages: self
-                .messages
-                .into_iter()
-                .filter(|m| *m.id() != message_id)
-                .collect(),
-            ..self
-        }
-    }
 }
 
 impl Allowed<MessageThread, Update> {
-    pub fn update_message_body(
-        self,
+    pub fn authorize_message_post(
+        &self,
+        message: Message,
+    ) -> Result<Allowed<MessagePost, Create>, DomainError> {
+        self.authorize_create(MessagePost::new(*self.answer_id(), message))
+    }
+
+    pub fn authorize_message_update(
+        &self,
         message_id: MessageId,
         new_body: MessageBody,
-    ) -> Result<Self, DomainError> {
+    ) -> Result<Allowed<Message, Update>, DomainError> {
         let message = self
             .value()
             .find_message(message_id)
             .ok_or(DomainError::NotFound)?
-            .clone();
-        self.authorize_update(message)?;
-        Ok(self.map(|thread| thread.apply_message_update(message_id, new_body)))
+            .clone()
+            .update_body(new_body);
+        self.authorize_update(message)
     }
 
     pub fn authorize_message_delete(
         &self,
         message_id: MessageId,
-    ) -> Result<Allowed<Message, Delete>, DomainError> {
+        deleted_at: DateTime<Utc>,
+    ) -> Result<Allowed<DeletedMessage, Create>, DomainError> {
         let message = self
             .value()
             .find_message(message_id)
             .ok_or(DomainError::NotFound)?
             .clone();
-        self.authorize_delete(message)
+        let target = MessageDeletionTarget {
+            answer_id: *self.answer_id(),
+            message,
+        };
+
+        self.authorize_delete(target)?.delete(deleted_at)
+    }
+}
+
+impl Allowed<MessageThread, Read> {
+    pub fn can_read_deleted_message_history(&self) -> bool {
+        can_read_deleted_message_history(self.actor())
     }
 
-    pub fn remove_message(self, message: Allowed<Message, Delete>) -> Self {
-        self.map(|thread| thread.apply_message_removal(*message.value().id()))
+    pub fn authorize_message_history_entry(
+        &self,
+        history_entry: MessageHistoryEntry,
+    ) -> Result<Allowed<MessageHistoryEntry, Read>, DomainError> {
+        self.authorize_read(history_entry)
     }
 }
 
@@ -128,7 +172,9 @@ impl AuthorizationGuardDefinitions for MessageThread {
     fn can_create(&self, actor: &Actor) -> bool {
         matches!(
             actor,
-            Actor::AccountUser(user) if user.role() == &Administrator
+            Actor::AccountUser(user)
+                if user.role() == &Administrator
+                    && self.messages.iter().all(|message| message.sender_id() == user.id())
         )
     }
 
@@ -185,11 +231,8 @@ mod tests {
     #[test]
     fn only_administrator_can_create_message_thread() {
         let answer_author_id = user_id("00000000-0000-7000-8000-000000000101");
-        let admin = Actor::from(active_user(
-            "admin",
-            user_id("00000000-0000-7000-8000-000000000102"),
-            Role::Administrator,
-        ));
+        let admin_id = user_id("00000000-0000-7000-8000-000000000102");
+        let admin = Actor::from(active_user("admin", admin_id, Role::Administrator));
         let answer_author = Actor::from(active_user(
             "answer_author",
             answer_author_id,
@@ -206,9 +249,12 @@ mod tests {
         ));
 
         assert!(
-            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
-                .try_create(admin)
-                .is_ok()
+            AuthorizationGuard::<_, Create>::from(
+                thread_for_answer_author(answer_author_id)
+                    .add_message(message_from(admin_id, "initial message"))
+            )
+            .try_create(admin)
+            .is_ok()
         );
         assert!(
             AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
@@ -235,6 +281,20 @@ mod tests {
                 .try_create(Actor::System)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn administrator_cannot_create_thread_with_another_users_message() {
+        let answer_author_id = user_id("00000000-0000-7000-8000-000000000111");
+        let admin_id = user_id("00000000-0000-7000-8000-000000000112");
+        let other_user_id = user_id("00000000-0000-7000-8000-000000000113");
+        let admin = Actor::from(active_user("admin", admin_id, Role::Administrator));
+        let thread = thread_for_answer_author(answer_author_id)
+            .add_message(message_from(other_user_id, "forged sender"));
+
+        let result = AuthorizationGuard::<_, Create>::from(thread).try_create(admin);
+
+        assert!(matches!(result, Err(DomainError::Forbidden)));
     }
 
     #[test]
@@ -329,23 +389,19 @@ mod tests {
         let updated_by_answer_author = AuthorizationGuard::<_, Update>::from(thread.clone())
             .try_update(answer_author.clone())
             .unwrap()
-            .update_message_body(answer_author_message_id, message_body("updated"))
+            .authorize_message_update(answer_author_message_id, message_body("updated"))
             .unwrap();
 
-        assert_eq!(
-            updated_by_answer_author
-                .find_message(answer_author_message_id)
-                .unwrap()
-                .body()
-                .as_str(),
-            "updated"
-        );
+        assert_eq!(updated_by_answer_author.value().body().as_str(), "updated");
 
         let admin_updates_answer_author_message =
             AuthorizationGuard::<_, Update>::from(thread.clone())
                 .try_update(admin)
                 .unwrap()
-                .update_message_body(answer_author_message_id, message_body("updated by admin"));
+                .authorize_message_update(
+                    answer_author_message_id,
+                    message_body("updated by admin"),
+                );
 
         assert!(matches!(
             admin_updates_answer_author_message,
@@ -355,7 +411,7 @@ mod tests {
         let answer_author_updates_admin_message = AuthorizationGuard::<_, Update>::from(thread)
             .try_update(answer_author)
             .unwrap()
-            .update_message_body(admin_message_id, message_body("updated by answer author"));
+            .authorize_message_update(admin_message_id, message_body("updated by answer author"));
 
         assert!(matches!(
             answer_author_updates_admin_message,
@@ -376,9 +432,31 @@ mod tests {
         let result = AuthorizationGuard::<_, Update>::from(thread)
             .try_update(answer_author)
             .unwrap()
-            .update_message_body(MessageId::new(), message_body("updated"));
+            .authorize_message_update(MessageId::new(), message_body("updated"));
 
         assert!(matches!(result, Err(DomainError::NotFound)));
+    }
+
+    #[test]
+    fn message_post_requires_sender_to_match_the_thread_actor() {
+        let answer_author_id = user_id("00000000-0000-7000-8000-000000000551");
+        let another_user_id = user_id("00000000-0000-7000-8000-000000000552");
+        let answer_author = Actor::from(active_user(
+            "answer_author",
+            answer_author_id,
+            Role::StandardUser,
+        ));
+        let allowed_thread =
+            AuthorizationGuard::<_, Update>::from(thread_for_answer_author(answer_author_id))
+                .try_update(answer_author)
+                .unwrap();
+
+        let result = allowed_thread.authorize_message_post(message_from(
+            another_user_id,
+            "message with a different sender",
+        ));
+
+        assert!(matches!(result, Err(DomainError::Forbidden)));
     }
 
     #[test]
@@ -393,31 +471,60 @@ mod tests {
         ));
 
         let answer_author_message = message_from(answer_author_id, "from answer author");
+        let expected_answer_author_message = answer_author_message.clone();
         let answer_author_message_id = *answer_author_message.id();
         let admin_message = message_from(admin_id, "from admin");
         let admin_message_id = *admin_message.id();
         let thread = thread_for_answer_author(answer_author_id)
             .add_message(answer_author_message)
             .add_message(admin_message);
+        let expected_answer_id = *thread.answer_id();
+        let deleted_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
 
         let sender_delete = AuthorizationGuard::<_, Update>::from(thread.clone())
             .try_update(answer_author.clone())
             .unwrap()
-            .authorize_message_delete(answer_author_message_id);
+            .authorize_message_delete(answer_author_message_id, deleted_at);
 
-        assert!(sender_delete.is_ok());
+        let sender_deleted = sender_delete.unwrap();
+        assert_eq!(
+            sender_deleted.value().message(),
+            &expected_answer_author_message
+        );
+        assert_eq!(sender_deleted.value().answer_id(), &expected_answer_id);
+        assert_eq!(sender_deleted.value().deleted_at(), &deleted_at);
+        assert_eq!(
+            sender_deleted.value().deleted_by(),
+            &UserSnapshot::from(match sender_deleted.actor() {
+                Actor::AccountUser(user) => user,
+                _ => unreachable!(),
+            })
+        );
 
         let admin_delete = AuthorizationGuard::<_, Update>::from(thread.clone())
             .try_update(admin)
             .unwrap()
-            .authorize_message_delete(answer_author_message_id);
+            .authorize_message_delete(answer_author_message_id, deleted_at);
 
-        assert!(admin_delete.is_ok());
+        let admin_deleted = admin_delete.unwrap();
+        assert_eq!(
+            admin_deleted.value().message(),
+            &expected_answer_author_message
+        );
+        assert_eq!(admin_deleted.value().answer_id(), &expected_answer_id);
+        assert_eq!(admin_deleted.value().deleted_at(), &deleted_at);
+        assert_eq!(
+            admin_deleted.value().deleted_by(),
+            &UserSnapshot::from(match admin_deleted.actor() {
+                Actor::AccountUser(user) => user,
+                _ => unreachable!(),
+            })
+        );
 
         let answer_author_deletes_admin_message = AuthorizationGuard::<_, Update>::from(thread)
             .try_update(answer_author)
             .unwrap()
-            .authorize_message_delete(admin_message_id);
+            .authorize_message_delete(admin_message_id, deleted_at);
 
         assert!(matches!(
             answer_author_deletes_admin_message,
@@ -438,13 +545,13 @@ mod tests {
         let result = AuthorizationGuard::<_, Update>::from(thread)
             .try_update(answer_author)
             .unwrap()
-            .authorize_message_delete(MessageId::new());
+            .authorize_message_delete(MessageId::new(), Utc::now());
 
         assert!(matches!(result, Err(DomainError::NotFound)));
     }
 
     #[test]
-    fn remove_message_removes_only_authorized_message() {
+    fn authorizing_message_delete_keeps_other_messages_in_the_thread() {
         let answer_author_id = user_id("00000000-0000-7000-8000-000000000801");
         let answer_author = Actor::from(active_user(
             "answer_author",
@@ -462,12 +569,45 @@ mod tests {
         let allowed_thread = AuthorizationGuard::<_, Update>::from(thread)
             .try_update(answer_author)
             .unwrap();
-        let deletion_target = allowed_thread
-            .authorize_message_delete(first_message_id)
+        let _deletion_target = allowed_thread
+            .authorize_message_delete(first_message_id, Utc::now())
             .unwrap();
-        let updated_thread = allowed_thread.remove_message(deletion_target);
 
-        assert!(updated_thread.find_message(first_message_id).is_none());
-        assert!(updated_thread.find_message(second_message_id).is_some());
+        assert!(allowed_thread.find_message(first_message_id).is_some());
+        assert!(allowed_thread.find_message(second_message_id).is_some());
+    }
+
+    #[test]
+    fn message_history_entry_for_another_thread_is_rejected() {
+        use crate::form::message::{MessageHistoryAction, MessageHistoryId};
+
+        let answer_author_id = user_id("00000000-0000-7000-8000-000000000901");
+        let answer_author = active_user("answer_author", answer_author_id, Role::StandardUser);
+        let readable_thread =
+            AuthorizationGuard::<_, Read>::from(thread_for_answer_author(answer_author_id))
+                .try_read(Actor::from(answer_author.clone()))
+                .unwrap();
+        let snapshot = UserSnapshot::new(
+            *answer_author.id(),
+            answer_author.name().to_owned(),
+            answer_author.role().to_owned(),
+        );
+        let history_entry = unsafe {
+            MessageHistoryEntry::from_raw_parts(
+                MessageHistoryId::new(),
+                AnswerId::new(),
+                MessageId::new(),
+                snapshot.clone(),
+                chrono::Utc::now(),
+                MessageHistoryAction::Delete,
+                message_body("state"),
+                snapshot,
+                chrono::Utc::now(),
+            )
+        };
+
+        let result = readable_thread.authorize_message_history_entry(history_entry);
+
+        assert!(matches!(result, Err(DomainError::NotFound)));
     }
 }

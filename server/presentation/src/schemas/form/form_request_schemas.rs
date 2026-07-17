@@ -42,6 +42,16 @@ pub struct AnswerListQuery {
     pub cursor: Option<String>,
 }
 
+#[derive(Deserialize, Debug, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct HistoryListQuery {
+    /// Maximum number of history entries to return
+    #[param(minimum = 1, maximum = 100)]
+    pub limit: Option<u32>,
+    /// Cursor returned by the previous page
+    pub cursor: Option<String>,
+}
+
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct FormCreateSchema {
     #[schema(value_type = String)]

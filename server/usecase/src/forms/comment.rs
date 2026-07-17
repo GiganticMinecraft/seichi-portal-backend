@@ -1,3 +1,4 @@
+use chrono::Utc;
 use domain::form::comment::CommentContent;
 use domain::form::models::FormId;
 use domain::{
@@ -5,8 +6,9 @@ use domain::{
     auth::Actor,
     form::{
         answer::{AnswerEntry, AnswerId},
-        comment::{Comment, CommentId},
+        comment::{Comment, CommentHistoryEntry, CommentHistoryPagePosition, CommentId},
     },
+    pagination::{Page, PageRequest},
     repository::form::{
         active_form_repository::ActiveFormRepository,
         answer_entry_repository::AnswerEntryRepository, comment_repository::CommentRepository,
@@ -120,6 +122,19 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
         self.comment_repository.create(comment).await
     }
 
+    pub async fn get_history(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        request: PageRequest<CommentHistoryPagePosition>,
+    ) -> Result<Page<Allowed<CommentHistoryEntry, Read>, CommentHistoryPagePosition>, Error> {
+        let entry = self
+            .read_answer_entry(&Actor::from(actor.clone()), form_id, answer_id)
+            .await?;
+        self.comment_repository.history(&entry, request).await
+    }
+
     pub async fn update_comment(
         &self,
         actor: &AccountUser,
@@ -142,7 +157,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
 
         if let Some(content) = content {
             let updated = entry.update_comment(current_comment.into_inner(), content)?;
-            self.comment_repository.update(updated).await?;
+            self.comment_repository.update(updated, Utc::now()).await?;
         }
 
         Ok(())
@@ -167,7 +182,7 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
             .find(|comment| *comment.value().comment_id() == comment_id)
             .ok_or(Error::from(CommentNotFound))?;
 
-        let comment = entry.delete_comment(comment.into_inner())?;
+        let comment = entry.delete_comment(comment.into_inner(), Utc::now())?;
 
         self.comment_repository.delete(comment).await
     }
