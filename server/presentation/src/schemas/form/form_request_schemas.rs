@@ -1,5 +1,5 @@
 use domain::account::models::UserGroupId;
-use domain::form::question::{ChoiceId, QuestionId, QuestionType};
+use domain::form::question::{ChoiceId, QuestionId, QuestionType, TemplateKey};
 use domain::form::{
     answer::{AnswerLabelId, AnswerTitle},
     models::{
@@ -196,7 +196,7 @@ pub struct QuestionDefinitionSchema {
     #[schema(value_type = Option<String>, format = "uuid")]
     pub id: Option<QuestionId>,
     #[schema(value_type = String)]
-    pub template_key: NonEmptyString,
+    pub template_key: TemplateKey,
     pub position: u16,
     #[schema(value_type = String)]
     pub title: NonEmptyString,

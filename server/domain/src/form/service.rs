@@ -34,28 +34,29 @@ impl DefaultAnswerTitleDomainService {
                     })
                     .collect::<HashMap<_, _>>();
 
-                let answer_replaced_title: String = question_placeholder_regex()
+                let replaced_title = template_placeholder_regex()
                     .replace_all(default_answer_title.as_str(), |caps: &regex::Captures| {
-                        answers_by_template_key
-                            .get(&caps[1])
-                            .copied()
-                            .unwrap_or_default()
+                        if &caps[1] == "username" {
+                            author_name
+                        } else {
+                            answers_by_template_key
+                                .get(&caps[1])
+                                .copied()
+                                .unwrap_or_default()
+                        }
                     })
                     .into_owned();
 
-                let username_replaced_title =
-                    answer_replaced_title.replace("$username", author_name);
-
-                Ok(AnswerTitle::new(Some(username_replaced_title.try_into()?)))
+                Ok(AnswerTitle::new(Some(replaced_title.try_into()?)))
             }
             None => Ok(AnswerTitle::new(None)),
         }
     }
 }
 
-fn question_placeholder_regex() -> &'static Regex {
+fn template_placeholder_regex() -> &'static Regex {
     static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| Regex::new(r"\{\{question\.([A-Za-z0-9_-]+)\}\}").unwrap())
+    REGEX.get_or_init(|| Regex::new(r"\$([A-Za-z0-9_-]+)").unwrap())
 }
 
 #[cfg(test)]
@@ -82,8 +83,7 @@ mod tests {
 
         let default_answer_title = DefaultAnswerTitle::new(Some(
             NonEmptyString::try_new(
-                "Answer to {{question.first}}, {{question.second}}, {{question.third}} by $username($username)"
-                    .to_string(),
+                "Answer to $first, $second, $third by $username($username)".to_string(),
             )
             .unwrap(),
         ));
@@ -168,6 +168,110 @@ mod tests {
         assert_eq!(
             result.into_inner().unwrap().into_inner(),
             "Answer to Answer1, Answer2, Answer3 by respondent_name(respondent_name)"
+        );
+    }
+
+    fn title_from(title: &str, questions: &[Question], answers: &PostedAnswerContents) -> String {
+        DefaultAnswerTitleDomainService::to_answer_title_from_questions(
+            DefaultAnswerTitle::new(Some(title.to_string().try_into().unwrap())),
+            questions,
+            answers,
+            "respondent",
+        )
+        .unwrap()
+        .into_inner()
+        .unwrap()
+        .into_inner()
+    }
+
+    fn question(id: QuestionId, template_key: &str, position: u16) -> Question {
+        unsafe {
+            Question::from_raw_parts(
+                id,
+                template_key.parse().unwrap(),
+                position,
+                template_key.to_string().try_into().unwrap(),
+                None,
+                QuestionType::Text,
+                None,
+                false,
+            )
+            .unwrap()
+        }
+    }
+
+    #[test]
+    fn replaces_consecutive_placeholders_in_one_pass() {
+        let first_id = question_id("00000000-0000-7000-8000-000000000011");
+        let second_id = question_id("00000000-0000-7000-8000-000000000012");
+        let questions = vec![
+            question(first_id, "first", 0),
+            question(second_id, "second", 1),
+        ];
+        let answers = PostedAnswerContents::try_new(
+            &questions,
+            vec![
+                FormAnswerContent {
+                    id: FormAnswerContentId::new(),
+                    question_id: first_id,
+                    answer: "$username".to_string(),
+                },
+                FormAnswerContent {
+                    id: FormAnswerContentId::new(),
+                    question_id: second_id,
+                    answer: "second answer".to_string(),
+                },
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            title_from("$first$second", &questions, &answers),
+            "$usernamesecond answer"
+        );
+    }
+
+    #[test]
+    fn leaves_legacy_question_placeholders_literal() {
+        let question_id = question_id("00000000-0000-7000-8000-000000000021");
+        let questions = vec![question(question_id, "body", 0)];
+        let answers = PostedAnswerContents::try_new(
+            &questions,
+            vec![FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id,
+                answer: "answer".to_string(),
+            }],
+        )
+        .unwrap();
+
+        assert_eq!(
+            title_from("{{question.body}}", &questions, &answers),
+            "{{question.body}}"
+        );
+    }
+
+    #[test]
+    fn replaces_unknown_and_unanswered_placeholders_with_empty_strings() {
+        let answered_id = question_id("00000000-0000-7000-8000-000000000031");
+        let unanswered_id = question_id("00000000-0000-7000-8000-000000000032");
+        let questions = vec![
+            question(answered_id, "answered", 0),
+            question(unanswered_id, "unanswered", 1),
+        ];
+        let answers = PostedAnswerContents::try_new(
+            &questions,
+            vec![FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id: answered_id,
+                answer: "answer".to_string(),
+            }],
+        )
+        .unwrap();
+
+        assert_eq!(
+            title_from("$answered/$unanswered/$unknown", &questions, &answers),
+            "answer//"
         );
     }
 }
