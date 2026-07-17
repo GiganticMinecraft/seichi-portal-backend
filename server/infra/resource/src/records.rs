@@ -515,4 +515,22 @@ mod tests {
 
         assert!(result.is_err());
     }
+
+    #[test]
+    fn question_record_rejects_invalid_template_key() {
+        let result: Result<Question, _> = QuestionRecord {
+            id: Uuid::nil().to_string(),
+            form_id: Uuid::nil().to_string(),
+            template_key: "invalid key".to_string(),
+            position: 0,
+            title: "Question".to_string(),
+            description: None,
+            question_type: "Text".to_string(),
+            choices: vec![],
+            is_required: true,
+        }
+        .try_into();
+
+        assert!(result.is_err());
+    }
 }

@@ -3,7 +3,7 @@ use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fmt, str::FromStr};
 use strum_macros::EnumString;
 use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
@@ -16,6 +16,81 @@ use crate::{
 
 pub type QuestionId = types::Id<Question>;
 pub type ChoiceId = types::IntegerId<Choice>;
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(transparent)]
+pub struct TemplateKey(String);
+
+impl TemplateKey {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl TryFrom<String> for TemplateKey {
+    type Error = DomainError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.is_empty()
+            || value.len() > 255
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+            || value == "username"
+        {
+            return Err(DomainError::InvalidEntity {
+                message: "question.template_key must be 1 to 255 ASCII alphanumeric, underscore, or hyphen characters and must not be \"username\"".to_string(),
+            });
+        }
+
+        Ok(Self(value))
+    }
+}
+
+impl FromStr for TemplateKey {
+    type Err = DomainError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value.to_owned().try_into()
+    }
+}
+
+impl<'de> Deserialize<'de> for TemplateKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?
+            .try_into()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl fmt::Display for TemplateKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[cfg(test)]
+impl proptest::arbitrary::Arbitrary for TemplateKey {
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        use proptest::strategy::Strategy;
+
+        proptest::string::string_regex("[A-Za-z0-9_-]{1,255}")
+            .expect("valid TemplateKey regex")
+            .prop_filter("username is reserved", |value| value != "username")
+            .prop_map(|value| Self::try_from(value).expect("strategy only generates valid keys"))
+            .boxed()
+    }
+}
 
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
@@ -52,7 +127,7 @@ impl Choice {
 #[derive(Serialize, Deserialize, Clone, Getters, Debug, PartialEq)]
 pub struct QuestionDefinition {
     id: QuestionId,
-    template_key: NonEmptyString,
+    template_key: TemplateKey,
     position: u16,
     title: NonEmptyString,
     description: Option<NonEmptyString>,
@@ -62,7 +137,7 @@ pub struct QuestionDefinition {
 impl QuestionDefinition {
     pub fn new(
         id: QuestionId,
-        template_key: NonEmptyString,
+        template_key: TemplateKey,
         position: u16,
         title: NonEmptyString,
         description: Option<NonEmptyString>,
@@ -188,7 +263,7 @@ impl QuestionSet {
 
 impl Question {
     pub fn new_text(
-        template_key: NonEmptyString,
+        template_key: TemplateKey,
         position: u16,
         title: NonEmptyString,
         description: Option<NonEmptyString>,
@@ -206,7 +281,7 @@ impl Question {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new_single_choice(
-        template_key: NonEmptyString,
+        template_key: TemplateKey,
         position: u16,
         title: NonEmptyString,
         description: Option<NonEmptyString>,
@@ -228,7 +303,7 @@ impl Question {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new_multiple_choice(
-        template_key: NonEmptyString,
+        template_key: TemplateKey,
         position: u16,
         title: NonEmptyString,
         description: Option<NonEmptyString>,
@@ -255,7 +330,7 @@ impl Question {
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn from_raw_parts(
         id: QuestionId,
-        template_key: NonEmptyString,
+        template_key: TemplateKey,
         position: u16,
         title: NonEmptyString,
         description: Option<NonEmptyString>,
@@ -309,7 +384,7 @@ impl Question {
         *self.definition().id()
     }
 
-    pub fn template_key(&self) -> &NonEmptyString {
+    pub fn template_key(&self) -> &TemplateKey {
         self.definition().template_key()
     }
 
@@ -440,6 +515,46 @@ mod test {
 
     use super::*;
     use crate::form::question::QuestionType;
+
+    #[test]
+    fn template_key_accepts_valid_values() {
+        for value in [
+            "a",
+            "A",
+            "0",
+            "_",
+            "-",
+            "question_key-1",
+            "Username",
+            "USERNAME",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
+            assert!(
+                TemplateKey::from_str(value).is_ok(),
+                "template key {value:?} must be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn template_key_rejects_invalid_values() {
+        for value in [
+            "",
+            "question key",
+            "question.key",
+            "質問",
+            "username",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
+            assert!(
+                matches!(
+                    TemplateKey::from_str(value),
+                    Err(DomainError::InvalidEntity { .. })
+                ),
+                "template key {value:?} must be rejected"
+            );
+        }
+    }
 
     #[test_case("TEXT" => Ok(QuestionType::Text); "legacy upper text")]
     #[test_case("text" => Ok(QuestionType::Text); "legacy lower text")]
