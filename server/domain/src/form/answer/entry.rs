@@ -146,7 +146,6 @@ impl Allowed<AnswerEntry, Read> {
         comment: Comment,
         deleted_at: DateTime<Utc>,
     ) -> Result<Allowed<DeletedComment, Create>, DomainError> {
-        self.authorize_delete(comment)?
-            .transition_to_create(deleted_at)
+        self.authorize_delete(comment)?.delete(deleted_at)
     }
 }

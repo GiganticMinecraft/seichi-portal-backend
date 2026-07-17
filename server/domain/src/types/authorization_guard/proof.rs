@@ -56,7 +56,7 @@ impl<T> Allowed<T, Delete> {
     ///
     /// 認可に使った [`Actor`] は遷移処理へ参照で渡した後、そのまま作成の証明へ
     /// 引き継ぎます。
-    pub(crate) fn transition_to_create(
+    pub(crate) fn delete(
         self,
         context: T::Context,
     ) -> Result<Allowed<T::Created, Create>, DomainError>

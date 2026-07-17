@@ -138,8 +138,7 @@ impl Allowed<MessageThread, Update> {
             message,
         };
 
-        self.authorize_delete(target)?
-            .transition_to_create(deleted_at)
+        self.authorize_delete(target)?.delete(deleted_at)
     }
 }
 
