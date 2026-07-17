@@ -11,7 +11,7 @@ use domain::{
     },
     pagination::{Page, PageRequest},
     repository::form::comment_repository::CommentRepository,
-    types::authorization_guard::{Allowed, Create, Delete, Read, Update},
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
 use errors::{Error, infra::InfraError};
 use std::str::FromStr;
@@ -75,7 +75,7 @@ where
     }
 
     #[tracing::instrument(skip(self, comment))]
-    async fn delete(&self, comment: Allowed<DeletedComment, Delete>) -> Result<(), Error> {
+    async fn delete(&self, comment: Allowed<DeletedComment, Create>) -> Result<(), Error> {
         self.client
             .form_comment()
             .delete_comment_with_history(comment.value())

@@ -12,7 +12,7 @@ use domain::{
     },
     pagination::{Page, PageRequest},
     repository::form::message_thread_repository::MessageThreadRepository,
-    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 use errors::{Error, infra::InfraError};
 use std::str::FromStr;
@@ -110,7 +110,7 @@ where
         Ok(())
     }
 
-    async fn delete_message(&self, message: Allowed<DeletedMessage, Delete>) -> Result<(), Error> {
+    async fn delete_message(&self, message: Allowed<DeletedMessage, Create>) -> Result<(), Error> {
         self.client
             .form_message()
             .delete_message_with_history(message.value())

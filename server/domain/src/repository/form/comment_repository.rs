@@ -9,7 +9,7 @@ use crate::{
         comment::{Comment, CommentHistoryEntry, CommentHistoryPagePosition, DeletedComment},
     },
     pagination::{Page, PageRequest},
-    types::authorization_guard::{Allowed, Create, Delete, Read, Update},
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
 
 /// [`Comment`] を集約ルートとして永続化するためのリポジトリ。
@@ -35,7 +35,7 @@ pub trait CommentRepository: Send + Sync + 'static {
         comment: Allowed<Comment, Update>,
         updated_at: DateTime<Utc>,
     ) -> Result<(), Error>;
-    async fn delete(&self, comment: Allowed<DeletedComment, Delete>) -> Result<(), Error>;
+    async fn delete(&self, comment: Allowed<DeletedComment, Create>) -> Result<(), Error>;
     async fn history(
         &self,
         answer: &Allowed<AnswerEntry, Read>,

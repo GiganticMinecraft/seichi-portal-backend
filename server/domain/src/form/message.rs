@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    account::models::{Role, UserId, UserSnapshot},
+    account::models::{UserId, UserSnapshot},
     auth::Actor,
     form::{answer::AnswerId, is_administrator, message_thread::MessageThread},
     types::authorization_guard::{
-        AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, Update,
+        AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
     },
 };
 
@@ -148,7 +148,7 @@ impl Message {
         Self { body, ..self }
     }
 
-    pub(crate) fn delete(
+    pub(super) fn delete(
         self,
         answer_id: AnswerId,
         deleted_at: DateTime<Utc>,
@@ -170,30 +170,6 @@ pub struct DeletedMessage {
     message: Message,
     deleted_at: DateTime<Utc>,
     deleted_by: UserSnapshot,
-}
-
-impl AuthorizationRole for DeletedMessage {
-    type Role = ParentGuarded<MessageThread>;
-}
-
-impl BelongsTo<MessageThread> for DeletedMessage {
-    fn belongs_to(&self, parent: &MessageThread) -> bool {
-        &self.answer_id == parent.answer_id() && self.message.belongs_to(parent)
-    }
-}
-
-impl GuardedBy<MessageThread, Delete> for DeletedMessage {
-    fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
-        matches!(
-            actor,
-            Actor::AccountUser(user)
-                if (user.id() == self.message.sender_id()
-                    || user.role() == &Role::Administrator)
-                    && user.id() == self.deleted_by.id()
-                    && user.name() == self.deleted_by.name()
-                    && user.role() == self.deleted_by.role()
-        )
-    }
 }
 
 impl BelongsTo<MessageThread> for Message {
@@ -246,39 +222,6 @@ mod tests {
         let result = allowed_thread.authorize_update(foreign_message);
 
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn message_delete_rejects_deleted_by_snapshot_that_differs_from_actor() {
-        let user = AccountUser::new(
-            "sender".to_string(),
-            UserId::from(Uuid::new_v4()),
-            Role::StandardUser,
-        );
-        let answer_id = AnswerId::new();
-        let message = Message::new(
-            *user.id(),
-            MessageBody::new("delete me".to_string().try_into().unwrap()),
-        );
-        let thread = MessageThread::new(answer_id, *user.id()).add_message(message.clone());
-        let actor = Actor::from(user.clone());
-        let deleted_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
-        let snapshot_with_different_name = UserSnapshot::new(
-            *user.id(),
-            "different-name".to_string(),
-            user.role().to_owned(),
-        );
-        let snapshot_with_different_role =
-            UserSnapshot::new(*user.id(), user.name().to_owned(), Role::Administrator);
-
-        let different_name =
-            message
-                .clone()
-                .delete(answer_id, deleted_at, snapshot_with_different_name);
-        let different_role = message.delete(answer_id, deleted_at, snapshot_with_different_role);
-
-        assert!(!different_name.is_allowed_for(&thread, &actor));
-        assert!(!different_role.is_allowed_for(&thread, &actor));
     }
 
     #[test]

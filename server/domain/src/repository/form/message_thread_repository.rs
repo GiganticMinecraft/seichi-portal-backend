@@ -12,7 +12,7 @@ use crate::{
         message_thread::MessageThread,
     },
     pagination::{Page, PageRequest},
-    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
+    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 
 #[automock]
@@ -29,7 +29,7 @@ pub trait MessageThreadRepository: Send + Sync + 'static {
         message: Allowed<Message, Update>,
         updated_at: DateTime<Utc>,
     ) -> Result<(), Error>;
-    async fn delete_message(&self, message: Allowed<DeletedMessage, Delete>) -> Result<(), Error>;
+    async fn delete_message(&self, message: Allowed<DeletedMessage, Create>) -> Result<(), Error>;
     async fn history(
         &self,
         message_thread: &Allowed<MessageThread, Read>,

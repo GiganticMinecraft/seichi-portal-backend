@@ -13,8 +13,8 @@ use crate::{
         },
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, Create, Delete, Read,
-        SelfGuarded, Update,
+        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, BelongsTo, Create, Delete,
+        DeleteTransition, GuardedBy, ParentGuarded, Read, SelfGuarded, Update,
     },
 };
 
@@ -23,6 +23,49 @@ pub struct MessageThread {
     answer_id: AnswerId,
     answer_author_id: UserId,
     messages: Vec<Message>,
+}
+
+struct MessageDeletionTarget {
+    answer_id: AnswerId,
+    message: Message,
+}
+
+impl AuthorizationRole for MessageDeletionTarget {
+    type Role = ParentGuarded<MessageThread>;
+}
+
+impl BelongsTo<MessageThread> for MessageDeletionTarget {
+    fn belongs_to(&self, parent: &MessageThread) -> bool {
+        &self.answer_id == parent.answer_id() && self.message.belongs_to(parent)
+    }
+}
+
+impl GuardedBy<MessageThread, Delete> for MessageDeletionTarget {
+    fn is_allowed_for(&self, _parent: &MessageThread, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::AccountUser(user)
+                if self.message.sender_id() == user.id() || user.role() == &Administrator
+        )
+    }
+}
+
+impl DeleteTransition for MessageDeletionTarget {
+    type Created = DeletedMessage;
+    type Context = DateTime<Utc>;
+
+    fn transition(
+        self,
+        deleted_at: Self::Context,
+        actor: &Actor,
+    ) -> Result<Self::Created, DomainError> {
+        let deleted_by = match actor {
+            Actor::AccountUser(user) => UserSnapshot::from(user),
+            _ => return Err(DomainError::Forbidden),
+        };
+
+        Ok(self.message.delete(self.answer_id, deleted_at, deleted_by))
+    }
 }
 
 impl MessageThread {
@@ -84,17 +127,19 @@ impl Allowed<MessageThread, Update> {
         &self,
         message_id: MessageId,
         deleted_at: DateTime<Utc>,
-    ) -> Result<Allowed<DeletedMessage, Delete>, DomainError> {
-        let deleted_by = match self.actor() {
-            Actor::AccountUser(user) => UserSnapshot::from(user),
-            _ => return Err(DomainError::Forbidden),
-        };
+    ) -> Result<Allowed<DeletedMessage, Create>, DomainError> {
         let message = self
             .value()
             .find_message(message_id)
             .ok_or(DomainError::NotFound)?
             .clone();
-        self.authorize_delete(message.delete(*self.answer_id(), deleted_at, deleted_by))
+        let target = MessageDeletionTarget {
+            answer_id: *self.answer_id(),
+            message,
+        };
+
+        self.authorize_delete(target)?
+            .transition_to_create(deleted_at)
     }
 }
 
@@ -434,6 +479,7 @@ mod tests {
         let thread = thread_for_answer_author(answer_author_id)
             .add_message(answer_author_message)
             .add_message(admin_message);
+        let expected_answer_id = *thread.answer_id();
         let deleted_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
 
         let sender_delete = AuthorizationGuard::<_, Update>::from(thread.clone())
@@ -446,6 +492,7 @@ mod tests {
             sender_deleted.value().message(),
             &expected_answer_author_message
         );
+        assert_eq!(sender_deleted.value().answer_id(), &expected_answer_id);
         assert_eq!(sender_deleted.value().deleted_at(), &deleted_at);
         assert_eq!(
             sender_deleted.value().deleted_by(),
@@ -465,6 +512,7 @@ mod tests {
             admin_deleted.value().message(),
             &expected_answer_author_message
         );
+        assert_eq!(admin_deleted.value().answer_id(), &expected_answer_id);
         assert_eq!(admin_deleted.value().deleted_at(), &deleted_at);
         assert_eq!(
             admin_deleted.value().deleted_by(),

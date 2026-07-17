@@ -13,7 +13,8 @@ use crate::{
         is_administrator,
     },
     types::authorization_guard::{
-        AuthorizationRole, BelongsTo, Create, Delete, GuardedBy, ParentGuarded, Read, Update,
+        AuthorizationRole, BelongsTo, Create, Delete, DeleteTransition, GuardedBy, ParentGuarded,
+        Read, Update,
     },
 };
 
@@ -111,18 +112,6 @@ impl Comment {
     pub fn with_updated_content(self, content: CommentContent) -> Self {
         Self { content, ..self }
     }
-
-    pub(crate) fn delete(
-        self,
-        deleted_at: DateTime<Utc>,
-        deleted_by: UserSnapshot,
-    ) -> DeletedComment {
-        DeletedComment {
-            comment: self,
-            deleted_at,
-            deleted_by,
-        }
-    }
 }
 
 /// 削除されたコメントと、削除時点の操作情報を表す。
@@ -131,30 +120,6 @@ pub struct DeletedComment {
     comment: Comment,
     deleted_at: DateTime<Utc>,
     deleted_by: UserSnapshot,
-}
-
-impl AuthorizationRole for DeletedComment {
-    type Role = ParentGuarded<AnswerEntry>;
-}
-
-impl BelongsTo<AnswerEntry> for DeletedComment {
-    fn belongs_to(&self, parent: &AnswerEntry) -> bool {
-        self.comment.belongs_to(parent)
-    }
-}
-
-impl GuardedBy<AnswerEntry, Delete> for DeletedComment {
-    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
-        matches!(
-            actor,
-            Actor::AccountUser(user)
-                if (user.id() == self.comment.commented_by()
-                    || user.role() == &Role::Administrator)
-                    && user.id() == self.deleted_by.id()
-                    && user.name() == self.deleted_by.name()
-                    && user.role() == self.deleted_by.role()
-        )
-    }
 }
 
 impl AuthorizationRole for Comment {
@@ -182,6 +147,38 @@ impl GuardedBy<AnswerEntry, Create> for Comment {
 impl GuardedBy<AnswerEntry, Update> for Comment {
     fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
         matches!(actor, Actor::AccountUser(user) if user.id() == self.commented_by())
+    }
+}
+
+impl GuardedBy<AnswerEntry, Delete> for Comment {
+    fn is_allowed_for(&self, _parent: &AnswerEntry, actor: &Actor) -> bool {
+        matches!(
+            actor,
+            Actor::AccountUser(user)
+                if user.id() == self.commented_by() || user.role() == &Role::Administrator
+        )
+    }
+}
+
+impl DeleteTransition for Comment {
+    type Created = DeletedComment;
+    type Context = DateTime<Utc>;
+
+    fn transition(
+        self,
+        deleted_at: Self::Context,
+        actor: &Actor,
+    ) -> Result<Self::Created, errors::domain::DomainError> {
+        let deleted_by = match actor {
+            Actor::AccountUser(user) => UserSnapshot::from(user),
+            _ => return Err(errors::domain::DomainError::Forbidden),
+        };
+
+        Ok(DeletedComment {
+            comment: self,
+            deleted_at,
+            deleted_by,
+        })
     }
 }
 
@@ -404,39 +401,6 @@ mod tests {
             })
         );
         assert!(matches!(other_result, Err(DomainError::Forbidden)));
-    }
-
-    #[test]
-    fn comment_delete_rejects_deleted_by_snapshot_that_differs_from_actor() {
-        let answer_author = active_user("author", Role::StandardUser);
-        let commenter = active_user("commenter", Role::StandardUser);
-        let form = sample_form(AnswerVisibility::PUBLIC);
-        let entry = answer_entry(&form, &answer_author);
-        let comment =
-            create_comment_by(form.clone(), entry.clone(), commenter.clone(), "delete me");
-        let readable_entry = read_entry_by(form, entry, Actor::from(commenter.clone()));
-        let deleted_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
-        let snapshot_with_different_name = UserSnapshot::new(
-            *commenter.id(),
-            "different-name".to_string(),
-            commenter.role().to_owned(),
-        );
-        let snapshot_with_different_role = UserSnapshot::new(
-            *commenter.id(),
-            commenter.name().to_owned(),
-            Role::Administrator,
-        );
-
-        let different_name = readable_entry.authorize_delete(
-            comment
-                .clone()
-                .delete(deleted_at, snapshot_with_different_name),
-        );
-        let different_role = readable_entry
-            .authorize_delete(comment.delete(deleted_at, snapshot_with_different_role));
-
-        assert!(matches!(different_name, Err(DomainError::Forbidden)));
-        assert!(matches!(different_role, Err(DomainError::Forbidden)));
     }
 
     #[test]
