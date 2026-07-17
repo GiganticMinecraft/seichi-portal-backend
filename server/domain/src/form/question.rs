@@ -22,6 +22,22 @@ pub type ChoiceId = types::IntegerId<Choice>;
 pub struct TemplateKey(String);
 
 impl TemplateKey {
+    fn validate(value: &str) -> Result<(), DomainError> {
+        if value.is_empty()
+            || value.len() > 255
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+            || value == "username"
+        {
+            return Err(DomainError::InvalidEntity {
+                message: "question.template_key must be 1 to 255 ASCII alphanumeric, underscore, or hyphen characters and must not be \"username\"".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -35,19 +51,17 @@ impl TryFrom<String> for TemplateKey {
     type Error = DomainError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.is_empty()
-            || value.len() > 255
-            || !value
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-            || value == "username"
-        {
-            return Err(DomainError::InvalidEntity {
-                message: "question.template_key must be 1 to 255 ASCII alphanumeric, underscore, or hyphen characters and must not be \"username\"".to_string(),
-            });
-        }
-
+        Self::validate(&value)?;
         Ok(Self(value))
+    }
+}
+
+impl TryFrom<&str> for TemplateKey {
+    type Error = DomainError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::validate(value)?;
+        Ok(Self(value.to_owned()))
     }
 }
 
@@ -55,7 +69,7 @@ impl FromStr for TemplateKey {
     type Err = DomainError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        value.to_owned().try_into()
+        Self::try_from(value)
     }
 }
 
