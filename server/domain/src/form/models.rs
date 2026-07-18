@@ -80,6 +80,10 @@ impl FormTitle {
     pub fn new(title: NonEmptyString) -> Self {
         Self(title)
     }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
