@@ -253,6 +253,14 @@ pub(crate) struct InMemoryAnswerEntryRepository {
     answers: Mutex<Vec<AnswerEntry>>,
 }
 
+impl InMemoryAnswerEntryRepository {
+    pub(crate) fn new(answers: Vec<AnswerEntry>) -> Self {
+        Self {
+            answers: Mutex::new(answers),
+        }
+    }
+}
+
 #[async_trait]
 impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
     async fn get(

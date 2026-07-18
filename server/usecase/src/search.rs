@@ -25,13 +25,14 @@ use domain::{
     types::authorization_guard::{Allowed, AuthorizationGuard, Read},
 };
 use errors::Error;
-use errors::usecase::UseCaseError::UserNotFound;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
 use tokio::time;
+
+const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
 
 pub struct SearchUseCase<
     'a,
@@ -168,7 +169,7 @@ impl<
         account_user: &AccountUser,
         actor: &Actor,
         answer: Allowed<AnswerEntry, Read>,
-    ) -> Result<AnswerDetails, Error> {
+    ) -> Result<Option<AnswerDetails>, Error> {
         let answer_id = *answer.id();
         let form_id = *answer.form_id();
         let labels = self
@@ -193,23 +194,23 @@ impl<
         )
         .await?;
         let author = match answer.author() {
-            AnswerAuthor::AuthenticatedUser(user_id) => Actor::AccountUser(
-                users
-                    .get(user_id)
-                    .cloned()
-                    .ok_or(Error::from(UserNotFound))?,
-            ),
+            AnswerAuthor::AuthenticatedUser(user_id) => {
+                let Some(user) = users.get(user_id).cloned() else {
+                    return Ok(None);
+                };
+                Actor::AccountUser(user)
+            }
             AnswerAuthor::Temporary(temporary_user) => {
                 Actor::TemporaryAnswerAuthor(temporary_user.clone())
             }
         };
 
-        Ok(AnswerDetails {
+        Ok(Some(AnswerDetails {
             form_id,
             form_answer: answer.into_inner(),
             author,
             labels,
-        })
+        }))
     }
 
     async fn comments_with_authors(
@@ -227,19 +228,18 @@ impl<
         )
         .await?;
 
-        comments
+        Ok(comments
             .into_iter()
-            .map(|comment| {
-                let commented_by = users
+            .filter_map(|comment| {
+                users
                     .get(comment.commented_by())
                     .cloned()
-                    .ok_or(Error::from(UserNotFound))?;
-                Ok(CommentWithAuthor {
-                    comment,
-                    commented_by,
-                })
+                    .map(|commented_by| CommentWithAuthor {
+                        comment,
+                        commented_by,
+                    })
             })
-            .collect()
+            .collect())
     }
 
     pub async fn search_users(
@@ -271,9 +271,8 @@ impl<
         let actor_ref = &actor;
 
         let visible_forms = stream::iter(forms)
-            .then(
-                |form| async move { self.visible_form_with_labels(actor_ref, form.form_id).await },
-            )
+            .map(|form| async move { self.visible_form_with_labels(actor_ref, form.form_id).await })
+            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
             .await?;
@@ -281,7 +280,7 @@ impl<
         let visible_users = self.visible_users(actor_ref, users).await?;
 
         let visible_label_for_forms = stream::iter(label_for_forms)
-            .then(|label| async move {
+            .map(|label| async move {
                 self.form_label_repository
                     .fetch_label(label.label_id)
                     .await
@@ -294,12 +293,13 @@ impl<
                         })
                     })
             })
+            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
             .await?;
 
         let visible_label_for_answers = stream::iter(label_for_answers)
-            .then(|label| async move {
+            .map(|label| async move {
                 self.form_answer_label_repository
                     .get_label_for_answers(label.label_id)
                     .await
@@ -312,6 +312,7 @@ impl<
                         })
                     })
             })
+            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
             .await?;
@@ -325,7 +326,7 @@ impl<
         let answer_entries = self.list_all_answer_entries(&readable_forms).await?;
 
         let visible_answers = stream::iter(answers)
-            .then(|entry| {
+            .map(|entry| {
                 let answer_entries = &answer_entries;
 
                 async move {
@@ -334,17 +335,16 @@ impl<
                         return Ok::<_, Error>(None);
                     };
 
-                    self.answer_details(account_user, actor_ref, answer)
-                        .await
-                        .map(Some)
+                    self.answer_details(account_user, actor_ref, answer).await
                 }
             })
+            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
             .await?;
 
         let visible_comments: Vec<Comment> = stream::iter(comments)
-            .then(|comment| {
+            .map(|comment| {
                 let answer_entries = &answer_entries;
 
                 async move {
@@ -363,6 +363,7 @@ impl<
                     )
                 }
             })
+            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
             .try_filter_map(|visible| std::future::ready(Ok(visible)))
             .try_collect()
             .await?;
@@ -613,9 +614,15 @@ mod tests {
         InMemoryActiveFormRepository, InMemoryAnswerEntryRepository, InMemoryFormLabelRepository,
         InMemoryUserRepository,
     };
+    use chrono::Utc;
     use domain::{
         account::models::{Role, UserGroup, UserGroupName},
         form::{
+            answer::{
+                AnswerAuthor, AnswerEntry, AnswerSettings, AnswerTitle, AnswerVisibility,
+                FormAnswerContent, FormAnswerContentId, PostedAnswerContents,
+            },
+            comment::{Comment, CommentContent, CommentId},
             models::{AllowedUserGroups, FormDescription, FormSettings, FormTitle},
             question::{Question, QuestionSet},
         },
@@ -626,7 +633,7 @@ mod tests {
             },
             search_repository::MockSearchRepository,
         },
-        search::models::FormSearchHit,
+        search::models::{AnswerSearchHit, CommentSearchHit, FormSearchHit},
     };
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
@@ -723,5 +730,231 @@ mod tests {
 
         assert_eq!(output.forms.len(), 1);
         assert_eq!(*output.forms[0].form.id(), readable_form_id);
+    }
+
+    #[tokio::test]
+    async fn cross_search_excludes_only_answer_hits_whose_author_is_missing() {
+        let member_group = UserGroup::new(UserGroupName::new(
+            "members".to_string().try_into().unwrap(),
+        ));
+        let actor = AccountUser::with_groups(
+            "viewer".to_string(),
+            Uuid::from_u128(1).into(),
+            Role::StandardUser,
+            vec![member_group.clone()],
+        );
+        let form = form_restricted_to("answers", &member_group).change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let form_id = *form.id();
+        let question_id = *form.questions().as_slice()[0].id();
+        let answer_contents = || {
+            PostedAnswerContents::try_new(
+                form.questions().as_slice(),
+                vec![FormAnswerContent {
+                    id: FormAnswerContentId::from(Uuid::new_v4()),
+                    question_id: question_id.into(),
+                    answer: "body".to_string(),
+                }],
+            )
+            .unwrap()
+        };
+        let missing_author_answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::AuthenticatedUser(Uuid::from_u128(4).into()),
+            AnswerTitle::default(),
+            answer_contents(),
+        );
+        let visible_answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::AuthenticatedUser(*actor.id()),
+            AnswerTitle::default(),
+            answer_contents(),
+        );
+        let missing_author_answer_id = *missing_author_answer.id();
+        let visible_answer_id = *visible_answer.id();
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_search_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_users()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_answers()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_answers()
+            .returning(move |_| {
+                Ok(vec![
+                    AnswerSearchHit {
+                        answer_id: missing_author_answer_id,
+                    },
+                    AnswerSearchHit {
+                        answer_id: visible_answer_id,
+                    },
+                ])
+            });
+        search_repository
+            .expect_search_comments()
+            .returning(|_| Ok(vec![]));
+
+        let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository
+            .expect_get_labels_for_answers_by_answer_id()
+            .returning(|_| Ok(vec![]));
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        user_repository.save_user(actor.clone());
+        let answer_entry_repository =
+            InMemoryAnswerEntryRepository::new(vec![missing_author_answer, visible_answer]);
+        let comment_repository = MockCommentRepository::new();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_repository: &comment_repository,
+        };
+
+        let output = use_case
+            .cross_search(&actor, "answer".to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(output.answers.len(), 1);
+        assert_eq!(*output.answers[0].form_answer.id(), visible_answer_id);
+    }
+
+    #[tokio::test]
+    async fn cross_search_excludes_only_comment_hits_whose_author_is_missing() {
+        let member_group = UserGroup::new(UserGroupName::new(
+            "members".to_string().try_into().unwrap(),
+        ));
+        let actor = AccountUser::with_groups(
+            "viewer".to_string(),
+            Uuid::from_u128(10).into(),
+            Role::StandardUser,
+            vec![member_group.clone()],
+        );
+        let form = form_restricted_to("comments", &member_group).change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let question_id = *form.questions().as_slice()[0].id();
+        let answer = AnswerEntry::new(
+            *form.id(),
+            AnswerAuthor::AuthenticatedUser(*actor.id()),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(
+                form.questions().as_slice(),
+                vec![FormAnswerContent {
+                    id: FormAnswerContentId::from(Uuid::new_v4()),
+                    question_id: question_id.into(),
+                    answer: "body".to_string(),
+                }],
+            )
+            .unwrap(),
+        );
+        let answer_id = *answer.id();
+        let first_comment_id = CommentId::from(Uuid::from_u128(11));
+        let missing_author_comment_id = CommentId::from(Uuid::from_u128(12));
+        let second_comment_id = CommentId::from(Uuid::from_u128(13));
+        let comment = |comment_id, commented_by, content: &str| unsafe {
+            Comment::from_raw_parts(
+                answer_id,
+                comment_id,
+                CommentContent::new(content.to_string().try_into().unwrap()),
+                Utc::now(),
+                commented_by,
+            )
+        };
+        let first_comment = comment(first_comment_id, *actor.id(), "first");
+        let missing_author_comment = comment(
+            missing_author_comment_id,
+            Uuid::from_u128(14).into(),
+            "missing author",
+        );
+        let second_comment = comment(second_comment_id, *actor.id(), "second");
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_search_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_users()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_answers()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_answers()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_comments()
+            .returning(move |_| {
+                Ok(vec![
+                    CommentSearchHit {
+                        comment_id: second_comment_id,
+                        answer_id,
+                    },
+                    CommentSearchHit {
+                        comment_id: missing_author_comment_id,
+                        answer_id,
+                    },
+                    CommentSearchHit {
+                        comment_id: first_comment_id,
+                        answer_id,
+                    },
+                ])
+            });
+
+        let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
+        let answer_label_repository = MockAnswerLabelRepository::new();
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        user_repository.save_user(actor.clone());
+        let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let stored_comments = vec![first_comment, missing_author_comment, second_comment];
+        let mut comment_repository = MockCommentRepository::new();
+        comment_repository
+            .expect_find_by_answer()
+            .returning(move |answer| {
+                stored_comments
+                    .iter()
+                    .cloned()
+                    .map(|comment| answer.authorize_comment(comment).map_err(Error::from))
+                    .collect()
+            });
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_repository: &comment_repository,
+        };
+
+        let output = use_case
+            .cross_search(&actor, "comment".to_string())
+            .await
+            .unwrap();
+
+        let comment_ids = output
+            .comments
+            .iter()
+            .map(|comment| *comment.comment.comment_id())
+            .collect::<Vec<_>>();
+        assert_eq!(comment_ids, vec![second_comment_id, first_comment_id]);
     }
 }
