@@ -1,19 +1,14 @@
-use domain::form::answer::AnswerEntry;
-use domain::{
-    account::models::AccountUser,
-    form::{
-        answer::{AnswerId, AnswerLabel},
-        comment::{Comment, CommentId},
-        models::{ActiveForm, FormLabel},
-    },
-};
-use itertools::Itertools;
+use domain::{auth::Actor, form::answer::AnswerId};
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
-use usecase::models::CrossSearchOutput;
-use uuid::Uuid;
+use usecase::models::{CommentWithAuthor, CrossSearchOutput};
 
-use crate::schemas::user::UserSchema;
+use crate::schemas::{
+    form::form_response_schemas::{
+        AnswerComment, AnswerLabelResponseSchema, FormAnswer, FormLabelResponseSchema, FormSchema,
+    },
+    user::UserSchema,
+};
 
 #[derive(Deserialize, Debug, PartialEq, utoipa::ToSchema)]
 pub struct SearchQuery {
@@ -21,51 +16,61 @@ pub struct SearchQuery {
     pub query: Option<NonEmptyString>,
 }
 
-#[derive(Serialize, Debug, PartialEq, utoipa::ToSchema)]
-pub struct CommentSchema {
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct SearchCommentSchema {
     #[schema(value_type = String, format = "uuid")]
     pub answer_id: AnswerId,
-    #[schema(value_type = String, format = "uuid")]
-    pub id: CommentId,
-    pub content: String,
-    pub commented_by: Uuid,
+    #[serde(flatten)]
+    pub comment: AnswerComment,
 }
 
-impl From<Comment> for CommentSchema {
-    fn from(value: Comment) -> Self {
+impl From<CommentWithAuthor> for SearchCommentSchema {
+    fn from(value: CommentWithAuthor) -> Self {
         Self {
-            answer_id: value.answer_id().to_owned(),
-            id: value.comment_id().to_owned(),
-            content: value.content().to_owned().into_inner().into_inner(),
-            commented_by: value.commented_by().into_inner(),
+            answer_id: *value.comment.answer_id(),
+            comment: value.into(),
         }
     }
 }
 
-#[derive(Serialize, Debug, PartialEq, utoipa::ToSchema)]
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct CrossSearchResult {
-    #[schema(value_type = Vec<serde_json::Value>)]
-    pub forms: Vec<ActiveForm>,
-    #[schema(value_type = Vec<serde_json::Value>)]
-    pub users: Vec<AccountUser>,
-    #[schema(value_type = Vec<serde_json::Value>)]
-    pub answers: Vec<AnswerEntry>,
-    #[schema(value_type = Vec<serde_json::Value>)]
-    pub label_for_forms: Vec<FormLabel>,
-    #[schema(value_type = Vec<serde_json::Value>)]
-    pub label_for_answers: Vec<AnswerLabel>,
-    pub comments: Vec<CommentSchema>,
+    pub forms: Vec<FormSchema>,
+    pub users: Vec<UserSchema>,
+    pub answers: Vec<FormAnswer>,
+    pub label_for_forms: Vec<FormLabelResponseSchema>,
+    pub label_for_answers: Vec<AnswerLabelResponseSchema>,
+    pub comments: Vec<SearchCommentSchema>,
 }
 
-impl From<CrossSearchOutput> for CrossSearchResult {
-    fn from(output: CrossSearchOutput) -> Self {
+impl CrossSearchResult {
+    pub fn from_output(actor: &Actor, output: CrossSearchOutput) -> Self {
         Self {
-            forms: output.forms,
-            users: output.users,
-            answers: output.answers,
-            label_for_forms: output.label_for_forms,
-            label_for_answers: output.label_for_answers,
-            comments: output.comments.into_iter().map(Into::into).collect_vec(),
+            forms: output
+                .forms
+                .into_iter()
+                .map(|details| FormSchema::from_active_form(actor, &details.form, details.labels))
+                .collect(),
+            users: output.users.into_iter().map(Into::into).collect(),
+            answers: output
+                .answers
+                .into_iter()
+                .map(|details| {
+                    FormAnswer::new(
+                        details.form_answer,
+                        details.form_id,
+                        details.author,
+                        details.labels,
+                    )
+                })
+                .collect(),
+            label_for_forms: output.label_for_forms.into_iter().map(Into::into).collect(),
+            label_for_answers: output
+                .label_for_answers
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            comments: output.comments.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -73,4 +78,213 @@ impl From<CrossSearchOutput> for CrossSearchResult {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct UserSearchResult {
     pub users: Vec<UserSchema>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use domain::{
+        account::models::{AccountUser, Role, UserGroup, UserGroupName},
+        form::{
+            answer::{
+                AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
+                FormAnswerContentId,
+            },
+            comment::{Comment, CommentContent, CommentId},
+            models::{
+                ActiveForm, DiscordWebhookUrl, FormDescription, FormLabel, FormLabelName,
+                FormSettings, FormTitle,
+            },
+            question::{Question, QuestionSet},
+        },
+    };
+    use types::non_empty_vec::NonEmptyVec;
+    use usecase::models::{ActiveFormWithLabels, AnswerDetails, CommentWithAuthor};
+    use uuid::Uuid;
+
+    fn standard_user(name: &str) -> AccountUser {
+        AccountUser::new(
+            name.to_string(),
+            Uuid::from_u128(1).into(),
+            Role::StandardUser,
+        )
+    }
+
+    fn form_with_webhook() -> ActiveForm {
+        let question = Question::new_text(
+            "body".to_string().try_into().unwrap(),
+            0,
+            "Body".to_string().try_into().unwrap(),
+            Some("Answer body".to_string().try_into().unwrap()),
+            true,
+        )
+        .unwrap();
+        let questions =
+            QuestionSet::try_new(NonEmptyVec::try_new(vec![question]).unwrap()).unwrap();
+        let settings = FormSettings::new().change_discord_webhook_url(
+            DiscordWebhookUrl::try_new(Some(
+                "https://discord.com/api/webhooks/secret"
+                    .to_string()
+                    .try_into()
+                    .unwrap(),
+            ))
+            .unwrap(),
+        );
+
+        ActiveForm::new(
+            FormTitle::new("Detailed form".to_string().try_into().unwrap()),
+            FormDescription::new("Form description".to_string()),
+            questions,
+        )
+        .change_settings(settings)
+    }
+
+    #[test]
+    fn cross_search_result_preserves_detailed_resource_shape_and_comment_parent() {
+        let actor = Actor::from(AccountUser::new(
+            "admin".to_string(),
+            Uuid::from_u128(2).into(),
+            Role::Administrator,
+        ));
+        let form = form_with_webhook();
+        let form_id = *form.id();
+        let answer_id = AnswerId::from(Uuid::from_u128(3));
+        let question_id = form.questions().iter().next().unwrap().id();
+        let answer_author = standard_user("answer author");
+        let answer = unsafe {
+            AnswerEntry::from_raw_parts(
+                answer_id,
+                form_id,
+                AnswerAuthor::AuthenticatedUser(*answer_author.id()),
+                Utc::now(),
+                AnswerTitle::new(Some("Detailed answer".to_string().try_into().unwrap())),
+                vec![FormAnswerContent {
+                    id: FormAnswerContentId::from(Uuid::from_u128(4)),
+                    question_id,
+                    answer: "answer content".to_string(),
+                }],
+            )
+        };
+        let comment_id = CommentId::from(Uuid::from_u128(5));
+        let comment = unsafe {
+            Comment::from_raw_parts(
+                answer_id,
+                comment_id,
+                CommentContent::new("comment content".to_string().try_into().unwrap()),
+                Utc::now(),
+                *answer_author.id(),
+            )
+        };
+        let searched_user = AccountUser::with_groups(
+            "searched user".to_string(),
+            Uuid::from_u128(6).into(),
+            Role::StandardUser,
+            vec![UserGroup::new(UserGroupName::new(
+                "members".to_string().try_into().unwrap(),
+            ))],
+        );
+
+        let result = CrossSearchResult::from_output(
+            &actor,
+            CrossSearchOutput {
+                forms: vec![ActiveFormWithLabels {
+                    form,
+                    labels: vec![FormLabel::new(FormLabelName::new(
+                        "form label".to_string().try_into().unwrap(),
+                    ))],
+                }],
+                users: vec![searched_user],
+                answers: vec![AnswerDetails {
+                    form_id,
+                    form_answer: answer,
+                    author: Actor::from(answer_author.clone()),
+                    labels: vec![AnswerLabel::new(
+                        "answer label".to_string().try_into().unwrap(),
+                    )],
+                }],
+                label_for_forms: vec![FormLabel::new(FormLabelName::new(
+                    "matching form label".to_string().try_into().unwrap(),
+                ))],
+                label_for_answers: vec![AnswerLabel::new(
+                    "matching answer label".to_string().try_into().unwrap(),
+                )],
+                comments: vec![CommentWithAuthor {
+                    comment,
+                    commented_by: answer_author,
+                }],
+            },
+        );
+
+        let serialized = serde_json::to_value(result).unwrap();
+
+        assert_eq!(serialized["forms"][0]["title"], "Detailed form");
+        assert_eq!(serialized["forms"][0]["description"], "Form description");
+        assert_eq!(
+            serialized["forms"][0]["questions"][0]["template_key"],
+            "body"
+        );
+        assert_eq!(serialized["forms"][0]["labels"][0]["name"], "form label");
+        assert_eq!(serialized["users"][0]["name"], "searched user");
+        assert_eq!(serialized["users"][0]["role"], "STANDARD_USER");
+        assert_eq!(serialized["users"][0]["groups"][0]["name"], "members");
+        assert_eq!(serialized["answers"][0]["title"], "Detailed answer");
+        assert_eq!(
+            serialized["answers"][0]["author"]["user"]["name"],
+            "answer author"
+        );
+        assert_eq!(
+            serialized["answers"][0]["answers"][0]["answer"],
+            "answer content"
+        );
+        assert_eq!(
+            serialized["answers"][0]["labels"][0]["name"],
+            "answer label"
+        );
+        assert_eq!(
+            serialized["label_for_forms"][0]["name"],
+            "matching form label"
+        );
+        assert_eq!(
+            serialized["label_for_answers"][0]["name"],
+            "matching answer label"
+        );
+        assert_eq!(
+            serialized["comments"][0]["answer_id"],
+            answer_id.to_string()
+        );
+        assert_eq!(serialized["comments"][0]["id"], comment_id.to_string());
+        assert_eq!(
+            serialized["comments"][0]["commented_by"]["name"],
+            "answer author"
+        );
+    }
+
+    #[test]
+    fn cross_search_result_omits_form_webhook_for_standard_user() {
+        let actor = Actor::from(standard_user("viewer"));
+        let result = CrossSearchResult::from_output(
+            &actor,
+            CrossSearchOutput {
+                forms: vec![ActiveFormWithLabels {
+                    form: form_with_webhook(),
+                    labels: vec![],
+                }],
+                users: vec![],
+                answers: vec![],
+                label_for_forms: vec![],
+                label_for_answers: vec![],
+                comments: vec![],
+            },
+        );
+
+        let serialized = serde_json::to_value(result).unwrap();
+
+        assert_eq!(serialized["forms"][0]["title"], "Detailed form");
+        assert!(
+            serialized["forms"][0]["settings"]
+                .get("discord_webhook_url")
+                .is_none()
+        );
+    }
 }

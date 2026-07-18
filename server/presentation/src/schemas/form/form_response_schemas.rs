@@ -5,8 +5,8 @@ use domain::form::{
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
-        AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel, FormMeta,
-        FormSettings, FormTitle, Visibility,
+        ActiveForm, AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel,
+        FormMeta, FormSettings, FormTitle, Visibility,
     },
     question::{Choice, Question, QuestionType},
 };
@@ -123,6 +123,29 @@ pub struct FormSchema {
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
     pub labels: Vec<FormLabel>,
+}
+
+impl FormSchema {
+    pub fn from_active_form(actor: &Actor, form: &ActiveForm, labels: Vec<FormLabel>) -> Self {
+        Self {
+            id: *form.id(),
+            title: form.title().clone(),
+            description: form.description().clone(),
+            settings: FormSettingsSchema::from_settings_and_answer_settings(
+                actor,
+                form.settings(),
+                form.answer_settings(),
+            ),
+            metadata: FormMetaSchema::from_meta_ref(form.metadata()),
+            questions: form
+                .questions()
+                .iter()
+                .cloned()
+                .map(QuestionResponseSchema::from)
+                .collect(),
+            labels,
+        }
+    }
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]

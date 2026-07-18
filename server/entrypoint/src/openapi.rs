@@ -54,7 +54,7 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::SenderSchema,
         presentation::schemas::form::form_response_schemas::User,
         presentation::schemas::notification::notification_response_schemas::NotificationSettingsResponse,
-        presentation::schemas::search_schemas::CommentSchema,
+        presentation::schemas::search_schemas::SearchCommentSchema,
         presentation::schemas::search_schemas::CrossSearchResult,
         presentation::schemas::search_schemas::UserSearchResult,
     )),

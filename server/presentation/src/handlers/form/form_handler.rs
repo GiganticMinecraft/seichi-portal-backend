@@ -14,8 +14,8 @@ use domain::{
     auth::Actor,
     form::{
         models::{
-            ActiveForm, AllowedUserGroups, ArchivedForm, ArchivedFormPagePosition, FormDescription,
-            FormId, FormLabel, FormPagePosition,
+            AllowedUserGroups, ArchivedForm, ArchivedFormPagePosition, FormDescription, FormId,
+            FormLabel, FormPagePosition,
         },
         question::{Choice, Question, QuestionSet, QuestionType},
     },
@@ -165,27 +165,6 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
         form_label_repository: repository.form_label_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         user_repository: repository.user_repository(),
-    }
-}
-
-fn form_schema(actor: &Actor, form: &ActiveForm, labels: Vec<FormLabel>) -> FormSchema {
-    FormSchema {
-        id: form.id().to_owned(),
-        title: form.title().to_owned(),
-        description: form.description().to_owned(),
-        settings: FormSettingsSchema::from_settings_and_answer_settings(
-            actor,
-            form.settings(),
-            form.answer_settings(),
-        ),
-        metadata: FormMetaSchema::from_meta_ref(form.metadata()),
-        questions: form
-            .questions()
-            .iter()
-            .cloned()
-            .map(QuestionResponseSchema::from)
-            .collect(),
-        labels,
     }
 }
 
@@ -401,7 +380,7 @@ pub async fn create_form_handler(
 
     let actor = Actor::from(user.clone());
 
-    Ok(CreateFormResponse::Created(form_schema(
+    Ok(CreateFormResponse::Created(FormSchema::from_active_form(
         &actor,
         &form,
         vec![],
@@ -446,7 +425,7 @@ pub async fn form_list_handler(
 
     let response_schema = forms
         .into_iter()
-        .map(|(form, labels)| form_schema(&actor, &form, labels))
+        .map(|(form, labels)| FormSchema::from_active_form(&actor, &form, labels))
         .collect::<Vec<_>>();
 
     Ok(FormListResponse::Ok(FormListPageResponse {
@@ -487,7 +466,9 @@ pub async fn get_form_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(GetFormResponse::Ok(form_schema(&actor, &form, labels)))
+    Ok(GetFormResponse::Ok(FormSchema::from_active_form(
+        &actor, &form, labels,
+    )))
 }
 
 #[utoipa::path(
@@ -636,7 +617,7 @@ pub async fn update_form_handler(
 
     let actor = Actor::from(user.clone());
 
-    Ok(UpdateFormResponse::Ok(form_schema(
+    Ok(UpdateFormResponse::Ok(FormSchema::from_active_form(
         &actor,
         &updated_form,
         labels,
