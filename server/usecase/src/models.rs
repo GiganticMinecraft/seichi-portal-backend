@@ -49,10 +49,10 @@ pub struct UserProfile {
 }
 
 pub struct CrossSearchOutput {
-    pub forms: Vec<ActiveForm>,
+    pub forms: Vec<ActiveFormWithLabels>,
     pub users: Vec<AccountUser>,
-    pub answers: Vec<AnswerEntry>,
+    pub answers: Vec<AnswerDetails>,
     pub label_for_forms: Vec<FormLabel>,
     pub label_for_answers: Vec<AnswerLabel>,
-    pub comments: Vec<Comment>,
+    pub comments: Vec<CommentWithAuthor>,
 }

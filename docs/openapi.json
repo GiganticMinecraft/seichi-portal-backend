@@ -5832,32 +5832,6 @@
           }
         }
       },
-      "CommentSchema": {
-        "type": "object",
-        "required": [
-          "answer_id",
-          "id",
-          "content",
-          "commented_by"
-        ],
-        "properties": {
-          "answer_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "commented_by": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "content": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
       "CommentUpdateSchema": {
         "type": "object",
         "properties": {
@@ -5886,29 +5860,39 @@
         "properties": {
           "answers": {
             "type": "array",
-            "items": {}
+            "items": {
+              "$ref": "#/components/schemas/FormAnswer"
+            }
           },
           "comments": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CommentSchema"
+              "$ref": "#/components/schemas/SearchCommentSchema"
             }
           },
           "forms": {
             "type": "array",
-            "items": {}
+            "items": {
+              "$ref": "#/components/schemas/FormSchema"
+            }
           },
           "label_for_answers": {
             "type": "array",
-            "items": {}
+            "items": {
+              "$ref": "#/components/schemas/AnswerLabelResponseSchema"
+            }
           },
           "label_for_forms": {
             "type": "array",
-            "items": {}
+            "items": {
+              "$ref": "#/components/schemas/FormLabelResponseSchema"
+            }
           },
           "users": {
             "type": "array",
-            "items": {}
+            "items": {
+              "$ref": "#/components/schemas/UserSchema"
+            }
           }
         }
       },
@@ -6651,6 +6635,25 @@
         "enum": [
           "STANDARD_USER",
           "ADMINISTRATOR"
+        ]
+      },
+      "SearchCommentSchema": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AnswerComment"
+          },
+          {
+            "type": "object",
+            "required": [
+              "answer_id"
+            ],
+            "properties": {
+              "answer_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
         ]
       },
       "SelectQuestionResponseSchema": {

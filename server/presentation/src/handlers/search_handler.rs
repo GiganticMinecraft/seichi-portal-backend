@@ -9,7 +9,7 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
-    account::models::AccountUser, repository::Repositories,
+    account::models::AccountUser, auth::Actor, repository::Repositories,
     search::models::SearchableFieldsWithOperation,
 };
 use errors::{Error, ErrorExtra, presentation::PresentationError};
@@ -103,7 +103,10 @@ pub async fn cross_search(
         .cross_search(&user, query)
         .await
         .map_err(handle_error)?;
-    Ok(CrossSearchResponse::Ok(CrossSearchResult::from(result)))
+    Ok(CrossSearchResponse::Ok(CrossSearchResult::from_output(
+        &Actor::from(user),
+        result,
+    )))
 }
 
 #[utoipa::path(
