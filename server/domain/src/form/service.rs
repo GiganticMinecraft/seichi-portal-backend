@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 
 use crate::form::{
     answer::{AnswerTitle, PostedAnswerContents},
-    models::{DefaultAnswerTitle, Question},
+    models::{DefaultAnswerTitle, FormTitle, Question},
 };
 
 pub struct DefaultAnswerTitleDomainService;
@@ -13,6 +13,7 @@ pub struct DefaultAnswerTitleDomainService;
 impl DefaultAnswerTitleDomainService {
     pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
+        form_title: &FormTitle,
         questions: &[Question],
         answers: &PostedAnswerContents,
         author_name: &str,
@@ -35,16 +36,17 @@ impl DefaultAnswerTitleDomainService {
                     .collect::<HashMap<_, _>>();
 
                 let replaced_title = template_placeholder_regex()
-                    .replace_all(default_answer_title.as_str(), |caps: &regex::Captures| {
-                        if &caps[1] == "username" {
-                            author_name
-                        } else {
-                            answers_by_template_key
-                                .get(&caps[1])
+                    .replace_all(
+                        default_answer_title.as_str(),
+                        |caps: &regex::Captures| match &caps[1] {
+                            "form_name" => form_title.as_str(),
+                            "username" => author_name,
+                            template_key => answers_by_template_key
+                                .get(template_key)
                                 .copied()
-                                .unwrap_or_default()
-                        }
-                    })
+                                .unwrap_or_default(),
+                        },
+                    )
                     .into_owned();
 
                 Ok(AnswerTitle::new(Some(replaced_title.try_into()?)))
@@ -154,6 +156,7 @@ mod tests {
 
         let result = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             default_answer_title,
+            &FormTitle::new("Form".to_string().try_into().unwrap()),
             questions.as_slice(),
             &answers,
             match &actor {
@@ -174,6 +177,7 @@ mod tests {
     fn title_from(title: &str, questions: &[Question], answers: &PostedAnswerContents) -> String {
         DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             DefaultAnswerTitle::new(Some(title.to_string().try_into().unwrap())),
+            &FormTitle::new("Form".to_string().try_into().unwrap()),
             questions,
             answers,
             "respondent",
@@ -228,6 +232,49 @@ mod tests {
         assert_eq!(
             title_from("$first$second", &questions, &answers),
             "$usernamesecond answer"
+        );
+    }
+
+    #[test]
+    fn replaces_reserved_and_question_placeholders_once_in_the_same_template() {
+        let question_id = question_id("00000000-0000-7000-8000-000000000013");
+        let questions = vec![question(question_id, "body", 0)];
+        let answers = PostedAnswerContents::try_new(
+            &questions,
+            vec![FormAnswerContent {
+                id: FormAnswerContentId::new(),
+                question_id,
+                answer: "$form_name from $username".to_string(),
+            }],
+        )
+        .unwrap();
+        let form_title = FormTitle::new(
+            "Support for $username and $body"
+                .to_string()
+                .try_into()
+                .unwrap(),
+        );
+
+        let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
+            DefaultAnswerTitle::new(Some(
+                "$form_name by $username: $body"
+                    .to_string()
+                    .try_into()
+                    .unwrap(),
+            )),
+            &form_title,
+            &questions,
+            &answers,
+            "respondent",
+        )
+        .unwrap()
+        .into_inner()
+        .unwrap()
+        .into_inner();
+
+        assert_eq!(
+            title,
+            "Support for $username and $body by respondent: $form_name from $username"
         );
     }
 

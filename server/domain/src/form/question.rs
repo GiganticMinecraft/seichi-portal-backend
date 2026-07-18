@@ -22,16 +22,20 @@ pub type ChoiceId = types::IntegerId<Choice>;
 pub struct TemplateKey(String);
 
 impl TemplateKey {
+    fn is_reserved(value: &str) -> bool {
+        matches!(value, "username" | "form_name")
+    }
+
     fn validate(value: &str) -> Result<(), DomainError> {
         if value.is_empty()
             || value.len() > 255
             || !value
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-            || value == "username"
+            || Self::is_reserved(value)
         {
             return Err(DomainError::InvalidEntity {
-                message: "question.template_key must be 1 to 255 ASCII alphanumeric, underscore, or hyphen characters and must not be \"username\"".to_string(),
+                message: "question.template_key must be 1 to 255 ASCII alphanumeric, underscore, or hyphen characters and must not be \"username\" or \"form_name\"".to_string(),
             });
         }
 
@@ -100,7 +104,9 @@ impl proptest::arbitrary::Arbitrary for TemplateKey {
 
         proptest::string::string_regex("[A-Za-z0-9_-]{1,255}")
             .expect("valid TemplateKey regex")
-            .prop_filter("username is reserved", |value| value != "username")
+            .prop_filter("reserved template keys are excluded", |value| {
+                !Self::is_reserved(value)
+            })
             .prop_map(|value| Self::try_from(value).expect("strategy only generates valid keys"))
             .boxed()
     }
@@ -541,6 +547,8 @@ mod test {
             "question_key-1",
             "Username",
             "USERNAME",
+            "Form_name",
+            "FORM_NAME",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         ] {
             assert!(
@@ -558,6 +566,7 @@ mod test {
             "question.key",
             "質問",
             "username",
+            "form_name",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         ] {
             assert!(

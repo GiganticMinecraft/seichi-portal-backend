@@ -919,7 +919,7 @@ mod tests {
 
     #[test]
     fn invalid_template_keys_are_rejected_during_deserialization() {
-        for template_key in ["", "question key", "username"] {
+        for template_key in ["", "question key", "username", "form_name"] {
             let result = serde_json::from_value::<QuestionSchema>(json!({
                 "question_type": "Text",
                 "template_key": template_key,

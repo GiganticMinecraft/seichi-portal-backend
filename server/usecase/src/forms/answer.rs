@@ -213,6 +213,7 @@ impl<
                 .answer_settings()
                 .default_answer_title()
                 .to_owned(),
+            form.value().title(),
             &questions,
             &posted_answers,
             user.name(),
@@ -252,6 +253,7 @@ impl<
                 .answer_settings()
                 .default_answer_title()
                 .to_owned(),
+            form.value().title(),
             &questions,
             &posted_answers,
             temporary_user.name(),
@@ -484,9 +486,10 @@ mod tests {
                 AnswerLabelId, AnswerSubmitterRestriction, AnswerSubmitterRestrictionReason,
                 FormAnswerContentId,
             },
-            models::{FormDescription, FormTitle, QuestionSet},
+            models::{AnswerSettings, DefaultAnswerTitle, FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
+        pagination::PageLimit,
         repository::form::answer_label_repository::AnswerLabelRepository,
         types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
     };
@@ -581,6 +584,112 @@ mod tests {
             FormDescription::new("description".to_string()),
             QuestionSet::try_new(NonEmptyVec::try_new(vec![question]).unwrap()).unwrap(),
         )
+    }
+
+    fn form_with_default_answer_title(allow_temporary_answers: bool) -> ActiveForm {
+        sample_form().change_answer_settings(
+            AnswerSettings::default()
+                .change_default_answer_title(DefaultAnswerTitle::new(Some(
+                    "$form_name".to_string().try_into().unwrap(),
+                )))
+                .change_allow_temporary_answers(allow_temporary_answers),
+        )
+    }
+
+    fn answer_to(form: &ActiveForm) -> FormAnswerContent {
+        FormAnswerContent {
+            id: FormAnswerContentId::new(),
+            question_id: (*form.questions().as_slice()[0].id()).into(),
+            answer: "answer".to_string(),
+        }
+    }
+
+    async fn only_posted_answer_title(
+        repositories: &FormUseCaseTestRepositories,
+        form_id: FormId,
+    ) -> String {
+        let administrator = active_user("admin", Role::Administrator);
+        let form = repositories
+            .active_form_repository
+            .get(form_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .try_read(Actor::from(administrator))
+            .unwrap();
+        let answers = repositories
+            .answer_entry_repository
+            .list_by_form(&form, PageRequest::first(PageLimit::default_limit()))
+            .await
+            .unwrap();
+
+        answers.items()[0]
+            .title()
+            .to_owned()
+            .into_inner()
+            .unwrap()
+            .into_inner()
+    }
+
+    #[tokio::test]
+    async fn post_answers_uses_current_form_title_for_generated_title() {
+        let form = form_with_default_answer_title(false);
+        let form_id = *form.id();
+        let answer = answer_to(&form);
+        let user = active_user("user", Role::StandardUser);
+        let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        let empty_answer_label_repository = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &empty_answer_label_repository,
+            user_repository: &repositories.user_repository,
+            answer_submitter_restriction_repository: &repositories
+                .answer_submitter_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: None,
+        };
+
+        usecase
+            .post_answers(user, form_id, vec![answer])
+            .await
+            .unwrap();
+
+        assert_eq!(
+            only_posted_answer_title(&repositories, form_id).await,
+            "Form"
+        );
+    }
+
+    #[tokio::test]
+    async fn post_temporary_answers_uses_current_form_title_for_generated_title() {
+        let form = form_with_default_answer_title(true);
+        let form_id = *form.id();
+        let answer = answer_to(&form);
+        let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        let empty_answer_label_repository = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &empty_answer_label_repository,
+            user_repository: &repositories.user_repository,
+            answer_submitter_restriction_repository: &repositories
+                .answer_submitter_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: None,
+        };
+
+        usecase
+            .post_temporary_answers(
+                TemporaryAnswerAuthor::new("temporary user".to_string(), "contact".to_string()),
+                form_id,
+                vec![answer],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            only_posted_answer_title(&repositories, form_id).await,
+            "Form"
+        );
     }
 
     #[tokio::test]
