@@ -22,7 +22,7 @@ publish = false
 tokio = { version = "1.53.0", features = ["full"] }
 axum = "0.8.9"
 axum-extra = { version = "0.12.6", features = ["typed-header"] }
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
 anyhow = "1.0.104"
 async-trait = "0.1.91"
 base64 = "0.22.1"
