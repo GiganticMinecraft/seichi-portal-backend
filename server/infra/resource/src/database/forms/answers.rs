@@ -450,6 +450,20 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
+                let size = sqlx::query_scalar!("SELECT COUNT(*) AS `count!: i64` FROM answers")
+                    .fetch_one(&mut **txn)
+                    .await?;
+
+                count_as_u32(size, "answers")
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn content_size(&self) -> Result<u32, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
                 let size =
                     sqlx::query_scalar!("SELECT COUNT(*) AS `count!: i64` FROM real_answers")
                         .fetch_one(&mut **txn)

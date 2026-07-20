@@ -1,7 +1,7 @@
 use crate::account::models::UserId;
 use crate::form::answer::FormAnswerContentId;
 use crate::form::{
-    answer::{AnswerId, AnswerLabelId},
+    answer::{AnswerId, AnswerLabelId, AnswerTitle},
     comment::CommentId,
     models::{FormDescription, FormId, FormLabelId, FormTitle},
     question::QuestionId,
@@ -22,6 +22,7 @@ pub enum Operation {
 #[derive(Debug)]
 pub enum SearchableFields {
     FormMetaData(FormMetaData),
+    AnswerTitle(AnswerTitleSearchDocument),
     RealAnswers(RealAnswers),
     FormAnswerComments(FormAnswerComments),
     LabelForFormAnswers(LabelForFormAnswers),
@@ -36,6 +37,13 @@ pub struct FormMetaData {
     pub id: FormId,
     pub title: FormTitle,
     pub description: FormDescription,
+}
+
+/// 回答タイトルを回答単位で検索するための検索エンジン向け投影。
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AnswerTitleSearchDocument {
+    pub id: AnswerId,
+    pub title: AnswerTitle,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -105,6 +113,7 @@ pub struct Users {
 #[derive(Getters, Default, Debug)]
 pub struct NumberOfRecordsPerAggregate {
     pub form_meta_data: NumberOfRecords,
+    pub answers: NumberOfRecords,
     pub real_answers: NumberOfRecords,
     pub form_answer_comments: NumberOfRecords,
     pub label_for_form_answers: NumberOfRecords,
@@ -116,6 +125,7 @@ impl NumberOfRecordsPerAggregate {
     pub fn try_into_sync_rate(&self, other: &Self) -> Result<SyncRate, Error> {
         let Self {
             form_meta_data,
+            answers,
             real_answers,
             form_answer_comments,
             label_for_form_answers,
@@ -125,6 +135,7 @@ impl NumberOfRecordsPerAggregate {
 
         let Self {
             form_meta_data: other_form_meta_data,
+            answers: other_answers,
             real_answers: other_real_answers,
             form_answer_comments: other_form_answer_comments,
             label_for_form_answers: other_label_for_form_answers,
@@ -134,6 +145,9 @@ impl NumberOfRecordsPerAggregate {
 
         let form_meta_data_sync_rate = SyncRate::new(NonNegativeF32::try_new(
             form_meta_data.0 as f32 / other_form_meta_data.0 as f32,
+        )?);
+        let answers_sync_rate = SyncRate::new(NonNegativeF32::try_new(
+            answers.0 as f32 / other_answers.0 as f32,
         )?);
         let real_answers_sync_rate = SyncRate::new(NonNegativeF32::try_new(
             real_answers.0 as f32 / other_real_answers.0 as f32,
@@ -154,6 +168,7 @@ impl NumberOfRecordsPerAggregate {
 
         Ok(SyncRate::average(&[
             form_meta_data_sync_rate,
+            answers_sync_rate,
             real_answers_sync_rate,
             form_answer_comments_sync_rate,
             label_for_form_answers_sync_rate,

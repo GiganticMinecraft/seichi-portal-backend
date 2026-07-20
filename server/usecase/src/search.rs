@@ -421,8 +421,9 @@ impl<
 
                     let repository_records = NumberOfRecordsPerAggregate {
                         form_meta_data: NumberOfRecords(self.active_form_repository.size().await?),
+                        answers: NumberOfRecords(self.answer_entry_repository.size().await?),
                         real_answers: NumberOfRecords(
-                            self.answer_entry_repository.size().await?,
+                            self.answer_entry_repository.content_size().await?,
                         ),
                         form_answer_comments: NumberOfRecords(
                             self.comment_repository.size().await?,
@@ -464,7 +465,23 @@ impl<
 
                         let answer_entries = self.list_all_answer_entries(&form_guards).await?;
 
-                        let answers = answer_entries
+                        let answer_titles = answer_entries
+                            .iter()
+                            .map(|entry| {
+                                let entry = entry.value();
+                                (
+                                    domain::search::models::SearchableFields::AnswerTitle(
+                                        domain::search::models::AnswerTitleSearchDocument {
+                                            id: *entry.id(),
+                                            title: entry.title().clone(),
+                                        },
+                                    ),
+                                    Operation::Update,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        let answer_contents = answer_entries
                             .iter()
                             .flat_map(|entry| {
                                 let entry = entry.value();
@@ -584,7 +601,8 @@ impl<
 
                         let data = forms
                             .into_iter()
-                            .chain(answers)
+                            .chain(answer_titles)
+                            .chain(answer_contents)
                             .chain(comments)
                             .chain(labels_for_forms)
                             .chain(labels_for_answers)

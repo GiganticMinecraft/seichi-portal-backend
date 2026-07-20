@@ -117,4 +117,13 @@ where
     async fn size(&self) -> Result<u32, Error> {
         self.client.form_answer().size().await.map_err(Into::into)
     }
+
+    #[tracing::instrument(skip(self))]
+    async fn content_size(&self) -> Result<u32, Error> {
+        self.client
+            .form_answer()
+            .content_size()
+            .await
+            .map_err(Into::into)
+    }
 }

@@ -370,6 +370,16 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
     async fn size(&self) -> Result<u32, Error> {
         Ok(self.answers.lock().unwrap().len() as u32)
     }
+
+    async fn content_size(&self) -> Result<u32, Error> {
+        Ok(self
+            .answers
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|answer| answer.contents().len() as u32)
+            .sum())
+    }
 }
 
 #[derive(Default)]
