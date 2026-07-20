@@ -43,6 +43,39 @@ where
             .map_err(Into::into)
     }
 
+    #[tracing::instrument(skip(self, forms))]
+    async fn find_by_ids(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
+        if forms.is_empty() || answer_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let entries = self
+            .client
+            .form_answer()
+            .get_answers_by_answer_ids(answer_ids)
+            .await?
+            .into_iter()
+            .map(TryInto::<AnswerEntry>::try_into)
+            .collect::<Result<Vec<_>, _>>()?;
+        let forms_by_id = forms
+            .iter()
+            .map(|form| (form.id().into_inner(), form))
+            .collect::<HashMap<_, _>>();
+
+        Ok(entries
+            .into_iter()
+            .filter_map(|entry| {
+                forms_by_id
+                    .get(&entry.form_id().into_inner())
+                    .and_then(|form| form.read_entry(entry).ok())
+            })
+            .collect())
+    }
+
     #[tracing::instrument(skip(self, form))]
     async fn list_by_form(
         &self,

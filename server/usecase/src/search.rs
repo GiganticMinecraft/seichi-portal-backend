@@ -28,7 +28,7 @@ use domain::{
 };
 use errors::Error;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
@@ -98,7 +98,12 @@ impl<
     async fn visible_answer_entries_by_id(
         &self,
         actor: &Actor,
+        answer_ids: Vec<AnswerId>,
     ) -> Result<HashMap<AnswerId, Allowed<AnswerEntry, Read>>, Error> {
+        if answer_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
         let readable_forms = self
             .list_all_form_guards()
             .await?
@@ -107,7 +112,8 @@ impl<
             .collect::<Vec<_>>();
 
         Ok(self
-            .list_all_answer_entries(&readable_forms)
+            .answer_entry_repository
+            .find_by_ids(&readable_forms, answer_ids)
             .await?
             .into_iter()
             .map(|answer| (*answer.id(), answer))
@@ -289,7 +295,10 @@ impl<
     ) -> Result<Vec<AnswerDetails>, Error> {
         let actor = Actor::from(account_user.clone());
         let hits = self.search_repository.search_answers(&query).await?;
-        let visible_answers_by_id = self.visible_answer_entries_by_id(&actor).await?;
+        let answer_ids = unique_answer_ids(hits.iter().map(|hit| hit.answer_id));
+        let visible_answers_by_id = self
+            .visible_answer_entries_by_id(&actor, answer_ids)
+            .await?;
 
         self.visible_answer_details(account_user, &actor, hits, &visible_answers_by_id)
             .await
@@ -311,6 +320,12 @@ impl<
         )?;
 
         let actor_ref = &actor;
+        let answer_ids = unique_answer_ids(
+            answers
+                .iter()
+                .map(|hit| hit.answer_id)
+                .chain(comments.iter().map(|hit| hit.answer_id)),
+        );
 
         let visible_forms = stream::iter(forms)
             .map(|form| async move { self.visible_form_with_labels(actor_ref, form.form_id).await })
@@ -359,7 +374,9 @@ impl<
             .try_collect()
             .await?;
 
-        let visible_answers_by_id = self.visible_answer_entries_by_id(actor_ref).await?;
+        let visible_answers_by_id = self
+            .visible_answer_entries_by_id(actor_ref, answer_ids)
+            .await?;
         let visible_answers = self
             .visible_answer_details(account_user, actor_ref, answers, &visible_answers_by_id)
             .await?;
@@ -646,6 +663,15 @@ impl<
     }
 }
 
+fn unique_answer_ids(answer_ids: impl IntoIterator<Item = AnswerId>) -> Vec<AnswerId> {
+    let mut seen = HashSet::new();
+
+    answer_ids
+        .into_iter()
+        .filter(|answer_id| seen.insert(*answer_id))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -667,6 +693,7 @@ mod tests {
         },
         repository::{
             form::{
+                answer_entry_repository::MockAnswerEntryRepository,
                 answer_label_repository::MockAnswerLabelRepository,
                 comment_repository::MockCommentRepository,
             },
@@ -772,7 +799,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn search_answers_excludes_unreadable_hits_and_preserves_hit_order() {
+    async fn search_answers_excludes_unreadable_hits_and_preserves_hit_order_and_duplicates() {
         let member_group = UserGroup::new(UserGroupName::new(
             "members".to_string().try_into().unwrap(),
         ));
@@ -825,6 +852,9 @@ mod tests {
                         answer_id: visible_answer_b_id,
                     },
                     AnswerSearchHit {
+                        answer_id: visible_answer_b_id,
+                    },
+                    AnswerSearchHit {
                         answer_id: hidden_answer_id,
                     },
                     AnswerSearchHit {
@@ -838,16 +868,28 @@ mod tests {
         let mut answer_label_repository = MockAnswerLabelRepository::new();
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
-            .times(2)
+            .times(3)
             .returning(|_| Ok(vec![]));
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
-        let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![
-            visible_answer_a,
-            hidden_answer,
-            visible_answer_b,
-        ]);
+        let mut answer_entry_repository = MockAnswerEntryRepository::new();
+        answer_entry_repository
+            .expect_find_by_ids()
+            .withf(move |_, answer_ids| {
+                answer_ids == &vec![visible_answer_b_id, hidden_answer_id, visible_answer_a_id]
+            })
+            .return_once(move |forms, _| {
+                let form = forms
+                    .iter()
+                    .find(|form| form.id() == visible_answer_a.form_id())
+                    .unwrap();
+
+                Ok(vec![
+                    form.read_entry(visible_answer_a).unwrap(),
+                    form.read_entry(visible_answer_b).unwrap(),
+                ])
+            });
         let comment_repository = MockCommentRepository::new();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -868,7 +910,14 @@ mod tests {
             .iter()
             .map(|answer| *answer.form_answer.id())
             .collect::<Vec<_>>();
-        assert_eq!(answer_ids, vec![visible_answer_b_id, visible_answer_a_id]);
+        assert_eq!(
+            answer_ids,
+            vec![
+                visible_answer_b_id,
+                visible_answer_b_id,
+                visible_answer_a_id
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1037,7 +1086,12 @@ mod tests {
             .returning(|_| Ok(vec![]));
         search_repository
             .expect_search_answers()
-            .returning(|_| Ok(vec![]));
+            .returning(move |_| {
+                Ok(vec![
+                    AnswerSearchHit { answer_id },
+                    AnswerSearchHit { answer_id },
+                ])
+            });
         search_repository
             .expect_search_comments()
             .returning(move |_| {
@@ -1058,11 +1112,25 @@ mod tests {
             });
 
         let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
-        let answer_label_repository = MockAnswerLabelRepository::new();
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository
+            .expect_get_labels_for_answers_by_answer_id()
+            .times(2)
+            .returning(|_| Ok(vec![]));
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
-        let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let mut answer_entry_repository = MockAnswerEntryRepository::new();
+        answer_entry_repository
+            .expect_find_by_ids()
+            .withf(move |_, answer_ids| answer_ids == &vec![answer_id])
+            .return_once(move |forms, _| {
+                let form = forms
+                    .iter()
+                    .find(|form| form.id() == answer.form_id())
+                    .unwrap();
+                Ok(vec![form.read_entry(answer).unwrap()])
+            });
         let stored_comments = vec![first_comment, missing_author_comment, second_comment];
         let mut comment_repository = MockCommentRepository::new();
         comment_repository
@@ -1088,6 +1156,13 @@ mod tests {
             .cross_search(&actor, "comment".to_string())
             .await
             .unwrap();
+
+        let answer_ids = output
+            .answers
+            .iter()
+            .map(|answer| *answer.form_answer.id())
+            .collect::<Vec<_>>();
+        assert_eq!(answer_ids, vec![answer_id, answer_id]);
 
         let comment_ids = output
             .comments
