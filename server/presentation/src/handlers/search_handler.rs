@@ -21,7 +21,9 @@ use usecase::search::SearchUseCase;
 use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
-    schemas::search_schemas::{CrossSearchResult, SearchQuery, UserSearchResult},
+    schemas::search_schemas::{
+        AnswerSearchResult, CrossSearchResult, SearchQuery, UserSearchResult,
+    },
 };
 
 #[derive(utoipa::IntoResponses)]
@@ -34,6 +36,12 @@ pub enum CrossSearchResponse {
 pub enum UserSearchResponse {
     #[response(status = 200, description = "The request has succeeded.")]
     Ok(UserSearchResult),
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum AnswerSearchResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(AnswerSearchResult),
 }
 
 impl IntoResponse for CrossSearchResponse {
@@ -52,14 +60,24 @@ impl IntoResponse for UserSearchResponse {
     }
 }
 
-fn query_string(search_query: SearchQuery) -> Option<String> {
-    search_query.query.map(|query| query.into_inner())
+impl IntoResponse for AnswerSearchResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(json!(body))).into_response(),
+        }
+    }
 }
 
-fn missing_query_response() -> Response {
-    handle_error(Error::from(PresentationError::QueryRejection {
-        cause: "query is required".to_string(),
-    }))
+fn required_query(query: Result<Query<SearchQuery>, QueryRejection>) -> Result<String, Error> {
+    let Query(search_query) = query.map_err_to_error()?;
+    search_query
+        .query
+        .map(|query| query.into_inner())
+        .ok_or_else(|| {
+            Error::from(PresentationError::QueryRejection {
+                cause: "query is required".to_string(),
+            })
+        })
 }
 
 #[utoipa::path(
@@ -94,10 +112,7 @@ pub async fn cross_search(
         comment_repository: repository.comment_repository(),
     };
 
-    let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
-    let Some(query) = query_string(search_query) else {
-        return Err(missing_query_response());
-    };
+    let query = required_query(query).map_err(handle_error)?;
 
     let result = search_use_case
         .cross_search(&user, query)
@@ -141,10 +156,7 @@ pub async fn search_users(
         comment_repository: repository.comment_repository(),
     };
 
-    let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
-    let Some(query) = query_string(search_query) else {
-        return Err(missing_query_response());
-    };
+    let query = required_query(query).map_err(handle_error)?;
 
     let users = search_use_case
         .search_users(&user, query)
@@ -154,6 +166,48 @@ pub async fn search_users(
     Ok(UserSearchResponse::Ok(UserSearchResult {
         users: users.into_iter().map(Into::into).collect(),
     }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/search/answers",
+    summary = "回答検索を行う",
+    params(
+        ("query" = String, Query, description = "Search query"),
+    ),
+    responses(
+        AnswerSearchResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Search"
+)]
+pub async fn search_answers(
+    Extension(user): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    query: Result<Query<SearchQuery>, QueryRejection>,
+) -> Result<AnswerSearchResponse, Response> {
+    let search_use_case = SearchUseCase {
+        search_repository: repository.search_repository(),
+        active_form_repository: repository.active_form_repository(),
+        form_answer_label_repository: repository.answer_label_repository(),
+        form_label_repository: repository.form_label_repository(),
+        user_repository: repository.user_repository(),
+        answer_entry_repository: repository.answer_entry_repository(),
+        comment_repository: repository.comment_repository(),
+    };
+
+    let query = required_query(query).map_err(handle_error)?;
+
+    let answers = search_use_case
+        .search_answers(&user, query)
+        .await
+        .map_err(handle_error)?;
+
+    Ok(AnswerSearchResponse::Ok(answers.into()))
 }
 
 pub async fn start_sync(

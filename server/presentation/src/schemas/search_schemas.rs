@@ -1,7 +1,7 @@
 use domain::{auth::Actor, form::answer::AnswerId};
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
-use usecase::models::{CommentWithAuthor, CrossSearchOutput};
+use usecase::models::{AnswerDetails, CommentWithAuthor, CrossSearchOutput};
 
 use crate::schemas::{
     form::form_response_schemas::{
@@ -9,6 +9,17 @@ use crate::schemas::{
     },
     user::UserSchema,
 };
+
+impl From<AnswerDetails> for FormAnswer {
+    fn from(details: AnswerDetails) -> Self {
+        Self::new(
+            details.form_answer,
+            details.form_id,
+            details.author,
+            details.labels,
+        )
+    }
+}
 
 #[derive(Deserialize, Debug, PartialEq, utoipa::ToSchema)]
 pub struct SearchQuery {
@@ -52,18 +63,7 @@ impl CrossSearchResult {
                 .map(|details| FormSchema::from_active_form(actor, &details.form, details.labels))
                 .collect(),
             users: output.users.into_iter().map(Into::into).collect(),
-            answers: output
-                .answers
-                .into_iter()
-                .map(|details| {
-                    FormAnswer::new(
-                        details.form_answer,
-                        details.form_id,
-                        details.author,
-                        details.labels,
-                    )
-                })
-                .collect(),
+            answers: output.answers.into_iter().map(Into::into).collect(),
             label_for_forms: output.label_for_forms.into_iter().map(Into::into).collect(),
             label_for_answers: output
                 .label_for_answers
@@ -78,6 +78,19 @@ impl CrossSearchResult {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct UserSearchResult {
     pub users: Vec<UserSchema>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerSearchResult {
+    pub answers: Vec<FormAnswer>,
+}
+
+impl From<Vec<AnswerDetails>> for AnswerSearchResult {
+    fn from(answers: Vec<AnswerDetails>) -> Self {
+        Self {
+            answers: answers.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 #[cfg(test)]
