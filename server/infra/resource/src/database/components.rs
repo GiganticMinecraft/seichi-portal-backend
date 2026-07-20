@@ -115,7 +115,10 @@ pub trait FormAnswerDatabase: Send + Sync {
         answer_entry: &AnswerEntry,
         form_id: FormId,
     ) -> Result<(), InfraError>;
+    /// 回答 (`answers`) の件数を返す。
     async fn size(&self) -> Result<u32, InfraError>;
+    /// 回答本文 (`real_answers`) の件数を返す。
+    async fn content_size(&self) -> Result<u32, InfraError>;
 }
 
 #[automock]

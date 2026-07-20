@@ -12,6 +12,8 @@ pub struct MeilisearchIndexSchema {
     #[serde(default)]
     form_meta_data: NumberOfDocuments,
     #[serde(default)]
+    answers: NumberOfDocuments,
+    #[serde(default)]
     real_answers: NumberOfDocuments,
     #[serde(default)]
     form_answer_comments: NumberOfDocuments,
@@ -27,6 +29,7 @@ impl From<MeilisearchIndexSchema> for NumberOfRecordsPerAggregate {
     fn from(value: MeilisearchIndexSchema) -> Self {
         NumberOfRecordsPerAggregate {
             form_meta_data: NumberOfRecords(value.form_meta_data.number_of_documents),
+            answers: NumberOfRecords(value.answers.number_of_documents),
             real_answers: NumberOfRecords(value.real_answers.number_of_documents),
             form_answer_comments: NumberOfRecords(value.form_answer_comments.number_of_documents),
             label_for_form_answers: NumberOfRecords(

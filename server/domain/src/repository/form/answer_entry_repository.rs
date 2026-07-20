@@ -39,5 +39,8 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         form: &Allowed<ActiveForm, Update>,
         answer_entry: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error>;
+    /// 回答 (`answers`) の件数を返す。
     async fn size(&self) -> Result<u32, Error>;
+    /// 回答本文 (`real_answers`) の件数を返す。
+    async fn content_size(&self) -> Result<u32, Error>;
 }

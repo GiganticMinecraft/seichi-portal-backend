@@ -46,6 +46,10 @@ impl Payload {
                 let form_meta_data: FormMetaData = serde_json::from_value(value)?;
                 Ok(Some(ActualDataFields::FormMetaData(form_meta_data)))
             }
+            "answers" => {
+                let answer: AnswerTitleSearchDocument = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::AnswerTitle(answer)))
+            }
             "real_answers" => {
                 let real_answers: RealAnswers = serde_json::from_value(value)?;
                 Ok(Some(ActualDataFields::RealAnswers(real_answers)))
@@ -122,6 +126,32 @@ impl TryFrom<FormMetaData> for domain::search::models::FormMetaData {
             id: Uuid::from_str(&form_meta_data.id)?.into(),
             title: form_meta_data.title.into(),
             description: form_meta_data.description.into(),
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AnswerTitleSearchDocument {
+    pub id: String,
+    pub title: Option<NonEmptyString>,
+}
+
+impl From<domain::search::models::AnswerTitleSearchDocument> for AnswerTitleSearchDocument {
+    fn from(answer: domain::search::models::AnswerTitleSearchDocument) -> Self {
+        Self {
+            id: answer.id.to_string(),
+            title: answer.title.into_inner(),
+        }
+    }
+}
+
+impl TryFrom<AnswerTitleSearchDocument> for domain::search::models::AnswerTitleSearchDocument {
+    type Error = InfraError;
+
+    fn try_from(answer: AnswerTitleSearchDocument) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Uuid::from_str(&answer.id)?.into(),
+            title: domain::form::answer::AnswerTitle::new(answer.title),
         })
     }
 }
@@ -268,6 +298,7 @@ impl TryFrom<Users> for domain::search::models::Users {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ActualDataFields {
     FormMetaData(FormMetaData),
+    AnswerTitle(AnswerTitleSearchDocument),
     RealAnswers(RealAnswers),
     FormAnswerComments(FormAnswerComments),
     LabelForFormAnswers(LabelForFormAnswers),
@@ -279,6 +310,7 @@ impl From<SearchableFields> for ActualDataFields {
     fn from(value: SearchableFields) -> Self {
         match value {
             SearchableFields::FormMetaData(data) => ActualDataFields::FormMetaData(data.into()),
+            SearchableFields::AnswerTitle(data) => ActualDataFields::AnswerTitle(data.into()),
             SearchableFields::RealAnswers(data) => ActualDataFields::RealAnswers(data.into()),
             SearchableFields::FormAnswerComments(data) => {
                 ActualDataFields::FormAnswerComments(data.into())
@@ -300,6 +332,9 @@ impl TryFrom<ActualDataFields> for SearchableFields {
             ActualDataFields::FormMetaData(data) => {
                 Ok(SearchableFields::FormMetaData(data.try_into()?))
             }
+            ActualDataFields::AnswerTitle(data) => {
+                Ok(SearchableFields::AnswerTitle(data.try_into()?))
+            }
             ActualDataFields::RealAnswers(data) => {
                 Ok(SearchableFields::RealAnswers(data.try_into()?))
             }
@@ -314,5 +349,67 @@ impl TryFrom<ActualDataFields> for SearchableFields {
             }
             ActualDataFields::Users(data) => Ok(SearchableFields::Users(data.try_into()?)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RabbitMQSchema, SearchableFields};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn answers_create_or_update_payload_uses_after_image() {
+        let answer_id = Uuid::from_u128(1);
+        let schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": "u",
+                "source": { "table": "answers" },
+                "before": null,
+                "after": {
+                    "id": answer_id.to_string(),
+                    "title": "検索できるタイトル"
+                }
+            }
+        }))
+        .unwrap();
+
+        let actual = schema.payload.try_into_after().unwrap().unwrap();
+        let SearchableFields::AnswerTitle(document) = SearchableFields::try_from(actual).unwrap()
+        else {
+            panic!("answers payload must become an answer title search document");
+        };
+
+        assert_eq!(document.id.into_inner(), answer_id);
+        assert_eq!(
+            serde_json::to_value(document.title).unwrap(),
+            json!("検索できるタイトル")
+        );
+    }
+
+    #[test]
+    fn answers_delete_payload_uses_before_image_and_preserves_null_title() {
+        let answer_id = Uuid::from_u128(1);
+        let schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": "d",
+                "source": { "table": "answers" },
+                "before": {
+                    "id": answer_id.to_string(),
+                    "title": null
+                },
+                "after": null
+            }
+        }))
+        .unwrap();
+
+        let actual = schema.payload.try_into_before().unwrap().unwrap();
+        let SearchableFields::AnswerTitle(document) = SearchableFields::try_from(actual).unwrap()
+        else {
+            panic!("answers payload must become an answer title search document");
+        };
+
+        assert_eq!(document.id.into_inner(), answer_id);
+        assert_eq!(serde_json::to_value(document.title).unwrap(), json!(null));
     }
 }

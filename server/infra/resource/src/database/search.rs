@@ -3,9 +3,9 @@ use crate::database::meilisearch_schemas::MeilisearchStatsSchema;
 use crate::database::{components::SearchDatabase, connection::ConnectionPool};
 use async_trait::async_trait;
 use domain::search::models::{
-    AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormAnswerComments,
-    FormLabelSearchHit, FormMetaData, FormSearchHit, LabelForFormAnswers, LabelForForms,
-    NumberOfRecordsPerAggregate, RealAnswers, UserSearchHit, Users,
+    AnswerLabelSearchHit, AnswerSearchHit, AnswerTitleSearchDocument, CommentSearchHit,
+    FormAnswerComments, FormLabelSearchHit, FormMetaData, FormSearchHit, LabelForFormAnswers,
+    LabelForForms, NumberOfRecordsPerAggregate, RealAnswers, UserSearchHit, Users,
 };
 use domain::{
     account::models::UserId,
@@ -14,6 +14,18 @@ use domain::{
 use errors::infra::InfraError;
 use itertools::Itertools;
 use meilisearch_sdk::search::Selectors;
+
+fn merge_answer_hits(
+    title_answer_ids: impl IntoIterator<Item = domain::form::answer::AnswerId>,
+    content_answer_ids: impl IntoIterator<Item = domain::form::answer::AnswerId>,
+) -> Vec<AnswerSearchHit> {
+    title_answer_ids
+        .into_iter()
+        .chain(content_answer_ids)
+        .map(|answer_id| AnswerSearchHit { answer_id })
+        .unique_by(|hit| hit.answer_id)
+        .collect()
+}
 
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
@@ -97,21 +109,33 @@ impl SearchDatabase for ConnectionPool {
 
     #[tracing::instrument]
     async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, InfraError> {
-        Ok(self
-            .meilisearch_client
-            .index("real_answers")
-            .search()
-            .with_query(query)
-            .with_attributes_to_highlight(Selectors::All)
-            .execute::<RealAnswers>()
-            .await?
-            .hits
-            .into_iter()
-            .map(|hit| AnswerSearchHit {
-                answer_id: hit.result.answer_id,
-            })
-            .unique_by(|hit| hit.answer_id.to_string())
-            .collect_vec())
+        let title_search = async {
+            self.meilisearch_client
+                .index("answers")
+                .search()
+                .with_query(query)
+                .with_attributes_to_highlight(Selectors::All)
+                .execute::<AnswerTitleSearchDocument>()
+                .await
+        };
+        let content_search = async {
+            self.meilisearch_client
+                .index("real_answers")
+                .search()
+                .with_query(query)
+                .with_attributes_to_highlight(Selectors::All)
+                .execute::<RealAnswers>()
+                .await
+        };
+        let (title_results, content_results) = futures::try_join!(title_search, content_search)?;
+
+        Ok(merge_answer_hits(
+            title_results.hits.into_iter().map(|hit| hit.result.id),
+            content_results
+                .hits
+                .into_iter()
+                .map(|hit| hit.result.answer_id),
+        ))
     }
 
     #[tracing::instrument]
@@ -146,6 +170,12 @@ impl SearchDatabase for ConnectionPool {
                         self.meilisearch_client
                             .index("form_meta_data")
                             .add_or_replace(&[data], Some("id"))
+                            .await
+                    }
+                    SearchableFields::AnswerTitle(answer) => {
+                        self.meilisearch_client
+                            .index("answers")
+                            .add_or_replace(&[answer], Some("id"))
                             .await
                     }
                     SearchableFields::RealAnswers(answers) => {
@@ -184,6 +214,12 @@ impl SearchDatabase for ConnectionPool {
                         self.meilisearch_client
                             .index("form_meta_data")
                             .delete_document(data.id.into_inner().to_string())
+                            .await
+                    }
+                    SearchableFields::AnswerTitle(answer) => {
+                        self.meilisearch_client
+                            .index("answers")
+                            .delete_document(answer.id.to_string())
                             .await
                     }
                     SearchableFields::RealAnswers(answers) => {
@@ -250,6 +286,7 @@ impl SearchDatabase for ConnectionPool {
     async fn initialize_search_engine(&self) -> Result<(), InfraError> {
         let index_with_uid = vec![
             ("form_meta_data", "id"),
+            ("answers", "id"),
             ("real_answers", "id"),
             ("form_answer_comments", "id"),
             ("label_for_form_answers", "id"),
@@ -259,11 +296,55 @@ impl SearchDatabase for ConnectionPool {
 
         let futures = index_with_uid
             .into_iter()
-            .map(|(index, uid)| self.meilisearch_client.create_index(index, Some(uid)))
+            .map(async |(index, uid)| {
+                self.meilisearch_client
+                    .create_index(index, Some(uid))
+                    .await?
+                    .wait_for_completion(&self.meilisearch_client, None, None)
+                    .await?;
+
+                Ok::<_, meilisearch_sdk::errors::Error>(())
+            })
             .collect_vec();
 
         futures::future::try_join_all(futures).await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_answer_hits;
+    use domain::form::answer::AnswerId;
+    use uuid::Uuid;
+
+    fn answer_id(value: u128) -> AnswerId {
+        Uuid::from_u128(value).into()
+    }
+
+    #[test]
+    fn answer_search_hits_include_title_and_content_matches_with_title_first() {
+        let title_match = answer_id(1);
+        let content_match = answer_id(2);
+
+        let hits = merge_answer_hits([title_match], [content_match]);
+
+        assert_eq!(
+            hits.into_iter()
+                .map(|hit| hit.answer_id)
+                .collect::<Vec<_>>(),
+            vec![title_match, content_match]
+        );
+    }
+
+    #[test]
+    fn answer_search_hits_are_unique_when_title_and_content_both_match() {
+        let answer_id = answer_id(1);
+
+        let hits = merge_answer_hits([answer_id], [answer_id, answer_id]);
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].answer_id, answer_id);
     }
 }
