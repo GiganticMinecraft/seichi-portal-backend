@@ -57,6 +57,7 @@ use utoipa_axum::routes;
         presentation::schemas::search_schemas::SearchCommentSchema,
         presentation::schemas::search_schemas::CrossSearchResult,
         presentation::schemas::search_schemas::UserSearchResult,
+        presentation::schemas::search_schemas::AnswerSearchResult,
     )),
     modifiers(&SecurityAddon),
     tags(
@@ -189,6 +190,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         ))
         .routes(routes!(search_handler::cross_search))
         .routes(routes!(search_handler::search_users))
+        .routes(routes!(search_handler::search_answers))
         .routes(routes!(message_handler::get_messages_handler))
         .routes(routes!(message_handler::get_message_history))
         .routes(routes!(

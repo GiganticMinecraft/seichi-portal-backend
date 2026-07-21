@@ -30,7 +30,7 @@ use domain::{
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 use errors::Error;
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 use uuid::Uuid;
 
 use crate::forms::form::FormUseCase;
@@ -277,6 +277,31 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .cloned()
             .map(|answer| _form.read_entry(answer))
             .transpose()?)
+    }
+
+    async fn find_by_ids(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
+        let forms_by_id = forms
+            .iter()
+            .map(|form| (form.id().into_inner(), form))
+            .collect::<HashMap<_, _>>();
+
+        Ok(self
+            .answers
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|answer| answer_ids.contains(answer.id()))
+            .cloned()
+            .filter_map(|answer| {
+                forms_by_id
+                    .get(&answer.form_id().into_inner())
+                    .and_then(|form| form.read_entry(answer).ok())
+            })
+            .collect())
     }
 
     async fn list_by_form(

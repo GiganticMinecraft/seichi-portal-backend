@@ -19,6 +19,16 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         form: &Allowed<ActiveForm, Read>,
         answer_id: AnswerId,
     ) -> Result<Option<Allowed<AnswerEntry, Read>>, Error>;
+    /// 指定された ID に一致する回答のうち、`forms` に含まれる親フォームから
+    /// 閲覧を認可できるものだけを返す。
+    ///
+    /// 指定されていない ID、親フォームが `forms` にない回答、または閲覧できない回答は
+    /// 返さない。返却順は規定しない。`answer_ids` が空の場合は空のリストを返す。
+    async fn find_by_ids(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error>;
     async fn list_by_form(
         &self,
         form: &Allowed<ActiveForm, Read>,

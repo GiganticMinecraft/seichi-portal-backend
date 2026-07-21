@@ -8,7 +8,9 @@ use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
 use domain::search::models::NumberOfRecords;
-use domain::search::models::{NumberOfRecordsPerAggregate, Operation, UserSearchHit};
+use domain::search::models::{
+    AnswerSearchHit, NumberOfRecordsPerAggregate, Operation, UserSearchHit,
+};
 use domain::{
     account::models::AccountUser,
     auth::Actor,
@@ -26,7 +28,7 @@ use domain::{
 };
 use errors::Error;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, mpsc::Receiver};
@@ -63,19 +65,6 @@ impl<
     R7: CommentRepository,
 > SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
 {
-    /// 認可済みの `answer_entries` から `answer_id` の回答を探して返す。回答の公開範囲は
-    /// `answer_entries` を取得した時点で各フォームの読み取りガードが検証済みのため、ここでは
-    /// 同一性の照合だけを行う。
-    fn read_visible_answer(
-        answer_entries: &[Allowed<AnswerEntry, Read>],
-        answer_id: AnswerId,
-    ) -> Option<Allowed<AnswerEntry, Read>> {
-        answer_entries
-            .iter()
-            .find(|entry| *entry.value().id() == answer_id)
-            .cloned()
-    }
-
     async fn list_all_form_guards(
         &self,
     ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
@@ -104,6 +93,31 @@ impl<
         }
 
         Ok(answers)
+    }
+
+    async fn visible_answer_entries_by_id(
+        &self,
+        actor: &Actor,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<HashMap<AnswerId, Allowed<AnswerEntry, Read>>, Error> {
+        if answer_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let readable_forms = self
+            .list_all_form_guards()
+            .await?
+            .into_iter()
+            .filter_map(|form| form.try_read(actor.clone()).ok())
+            .collect::<Vec<_>>();
+
+        Ok(self
+            .answer_entry_repository
+            .find_by_ids(&readable_forms, answer_ids)
+            .await?
+            .into_iter()
+            .map(|answer| (*answer.id(), answer))
+            .collect())
     }
 
     async fn visible_users(
@@ -213,6 +227,27 @@ impl<
         }))
     }
 
+    async fn visible_answer_details(
+        &self,
+        account_user: &AccountUser,
+        actor: &Actor,
+        hits: Vec<AnswerSearchHit>,
+        visible_answers_by_id: &HashMap<AnswerId, Allowed<AnswerEntry, Read>>,
+    ) -> Result<Vec<AnswerDetails>, Error> {
+        stream::iter(hits)
+            .map(|hit| async move {
+                let Some(answer) = visible_answers_by_id.get(&hit.answer_id).cloned() else {
+                    return Ok::<_, Error>(None);
+                };
+
+                self.answer_details(account_user, actor, answer).await
+            })
+            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
+            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_collect()
+            .await
+    }
+
     async fn comments_with_authors(
         &self,
         account_user: &AccountUser,
@@ -253,6 +288,22 @@ impl<
         self.visible_users(&actor, users).await
     }
 
+    pub async fn search_answers(
+        &self,
+        account_user: &AccountUser,
+        query: String,
+    ) -> Result<Vec<AnswerDetails>, Error> {
+        let actor = Actor::from(account_user.clone());
+        let hits = self.search_repository.search_answers(&query).await?;
+        let answer_ids = unique_answer_ids(hits.iter().map(|hit| hit.answer_id));
+        let visible_answers_by_id = self
+            .visible_answer_entries_by_id(&actor, answer_ids)
+            .await?;
+
+        self.visible_answer_details(account_user, &actor, hits, &visible_answers_by_id)
+            .await
+    }
+
     pub async fn cross_search(
         &self,
         account_user: &AccountUser,
@@ -269,6 +320,12 @@ impl<
         )?;
 
         let actor_ref = &actor;
+        let answer_ids = unique_answer_ids(
+            answers
+                .iter()
+                .map(|hit| hit.answer_id)
+                .chain(comments.iter().map(|hit| hit.answer_id)),
+        );
 
         let visible_forms = stream::iter(forms)
             .map(|form| async move { self.visible_form_with_labels(actor_ref, form.form_id).await })
@@ -317,38 +374,19 @@ impl<
             .try_collect()
             .await?;
 
-        let readable_forms = self
-            .list_all_form_guards()
-            .await?
-            .into_iter()
-            .filter_map(|form| form.try_read(actor_ref.clone()).ok())
-            .collect::<Vec<_>>();
-        let answer_entries = self.list_all_answer_entries(&readable_forms).await?;
-
-        let visible_answers = stream::iter(answers)
-            .map(|entry| {
-                let answer_entries = &answer_entries;
-
-                async move {
-                    let Some(answer) = Self::read_visible_answer(answer_entries, entry.answer_id)
-                    else {
-                        return Ok::<_, Error>(None);
-                    };
-
-                    self.answer_details(account_user, actor_ref, answer).await
-                }
-            })
-            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
-            .try_filter_map(|visible| std::future::ready(Ok(visible)))
-            .try_collect()
+        let visible_answers_by_id = self
+            .visible_answer_entries_by_id(actor_ref, answer_ids)
+            .await?;
+        let visible_answers = self
+            .visible_answer_details(account_user, actor_ref, answers, &visible_answers_by_id)
             .await?;
 
         let visible_comments: Vec<Comment> = stream::iter(comments)
             .map(|comment| {
-                let answer_entries = &answer_entries;
+                let visible_answers_by_id = &visible_answers_by_id;
 
                 async move {
-                    let Some(answer) = Self::read_visible_answer(answer_entries, comment.answer_id)
+                    let Some(answer) = visible_answers_by_id.get(&comment.answer_id).cloned()
                     else {
                         return Ok::<_, Error>(None);
                     };
@@ -625,6 +663,15 @@ impl<
     }
 }
 
+fn unique_answer_ids(answer_ids: impl IntoIterator<Item = AnswerId>) -> Vec<AnswerId> {
+    let mut seen = HashSet::new();
+
+    answer_ids
+        .into_iter()
+        .filter(|answer_id| seen.insert(*answer_id))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -646,6 +693,7 @@ mod tests {
         },
         repository::{
             form::{
+                answer_entry_repository::MockAnswerEntryRepository,
                 answer_label_repository::MockAnswerLabelRepository,
                 comment_repository::MockCommentRepository,
             },
@@ -748,6 +796,128 @@ mod tests {
 
         assert_eq!(output.forms.len(), 1);
         assert_eq!(*output.forms[0].form.id(), readable_form_id);
+    }
+
+    #[tokio::test]
+    async fn search_answers_excludes_unreadable_hits_and_preserves_hit_order_and_duplicates() {
+        let member_group = UserGroup::new(UserGroupName::new(
+            "members".to_string().try_into().unwrap(),
+        ));
+        let other_group =
+            UserGroup::new(UserGroupName::new("other".to_string().try_into().unwrap()));
+        let actor = AccountUser::with_groups(
+            "viewer".to_string(),
+            Uuid::from_u128(20).into(),
+            Role::StandardUser,
+            vec![member_group.clone()],
+        );
+        let readable_form = form_restricted_to("readable answers", &member_group)
+            .change_answer_settings(
+                AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+            );
+        let hidden_form = form_restricted_to("hidden answers", &other_group)
+            .change_answer_settings(
+                AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+            );
+        let answer_for = |form: &ActiveForm| {
+            let question_id = *form.questions().as_slice()[0].id();
+            AnswerEntry::new(
+                *form.id(),
+                AnswerAuthor::AuthenticatedUser(*actor.id()),
+                AnswerTitle::default(),
+                PostedAnswerContents::try_new(
+                    form.questions().as_slice(),
+                    vec![FormAnswerContent {
+                        id: FormAnswerContentId::from(Uuid::new_v4()),
+                        question_id: question_id.into(),
+                        answer: "body".to_string(),
+                    }],
+                )
+                .unwrap(),
+            )
+        };
+        let visible_answer_a = answer_for(&readable_form);
+        let visible_answer_b = answer_for(&readable_form);
+        let hidden_answer = answer_for(&hidden_form);
+        let visible_answer_a_id = *visible_answer_a.id();
+        let visible_answer_b_id = *visible_answer_b.id();
+        let hidden_answer_id = *hidden_answer.id();
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_search_answers()
+            .returning(move |_| {
+                Ok(vec![
+                    AnswerSearchHit {
+                        answer_id: visible_answer_b_id,
+                    },
+                    AnswerSearchHit {
+                        answer_id: visible_answer_b_id,
+                    },
+                    AnswerSearchHit {
+                        answer_id: hidden_answer_id,
+                    },
+                    AnswerSearchHit {
+                        answer_id: visible_answer_a_id,
+                    },
+                ])
+            });
+
+        let active_form_repository =
+            InMemoryActiveFormRepository::new(vec![readable_form, hidden_form]);
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository
+            .expect_get_labels_for_answers_by_answer_id()
+            .times(3)
+            .returning(|_| Ok(vec![]));
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        user_repository.save_user(actor.clone());
+        let mut answer_entry_repository = MockAnswerEntryRepository::new();
+        answer_entry_repository
+            .expect_find_by_ids()
+            .withf(move |_, answer_ids| {
+                answer_ids == &vec![visible_answer_b_id, hidden_answer_id, visible_answer_a_id]
+            })
+            .return_once(move |forms, _| {
+                let form = forms
+                    .iter()
+                    .find(|form| form.id() == visible_answer_a.form_id())
+                    .unwrap();
+
+                Ok(vec![
+                    form.read_entry(visible_answer_a).unwrap(),
+                    form.read_entry(visible_answer_b).unwrap(),
+                ])
+            });
+        let comment_repository = MockCommentRepository::new();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_repository: &comment_repository,
+        };
+
+        let answers = use_case
+            .search_answers(&actor, "answer".to_string())
+            .await
+            .unwrap();
+
+        let answer_ids = answers
+            .iter()
+            .map(|answer| *answer.form_answer.id())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            answer_ids,
+            vec![
+                visible_answer_b_id,
+                visible_answer_b_id,
+                visible_answer_a_id
+            ]
+        );
     }
 
     #[tokio::test]
@@ -916,7 +1086,12 @@ mod tests {
             .returning(|_| Ok(vec![]));
         search_repository
             .expect_search_answers()
-            .returning(|_| Ok(vec![]));
+            .returning(move |_| {
+                Ok(vec![
+                    AnswerSearchHit { answer_id },
+                    AnswerSearchHit { answer_id },
+                ])
+            });
         search_repository
             .expect_search_comments()
             .returning(move |_| {
@@ -937,11 +1112,25 @@ mod tests {
             });
 
         let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
-        let answer_label_repository = MockAnswerLabelRepository::new();
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository
+            .expect_get_labels_for_answers_by_answer_id()
+            .times(2)
+            .returning(|_| Ok(vec![]));
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
-        let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let mut answer_entry_repository = MockAnswerEntryRepository::new();
+        answer_entry_repository
+            .expect_find_by_ids()
+            .withf(move |_, answer_ids| answer_ids == &vec![answer_id])
+            .return_once(move |forms, _| {
+                let form = forms
+                    .iter()
+                    .find(|form| form.id() == answer.form_id())
+                    .unwrap();
+                Ok(vec![form.read_entry(answer).unwrap()])
+            });
         let stored_comments = vec![first_comment, missing_author_comment, second_comment];
         let mut comment_repository = MockCommentRepository::new();
         comment_repository
@@ -967,6 +1156,13 @@ mod tests {
             .cross_search(&actor, "comment".to_string())
             .await
             .unwrap();
+
+        let answer_ids = output
+            .answers
+            .iter()
+            .map(|answer| *answer.form_answer.id())
+            .collect::<Vec<_>>();
+        assert_eq!(answer_ids, vec![answer_id, answer_id]);
 
         let comment_ids = output
             .comments
