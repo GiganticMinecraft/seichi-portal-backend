@@ -17,6 +17,9 @@ use futures::join;
 use hyper::header::SET_COOKIE;
 use presentation::api::notificator_impl::DiscordNotificator;
 use presentation::auth::{auth, optional_auth};
+use presentation::form_operation_notification::{
+    FormOperationNotificationState, notify_successful_form_operation,
+};
 use presentation::handlers::form::message_handler::{
     RealInfrastructureRepositoryWithNotificator, post_message_handler,
 };
@@ -47,6 +50,10 @@ async fn main() -> anyhow::Result<()> {
             )),
         )
         .init();
+
+    let global_webhook_url = resource::outgoing::load_discord_global_webhook_url()?;
+    let form_operation_notification_state =
+        FormOperationNotificationState::new(global_webhook_url, ENV.name.to_owned());
 
     let _guard = if ENV.name != "local" {
         let _guard = sentry::init((
@@ -99,6 +106,15 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_repository.to_owned())
         .split_for_parts();
 
+    let (public_form_mutation_api, _) = openapi::public_form_mutation_api_router()
+        .with_state(shared_repository.to_owned())
+        .split_for_parts();
+    let public_form_mutation_api =
+        public_form_mutation_api.route_layer(middleware::from_fn_with_state(
+            form_operation_notification_state.clone(),
+            notify_successful_form_operation,
+        ));
+
     let (optional_auth_api, _) = openapi::optional_auth_api_router()
         .with_state(shared_repository.to_owned())
         .split_for_parts();
@@ -110,10 +126,22 @@ async fn main() -> anyhow::Result<()> {
     let (authenticated_api, _) = openapi::authenticated_api_router()
         .with_state(shared_repository.to_owned())
         .split_for_parts();
-    let authenticated_api = authenticated_api.route_layer(middleware::from_fn_with_state(
-        shared_repository.to_owned(),
-        auth,
-    ));
+    let (authenticated_form_mutation_api, _) = openapi::authenticated_form_mutation_api_router()
+        .with_state(shared_repository.to_owned())
+        .split_for_parts();
+    let authenticated_form_mutation_api =
+        authenticated_form_mutation_api.route_layer(middleware::from_fn_with_state(
+            form_operation_notification_state.clone(),
+            notify_successful_form_operation,
+        ));
+    // Axum では後から追加した layer が外側になるため、認証を通知より後に追加する。
+    // これによりリクエストは auth -> notification -> handler の順に通る。
+    let authenticated_api = authenticated_api
+        .merge(authenticated_form_mutation_api)
+        .route_layer(middleware::from_fn_with_state(
+            shared_repository.to_owned(),
+            auth,
+        ));
 
     // post_message_handler uses a different State type, so register it separately
     let message_post_router = Router::new()
@@ -121,6 +149,10 @@ async fn main() -> anyhow::Result<()> {
             "/forms/{form_id}/answers/{answer_id}/messages",
             post(post_message_handler),
         )
+        .route_layer(middleware::from_fn_with_state(
+            form_operation_notification_state,
+            notify_successful_form_operation,
+        ))
         .route_layer(middleware::from_fn_with_state(
             shared_repository.to_owned(),
             auth,
@@ -136,6 +168,7 @@ async fn main() -> anyhow::Result<()> {
         .nest(
             "/api/v1",
             public_api
+                .merge(public_form_mutation_api)
                 .merge(optional_auth_api)
                 .merge(authenticated_api)
                 .merge(message_post_router),

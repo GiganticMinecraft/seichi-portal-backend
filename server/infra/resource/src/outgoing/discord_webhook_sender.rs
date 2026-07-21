@@ -28,11 +28,11 @@ impl DiscordWebhookField {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct DiscordWebhookMessage {
     pub discord_webhook_url: String,
     pub title: String,
-    pub link_url: String,
+    pub link_url: Option<String>,
     pub fields: Vec<DiscordWebhookField>,
 }
 
@@ -75,7 +75,7 @@ impl DiscordWebhookSender {
             .json(&request)
             .send()
             .await
-            .map_err(|error| DiscordWebhookSendError::Retryable(error.into()))?;
+            .map_err(|_| DiscordWebhookSendError::Retryable(request_error()))?;
         let status = response.status();
 
         match status {
@@ -125,6 +125,12 @@ fn status_error(status: StatusCode) -> InfraError {
     }
 }
 
+fn request_error() -> InfraError {
+    InfraError::Outgoing {
+        cause: "Discord webhook request failed".to_string(),
+    }
+}
+
 #[derive(Serialize)]
 struct DiscordWebhookRequest {
     username: String,
@@ -134,7 +140,8 @@ struct DiscordWebhookRequest {
 #[derive(Serialize)]
 struct DiscordEmbed {
     title: String,
-    url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
     color: i32,
     fields: Vec<DiscordEmbedField>,
 }

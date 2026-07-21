@@ -89,7 +89,7 @@ impl DiscordAnswerWebhookNotifier for ResourceDiscordAnswerWebhookNotifier {
             let message = DiscordWebhookMessage {
                 discord_webhook_url: notification.discord_webhook_url,
                 title: notification.title,
-                link_url: notification.answer_url,
+                link_url: Some(notification.answer_url),
                 fields: notification
                     .fields
                     .into_iter()

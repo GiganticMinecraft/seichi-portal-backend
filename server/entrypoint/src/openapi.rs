@@ -95,14 +95,16 @@ impl Modify for SecurityAddon {
 }
 
 pub fn public_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
+    OpenApiRouter::new().routes(routes!(
+        user_handler::start_session,
+        user_handler::end_session
+    ))
+}
+
+pub fn public_form_mutation_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
     use presentation::handlers::form::answer_handler;
 
-    OpenApiRouter::new()
-        .routes(routes!(answer_handler::post_temporary_answer_handler))
-        .routes(routes!(
-            user_handler::start_session,
-            user_handler::end_session
-        ))
+    OpenApiRouter::new().routes(routes!(answer_handler::post_temporary_answer_handler))
 }
 
 pub fn optional_auth_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
@@ -120,47 +122,15 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
     };
 
     OpenApiRouter::new()
-        .routes(routes!(form_handler::create_form_handler))
-        .routes(routes!(form_handler::update_form_handler))
-        .routes(routes!(form_handler::archive_form_handler))
         .routes(routes!(form_handler::archived_form_list_handler))
         .routes(routes!(form_handler::get_archived_form_handler))
-        .routes(routes!(form_handler::restore_archived_form_handler))
-        .routes(routes!(
-            answer_handler::get_answer_by_form_id_handler,
-            answer_handler::post_answer_handler
-        ))
+        .routes(routes!(answer_handler::get_answer_by_form_id_handler))
         .routes(routes!(answer_handler::get_all_answers))
-        .routes(routes!(
-            answer_label_handler::get_labels_for_answers,
-            answer_label_handler::create_label_for_answers
-        ))
-        .routes(routes!(
-            answer_label_handler::delete_label_for_answers,
-            answer_label_handler::edit_label_for_answers
-        ))
-        .routes(routes!(
-            form_label_handler::get_labels_for_forms,
-            form_label_handler::create_label_for_forms
-        ))
-        .routes(routes!(
-            form_label_handler::delete_label_for_forms,
-            form_label_handler::edit_label_for_forms
-        ))
-        .routes(routes!(
-            answer_handler::get_answer_handler,
-            answer_handler::update_answer_handler
-        ))
-        .routes(routes!(answer_label_handler::replace_answer_labels))
-        .routes(routes!(
-            comment_handler::get_form_comment,
-            comment_handler::post_form_comment
-        ))
+        .routes(routes!(answer_label_handler::get_labels_for_answers))
+        .routes(routes!(form_label_handler::get_labels_for_forms))
+        .routes(routes!(answer_handler::get_answer_handler))
+        .routes(routes!(comment_handler::get_form_comment))
         .routes(routes!(comment_handler::get_comment_history))
-        .routes(routes!(
-            comment_handler::update_form_comment,
-            comment_handler::delete_form_comment_handler
-        ))
         .routes(routes!(
             user_handler::get_user_info,
             user_handler::patch_user_role
@@ -193,10 +163,6 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         .routes(routes!(search_handler::search_answers))
         .routes(routes!(message_handler::get_messages_handler))
         .routes(routes!(message_handler::get_message_history))
-        .routes(routes!(
-            message_handler::update_message_handler,
-            message_handler::delete_message_handler
-        ))
         .routes(routes!(notification_handler::get_notification_settings))
         .routes(routes!(
             notification_handler::get_my_notification_settings,
@@ -208,14 +174,113 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         ))
 }
 
+pub fn authenticated_form_mutation_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
+    use presentation::handlers::form::{
+        answer_handler, answer_label_handler, comment_handler, form_handler, form_label_handler,
+        message_handler,
+    };
+
+    OpenApiRouter::new()
+        .routes(routes!(form_handler::create_form_handler))
+        .routes(routes!(form_handler::update_form_handler))
+        .routes(routes!(form_handler::archive_form_handler))
+        .routes(routes!(form_handler::restore_archived_form_handler))
+        .routes(routes!(answer_handler::post_answer_handler))
+        .routes(routes!(answer_handler::update_answer_handler))
+        .routes(routes!(answer_label_handler::create_label_for_answers))
+        .routes(routes!(answer_label_handler::delete_label_for_answers))
+        .routes(routes!(answer_label_handler::edit_label_for_answers))
+        .routes(routes!(answer_label_handler::replace_answer_labels))
+        .routes(routes!(form_label_handler::create_label_for_forms))
+        .routes(routes!(form_label_handler::delete_label_for_forms))
+        .routes(routes!(form_label_handler::edit_label_for_forms))
+        .routes(routes!(comment_handler::post_form_comment))
+        .routes(routes!(comment_handler::update_form_comment))
+        .routes(routes!(comment_handler::delete_form_comment_handler))
+        .routes(routes!(message_handler::update_message_handler))
+        .routes(routes!(message_handler::delete_message_handler))
+}
+
 pub fn versioned_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
     let combined = OpenApiRouter::with_openapi(ManuallyRegisteredApiDoc::openapi())
         .merge(public_api_router())
+        .merge(public_form_mutation_api_router())
         .merge(optional_auth_api_router())
-        .merge(authenticated_api_router());
+        .merge(authenticated_api_router())
+        .merge(authenticated_form_mutation_api_router());
     OpenApiRouter::with_openapi(ApiMetadata::openapi()).nest("/api/v1", combined)
 }
 
 pub fn openapi() -> utoipa::openapi::OpenApi {
     versioned_api_router().into_openapi()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use utoipa::openapi::{OpenApi, path::PathItem};
+
+    use super::{authenticated_form_mutation_api_router, public_form_mutation_api_router};
+
+    fn operations(openapi: OpenApi) -> BTreeSet<String> {
+        openapi
+            .paths
+            .paths
+            .into_iter()
+            .flat_map(|(path, item)| operations_for_path(path, item))
+            .collect()
+    }
+
+    fn operations_for_path(path: String, item: PathItem) -> Vec<String> {
+        [
+            ("POST", item.post),
+            ("PUT", item.put),
+            ("PATCH", item.patch),
+            ("DELETE", item.delete),
+        ]
+        .into_iter()
+        .filter_map(|(method, operation)| operation.map(|_| format!("{method} {path}")))
+        .collect()
+    }
+
+    #[test]
+    fn public_form_mutation_router_contains_only_temporary_answer_submission() {
+        assert_eq!(
+            operations(public_form_mutation_api_router().into_openapi()),
+            BTreeSet::from(["POST /forms/{id}/temporary-answers".to_string()])
+        );
+    }
+
+    #[test]
+    fn authenticated_form_mutation_router_contains_all_repository_state_mutations() {
+        let expected = [
+            "DELETE /forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
+            "DELETE /forms/{form_id}/answers/{answer_id}/messages/{message_id}",
+            "DELETE /labels/answers/{label_id}",
+            "DELETE /labels/forms/{label_id}",
+            "PATCH /forms/{form_id}/answers/{answer_id}",
+            "PATCH /forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
+            "PATCH /forms/{form_id}/answers/{answer_id}/messages/{message_id}",
+            "PATCH /labels/answers/{label_id}",
+            "PATCH /labels/forms/{label_id}",
+            "POST /archived-forms/{id}/restore",
+            "POST /forms",
+            "POST /forms/{form_id}/answers/{answer_id}/comments",
+            "POST /forms/{id}/answers",
+            "POST /forms/{id}/archive",
+            "POST /labels/answers",
+            "POST /labels/forms",
+            "PUT /forms/answers/{answer_id}/labels",
+            "PUT /forms/{id}",
+        ]
+        .map(str::to_string)
+        .into_iter()
+        .collect();
+
+        assert_eq!(
+            operations(authenticated_form_mutation_api_router().into_openapi()),
+            expected
+        );
+    }
 }
