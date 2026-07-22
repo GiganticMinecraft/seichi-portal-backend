@@ -2,9 +2,12 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::search::models::{
-    AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
-    NumberOfRecordsPerAggregate, SearchableFieldsWithOperation, UserSearchHit,
+use crate::{
+    form::models::FormId,
+    search::models::{
+        AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
+        NumberOfRecordsPerAggregate, SearchableFieldsWithOperation, UserSearchHit,
+    },
 };
 
 #[automock]
@@ -25,7 +28,7 @@ pub trait SearchRepository: Send + Sync + 'static {
     async fn search_answers(
         &self,
         query: &str,
-        form_id: Option<crate::form::models::FormId>,
+        form_id: Option<FormId>,
     ) -> Result<Vec<AnswerSearchHit>, Error>;
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, Error>;
     async fn sync_search_engine(&self, data: &[SearchableFieldsWithOperation])

@@ -7,10 +7,6 @@ use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_repository::CommentRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
-use domain::search::models::NumberOfRecords;
-use domain::search::models::{
-    AnswerSearchHit, NumberOfRecordsPerAggregate, Operation, UserSearchHit,
-};
 use domain::{
     account::models::AccountUser,
     auth::Actor,
@@ -23,14 +19,23 @@ use domain::{
     repository::{
         form::active_form_repository::ActiveFormRepository, search_repository::SearchRepository,
     },
-    search::models::SearchableFieldsWithOperation,
+    search::models::{
+        AnswerSearchHit, AnswerTitleSearchDocument, FormAnswerComments, FormMetaData,
+        LabelForFormAnswers, LabelForForms, NumberOfRecords, NumberOfRecordsPerAggregate,
+        Operation, RealAnswers, SearchableFields, SearchableFieldsWithOperation, UserSearchHit,
+        Users,
+    },
     types::authorization_guard::{Allowed, AuthorizationGuard, Read},
 };
 use errors::Error;
 use futures::{StreamExt, TryStreamExt, stream, try_join};
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    future::ready,
+    iter::once,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::{Notify, mpsc::Receiver};
 use tokio::time;
 
@@ -152,7 +157,7 @@ impl<
     async fn visible_form_with_labels(
         &self,
         actor: &Actor,
-        form_id: domain::form::models::FormId,
+        form_id: FormId,
     ) -> Result<Option<ActiveFormWithLabels>, Error> {
         let Some(form) = self.active_form_repository.get(form_id).await? else {
             return Ok(None);
@@ -243,7 +248,7 @@ impl<
                 self.answer_details(account_user, actor, answer).await
             })
             .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
-            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_filter_map(|visible| ready(Ok(visible)))
             .try_collect()
             .await
     }
@@ -343,7 +348,7 @@ impl<
         let visible_forms = stream::iter(forms)
             .map(|form| async move { self.visible_form_with_labels(actor_ref, form.form_id).await })
             .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
-            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_filter_map(|visible| ready(Ok(visible)))
             .try_collect()
             .await?;
 
@@ -364,7 +369,7 @@ impl<
                     })
             })
             .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
-            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_filter_map(|visible| ready(Ok(visible)))
             .try_collect()
             .await?;
 
@@ -383,7 +388,7 @@ impl<
                     })
             })
             .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
-            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_filter_map(|visible| ready(Ok(visible)))
             .try_collect()
             .await?;
 
@@ -415,7 +420,7 @@ impl<
                 }
             })
             .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
-            .try_filter_map(|visible| std::future::ready(Ok(visible)))
+            .try_filter_map(|visible| ready(Ok(visible)))
             .try_collect()
             .await?;
         let visible_comments = self
@@ -496,14 +501,14 @@ impl<
                             .await?
                             .into_iter()
                             .map(|guard| guard.try_read(system.clone()).map_err(Into::into))
-                            .collect::<Result<Vec<_>, errors::Error>>()?;
+                            .collect::<Result<Vec<_>, Error>>()?;
 
                         let forms = form_guards
                             .iter()
                             .map(|form| {
                                 Ok((
-                                    domain::search::models::SearchableFields::FormMetaData(
-                                        domain::search::models::FormMetaData {
+                                    SearchableFields::FormMetaData(
+                                        FormMetaData {
                                             id: form.value().id().to_owned(),
                                             title: form.value().title().to_owned(),
                                             description: form.value().description().to_owned(),
@@ -512,7 +517,7 @@ impl<
                                     Operation::Update,
                                 ))
                             })
-                            .collect::<Result<Vec<_>, errors::Error>>()?;
+                            .collect::<Result<Vec<_>, Error>>()?;
 
                         let answer_entries = self.list_all_answer_entries(&form_guards).await?;
 
@@ -529,8 +534,8 @@ impl<
                                         .map(|comment| comment.into_inner())
                                         .map(|comment| {
                                             (
-                                                domain::search::models::SearchableFields::FormAnswerComments(
-                                                    domain::search::models::FormAnswerComments {
+                                                SearchableFields::FormAnswerComments(
+                                                    FormAnswerComments {
                                                         id: comment.comment_id().to_owned(),
                                                         answer_id: comment.answer_id().to_owned(),
                                                         content: comment
@@ -561,8 +566,8 @@ impl<
                                 let label = guard.try_read(system.clone())?.into_inner();
 
                                 Ok((
-                                    domain::search::models::SearchableFields::LabelForForms(
-                                        domain::search::models::LabelForForms {
+                                    SearchableFields::LabelForForms(
+                                        LabelForForms {
                                             id: label.id().to_owned(),
                                             name: label.name().to_owned().into_inner().into_inner(),
                                         },
@@ -570,7 +575,7 @@ impl<
                                     Operation::Update,
                                 ))
                             })
-                            .collect::<Result<Vec<_>, errors::Error>>()?;
+                            .collect::<Result<Vec<_>, Error>>()?;
 
                         let labels_for_answers = self
                             .form_answer_label_repository
@@ -581,8 +586,8 @@ impl<
                                 let label = guard.try_read(system.clone())?.into_inner();
 
                                 Ok((
-                                    domain::search::models::SearchableFields::LabelForFormAnswers(
-                                        domain::search::models::LabelForFormAnswers {
+                                    SearchableFields::LabelForFormAnswers(
+                                        LabelForFormAnswers {
                                             id: label.id().to_owned(),
                                             name: label.name().to_owned().into_inner(),
                                         },
@@ -590,7 +595,7 @@ impl<
                                     Operation::Update,
                                 ))
                             })
-                            .collect::<Result<Vec<_>, errors::Error>>()?;
+                            .collect::<Result<Vec<_>, Error>>()?;
 
                         let users = self
                             .user_repository
@@ -601,8 +606,8 @@ impl<
                                 let user = guard.try_read(system.clone())?.into_inner();
 
                                 Ok((
-                                    domain::search::models::SearchableFields::Users(
-                                        domain::search::models::Users {
+                                    SearchableFields::Users(
+                                        Users {
                                             id: user.id().into_inner(),
                                             name: user.name().to_owned(),
                                         },
@@ -610,7 +615,7 @@ impl<
                                     Operation::Update,
                                 ))
                             })
-                            .collect::<Result<Vec<_>, errors::Error>>()?;
+                            .collect::<Result<Vec<_>, Error>>()?;
 
                         let data = forms
                             .into_iter()
@@ -659,26 +664,22 @@ fn answer_search_documents(
         .iter()
         .flat_map(|entry| {
             let entry = entry.value();
-            std::iter::once((
-                domain::search::models::SearchableFields::AnswerTitle(
-                    domain::search::models::AnswerTitleSearchDocument {
-                        id: *entry.id(),
-                        form_id: *entry.form_id(),
-                        title: entry.title().clone(),
-                    },
-                ),
+            once((
+                SearchableFields::AnswerTitle(AnswerTitleSearchDocument {
+                    id: *entry.id(),
+                    form_id: *entry.form_id(),
+                    title: entry.title().clone(),
+                }),
                 Operation::Update,
             ))
             .chain(entry.contents().iter().map(|content| {
                 (
-                    domain::search::models::SearchableFields::RealAnswers(
-                        domain::search::models::RealAnswers {
-                            id: content.id,
-                            answer_id: *entry.id(),
-                            question_id: content.question_id,
-                            answer: content.answer.to_owned(),
-                        },
-                    ),
+                    SearchableFields::RealAnswers(RealAnswers {
+                        id: content.id,
+                        answer_id: *entry.id(),
+                        question_id: content.question_id,
+                        answer: content.answer.to_owned(),
+                    }),
                     Operation::Update,
                 )
             }))

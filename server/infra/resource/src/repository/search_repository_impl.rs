@@ -4,6 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use domain::{
+    form::models::FormId,
     repository::search_repository::SearchRepository,
     search::models::{
         AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
@@ -52,7 +53,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
     async fn search_answers(
         &self,
         query: &str,
-        form_id: Option<domain::form::models::FormId>,
+        form_id: Option<FormId>,
     ) -> Result<Vec<AnswerSearchHit>, Error> {
         self.client
             .search()
