@@ -1,5 +1,6 @@
 pub mod answer_submitter_restriction_repository;
 pub mod form;
+pub mod global_discord_webhook_repository;
 pub mod health_check_repository;
 pub mod notification_repository;
 pub mod search_repository;

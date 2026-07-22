@@ -102,8 +102,17 @@ pub struct FormSettingsSchema {
     pub answer_settings: Option<AnswerSettingsSchema>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DiscordWebhookUrlSchema(pub(crate) Option<DiscordWebhookUrl>);
+
+impl std::fmt::Debug for DiscordWebhookUrlSchema {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_tuple("DiscordWebhookUrlSchema")
+            .field(&self.0.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
+}
 
 impl<'de> Deserialize<'de> for DiscordWebhookUrlSchema {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -122,6 +131,26 @@ impl<'de> Deserialize<'de> for DiscordWebhookUrlSchema {
             }
             None => Ok(DiscordWebhookUrlSchema(None)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use types::non_empty_string::NonEmptyString;
+
+    #[test]
+    fn discord_webhook_url_schema_debug_redacts_the_token() {
+        let secret = "super-secret-token";
+        let schema = DiscordWebhookUrlSchema(Some(
+            DiscordWebhookUrl::try_new(Some(
+                NonEmptyString::try_new(format!("https://discord.com/api/webhooks/123/{secret}"))
+                    .unwrap(),
+            ))
+            .unwrap(),
+        ));
+
+        assert!(!format!("{schema:?}").contains(secret));
     }
 }
 

@@ -3,6 +3,7 @@ pub mod config;
 pub mod connection;
 pub mod count;
 pub mod forms;
+pub mod global_discord_webhook;
 mod meilisearch_schemas;
 pub mod notification;
 pub mod search;

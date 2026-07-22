@@ -98,10 +98,16 @@ impl FormSettings {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
+#[derive(Clone, DerivingVia, Default, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
 ))]
 pub struct DiscordWebhookUrl(Option<NonEmptyString>);
+
+impl std::fmt::Debug for DiscordWebhookUrl {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("DiscordWebhookUrl([REDACTED])")
+    }
+}
 
 impl DiscordWebhookUrl {
     pub fn try_new(url: Option<NonEmptyString>) -> Result<Self, DomainError> {
@@ -132,5 +138,24 @@ impl TryFrom<String> for Visibility {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         use std::str::FromStr;
         Self::from_str(&value).map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod webhook_debug_tests {
+    use super::*;
+
+    #[test]
+    fn webhook_url_and_form_settings_debug_redact_the_token() {
+        let secret = "super-secret-token";
+        let webhook = DiscordWebhookUrl::try_new(Some(
+            NonEmptyString::try_new(format!("https://discord.com/api/webhooks/123/{secret}"))
+                .unwrap(),
+        ))
+        .unwrap();
+        let settings = FormSettings::new().change_discord_webhook_url(webhook.clone());
+
+        assert!(!format!("{webhook:?}").contains(secret));
+        assert!(!format!("{settings:?}").contains(secret));
     }
 }

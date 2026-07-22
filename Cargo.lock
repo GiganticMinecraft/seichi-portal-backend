@@ -5010,6 +5010,7 @@ dependencies = [
  "resource",
  "serde_json",
  "tokio",
+ "tracing",
  "types",
  "uuid",
 ]

@@ -1,6 +1,7 @@
 pub mod account;
 pub mod auth;
 pub mod form;
+pub mod global_discord_webhook;
 pub mod notification;
 pub mod pagination;
 pub mod repository;

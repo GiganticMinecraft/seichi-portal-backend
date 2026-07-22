@@ -1,4 +1,6 @@
-use presentation::handlers::{notification_handler, search_handler, user_handler};
+use presentation::handlers::{
+    global_discord_webhook_handler, notification_handler, search_handler, user_handler,
+};
 use resource::repository::RealInfrastructureRepository;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -71,6 +73,7 @@ use utoipa_axum::routes;
         (name = "User Groups"),
         (name = "Search"),
         (name = "Notifications"),
+        (name = "Settings"),
         (name = "Session"),
         (name = "Health"),
     )
@@ -120,6 +123,10 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
     };
 
     OpenApiRouter::new()
+        .routes(routes!(
+            global_discord_webhook_handler::get_global_discord_webhook,
+            global_discord_webhook_handler::update_global_discord_webhook
+        ))
         .routes(routes!(form_handler::create_form_handler))
         .routes(routes!(form_handler::update_form_handler))
         .routes(routes!(form_handler::archive_form_handler))

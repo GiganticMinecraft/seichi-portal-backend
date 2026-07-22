@@ -15,6 +15,7 @@ use domain::search::models::SearchableFieldsWithOperation;
 use entrypoint::openapi;
 use futures::join;
 use hyper::header::SET_COOKIE;
+use presentation::api::global_discord_webhook::start_global_discord_webhook_worker;
 use presentation::api::notificator_impl::DiscordNotificator;
 use presentation::auth::{auth, optional_auth};
 use presentation::handlers::form::message_handler::{
@@ -90,6 +91,8 @@ async fn main() -> anyhow::Result<()> {
 
     let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;
     let notificator = DiscordNotificator::new(discord_sender, shared_repository.to_owned());
+    let _global_discord_webhook_worker =
+        start_global_discord_webhook_worker(shared_repository.to_owned());
 
     use presentation::handlers::health_check_handler;
 

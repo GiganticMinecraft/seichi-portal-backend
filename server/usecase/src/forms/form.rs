@@ -27,9 +27,15 @@ use errors::{
     usecase::UseCaseError::{FormNotFound, LabelNotFound, UserGroupNotFound, UserNotFound},
 };
 use std::collections::{BTreeSet, HashMap};
+use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 
-use crate::models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput};
+use crate::{
+    application_event::{
+        ApplicationActor, ApplicationEvent, ApplicationEventPublisher, EventDetail,
+    },
+    models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput},
+};
 
 pub struct FormUseCase<
     'a,
@@ -46,6 +52,7 @@ pub struct FormUseCase<
     pub form_label_repository: &'a FormLabelRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
     pub user_repository: &'a UserRepo,
+    pub application_event_publisher: Option<&'a dyn ApplicationEventPublisher>,
 }
 
 impl<
@@ -157,13 +164,25 @@ impl<
             )
             .await?;
 
-        self.active_form_repository
+        let created_form = self
+            .active_form_repository
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?
             .try_read(user_as_user.clone())
             .map(|form| form.into_inner())
-            .map_err(Error::from)
+            .map_err(Error::from)?;
+
+        if let Some(publisher) = self.application_event_publisher {
+            publisher.publish(ApplicationEvent::FormCreated {
+                actor: ApplicationActor::from(user),
+                form_id: form_id.to_string(),
+                form_title: created_form.title().as_str().to_owned(),
+                details: form_creation_details(&created_form),
+            });
+        }
+
+        Ok(created_form)
     }
 
     /// `actor` が参照可能なフォームのリストを取得する
@@ -347,10 +366,19 @@ impl<
             .archived_form_repository
             .archive(AuthorizationGuard::<_, Create>::from(form).try_create(actor_user.clone())?)
             .await?;
-        archived_form
+        let archived_form = archived_form
             .try_read(actor_user.clone())
             .map(|form| form.into_inner())
-            .map_err(Into::into)
+            .map_err(Error::from)?;
+        if let Some(publisher) = self.application_event_publisher {
+            publisher.publish(ApplicationEvent::FormArchived {
+                actor: ApplicationActor::from(actor),
+                form_id: form_id.to_string(),
+                form_title: archived_form.form().title().as_str().to_owned(),
+            });
+        }
+
+        Ok(archived_form)
     }
 
     pub async fn restore_form(&self, actor: &AccountUser, form_id: FormId) -> Result<(), Error> {
@@ -358,11 +386,22 @@ impl<
             .archived_form_repository
             .get(form_id)
             .await?
-            .ok_or(Error::from(FormNotFound))?;
+            .ok_or(Error::from(FormNotFound))?
+            .try_read(Actor::from(actor.clone()))?;
 
+        let form_title = form.value().form().title().as_str().to_owned();
         self.archived_form_repository
-            .restore(form.into_update().try_update(Actor::from(actor.clone()))?)
-            .await
+            .restore(form.try_into_update()?)
+            .await?;
+        if let Some(publisher) = self.application_event_publisher {
+            publisher.publish(ApplicationEvent::FormRestored {
+                actor: ApplicationActor::from(actor),
+                form_id: form_id.to_string(),
+                form_title,
+            });
+        }
+
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -399,6 +438,7 @@ impl<
             .await?
             .ok_or(Error::from(FormNotFound))?;
         let current_form_read = current_form.try_read(actor_user.clone())?;
+        let form_before_update = current_form_read.value().clone();
         let current_questions = current_form_read.questions().as_slice().to_vec();
 
         if let Some(questions) = &questions {
@@ -568,8 +608,218 @@ impl<
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let changes = form_update_details(&form_before_update, &updated_form);
+        if !changes.is_empty()
+            && let Some(publisher) = self.application_event_publisher
+        {
+            publisher.publish(ApplicationEvent::FormUpdated {
+                actor: ApplicationActor::from(actor),
+                form_id: form_id.to_string(),
+                form_title: updated_form.title().as_str().to_owned(),
+                changes,
+            });
+        }
+
         Ok((updated_form, labels))
     }
+}
+
+fn form_creation_details(form: &ActiveForm) -> Vec<EventDetail> {
+    vec![
+        EventDetail::new("説明", form.description().to_owned().into_inner()),
+        EventDetail::new("フォーム公開範囲", form.settings().visibility().to_string()),
+        EventDetail::new(
+            "フォーム閲覧グループ",
+            format_groups(form.settings().allowed_user_groups()),
+        ),
+        EventDetail::new(
+            "フォーム別 Discord 通知",
+            format_form_webhook_status(form.settings()),
+        ),
+        EventDetail::new(
+            "回答公開範囲",
+            form.answer_settings().visibility().to_string(),
+        ),
+        EventDetail::new(
+            "回答可能グループ",
+            format_groups(form.answer_settings().answer_groups()),
+        ),
+        EventDetail::new(
+            "回答受付期間",
+            format_acceptance_period(form.answer_settings().acceptance_period()),
+        ),
+        EventDetail::new(
+            "回答の既定タイトル",
+            format_default_answer_title(form.answer_settings().default_answer_title()),
+        ),
+        EventDetail::new(
+            "匿名回答",
+            format_allowed(*form.answer_settings().allow_temporary_answers()),
+        ),
+    ]
+    .into_iter()
+    .chain(question_details(form.questions().as_slice()))
+    .collect()
+}
+
+fn form_update_details(before: &ActiveForm, after: &ActiveForm) -> Vec<EventDetail> {
+    [
+        (before.title() != after.title())
+            .then(|| EventDetail::new("タイトル", after.title().as_str())),
+        (before.description() != after.description())
+            .then(|| EventDetail::new("説明", after.description().to_owned().into_inner())),
+        (before.settings().visibility() != after.settings().visibility()).then(|| {
+            EventDetail::new(
+                "フォーム公開範囲",
+                after.settings().visibility().to_string(),
+            )
+        }),
+        (before.settings().allowed_user_groups() != after.settings().allowed_user_groups()).then(
+            || {
+                EventDetail::new(
+                    "フォーム閲覧グループ",
+                    format_groups(after.settings().allowed_user_groups()),
+                )
+            },
+        ),
+        (before.settings().discord_webhook_url(&Actor::System).ok()
+            != after.settings().discord_webhook_url(&Actor::System).ok())
+        .then(|| {
+            EventDetail::new(
+                "フォーム別 Discord 通知",
+                format_form_webhook_status(after.settings()),
+            )
+        }),
+        (before.answer_settings().visibility() != after.answer_settings().visibility()).then(
+            || {
+                EventDetail::new(
+                    "回答公開範囲",
+                    after.answer_settings().visibility().to_string(),
+                )
+            },
+        ),
+        (before.answer_settings().answer_groups() != after.answer_settings().answer_groups()).then(
+            || {
+                EventDetail::new(
+                    "回答可能グループ",
+                    format_groups(after.answer_settings().answer_groups()),
+                )
+            },
+        ),
+        (before.answer_settings().acceptance_period()
+            != after.answer_settings().acceptance_period())
+        .then(|| {
+            EventDetail::new(
+                "回答受付期間",
+                format_acceptance_period(after.answer_settings().acceptance_period()),
+            )
+        }),
+        (before.answer_settings().default_answer_title()
+            != after.answer_settings().default_answer_title())
+        .then(|| {
+            EventDetail::new(
+                "回答の既定タイトル",
+                format_default_answer_title(after.answer_settings().default_answer_title()),
+            )
+        }),
+        (before.answer_settings().allow_temporary_answers()
+            != after.answer_settings().allow_temporary_answers())
+        .then(|| {
+            EventDetail::new(
+                "匿名回答",
+                format_allowed(*after.answer_settings().allow_temporary_answers()),
+            )
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .chain(
+        (before.questions() != after.questions())
+            .then(|| question_details(after.questions().as_slice()))
+            .into_iter()
+            .flatten(),
+    )
+    .collect()
+}
+
+fn format_groups(groups: &AllowedUserGroups) -> String {
+    match groups.as_slice() {
+        [] => "制限なし".to_string(),
+        groups => groups
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
+fn format_form_webhook_status(settings: &FormSettings) -> &'static str {
+    match settings
+        .discord_webhook_url(&Actor::System)
+        .ok()
+        .cloned()
+        .and_then(DiscordWebhookUrl::into_inner)
+    {
+        Some(_) => "有効 (URLは非表示)",
+        None => "無効",
+    }
+}
+
+fn format_acceptance_period(period: &AnswerAcceptancePeriod) -> String {
+    let start = period
+        .start_at()
+        .map(|value| value.to_rfc3339())
+        .unwrap_or_else(|| "開始指定なし".to_string());
+    let end = period
+        .end_at()
+        .map(|value| value.to_rfc3339())
+        .unwrap_or_else(|| "終了指定なし".to_string());
+    format!("{start} ～ {end}")
+}
+
+fn format_default_answer_title(title: &DefaultAnswerTitle) -> String {
+    title
+        .to_owned()
+        .into_inner()
+        .map(NonEmptyString::into_inner)
+        .unwrap_or_else(|| "未設定".to_string())
+}
+
+fn format_allowed(allowed: bool) -> &'static str {
+    if allowed { "許可" } else { "不許可" }
+}
+
+fn question_details(questions: &[Question]) -> impl Iterator<Item = EventDetail> + '_ {
+    questions.iter().map(|question| {
+        let choices = question
+            .choices()
+            .map(|choices| {
+                choices
+                    .iter()
+                    .map(|choice| choice.label.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .filter(|choices| !choices.is_empty());
+        let value = [
+            Some(format!("種別: {}", question.question_type())),
+            Some(format!(
+                "必須: {}",
+                if question.is_required() {
+                    "はい"
+                } else {
+                    "いいえ"
+                }
+            )),
+            Some(format!("テンプレートキー: {}", question.template_key())),
+            choices.map(|choices| format!("選択肢: {choices}")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
+        EventDetail::new(format!("質問: {}", question.title().as_str()), value)
+    })
 }
 
 fn validate_answered_form_question_update(
@@ -730,8 +980,24 @@ mod tests {
             question::{QuestionId, QuestionSet, QuestionType},
         },
     };
+    use std::sync::Mutex;
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
+
+    #[derive(Default)]
+    struct RecordingPublisher(Mutex<Vec<ApplicationEvent>>);
+
+    impl ApplicationEventPublisher for RecordingPublisher {
+        fn publish(&self, event: ApplicationEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    impl RecordingPublisher {
+        fn events(&self) -> Vec<ApplicationEvent> {
+            self.0.lock().unwrap().clone()
+        }
+    }
 
     fn admin_user() -> AccountUser {
         AccountUser::new("admin".to_string(), Uuid::nil().into(), Role::Administrator)
@@ -793,7 +1059,11 @@ mod tests {
         .unwrap();
 
         let repositories = FormUseCaseTestRepositories::default();
-        let usecase = repositories.form_use_case();
+        let publisher = RecordingPublisher::default();
+        let usecase = FormUseCase {
+            application_event_publisher: Some(&publisher),
+            ..repositories.form_use_case()
+        };
 
         let created_form = usecase
             .create_form(
@@ -814,6 +1084,12 @@ mod tests {
             .unwrap();
 
         assert_eq!(created_form.questions().as_slice().len(), 1);
+        assert!(matches!(
+            publisher.events().as_slice(),
+            [ApplicationEvent::FormCreated { form_id, details, .. }]
+                if form_id == &created_form.id().to_string()
+                    && details.iter().any(|detail| detail.name == "説明")
+        ));
     }
 
     #[tokio::test]
@@ -822,7 +1098,11 @@ mod tests {
         let form_id = FormId::from(Uuid::new_v4());
         let form = sample_form(form_id);
         let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form.clone()]);
-        let usecase = repositories.form_use_case();
+        let publisher = RecordingPublisher::default();
+        let usecase = FormUseCase {
+            application_event_publisher: Some(&publisher),
+            ..repositories.form_use_case()
+        };
 
         let (updated_form, _) = usecase
             .update_form(
@@ -852,5 +1132,119 @@ mod tests {
             updated_form.questions().as_slice()[0].template_key(),
             form.questions().as_slice()[0].template_key()
         );
+        assert!(publisher.events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn form_update_publishes_the_actual_changed_value() {
+        let user = admin_user();
+        let form_id = FormId::from(Uuid::new_v4());
+        let repositories =
+            FormUseCaseTestRepositories::with_active_forms(vec![sample_form(form_id)]);
+        let publisher = RecordingPublisher::default();
+        let usecase = FormUseCase {
+            application_event_publisher: Some(&publisher),
+            ..repositories.form_use_case()
+        };
+
+        usecase
+            .update_form(
+                &user,
+                form_id,
+                Some(FormTitle::new(
+                    "Updated form".to_string().try_into().unwrap(),
+                )),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            publisher.events().as_slice(),
+            [ApplicationEvent::FormUpdated { changes, .. }]
+                if changes.iter().any(|detail|
+                    detail.name == "タイトル" && detail.value == "Updated form")
+        ));
+    }
+
+    #[tokio::test]
+    async fn form_update_does_not_publish_when_the_value_is_unchanged() {
+        let user = admin_user();
+        let form_id = FormId::from(Uuid::new_v4());
+        let form = sample_form(form_id);
+        let title = form.title().clone();
+        let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        let publisher = RecordingPublisher::default();
+        let usecase = FormUseCase {
+            application_event_publisher: Some(&publisher),
+            ..repositories.form_use_case()
+        };
+
+        usecase
+            .update_form(
+                &user,
+                form_id,
+                Some(title),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(publisher.events().is_empty());
+    }
+
+    #[test]
+    fn label_only_changes_are_excluded_from_form_update_notifications() {
+        let form_id = FormId::from(Uuid::new_v4());
+        let before = sample_form(form_id);
+        let after = before
+            .clone()
+            .replace_label_ids(FormLabelAssignment::try_new(vec![FormLabelId::new()]).unwrap());
+
+        assert!(form_update_details(&before, &after).is_empty());
+    }
+
+    #[tokio::test]
+    async fn form_archive_and_restore_publish_events_after_success() {
+        let user = admin_user();
+        let form_id = FormId::from(Uuid::new_v4());
+        let repositories =
+            FormUseCaseTestRepositories::with_active_forms(vec![sample_form(form_id)]);
+        let publisher = RecordingPublisher::default();
+        let usecase = FormUseCase {
+            application_event_publisher: Some(&publisher),
+            ..repositories.form_use_case()
+        };
+
+        usecase.archive_form(&user, form_id).await.unwrap();
+        usecase.restore_form(&user, form_id).await.unwrap();
+
+        assert!(matches!(
+            publisher.events().as_slice(),
+            [
+                ApplicationEvent::FormArchived { form_id: archived_id, .. },
+                ApplicationEvent::FormRestored { form_id: restored_id, .. }
+            ] if archived_id == &form_id.to_string() && restored_id == &form_id.to_string()
+        ));
     }
 }

@@ -64,7 +64,7 @@ impl AnswerSettingsSchema {
     }
 }
 
-#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct FormSettingsSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discord_webhook_url: Option<Option<String>>,
@@ -74,6 +74,22 @@ pub struct FormSettingsSchema {
     pub allowed_group_ids: Vec<UserGroupId>,
     pub allow_temporary_answers: bool,
     pub answer_settings: AnswerSettingsSchema,
+}
+
+impl std::fmt::Debug for FormSettingsSchema {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("FormSettingsSchema")
+            .field(
+                "discord_webhook_url",
+                &self.discord_webhook_url.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("visibility", &self.visibility)
+            .field("allowed_group_ids", &self.allowed_group_ids)
+            .field("allow_temporary_answers", &self.allow_temporary_answers)
+            .field("answer_settings", &self.answer_settings)
+            .finish()
+    }
 }
 
 impl FormSettingsSchema {
@@ -600,7 +616,9 @@ pub struct SenderSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::form::models::DiscordWebhookUrl;
     use domain::form::question::{Choice, Question};
+    use types::non_empty_string::NonEmptyString;
     use types::non_empty_vec::NonEmptyVec;
 
     #[test]
@@ -646,5 +664,24 @@ mod tests {
         assert_eq!(serialized["choices"].as_array().unwrap().len(), 2);
         assert_eq!(serialized["choices"][0]["label"], "Admin");
         assert_eq!(serialized["is_required"], true);
+    }
+
+    #[test]
+    fn form_settings_debug_redacts_the_webhook_token() {
+        let secret = "super-secret-token";
+        let settings = FormSettings::new().change_discord_webhook_url(
+            DiscordWebhookUrl::try_new(Some(
+                NonEmptyString::try_new(format!("https://discord.com/api/webhooks/123/{secret}"))
+                    .unwrap(),
+            ))
+            .unwrap(),
+        );
+        let schema = FormSettingsSchema::from_settings_and_answer_settings(
+            &Actor::System,
+            &settings,
+            &AnswerSettings::default(),
+        );
+
+        assert!(!format!("{schema:?}").contains(secret));
     }
 }

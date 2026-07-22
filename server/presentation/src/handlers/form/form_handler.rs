@@ -31,9 +31,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use types::non_empty_vec::NonEmptyVec;
 use usecase::{
+    application_event::GlobalApplicationEventPublisher,
     forms::form::FormUseCase,
     models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput},
 };
+
+static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
+    GlobalApplicationEventPublisher;
 
 use crate::handlers::error_handler::handle_error;
 use crate::schemas::{
@@ -165,6 +169,7 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
         form_label_repository: repository.form_label_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         user_repository: repository.user_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     }
 }
 

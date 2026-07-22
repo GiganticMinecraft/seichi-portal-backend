@@ -18,7 +18,10 @@ use domain::{
 };
 use errors::{Error, ErrorExtra, presentation::PresentationError};
 use resource::repository::RealInfrastructureRepository;
-use usecase::forms::comment::CommentUseCase;
+use usecase::{application_event::GlobalApplicationEventPublisher, forms::comment::CommentUseCase};
+
+static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
+    GlobalApplicationEventPublisher;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::{CommentUpdateSchema, HistoryListQuery};
@@ -103,6 +106,7 @@ pub async fn get_comment_history(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let page = use_case
@@ -165,6 +169,7 @@ pub async fn get_form_comment(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -214,6 +219,7 @@ pub async fn post_form_comment(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -265,6 +271,7 @@ pub async fn update_form_comment(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -315,6 +322,7 @@ pub async fn delete_form_comment_handler(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_repository: repository.comment_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id, comment_id)) = path.map_err_to_error().map_err(handle_error)?;

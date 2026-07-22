@@ -18,7 +18,10 @@ use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use std::sync::Arc;
-use usecase::forms::message::MessageUseCase;
+use usecase::{application_event::GlobalApplicationEventPublisher, forms::message::MessageUseCase};
+
+static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
+    GlobalApplicationEventPublisher;
 
 use crate::schemas::error_responses::*;
 use crate::{
@@ -133,6 +136,7 @@ pub async fn get_message_history(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         message_thread_repository: repository.message_thread_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let request = history_page_request(query.0).map_err(handle_error)?;
@@ -186,6 +190,7 @@ pub async fn post_message_handler<N: Notificator>(
         user_repository: state.repository.user_repository(),
         answer_entry_repository: state.repository.answer_entry_repository(),
         message_thread_repository: state.repository.message_thread_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -239,6 +244,7 @@ pub async fn update_message_handler(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         message_thread_repository: repository.message_thread_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id, message_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -289,6 +295,7 @@ pub async fn get_messages_handler(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         message_thread_repository: repository.message_thread_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -346,6 +353,7 @@ pub async fn delete_message_handler(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         message_thread_repository: repository.message_thread_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
     let Path((form_id, answer_id, message_id)) = path.map_err_to_error().map_err(handle_error)?;

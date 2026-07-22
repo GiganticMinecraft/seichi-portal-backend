@@ -27,10 +27,16 @@ use resource::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::warn;
-use usecase::forms::{
-    answer::AnswerUseCase,
-    discord_answer_webhook::{DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier},
+use usecase::{
+    application_event::GlobalApplicationEventPublisher,
+    forms::{
+        answer::AnswerUseCase,
+        discord_answer_webhook::{DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier},
+    },
 };
+
+static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
+    GlobalApplicationEventPublisher;
 
 use crate::schemas::error_responses::*;
 use crate::{
@@ -65,6 +71,7 @@ fn build_answer_use_case<'a>(
             .answer_submitter_restriction_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         discord_answer_webhook_notifier,
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     }
 }
 

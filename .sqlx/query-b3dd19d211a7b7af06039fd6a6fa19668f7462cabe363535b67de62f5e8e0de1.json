@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE global_discord_webhook_settings SET url = ? WHERE singleton_key = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b3dd19d211a7b7af06039fd6a6fa19668f7462cabe363535b67de62f5e8e0de1"
+}

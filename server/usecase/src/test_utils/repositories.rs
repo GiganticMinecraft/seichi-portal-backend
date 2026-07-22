@@ -80,6 +80,7 @@ impl FormUseCaseTestRepositories {
             form_label_repository: &self.form_label_repository,
             answer_entry_repository: &self.answer_entry_repository,
             user_repository: &self.user_repository,
+            application_event_publisher: None,
         }
     }
 }
