@@ -22,7 +22,7 @@ use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
     schemas::search_schemas::{
-        AnswerSearchResult, CrossSearchResult, SearchQuery, UserSearchResult,
+        AnswerSearchQuery, AnswerSearchResult, CrossSearchResult, SearchQuery, UserSearchResult,
     },
 };
 
@@ -174,6 +174,7 @@ pub async fn search_users(
     summary = "回答検索を行う",
     params(
         ("query" = String, Query, description = "Search query"),
+        ("form_id" = Option<String>, Query, format = "uuid", description = "Limit results to the specified form"),
     ),
     responses(
         AnswerSearchResponse,
@@ -188,7 +189,7 @@ pub async fn search_users(
 pub async fn search_answers(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-    query: Result<Query<SearchQuery>, QueryRejection>,
+    query: Result<Query<AnswerSearchQuery>, QueryRejection>,
 ) -> Result<AnswerSearchResponse, Response> {
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
@@ -200,10 +201,18 @@ pub async fn search_answers(
         comment_repository: repository.comment_repository(),
     };
 
-    let query = required_query(query).map_err(handle_error)?;
+    let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
+    let query = search_query
+        .query
+        .map(|query| query.into_inner())
+        .ok_or_else(|| {
+            handle_error(Error::from(PresentationError::QueryRejection {
+                cause: "query is required".to_string(),
+            }))
+        })?;
 
     let answers = search_use_case
-        .search_answers(&user, query)
+        .search_answers(&user, query, search_query.form_id)
         .await
         .map_err(handle_error)?;
 

@@ -3718,6 +3718,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "form_id",
+            "in": "query",
+            "description": "Limit results to the specified form",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {

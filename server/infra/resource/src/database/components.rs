@@ -330,14 +330,18 @@ pub trait SearchDatabase: Send + Sync {
         &self,
         query: &str,
     ) -> Result<Vec<AnswerLabelSearchHit>, InfraError>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, InfraError>;
+    async fn search_answers(
+        &self,
+        query: &str,
+        form_id: Option<FormId>,
+    ) -> Result<Vec<AnswerSearchHit>, InfraError>;
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError>;
     async fn sync_search_engine(
         &self,
         data: &[SearchableFieldsWithOperation],
     ) -> Result<(), InfraError>;
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError>;
-    async fn initialize_search_engine(&self) -> Result<(), InfraError>;
+    async fn initialize_search_engine(&self) -> Result<bool, InfraError>;
 }
 
 #[automock]

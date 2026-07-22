@@ -43,6 +43,7 @@ pub struct FormMetaData {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AnswerTitleSearchDocument {
     pub id: AnswerId,
+    pub form_id: FormId,
     pub title: AnswerTitle,
 }
 

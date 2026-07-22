@@ -2,9 +2,12 @@ use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
 
-use crate::search::models::{
-    AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
-    NumberOfRecordsPerAggregate, SearchableFieldsWithOperation, UserSearchHit,
+use crate::{
+    form::models::FormId,
+    search::models::{
+        AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
+        NumberOfRecordsPerAggregate, SearchableFieldsWithOperation, UserSearchHit,
+    },
 };
 
 #[automock]
@@ -22,10 +25,15 @@ pub trait SearchRepository: Send + Sync + 'static {
         &self,
         query: &str,
     ) -> Result<Vec<AnswerLabelSearchHit>, Error>;
-    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, Error>;
+    async fn search_answers(
+        &self,
+        query: &str,
+        form_id: Option<FormId>,
+    ) -> Result<Vec<AnswerSearchHit>, Error>;
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, Error>;
     async fn sync_search_engine(&self, data: &[SearchableFieldsWithOperation])
     -> Result<(), Error>;
     async fn fetch_search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, Error>;
-    async fn initialize_search_engine(&self) -> Result<(), Error>;
+    /// 検索インデックスを初期化し、既存の回答文書に再投影が必要かを返す。
+    async fn initialize_search_engine(&self) -> Result<bool, Error>;
 }
