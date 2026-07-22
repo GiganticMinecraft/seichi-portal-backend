@@ -1,4 +1,7 @@
-use domain::{auth::Actor, form::answer::AnswerId};
+use domain::{
+    auth::Actor,
+    form::{answer::AnswerId, models::FormId},
+};
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 use usecase::models::{AnswerDetails, CommentWithAuthor, CrossSearchOutput};
@@ -25,6 +28,15 @@ impl From<AnswerDetails> for FormAnswer {
 pub struct SearchQuery {
     #[serde(default)]
     pub query: Option<NonEmptyString>,
+}
+
+#[derive(Deserialize, Debug, PartialEq, utoipa::ToSchema)]
+pub struct AnswerSearchQuery {
+    #[serde(default)]
+    pub query: Option<NonEmptyString>,
+    #[serde(default)]
+    #[schema(value_type = Option<String>, format = "uuid")]
+    pub form_id: Option<FormId>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -115,6 +127,33 @@ mod tests {
     use types::non_empty_vec::NonEmptyVec;
     use usecase::models::{ActiveFormWithLabels, AnswerDetails, CommentWithAuthor};
     use uuid::Uuid;
+
+    #[test]
+    fn answer_search_query_accepts_optional_form_id() {
+        let form_id = Uuid::from_u128(7);
+        let query: AnswerSearchQuery = serde_json::from_value(serde_json::json!({
+            "query": "keyword",
+            "form_id": form_id.to_string(),
+        }))
+        .unwrap();
+
+        assert_eq!(query.form_id, Some(form_id.into()));
+
+        let query_without_form: AnswerSearchQuery =
+            serde_json::from_value(serde_json::json!({ "query": "keyword" })).unwrap();
+        assert_eq!(query_without_form.form_id, None);
+    }
+
+    #[test]
+    fn answer_search_query_rejects_invalid_form_id() {
+        assert!(
+            serde_json::from_value::<AnswerSearchQuery>(serde_json::json!({
+                "query": "keyword",
+                "form_id": "not-a-uuid",
+            }))
+            .is_err()
+        );
+    }
 
     fn standard_user(name: &str) -> AccountUser {
         AccountUser::new(

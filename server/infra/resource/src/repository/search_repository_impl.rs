@@ -49,10 +49,14 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, Error> {
+    async fn search_answers(
+        &self,
+        query: &str,
+        form_id: Option<domain::form::models::FormId>,
+    ) -> Result<Vec<AnswerSearchHit>, Error> {
         self.client
             .search()
-            .search_answers(query)
+            .search_answers(query, form_id)
             .await
             .map_err(Into::into)
     }
@@ -84,7 +88,7 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
             .map_err(Into::into)
     }
 
-    async fn initialize_search_engine(&self) -> Result<(), Error> {
+    async fn initialize_search_engine(&self) -> Result<bool, Error> {
         self.client
             .search()
             .initialize_search_engine()

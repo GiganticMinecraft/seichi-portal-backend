@@ -1,11 +1,14 @@
 use crate::database::config::{MEILISEARCH, MeiliSearch};
 use crate::database::meilisearch_schemas::MeilisearchStatsSchema;
-use crate::database::{components::SearchDatabase, connection::ConnectionPool};
+use crate::database::{
+    components::{FormAnswerDatabase, SearchDatabase},
+    connection::ConnectionPool,
+};
 use async_trait::async_trait;
 use domain::search::models::{
     AnswerLabelSearchHit, AnswerSearchHit, AnswerTitleSearchDocument, CommentSearchHit,
     FormAnswerComments, FormLabelSearchHit, FormMetaData, FormSearchHit, LabelForFormAnswers,
-    LabelForForms, NumberOfRecordsPerAggregate, RealAnswers, UserSearchHit, Users,
+    LabelForForms, NumberOfRecordsPerAggregate, UserSearchHit, Users,
 };
 use domain::{
     account::models::UserId,
@@ -14,6 +17,51 @@ use domain::{
 use errors::infra::InfraError;
 use itertools::Itertools;
 use meilisearch_sdk::search::Selectors;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize)]
+struct AnswerContentSearchDocument {
+    id: domain::form::answer::FormAnswerContentId,
+    form_id: domain::form::models::FormId,
+    answer_id: domain::form::answer::AnswerId,
+    question_id: domain::form::question::QuestionId,
+    answer: String,
+}
+
+#[derive(Deserialize)]
+struct FormIdPresence {
+    #[serde(default)]
+    form_id: Option<domain::form::models::FormId>,
+}
+
+fn form_filter(form_id: domain::form::models::FormId) -> String {
+    format!("form_id = \"{form_id}\"")
+}
+
+async fn answer_documents_need_reprojection(
+    connection: &ConnectionPool,
+) -> Result<bool, InfraError> {
+    for index in ["answers", "real_answers"] {
+        let missing_form_id = connection
+            .meilisearch_client
+            .index(index)
+            .search()
+            .with_filter("form_id NOT EXISTS")
+            .with_limit(1)
+            .execute::<FormIdPresence>()
+            .await?
+            .hits
+            .into_iter()
+            .any(|hit| hit.result.form_id.is_none());
+        if missing_form_id {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
 
 fn merge_answer_hits(
     title_answer_ids: impl IntoIterator<Item = domain::form::answer::AnswerId>,
@@ -108,24 +156,33 @@ impl SearchDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn search_answers(&self, query: &str) -> Result<Vec<AnswerSearchHit>, InfraError> {
+    async fn search_answers(
+        &self,
+        query: &str,
+        form_id: Option<domain::form::models::FormId>,
+    ) -> Result<Vec<AnswerSearchHit>, InfraError> {
+        let filter = form_id.map(form_filter);
         let title_search = async {
-            self.meilisearch_client
-                .index("answers")
-                .search()
+            let index = self.meilisearch_client.index("answers");
+            let mut search = index.search();
+            search
                 .with_query(query)
-                .with_attributes_to_highlight(Selectors::All)
-                .execute::<AnswerTitleSearchDocument>()
-                .await
+                .with_attributes_to_highlight(Selectors::All);
+            if let Some(filter) = filter.as_deref() {
+                search.with_filter(filter);
+            }
+            search.execute::<AnswerTitleSearchDocument>().await
         };
         let content_search = async {
-            self.meilisearch_client
-                .index("real_answers")
-                .search()
+            let index = self.meilisearch_client.index("real_answers");
+            let mut search = index.search();
+            search
                 .with_query(query)
-                .with_attributes_to_highlight(Selectors::All)
-                .execute::<RealAnswers>()
-                .await
+                .with_attributes_to_highlight(Selectors::All);
+            if let Some(filter) = filter.as_deref() {
+                search.with_filter(filter);
+            }
+            search.execute::<AnswerContentSearchDocument>().await
         };
         let (title_results, content_results) = futures::try_join!(title_search, content_search)?;
 
@@ -162,6 +219,74 @@ impl SearchDatabase for ConnectionPool {
         &self,
         data: &[SearchableFieldsWithOperation],
     ) -> Result<(), InfraError> {
+        let mut form_ids_by_answer_id = data
+            .iter()
+            .filter_map(|(fields, operation)| match (fields, operation) {
+                (SearchableFields::AnswerTitle(answer), Operation::Create | Operation::Update) => {
+                    Some((answer.id, answer.form_id))
+                }
+                _ => None,
+            })
+            .collect::<HashMap<_, _>>();
+        let unresolved_content_answer_ids = data
+            .iter()
+            .filter_map(|(fields, operation)| match (fields, operation) {
+                (SearchableFields::RealAnswers(content), Operation::Create | Operation::Update) => {
+                    Some(content.answer_id)
+                }
+                _ => None,
+            })
+            .unique()
+            .filter(|answer_id| !form_ids_by_answer_id.contains_key(answer_id))
+            .collect_vec();
+        let database_form_ids: HashMap<
+            domain::form::answer::AnswerId,
+            domain::form::models::FormId,
+        > = if unresolved_content_answer_ids.is_empty() {
+            HashMap::new()
+        } else {
+            self.get_answers_by_answer_ids(unresolved_content_answer_ids)
+                .await?
+                .into_iter()
+                .map(|record| {
+                    Ok((
+                        Uuid::parse_str(&record.id)?.into(),
+                        Uuid::parse_str(&record.form_id)?.into(),
+                    ))
+                })
+                .collect::<Result<HashMap<_, _>, InfraError>>()?
+        };
+        form_ids_by_answer_id.extend(database_form_ids);
+        let content_documents = data
+            .iter()
+            .filter_map(|(fields, operation)| match (fields, operation) {
+                (SearchableFields::RealAnswers(content), Operation::Create | Operation::Update) => {
+                    Some(content)
+                }
+                _ => None,
+            })
+            .map(|content| {
+                let form_id = form_ids_by_answer_id.get(&content.answer_id).copied().ok_or_else(|| {
+                    InfraError::Unexpected {
+                        cause: format!(
+                            "form id for answer {} was not found while updating its search document",
+                            content.answer_id
+                        ),
+                    }
+                })?;
+                Ok((
+                    content.id,
+                    AnswerContentSearchDocument {
+                        id: content.id,
+                        form_id,
+                        answer_id: content.answer_id,
+                        question_id: content.question_id,
+                        answer: content.answer.clone(),
+                    },
+                ))
+            })
+            .collect::<Result<HashMap<_, _>, InfraError>>()?;
+
         let futures = data
             .iter()
             .map(async |(searchable_fields, operation)| match operation {
@@ -181,7 +306,7 @@ impl SearchDatabase for ConnectionPool {
                     SearchableFields::RealAnswers(answers) => {
                         self.meilisearch_client
                             .index("real_answers")
-                            .add_or_replace(&[answers], Some("id"))
+                            .add_or_replace(&[&content_documents[&answers.id]], Some("id"))
                             .await
                     }
                     SearchableFields::FormAnswerComments(comments) => {
@@ -283,7 +408,7 @@ impl SearchDatabase for ConnectionPool {
     }
 
     #[tracing::instrument]
-    async fn initialize_search_engine(&self) -> Result<(), InfraError> {
+    async fn initialize_search_engine(&self) -> Result<bool, InfraError> {
         let index_with_uid = vec![
             ("form_meta_data", "id"),
             ("answers", "id"),
@@ -309,18 +434,54 @@ impl SearchDatabase for ConnectionPool {
 
         futures::future::try_join_all(futures).await?;
 
-        Ok(())
+        let settings_futures = ["answers", "real_answers"].into_iter().map(async |index| {
+            self.meilisearch_client
+                .index(index)
+                .set_filterable_attributes(["form_id"])
+                .await?
+                .wait_for_completion(&self.meilisearch_client, None, None)
+                .await?;
+
+            Ok::<_, meilisearch_sdk::errors::Error>(())
+        });
+        futures::future::try_join_all(settings_futures).await?;
+
+        answer_documents_need_reprojection(self).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::merge_answer_hits;
-    use domain::form::answer::AnswerId;
+    use super::{AnswerContentSearchDocument, form_filter, merge_answer_hits};
+    use domain::form::{answer::AnswerId, models::FormId, question::QuestionId};
     use uuid::Uuid;
 
     fn answer_id(value: u128) -> AnswerId {
         Uuid::from_u128(value).into()
+    }
+
+    #[test]
+    fn answer_form_filter_uses_the_form_id_attribute() {
+        let form_id = FormId::from(Uuid::from_u128(1));
+
+        assert_eq!(form_filter(form_id), format!("form_id = \"{form_id}\""));
+    }
+
+    #[test]
+    fn answer_content_search_document_contains_form_id() {
+        let form_id = FormId::from(Uuid::from_u128(1));
+        let document = AnswerContentSearchDocument {
+            id: Uuid::from_u128(2).into(),
+            form_id,
+            answer_id: answer_id(3),
+            question_id: QuestionId::from(Uuid::from_u128(4)),
+            answer: "content".to_string(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(document).unwrap()["form_id"],
+            form_id.to_string()
+        );
     }
 
     #[test]

@@ -133,6 +133,7 @@ impl TryFrom<FormMetaData> for domain::search::models::FormMetaData {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AnswerTitleSearchDocument {
     pub id: String,
+    pub form_id: String,
     pub title: Option<NonEmptyString>,
 }
 
@@ -140,6 +141,7 @@ impl From<domain::search::models::AnswerTitleSearchDocument> for AnswerTitleSear
     fn from(answer: domain::search::models::AnswerTitleSearchDocument) -> Self {
         Self {
             id: answer.id.to_string(),
+            form_id: answer.form_id.to_string(),
             title: answer.title.into_inner(),
         }
     }
@@ -151,6 +153,7 @@ impl TryFrom<AnswerTitleSearchDocument> for domain::search::models::AnswerTitleS
     fn try_from(answer: AnswerTitleSearchDocument) -> Result<Self, Self::Error> {
         Ok(Self {
             id: Uuid::from_str(&answer.id)?.into(),
+            form_id: Uuid::from_str(&answer.form_id)?.into(),
             title: domain::form::answer::AnswerTitle::new(answer.title),
         })
     }
@@ -361,6 +364,7 @@ mod tests {
     #[test]
     fn answers_create_or_update_payload_uses_after_image() {
         let answer_id = Uuid::from_u128(1);
+        let form_id = Uuid::from_u128(2);
         let schema: RabbitMQSchema = serde_json::from_value(json!({
             "payload": {
                 "op": "u",
@@ -368,6 +372,7 @@ mod tests {
                 "before": null,
                 "after": {
                     "id": answer_id.to_string(),
+                    "form_id": form_id.to_string(),
                     "title": "検索できるタイトル"
                 }
             }
@@ -381,6 +386,7 @@ mod tests {
         };
 
         assert_eq!(document.id.into_inner(), answer_id);
+        assert_eq!(document.form_id.into_inner(), form_id);
         assert_eq!(
             serde_json::to_value(document.title).unwrap(),
             json!("検索できるタイトル")
@@ -390,12 +396,14 @@ mod tests {
     #[test]
     fn answers_delete_payload_uses_before_image_and_preserves_null_title() {
         let answer_id = Uuid::from_u128(1);
+        let form_id = Uuid::from_u128(2);
         let schema: RabbitMQSchema = serde_json::from_value(json!({
             "payload": {
                 "op": "d",
                 "source": { "table": "answers" },
                 "before": {
                     "id": answer_id.to_string(),
+                    "form_id": form_id.to_string(),
                     "title": null
                 },
                 "after": null
