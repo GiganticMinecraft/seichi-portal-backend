@@ -5927,7 +5927,7 @@
             }
           },
           "settings": {
-            "$ref": "#/components/schemas/FormSettingsSchema"
+            "$ref": "#/components/schemas/FormSettingsResponseSchema"
           },
           "title": {
             "type": "string"
@@ -6380,16 +6380,17 @@
             }
           },
           "settings": {
-            "$ref": "#/components/schemas/FormSettingsSchema"
+            "$ref": "#/components/schemas/FormSettingsResponseSchema"
           },
           "title": {
             "type": "string"
           }
         }
       },
-      "FormSettingsSchema": {
+      "FormSettingsResponseSchema": {
         "type": "object",
         "required": [
+          "discord_webhook_enabled",
           "visibility",
           "allowed_group_ids",
           "allow_temporary_answers",
@@ -6408,6 +6409,42 @@
           "answer_settings": {
             "$ref": "#/components/schemas/AnswerSettingsSchema"
           },
+          "discord_webhook_enabled": {
+            "type": "boolean"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        }
+      },
+      "FormSettingsSchema": {
+        "type": "object",
+        "properties": {
+          "allow_temporary_answers": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "allowed_group_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "answer_settings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AnswerSettingsSchema"
+              }
+            ]
+          },
           "discord_webhook_url": {
             "type": [
               "string",
@@ -6415,7 +6452,10 @@
             ]
           },
           "visibility": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

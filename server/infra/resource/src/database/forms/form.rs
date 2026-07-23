@@ -4,8 +4,7 @@ use domain::account::models::UserGroupId;
 use domain::form::{
     answer::{AnswerEntry, AnswerPagePosition},
     models::{
-        AllowedUserGroups, ArchivedFormPagePosition, DiscordWebhookUrl, FormLabelId,
-        FormPagePosition,
+        AllowedUserGroups, ArchivedFormPagePosition, FormLabelId, FormPagePosition, FormSettings,
     },
     question::{Choice, Question, QuestionId, QuestionType},
 };
@@ -567,13 +566,7 @@ async fn insert_form_root(
         .map(NonEmptyString::into_inner);
     let acceptance_period_start_at = answer_settings.acceptance_period().start_at().to_owned();
     let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
-    let discord_webhook_url = form
-        .settings()
-        .discord_webhook_url(&Actor::from(created_by.clone()))
-        .ok()
-        .map(ToOwned::to_owned)
-        .and_then(DiscordWebhookUrl::into_inner)
-        .map(NonEmptyString::into_inner);
+    let discord_webhook_url = discord_webhook_url_for_persistence(form.settings());
 
     sqlx::query(
         r#"INSERT INTO form_meta_data
@@ -605,6 +598,15 @@ async fn insert_form_root(
     Ok(())
 }
 
+fn discord_webhook_url_for_persistence(settings: &FormSettings) -> Option<String> {
+    settings
+        .discord_webhook_url(&Actor::System)
+        .expect("system actor must be allowed to read the Discord webhook URL")
+        .to_owned()
+        .into_inner()
+        .map(NonEmptyString::into_inner)
+}
+
 async fn update_form_root(
     txn: &mut DatabaseTransaction,
     form: &ActiveForm,
@@ -627,13 +629,7 @@ async fn update_form_root(
     let acceptance_period_start_at = answer_settings.acceptance_period().start_at().to_owned();
     let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
 
-    let discord_webhook_url = form
-        .settings()
-        .discord_webhook_url(&Actor::from(updated_by.clone()))
-        .ok()
-        .map(ToOwned::to_owned)
-        .and_then(DiscordWebhookUrl::into_inner)
-        .map(NonEmptyString::into_inner);
+    let discord_webhook_url = discord_webhook_url_for_persistence(form.settings());
 
     sqlx::query(
         r#"UPDATE form_meta_data SET
@@ -1891,4 +1887,28 @@ async fn insert_new_choices(
         .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::form::models::DiscordWebhookUrl;
+
+    #[test]
+    fn persistence_extracts_the_webhook_url_as_system() {
+        let url = "https://discord.com/api/webhooks/123/token";
+        let settings_with_webhook = FormSettings::new().change_discord_webhook_url(
+            DiscordWebhookUrl::try_new(Some(NonEmptyString::try_new(url.to_string()).unwrap()))
+                .unwrap(),
+        );
+
+        assert_eq!(
+            discord_webhook_url_for_persistence(&settings_with_webhook).as_deref(),
+            Some(url)
+        );
+        assert_eq!(
+            discord_webhook_url_for_persistence(&FormSettings::new()),
+            None
+        );
+    }
 }

@@ -36,7 +36,7 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::FormListPageResponse,
         presentation::schemas::form::form_response_schemas::FormMetaSchema,
         presentation::schemas::form::form_response_schemas::FormSchema,
-        presentation::schemas::form::form_response_schemas::FormSettingsSchema,
+        presentation::schemas::form::form_response_schemas::FormSettingsResponseSchema,
         presentation::schemas::form::form_response_schemas::TemporaryAnswerAuthor,
         presentation::schemas::form::form_response_schemas::MessageContentSchema,
         presentation::schemas::form::form_response_schemas::ChoiceResponseSchema,
