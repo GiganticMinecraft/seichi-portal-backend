@@ -1,1 +1,0 @@
-DROP TABLE global_discord_webhook_settings;

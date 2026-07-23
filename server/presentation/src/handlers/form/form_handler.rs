@@ -31,14 +31,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use types::non_empty_vec::NonEmptyVec;
 use usecase::{
-    application_event::GlobalApplicationEventPublisher,
     forms::form::FormUseCase,
     models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput},
 };
 
-static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
-    GlobalApplicationEventPublisher;
-
+use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
 use crate::handlers::error_handler::handle_error;
 use crate::schemas::{
     error_responses::*,

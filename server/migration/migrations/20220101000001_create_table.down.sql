@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS
+    global_discord_webhook_settings,
     message_history,
     form_answer_comment_history,
     message_threads,

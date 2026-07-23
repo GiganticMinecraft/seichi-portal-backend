@@ -18,11 +18,9 @@ use itertools::Itertools;
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use std::sync::Arc;
-use usecase::{application_event::GlobalApplicationEventPublisher, forms::message::MessageUseCase};
+use usecase::forms::message::MessageUseCase;
 
-static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
-    GlobalApplicationEventPublisher;
-
+use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
 use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,

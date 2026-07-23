@@ -130,61 +130,8 @@ impl<
             }
         };
 
-        let result = match post_result {
-            Ok(_) if message_sender_id != notification_recipient_id => {
-                let fetched_notification_preference = self
-                    .notification_repository
-                    .fetch_notification_settings(notification_recipient_id.into_inner())
-                    .await?;
-
-                let notification_preference = match fetched_notification_preference {
-                    Some(settings) => settings.try_read(Actor::System)?.into_inner(),
-                    None => {
-                        let recipient = self
-                            .user_repository
-                            .find_by(notification_recipient_id.into_inner())
-                            .await?
-                            .ok_or(Error::from(UserNotFound))?
-                            .try_read(actor_user.clone())?
-                            .into_inner();
-
-                        let preference = NotificationPreference::new(*recipient.id());
-
-                        self.notification_repository
-                            .create_notification_settings(
-                                AuthorizationGuard::<_, Create>::from(preference.clone())
-                                    .try_create(Actor::from(recipient.clone()))?,
-                            )
-                            .await?;
-
-                        AuthorizationGuard::<_, Read>::from(preference)
-                            .try_read(Actor::System)?
-                            .into_inner()
-                    }
-                };
-
-                let url = &*FRONTEND.url;
-                notificator
-                    .notify(
-                        notification_recipient_id,
-                        NotificationType::MessageReceived,
-                        &notification_preference,
-                        &NotificationContent::new(vec![
-                            "あなたの回答にメッセージが送信されました。".to_string(),
-                            "メッセージを確認してください。".to_string(),
-                            format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
-                        ]),
-                    )
-                    .await?;
-
-                Ok(())
-            }
-            Err(error) => Err(error),
-            _ => Ok(()),
-        };
-        if result.is_ok()
-            && let Some(publisher) = self.application_event_publisher
-        {
+        post_result?;
+        if let Some(publisher) = self.application_event_publisher {
             publisher.publish(ApplicationEvent::MessageCreated {
                 actor: ApplicationActor::from(actor),
                 form_id: form_id.to_string(),
@@ -194,7 +141,54 @@ impl<
             });
         }
 
-        result
+        if message_sender_id != notification_recipient_id {
+            let fetched_notification_preference = self
+                .notification_repository
+                .fetch_notification_settings(notification_recipient_id.into_inner())
+                .await?;
+
+            let notification_preference = match fetched_notification_preference {
+                Some(settings) => settings.try_read(Actor::System)?.into_inner(),
+                None => {
+                    let recipient = self
+                        .user_repository
+                        .find_by(notification_recipient_id.into_inner())
+                        .await?
+                        .ok_or(Error::from(UserNotFound))?
+                        .try_read(actor_user.clone())?
+                        .into_inner();
+
+                    let preference = NotificationPreference::new(*recipient.id());
+
+                    self.notification_repository
+                        .create_notification_settings(
+                            AuthorizationGuard::<_, Create>::from(preference.clone())
+                                .try_create(Actor::from(recipient.clone()))?,
+                        )
+                        .await?;
+
+                    AuthorizationGuard::<_, Read>::from(preference)
+                        .try_read(Actor::System)?
+                        .into_inner()
+                }
+            };
+
+            let url = &*FRONTEND.url;
+            notificator
+                .notify(
+                    notification_recipient_id,
+                    NotificationType::MessageReceived,
+                    &notification_preference,
+                    &NotificationContent::new(vec![
+                        "あなたの回答にメッセージが送信されました。".to_string(),
+                        "メッセージを確認してください。".to_string(),
+                        format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
+                    ]),
+                )
+                .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn get_messages(
@@ -350,7 +344,10 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
 
     use super::*;
     use async_trait::async_trait;
@@ -498,6 +495,26 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FailingNotificator(AtomicBool);
+
+    #[async_trait]
+    impl Notificator for FailingNotificator {
+        async fn notify(
+            &self,
+            _recipient: UserId,
+            _notification_type: NotificationType,
+            _notification_preference: &NotificationPreference,
+            _content: &NotificationContent,
+        ) -> Result<(), Error> {
+            self.0.store(true, Ordering::Relaxed);
+            Err(errors::domain::DomainError::InvalidEntity {
+                message: "notification failed".to_string(),
+            }
+            .into())
+        }
+    }
+
     fn user() -> AccountUser {
         AccountUser::new(
             "admin".to_string(),
@@ -595,6 +612,51 @@ mod tests {
                 ApplicationEvent::MessageUpdated { body: updated, .. },
                 ApplicationEvent::MessageDeleted { body: deleted, .. }
             ] if created == "original" && updated == "updated" && deleted == "updated"
+        ));
+    }
+
+    #[tokio::test]
+    async fn message_created_is_published_before_individual_notification_failure() {
+        unsafe { std::env::set_var("FRONTEND_URL", "https://example.com") };
+        let actor = user();
+        let recipient = AccountUser::new(
+            "recipient".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::StandardUser,
+        );
+        let (form, answer) = form_and_answer(&recipient);
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories.user_repository.save_user(recipient);
+        let messages = InMemoryMessageThreadRepository::default();
+        let publisher = RecordingPublisher::default();
+        let notificator = FailingNotificator::default();
+        let usecase = MessageUseCase {
+            notification_repository: &repositories.notification_repository,
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            message_thread_repository: &messages,
+            application_event_publisher: Some(&publisher),
+        };
+
+        let result = usecase
+            .post_message(
+                &actor,
+                form_id,
+                MessageBody::new("saved".to_string().try_into().unwrap()),
+                answer_id,
+                &notificator,
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert!(notificator.0.load(Ordering::Relaxed));
+        assert!(matches!(
+            publisher.0.lock().unwrap().as_slice(),
+            [ApplicationEvent::MessageCreated { body, .. }] if body == "saved"
         ));
     }
 }

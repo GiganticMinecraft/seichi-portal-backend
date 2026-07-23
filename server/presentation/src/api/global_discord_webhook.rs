@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use common::config::FRONTEND;
 use domain::{
     auth::Actor, repository::global_discord_webhook_repository::GlobalDiscordWebhookRepository,
@@ -8,9 +10,42 @@ use resource::{
     },
     repository::RealInfrastructureRepository,
 };
-use tokio::{sync::broadcast::error::RecvError, task::JoinHandle};
+use tokio::{
+    sync::broadcast::{self, error::RecvError},
+    task::JoinHandle,
+};
 use tracing::warn;
-use usecase::application_event::{ApplicationActor, ApplicationEvent, EventDetail, subscribe};
+use usecase::application_event::{
+    ApplicationActor, ApplicationEvent, ApplicationEventPublisher, EventDetail,
+};
+
+const EVENT_CHANNEL_CAPACITY: usize = 256;
+
+static EVENT_CHANNEL: LazyLock<broadcast::Sender<ApplicationEvent>> = LazyLock::new(|| {
+    let (sender, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+    sender
+});
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct GlobalApplicationEventPublisher;
+
+impl ApplicationEventPublisher for GlobalApplicationEventPublisher {
+    /// イベント配送は best-effort とし、購読者不在でも元の操作を失敗させない。
+    ///
+    /// チャネル容量を超えたイベントは receiver 側で lag として検出し、worker が警告する。
+    fn publish(&self, event: ApplicationEvent) {
+        if EVENT_CHANNEL.send(event).is_err() {
+            warn!("application event could not be delivered to the Discord webhook worker");
+        }
+    }
+}
+
+pub(crate) static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
+    GlobalApplicationEventPublisher;
+
+fn subscribe() -> broadcast::Receiver<ApplicationEvent> {
+    EVENT_CHANNEL.subscribe()
+}
 
 pub fn start_global_discord_webhook_worker(
     repository: RealInfrastructureRepository,

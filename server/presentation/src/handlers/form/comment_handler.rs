@@ -18,11 +18,9 @@ use domain::{
 };
 use errors::{Error, ErrorExtra, presentation::PresentationError};
 use resource::repository::RealInfrastructureRepository;
-use usecase::{application_event::GlobalApplicationEventPublisher, forms::comment::CommentUseCase};
+use usecase::forms::comment::CommentUseCase;
 
-static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
-    GlobalApplicationEventPublisher;
-
+use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
 use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::{CommentUpdateSchema, HistoryListQuery};
 use crate::schemas::form::form_response_schemas::{AnswerComment, CommentHistoryPageResponse};
