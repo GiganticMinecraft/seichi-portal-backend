@@ -64,10 +64,9 @@ impl AnswerSettingsSchema {
     }
 }
 
-#[derive(Serialize, utoipa::ToSchema)]
-pub struct FormSettingsSchema {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub discord_webhook_url: Option<Option<String>>,
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct FormSettingsResponseSchema {
+    pub discord_webhook_enabled: bool,
     #[schema(value_type = String)]
     pub visibility: Visibility,
     #[schema(value_type = Vec<String>)]
@@ -76,33 +75,13 @@ pub struct FormSettingsSchema {
     pub answer_settings: AnswerSettingsSchema,
 }
 
-impl std::fmt::Debug for FormSettingsSchema {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("FormSettingsSchema")
-            .field(
-                "discord_webhook_url",
-                &self.discord_webhook_url.as_ref().map(|_| "[REDACTED]"),
-            )
-            .field("visibility", &self.visibility)
-            .field("allowed_group_ids", &self.allowed_group_ids)
-            .field("allow_temporary_answers", &self.allow_temporary_answers)
-            .field("answer_settings", &self.answer_settings)
-            .finish()
-    }
-}
-
-impl FormSettingsSchema {
+impl FormSettingsResponseSchema {
     pub fn from_settings_and_answer_settings(
-        actor: &Actor,
         settings: &FormSettings,
         answer_settings: &AnswerSettings,
     ) -> Self {
-        FormSettingsSchema {
-            discord_webhook_url: settings
-                .discord_webhook_url(actor)
-                .ok()
-                .map(|url| url.to_owned().into_inner().map(NonEmptyString::into_inner)),
+        FormSettingsResponseSchema {
+            discord_webhook_enabled: settings.discord_webhook_enabled(),
             visibility: settings.visibility().to_owned(),
             allowed_group_ids: settings.allowed_user_groups().as_slice().to_vec(),
             allow_temporary_answers: *answer_settings.allow_temporary_answers(),
@@ -134,7 +113,7 @@ pub struct FormSchema {
     pub title: FormTitle,
     #[schema(value_type = String)]
     pub description: FormDescription,
-    pub settings: FormSettingsSchema,
+    pub settings: FormSettingsResponseSchema,
     pub metadata: FormMetaSchema,
     pub questions: Vec<QuestionResponseSchema>,
     #[schema(value_type = Vec<FormLabelResponseSchema>)]
@@ -142,13 +121,12 @@ pub struct FormSchema {
 }
 
 impl FormSchema {
-    pub fn from_active_form(actor: &Actor, form: &ActiveForm, labels: Vec<FormLabel>) -> Self {
+    pub fn from_active_form(form: &ActiveForm, labels: Vec<FormLabel>) -> Self {
         Self {
             id: *form.id(),
             title: form.title().clone(),
             description: form.description().clone(),
-            settings: FormSettingsSchema::from_settings_and_answer_settings(
-                actor,
+            settings: FormSettingsResponseSchema::from_settings_and_answer_settings(
                 form.settings(),
                 form.answer_settings(),
             ),
@@ -178,7 +156,7 @@ pub struct ArchivedFormSchema {
     pub title: FormTitle,
     #[schema(value_type = String)]
     pub description: FormDescription,
-    pub settings: FormSettingsSchema,
+    pub settings: FormSettingsResponseSchema,
     pub metadata: FormMetaSchema,
     pub archived_at: DateTime<Utc>,
     #[schema(value_type = serde_json::Value)]
@@ -667,7 +645,7 @@ mod tests {
     }
 
     #[test]
-    fn form_settings_debug_redacts_the_webhook_token() {
+    fn form_settings_response_exposes_only_whether_the_webhook_is_enabled() {
         let secret = "super-secret-token";
         let settings = FormSettings::new().change_discord_webhook_url(
             DiscordWebhookUrl::try_new(Some(
@@ -676,12 +654,27 @@ mod tests {
             ))
             .unwrap(),
         );
-        let schema = FormSettingsSchema::from_settings_and_answer_settings(
-            &Actor::System,
+        let schema = FormSettingsResponseSchema::from_settings_and_answer_settings(
             &settings,
             &AnswerSettings::default(),
         );
+        let serialized = serde_json::to_value(schema).unwrap();
+        let serialized_without_webhook = serde_json::to_value(
+            FormSettingsResponseSchema::from_settings_and_answer_settings(
+                &FormSettings::new(),
+                &AnswerSettings::default(),
+            ),
+        )
+        .unwrap();
 
-        assert!(!format!("{schema:?}").contains(secret));
+        assert_eq!(serialized["discord_webhook_enabled"], true);
+        assert!(serialized.get("discord_webhook_url").is_none());
+        assert!(!serialized.to_string().contains(secret));
+        assert_eq!(serialized_without_webhook["discord_webhook_enabled"], false);
+        assert!(
+            serialized_without_webhook
+                .get("discord_webhook_url")
+                .is_none()
+        );
     }
 }

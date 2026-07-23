@@ -1,7 +1,4 @@
-use domain::{
-    auth::Actor,
-    form::{answer::AnswerId, models::FormId},
-};
+use domain::form::{answer::AnswerId, models::FormId};
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 use usecase::models::{AnswerDetails, CommentWithAuthor, CrossSearchOutput};
@@ -67,12 +64,12 @@ pub struct CrossSearchResult {
 }
 
 impl CrossSearchResult {
-    pub fn from_output(actor: &Actor, output: CrossSearchOutput) -> Self {
+    pub fn from_output(output: CrossSearchOutput) -> Self {
         Self {
             forms: output
                 .forms
                 .into_iter()
-                .map(|details| FormSchema::from_active_form(actor, &details.form, details.labels))
+                .map(|details| FormSchema::from_active_form(&details.form, details.labels))
                 .collect(),
             users: output.users.into_iter().map(Into::into).collect(),
             answers: output.answers.into_iter().map(Into::into).collect(),
@@ -111,6 +108,7 @@ mod tests {
     use chrono::Utc;
     use domain::{
         account::models::{AccountUser, Role, UserGroup, UserGroupName},
+        auth::Actor,
         form::{
             answer::{
                 AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
@@ -194,11 +192,6 @@ mod tests {
 
     #[test]
     fn cross_search_result_preserves_detailed_resource_shape_and_comment_parent() {
-        let actor = Actor::from(AccountUser::new(
-            "admin".to_string(),
-            Uuid::from_u128(2).into(),
-            Role::Administrator,
-        ));
         let form = form_with_webhook();
         let form_id = *form.id();
         let answer_id = AnswerId::from(Uuid::from_u128(3));
@@ -237,41 +230,47 @@ mod tests {
             ))],
         );
 
-        let result = CrossSearchResult::from_output(
-            &actor,
-            CrossSearchOutput {
-                forms: vec![ActiveFormWithLabels {
-                    form,
-                    labels: vec![FormLabel::new(FormLabelName::new(
-                        "form label".to_string().try_into().unwrap(),
-                    ))],
-                }],
-                users: vec![searched_user],
-                answers: vec![AnswerDetails {
-                    form_id,
-                    form_answer: answer,
-                    author: Actor::from(answer_author.clone()),
-                    labels: vec![AnswerLabel::new(
-                        "answer label".to_string().try_into().unwrap(),
-                    )],
-                }],
-                label_for_forms: vec![FormLabel::new(FormLabelName::new(
-                    "matching form label".to_string().try_into().unwrap(),
+        let result = CrossSearchResult::from_output(CrossSearchOutput {
+            forms: vec![ActiveFormWithLabels {
+                form,
+                labels: vec![FormLabel::new(FormLabelName::new(
+                    "form label".to_string().try_into().unwrap(),
                 ))],
-                label_for_answers: vec![AnswerLabel::new(
-                    "matching answer label".to_string().try_into().unwrap(),
+            }],
+            users: vec![searched_user],
+            answers: vec![AnswerDetails {
+                form_id,
+                form_answer: answer,
+                author: Actor::from(answer_author.clone()),
+                labels: vec![AnswerLabel::new(
+                    "answer label".to_string().try_into().unwrap(),
                 )],
-                comments: vec![CommentWithAuthor {
-                    comment,
-                    commented_by: answer_author,
-                }],
-            },
-        );
+            }],
+            label_for_forms: vec![FormLabel::new(FormLabelName::new(
+                "matching form label".to_string().try_into().unwrap(),
+            ))],
+            label_for_answers: vec![AnswerLabel::new(
+                "matching answer label".to_string().try_into().unwrap(),
+            )],
+            comments: vec![CommentWithAuthor {
+                comment,
+                commented_by: answer_author,
+            }],
+        });
 
         let serialized = serde_json::to_value(result).unwrap();
 
         assert_eq!(serialized["forms"][0]["title"], "Detailed form");
         assert_eq!(serialized["forms"][0]["description"], "Form description");
+        assert_eq!(
+            serialized["forms"][0]["settings"]["discord_webhook_enabled"],
+            true
+        );
+        assert!(
+            serialized["forms"][0]["settings"]
+                .get("discord_webhook_url")
+                .is_none()
+        );
         assert_eq!(
             serialized["forms"][0]["questions"][0]["template_key"],
             "body"
@@ -313,26 +312,26 @@ mod tests {
     }
 
     #[test]
-    fn cross_search_result_omits_form_webhook_for_standard_user() {
-        let actor = Actor::from(standard_user("viewer"));
-        let result = CrossSearchResult::from_output(
-            &actor,
-            CrossSearchOutput {
-                forms: vec![ActiveFormWithLabels {
-                    form: form_with_webhook(),
-                    labels: vec![],
-                }],
-                users: vec![],
-                answers: vec![],
-                label_for_forms: vec![],
-                label_for_answers: vec![],
-                comments: vec![],
-            },
-        );
+    fn cross_search_result_exposes_webhook_status_without_url() {
+        let result = CrossSearchResult::from_output(CrossSearchOutput {
+            forms: vec![ActiveFormWithLabels {
+                form: form_with_webhook(),
+                labels: vec![],
+            }],
+            users: vec![],
+            answers: vec![],
+            label_for_forms: vec![],
+            label_for_answers: vec![],
+            comments: vec![],
+        });
 
         let serialized = serde_json::to_value(result).unwrap();
 
         assert_eq!(serialized["forms"][0]["title"], "Detailed form");
+        assert_eq!(
+            serialized["forms"][0]["settings"]["discord_webhook_enabled"],
+            true
+        );
         assert!(
             serialized["forms"][0]["settings"]
                 .get("discord_webhook_url")

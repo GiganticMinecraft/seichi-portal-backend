@@ -63,11 +63,15 @@ impl FormSettings {
     }
 
     pub fn discord_webhook_url(&self, actor: &Actor) -> Result<&DiscordWebhookUrl, DomainError> {
-        if matches!(actor, Actor::System) || is_administrator(actor) {
+        if matches!(actor, Actor::System) {
             Ok(&self.discord_webhook_url)
         } else {
             Err(DomainError::Forbidden)
         }
+    }
+
+    pub fn discord_webhook_enabled(&self) -> bool {
+        self.discord_webhook_url.0.is_some()
     }
 
     pub fn visibility(&self) -> &Visibility {
@@ -142,8 +146,47 @@ impl TryFrom<String> for Visibility {
 }
 
 #[cfg(test)]
-mod webhook_debug_tests {
+mod tests {
     use super::*;
+    use crate::account::models::{AccountUser, Role};
+    use uuid::Uuid;
+
+    #[test]
+    fn webhook_url_is_available_only_to_system() {
+        let secret = "super-secret-token";
+        let webhook = DiscordWebhookUrl::try_new(Some(
+            NonEmptyString::try_new(format!("https://discord.com/api/webhooks/123/{secret}"))
+                .unwrap(),
+        ))
+        .unwrap();
+        let settings = FormSettings::new().change_discord_webhook_url(webhook.clone());
+        let administrator = Actor::from(AccountUser::new(
+            "administrator".to_string(),
+            Uuid::new_v4().into(),
+            Role::Administrator,
+        ));
+
+        assert_eq!(settings.discord_webhook_url(&Actor::System), Ok(&webhook));
+        assert!(matches!(
+            settings.discord_webhook_url(&administrator),
+            Err(DomainError::Forbidden)
+        ));
+    }
+
+    #[test]
+    fn webhook_enabled_reports_whether_a_url_is_configured() {
+        let settings_without_webhook = FormSettings::new();
+        let settings_with_webhook = settings_without_webhook.clone().change_discord_webhook_url(
+            DiscordWebhookUrl::try_new(Some(
+                NonEmptyString::try_new("https://discord.com/api/webhooks/123/token".to_string())
+                    .unwrap(),
+            ))
+            .unwrap(),
+        );
+
+        assert!(!settings_without_webhook.discord_webhook_enabled());
+        assert!(settings_with_webhook.discord_webhook_enabled());
+    }
 
     #[test]
     fn webhook_url_and_form_settings_debug_redact_the_token() {

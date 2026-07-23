@@ -46,7 +46,7 @@ use crate::schemas::{
         },
         form_response_schemas::{
             ArchivedFormListPageResponse, ArchivedFormSchema, FormListPageResponse, FormMetaSchema,
-            FormSchema, FormSettingsSchema, QuestionResponseSchema,
+            FormSchema, FormSettingsResponseSchema, QuestionResponseSchema,
         },
     },
 };
@@ -171,7 +171,6 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
 }
 
 fn archived_form_schema_from_parts(
-    actor: &Actor,
     form: ArchivedForm,
     archived_by: AccountUser,
     labels: Vec<FormLabel>,
@@ -180,8 +179,7 @@ fn archived_form_schema_from_parts(
         id: form.form().id().to_owned(),
         title: form.form().title().to_owned(),
         description: form.form().description().to_owned(),
-        settings: FormSettingsSchema::from_settings_and_answer_settings(
-            actor,
+        settings: FormSettingsResponseSchema::from_settings_and_answer_settings(
             form.form().settings(),
             form.form().answer_settings(),
         ),
@@ -380,10 +378,7 @@ pub async fn create_form_handler(
         .await
         .map_err(handle_error)?;
 
-    let actor = Actor::from(user.clone());
-
     Ok(CreateFormResponse::Created(FormSchema::from_active_form(
-        &actor,
         &form,
         vec![],
     )))
@@ -427,7 +422,7 @@ pub async fn form_list_handler(
 
     let response_schema = forms
         .into_iter()
-        .map(|(form, labels)| FormSchema::from_active_form(&actor, &form, labels))
+        .map(|(form, labels)| FormSchema::from_active_form(&form, labels))
         .collect::<Vec<_>>();
 
     Ok(FormListResponse::Ok(FormListPageResponse {
@@ -469,7 +464,7 @@ pub async fn get_form_handler(
         .map_err(handle_error)?;
 
     Ok(GetFormResponse::Ok(FormSchema::from_active_form(
-        &actor, &form, labels,
+        &form, labels,
     )))
 }
 
@@ -504,16 +499,9 @@ pub async fn archive_form_handler(
         .archive_form(&user, form_id)
         .await
         .map_err(handle_error)?;
-    let actor = Actor::from(user.clone());
-
     Ok((
         StatusCode::OK,
-        Json(archived_form_schema_from_parts(
-            &actor,
-            archived_form,
-            user,
-            vec![],
-        )),
+        Json(archived_form_schema_from_parts(archived_form, user, vec![])),
     )
         .into_response())
 }
@@ -617,10 +605,7 @@ pub async fn update_form_handler(
         .await
         .map_err(handle_error)?;
 
-    let actor = Actor::from(user.clone());
-
     Ok(UpdateFormResponse::Ok(FormSchema::from_active_form(
-        &actor,
         &updated_form,
         labels,
     )))
@@ -662,16 +647,10 @@ pub async fn archived_form_list_handler(
         .transpose()
         .map_err(handle_error)?;
 
-    let actor = Actor::from(user);
     let response_schema = forms
         .into_iter()
         .map(|details| {
-            archived_form_schema_from_parts(
-                &actor,
-                details.form,
-                details.archived_by,
-                details.labels,
-            )
+            archived_form_schema_from_parts(details.form, details.archived_by, details.labels)
         })
         .collect::<Vec<_>>();
 
@@ -716,10 +695,7 @@ pub async fn get_archived_form_handler(
         .await
         .map_err(handle_error)?;
 
-    let actor = Actor::from(user.clone());
-
     Ok(ArchivedFormResponse::Ok(archived_form_schema_from_parts(
-        &actor,
         form,
         archived_by,
         labels,
