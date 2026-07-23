@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT url FROM global_discord_webhook_settings WHERE singleton_key = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "url",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.global_discord_webhook_settings",
+            "name": "url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "cd21bd4d18f28e62b07afc4ab511d98b32cfdddf942b11e95e0ac141cb5f0364"
+}

@@ -31,6 +31,9 @@ use errors::{
 use futures::{StreamExt, stream};
 
 use crate::{
+    application_event::{
+        ApplicationActor, ApplicationEvent, ApplicationEventPublisher, EventDetail,
+    },
     forms::discord_answer_webhook::{
         DiscordAnswerWebhookField, DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier,
     },
@@ -53,6 +56,7 @@ pub struct AnswerUseCase<
     pub answer_submitter_restriction_repository: &'a AnswerSubmitterRestrictionRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
     pub discord_answer_webhook_notifier: Option<&'a dyn DiscordAnswerWebhookNotifier>,
+    pub application_event_publisher: Option<&'a dyn ApplicationEventPublisher>,
 }
 
 impl<
@@ -225,6 +229,14 @@ impl<
             .post(&form, &answer_entry)
             .await?;
 
+        if let Some(publisher) = self.application_event_publisher {
+            publisher.publish(answer_submitted_event(
+                ApplicationActor::from(&user),
+                &form,
+                &answer_entry,
+            ));
+        }
+
         self.notify_discord_answer_webhook(&form, &answer_entry, user.name().to_string())
             .await;
 
@@ -238,6 +250,7 @@ impl<
         answers: Vec<FormAnswerContent>,
     ) -> Result<(), Error> {
         let actor = Actor::from(temporary_user.clone());
+        let application_actor = ApplicationActor::from(&temporary_user);
 
         let form_guard = self
             .active_form_repository
@@ -259,17 +272,21 @@ impl<
             temporary_user.name(),
         )?;
 
-        let respondent = format!(
-            "{} ({})",
-            temporary_user.name(),
-            temporary_user.contact_text()
-        );
+        let respondent = temporary_user.name().to_owned();
         let answer_entry =
             form.try_accept_temporary_answer(temporary_user, title, posted_answers)?;
 
         self.answer_entry_repository
             .post(&form, &answer_entry)
             .await?;
+
+        if let Some(publisher) = self.application_event_publisher {
+            publisher.publish(answer_submitted_event(
+                application_actor,
+                &form,
+                &answer_entry,
+            ));
+        }
 
         self.notify_discord_answer_webhook(&form, &answer_entry, respondent)
             .await;
@@ -475,6 +492,35 @@ impl<
     }
 }
 
+fn answer_submitted_event(
+    actor: ApplicationActor,
+    form: &Allowed<ActiveForm, Read>,
+    answer: &Allowed<AnswerEntry, domain::types::authorization_guard::Create>,
+) -> ApplicationEvent {
+    let questions = form.questions().as_slice();
+    let title = answer
+        .title()
+        .to_owned()
+        .into_inner()
+        .map(|title| EventDetail::new("回答タイトル", title.into_inner()));
+    let contents = answer.contents().iter().map(|content| {
+        let question_title = questions
+            .iter()
+            .find(|question| question.id() == content.question_id)
+            .map(|question| question.title().as_str().to_owned())
+            .unwrap_or_else(|| "不明な質問".to_string());
+        EventDetail::new(question_title, content.answer.to_owned())
+    });
+
+    ApplicationEvent::AnswerSubmitted {
+        actor,
+        form_id: form.id().to_string(),
+        form_title: form.title().as_str().to_owned(),
+        answer_id: answer.id().to_string(),
+        details: title.into_iter().chain(contents).collect(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,7 +532,10 @@ mod tests {
                 AnswerLabelId, AnswerSubmitterRestriction, AnswerSubmitterRestrictionReason,
                 FormAnswerContentId,
             },
-            models::{AnswerSettings, DefaultAnswerTitle, FormDescription, FormTitle, QuestionSet},
+            models::{
+                AnswerSettings, DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormTitle,
+                QuestionSet,
+            },
             question::Question,
         },
         pagination::PageLimit,
@@ -494,10 +543,43 @@ mod tests {
         types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
     };
     use errors::domain::DomainError;
+    use std::sync::Mutex;
+    use types::non_empty_string::NonEmptyString;
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
     use crate::test_utils::repositories::FormUseCaseTestRepositories;
+
+    #[derive(Default)]
+    struct RecordingPublisher(Mutex<Vec<ApplicationEvent>>);
+
+    impl ApplicationEventPublisher for RecordingPublisher {
+        fn publish(&self, event: ApplicationEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    impl RecordingPublisher {
+        fn events(&self) -> Vec<ApplicationEvent> {
+            self.0.lock().unwrap().clone()
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingDiscordAnswerWebhookNotifier(Mutex<Vec<DiscordAnswerWebhookNotification>>);
+
+    #[async_trait]
+    impl DiscordAnswerWebhookNotifier for RecordingDiscordAnswerWebhookNotifier {
+        async fn notify_answer_posted(&self, notification: DiscordAnswerWebhookNotification) {
+            self.0.lock().unwrap().push(notification);
+        }
+    }
+
+    impl RecordingDiscordAnswerWebhookNotifier {
+        fn notifications(&self) -> Vec<DiscordAnswerWebhookNotification> {
+            self.0.lock().unwrap().clone()
+        }
+    }
 
     #[derive(Default)]
     struct EmptyAnswerLabelRepository;
@@ -639,6 +721,7 @@ mod tests {
         let user = active_user("user", Role::StandardUser);
         let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
         let empty_answer_label_repository = EmptyAnswerLabelRepository;
+        let publisher = RecordingPublisher::default();
         let usecase = AnswerUseCase {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &empty_answer_label_repository,
@@ -647,6 +730,7 @@ mod tests {
                 .answer_submitter_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: None,
+            application_event_publisher: Some(&publisher),
         };
 
         usecase
@@ -658,15 +742,35 @@ mod tests {
             only_posted_answer_title(&repositories, form_id).await,
             "Form"
         );
+        assert!(matches!(
+            publisher.events().as_slice(),
+            [ApplicationEvent::AnswerSubmitted { actor, details, .. }]
+                if actor.display_name == "user"
+                    && actor.account_id.is_some()
+                    && details.iter().any(|detail| detail.value == "answer")
+        ));
     }
 
     #[tokio::test]
     async fn post_temporary_answers_uses_current_form_title_for_generated_title() {
+        // This test is the only usecase test that enables the form-specific notifier, which
+        // constructs a frontend link from the process configuration.
+        unsafe { std::env::set_var("FRONTEND_URL", "https://example.com") };
         let form = form_with_default_answer_title(true);
+        let settings = form.settings().clone().change_discord_webhook_url(
+            DiscordWebhookUrl::try_new(Some(
+                NonEmptyString::try_new("https://discord.com/api/webhooks/123/token".to_string())
+                    .unwrap(),
+            ))
+            .unwrap(),
+        );
+        let form = form.change_settings(settings);
         let form_id = *form.id();
         let answer = answer_to(&form);
         let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
         let empty_answer_label_repository = EmptyAnswerLabelRepository;
+        let publisher = RecordingPublisher::default();
+        let notifier = RecordingDiscordAnswerWebhookNotifier::default();
         let usecase = AnswerUseCase {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &empty_answer_label_repository,
@@ -674,7 +778,8 @@ mod tests {
             answer_submitter_restriction_repository: &repositories
                 .answer_submitter_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
-            discord_answer_webhook_notifier: None,
+            discord_answer_webhook_notifier: Some(&notifier),
+            application_event_publisher: Some(&publisher),
         };
 
         usecase
@@ -690,6 +795,20 @@ mod tests {
             only_posted_answer_title(&repositories, form_id).await,
             "Form"
         );
+        assert!(matches!(
+            publisher.events().as_slice(),
+            [ApplicationEvent::AnswerSubmitted { actor, details, .. }]
+                if actor.display_name == "temporary user"
+                    && actor.account_id.is_none()
+                    && details.iter().all(|detail| !detail.value.contains("contact"))
+        ));
+        assert!(matches!(
+            notifier.notifications().as_slice(),
+            [notification]
+                if notification.fields.iter().all(|field| !field.value.contains("contact"))
+                    && notification.fields.iter().any(|field|
+                        field.name == "回答者" && field.value == "temporary user")
+        ));
     }
 
     #[tokio::test]
@@ -724,6 +843,7 @@ mod tests {
                 .answer_submitter_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: None,
+            application_event_publisher: None,
         };
 
         let result = usecase.post_answers(user, *form.id(), vec![answer]).await;

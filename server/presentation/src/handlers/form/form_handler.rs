@@ -35,6 +35,7 @@ use usecase::{
     models::{ActiveFormWithLabels, ArchivedFormDetails, UpsertQuestionInput},
 };
 
+use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
 use crate::handlers::error_handler::handle_error;
 use crate::schemas::{
     error_responses::*,
@@ -165,6 +166,7 @@ fn build_form_use_case(repository: &RealInfrastructureRepository) -> ResourceFor
         form_label_repository: repository.form_label_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         user_repository: repository.user_repository(),
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     }
 }
 

@@ -1,5 +1,6 @@
 pub mod answer_submitter_restriction_repository_impl;
 pub mod form_repository_impls;
+pub mod global_discord_webhook_repository_impl;
 pub mod notification_repository_impl;
 pub mod search_repository_impl;
 pub mod user_repository_impl;
@@ -56,6 +57,12 @@ impl<Client: DatabaseComponents + 'static> Repository<Client> {
             db: Arc::new(self),
             health_check,
         }
+    }
+}
+
+impl<H: HealthCheckRepository + Send + Sync + 'static> SharedRepository<ConnectionPool, H> {
+    pub fn global_discord_webhook_repository(&self) -> &Repository<ConnectionPool> {
+        &self.db
     }
 }
 

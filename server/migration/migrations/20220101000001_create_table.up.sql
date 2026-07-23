@@ -40,6 +40,14 @@ CREATE TABLE IF NOT EXISTS discord_notification_settings(
     FOREIGN KEY fk_discord_notification_settings_id(discord_id) REFERENCES discord_linked_users(discord_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS global_discord_webhook_settings(
+    singleton_key TINYINT NOT NULL DEFAULT 1 PRIMARY KEY,
+    url TEXT,
+    CONSTRAINT chk_global_discord_webhook_singleton CHECK (singleton_key = 1)
+);
+
+INSERT INTO global_discord_webhook_settings (singleton_key, url) VALUES (1, NULL);
+
 CREATE TABLE IF NOT EXISTS form_meta_data(
     id CHAR(36) NOT NULL PRIMARY KEY,
     title TEXT NOT NULL,

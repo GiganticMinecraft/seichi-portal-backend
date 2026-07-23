@@ -32,6 +32,7 @@ use usecase::forms::{
     discord_answer_webhook::{DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier},
 };
 
+use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
 use crate::schemas::error_responses::*;
 use crate::{
     handlers::error_handler::handle_error,
@@ -65,6 +66,7 @@ fn build_answer_use_case<'a>(
             .answer_submitter_restriction_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         discord_answer_webhook_notifier,
+        application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     }
 }
 
