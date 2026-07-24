@@ -5553,6 +5553,20 @@
                 ]
               }
             }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ANONYMOUS"
+                ]
+              }
+            }
           }
         ]
       },
@@ -5721,6 +5735,7 @@
       "AnswerSettingsSchema": {
         "type": "object",
         "required": [
+          "hide_author",
           "visibility",
           "acceptance_period",
           "answer_group_ids"
@@ -5740,6 +5755,9 @@
               "string",
               "null"
             ]
+          },
+          "hide_author": {
+            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/AnswerVisibility"

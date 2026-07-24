@@ -1,0 +1,235 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT f.id, f.title, f.description, f.visibility,\n                    f.answer_visibility, f.hide_author AS `hide_author: _`,\n                    f.allow_temporary_answers AS `allow_temporary_answers: _`,\n                    f.acceptance_period_start_at AS `acceptance_period_start_at: _`,\n                    f.acceptance_period_end_at AS `acceptance_period_end_at: _`,\n                    f.default_answer_title, f.created_at AS `created_at: _`,\n                    f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`\n                    FROM form_meta_data f\n                    LEFT JOIN form_discord_webhooks w ON f.id = w.form_id\n                    ORDER BY f.id\n                    LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "visibility",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 28
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "answer_visibility",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 28
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "answer_visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "hide_author: _",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "NOT_NULL",
+          "collation": 63,
+          "max_size": 1
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "hide_author"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "allow_temporary_answers: _",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "NOT_NULL",
+          "collation": 63,
+          "max_size": 1
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "allow_temporary_answers"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "acceptance_period_start_at: _",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "acceptance_period_start_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "acceptance_period_end_at: _",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "acceptance_period_end_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "default_answer_title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "default_answer_title"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at: _",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "NOT_NULL | BINARY",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at: _",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "NOT_NULL | BINARY | ON_UPDATE_NOW",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "discord_webhook_url?",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_discord_webhooks",
+            "name": "url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "70d73dc3e23d7dce166e1342edb7bd82e9e35cc03af675208c9313c640a14fd7"
+}

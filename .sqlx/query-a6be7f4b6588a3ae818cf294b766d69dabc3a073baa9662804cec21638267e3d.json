@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_discord_webhooks (form_id, url) VALUES (?, ?)\n        ON DUPLICATE KEY UPDATE url = VALUES(url)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a6be7f4b6588a3ae818cf294b766d69dabc3a073baa9662804cec21638267e3d"
+}

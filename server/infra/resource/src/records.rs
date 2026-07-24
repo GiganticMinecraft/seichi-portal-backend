@@ -11,10 +11,10 @@ use domain::{
         comment::{Comment, CommentContent},
         message::{Message, MessageBody},
         models::{
-            ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerSettings, ArchivedForm,
-            DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
-            FormLabelAssignment, FormLabelId, FormLabelName, FormMeta, FormSettings, FormTitle,
-            QuestionSet,
+            ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerAuthorPublicationPolicy,
+            AnswerSettings, ArchivedForm, DefaultAnswerTitle, DiscordWebhookUrl, FormDescription,
+            FormId, FormLabel, FormLabelAssignment, FormLabelId, FormLabelName, FormMeta,
+            FormSettings, FormTitle, QuestionSet,
         },
         question::{Choice, Question, QuestionType},
     },
@@ -114,6 +114,7 @@ pub struct ActiveFormRecord {
     pub discord_webhook_url: Option<String>,
     pub visibility: String,
     pub answer_visibility: String,
+    pub hide_author: bool,
     pub allow_temporary_answers: bool,
     pub acceptance_period_start_at: Option<DateTime<Utc>>,
     pub acceptance_period_end_at: Option<DateTime<Utc>>,
@@ -137,6 +138,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             discord_webhook_url,
             visibility,
             answer_visibility,
+            hide_author,
             allow_temporary_answers,
             acceptance_period_start_at,
             acceptance_period_end_at,
@@ -163,6 +165,9 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             AnswerAcceptancePeriod::try_new(acceptance_period_start_at, acceptance_period_end_at)?,
             allow_temporary_answers,
         )
+        .change_author_publication_policy(AnswerAuthorPublicationPolicy::from_hide_author(
+            hide_author,
+        ))
         .change_answer_groups(AllowedUserGroups::new(answer_group_ids));
 
         Ok(unsafe {

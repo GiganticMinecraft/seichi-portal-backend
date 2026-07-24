@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_label_settings_for_form_answers (id, answer_id, label_id)\n        SELECT s.id, s.answer_id, s.label_id\n        FROM label_settings_for_form_answers s\n        INNER JOIN answers a ON s.answer_id = a.id\n        WHERE a.form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d28130b03d44ff0d7ae1ab5bbe23f5baf3f2c2a52ccc4ba98ea75e8be3fdc682"
+}

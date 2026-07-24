@@ -17,7 +17,7 @@ use domain::{
 use errors::{Error, infra::InfraError};
 use futures::{TryStreamExt, stream};
 use itertools::Itertools;
-use sqlx::{AssertSqlSafe, MySqlConnection, Row, mysql::MySqlRow, query};
+use sqlx::{AssertSqlSafe, MySqlConnection, Row, query};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 use types::non_empty_string::NonEmptyString;
@@ -47,6 +47,7 @@ struct FormRow {
     discord_webhook_url: Option<String>,
     visibility: String,
     answer_visibility: String,
+    hide_author: bool,
     allow_temporary_answers: bool,
     acceptance_period_start_at: Option<DateTime<Utc>>,
     acceptance_period_end_at: Option<DateTime<Utc>>,
@@ -59,6 +60,62 @@ struct ArchivedFormRow {
     archived_by_name: String,
     archived_by_id: String,
     archived_by_role: Role,
+}
+
+struct ArchivedFormQueryRow {
+    id: String,
+    title: String,
+    description: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    discord_webhook_url: Option<String>,
+    visibility: String,
+    answer_visibility: String,
+    hide_author: bool,
+    allow_temporary_answers: bool,
+    acceptance_period_start_at: Option<DateTime<Utc>>,
+    acceptance_period_end_at: Option<DateTime<Utc>>,
+    default_answer_title: Option<String>,
+    archived_at: DateTime<Utc>,
+    archived_by_name: String,
+    archived_by_id: String,
+    archived_by_role: String,
+}
+
+macro_rules! execute_typed_query {
+    ($txn:expr, $sql:literal $(, $argument:expr)* $(,)?) => {
+        sqlx::query!($sql $(, $argument)*)
+            .execute(&mut **$txn)
+            .await?
+    };
+}
+
+impl TryFrom<ArchivedFormQueryRow> for ArchivedFormRow {
+    type Error = InfraError;
+
+    fn try_from(row: ArchivedFormQueryRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            form: FormRow {
+                id: row.id,
+                title: row.title,
+                description: row.description,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                discord_webhook_url: row.discord_webhook_url,
+                visibility: row.visibility,
+                answer_visibility: row.answer_visibility,
+                hide_author: row.hide_author,
+                allow_temporary_answers: row.allow_temporary_answers,
+                acceptance_period_start_at: row.acceptance_period_start_at,
+                acceptance_period_end_at: row.acceptance_period_end_at,
+                default_answer_title: row.default_answer_title,
+            },
+            archived_at: row.archived_at,
+            archived_by_name: row.archived_by_name,
+            archived_by_id: row.archived_by_id,
+            archived_by_role: Role::from_str(&row.archived_by_role)?,
+        })
+    }
 }
 
 async fn get_questions_txn_with_tables(
@@ -202,6 +259,7 @@ async fn build_active_form_record(
         discord_webhook_url: row.discord_webhook_url,
         visibility: row.visibility,
         answer_visibility: row.answer_visibility,
+        hide_author: row.hide_author,
         allow_temporary_answers: row.allow_temporary_answers,
         acceptance_period_start_at: row.acceptance_period_start_at,
         acceptance_period_end_at: row.acceptance_period_end_at,
@@ -384,46 +442,6 @@ async fn archived_form_record_from_row(
     .await
 }
 
-fn form_row_from_db_row(row: MySqlRow) -> Result<FormRow, InfraError> {
-    Ok(FormRow {
-        id: row.try_get("id")?,
-        title: row.try_get("title")?,
-        description: row.try_get("description")?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
-        discord_webhook_url: row.try_get("discord_webhook_url")?,
-        visibility: row.try_get("visibility")?,
-        answer_visibility: row.try_get("answer_visibility")?,
-        allow_temporary_answers: row.try_get("allow_temporary_answers")?,
-        acceptance_period_start_at: row.try_get("acceptance_period_start_at")?,
-        acceptance_period_end_at: row.try_get("acceptance_period_end_at")?,
-        default_answer_title: row.try_get("default_answer_title")?,
-    })
-}
-
-fn archived_form_row_from_db_row(row: MySqlRow) -> Result<ArchivedFormRow, InfraError> {
-    Ok(ArchivedFormRow {
-        form: FormRow {
-            id: row.try_get("id")?,
-            title: row.try_get("title")?,
-            description: row.try_get("description")?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
-            discord_webhook_url: row.try_get("discord_webhook_url")?,
-            visibility: row.try_get("visibility")?,
-            answer_visibility: row.try_get("answer_visibility")?,
-            allow_temporary_answers: row.try_get("allow_temporary_answers")?,
-            acceptance_period_start_at: row.try_get("acceptance_period_start_at")?,
-            acceptance_period_end_at: row.try_get("acceptance_period_end_at")?,
-            default_answer_title: row.try_get("default_answer_title")?,
-        },
-        archived_at: row.try_get("archived_at")?,
-        archived_by_name: row.try_get("archived_by_name")?,
-        archived_by_id: row.try_get("archived_by_id")?,
-        archived_by_role: Role::from_str(&row.try_get::<String, _>("archived_by_role")?)?,
-    })
-}
-
 async fn fetch_answer_entries_page(
     txn: &mut DatabaseTransaction,
     form_id: Option<FormId>,
@@ -506,43 +524,51 @@ async fn fetch_form_row(
     txn: &mut DatabaseTransaction,
     form_id: FormId,
 ) -> Result<Option<FormRow>, InfraError> {
-    let row = sqlx::query(
+    let row = sqlx::query_as!(
+        FormRow,
         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-            f.created_at, f.updated_at, w.url AS discord_webhook_url
+            f.answer_visibility, f.hide_author AS `hide_author: _`,
+            f.allow_temporary_answers AS `allow_temporary_answers: _`,
+            f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+            f.acceptance_period_end_at AS `acceptance_period_end_at: _`, f.default_answer_title,
+            f.created_at AS `created_at: _`, f.updated_at AS `updated_at: _`,
+            w.url AS `discord_webhook_url?`
         FROM form_meta_data f
         LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
         WHERE f.id = ?",
+        form_id.into_inner().to_string(),
     )
-    .bind(form_id.into_inner().to_string())
     .fetch_optional(&mut **txn)
     .await?;
 
-    row.map(form_row_from_db_row).transpose()
+    Ok(row)
 }
 
 async fn fetch_archived_form_row(
     txn: &mut DatabaseTransaction,
     form_id: FormId,
 ) -> Result<Option<ArchivedFormRow>, InfraError> {
-    let row = sqlx::query(
+    let row = sqlx::query_as!(
+        ArchivedFormQueryRow,
         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-            f.created_at, f.updated_at, w.url AS discord_webhook_url,
-            f.archived_at, u.name AS archived_by_name,
+            f.answer_visibility, f.hide_author AS `hide_author: _`,
+            f.allow_temporary_answers AS `allow_temporary_answers: _`,
+            f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+            f.acceptance_period_end_at AS `acceptance_period_end_at: _`, f.default_answer_title,
+            f.created_at AS `created_at: _`, f.updated_at AS `updated_at: _`,
+            w.url AS `discord_webhook_url?`,
+            f.archived_at AS `archived_at: _`, u.name AS archived_by_name,
             u.id AS archived_by_id, u.role AS archived_by_role
         FROM archived_form_meta_data f
         INNER JOIN users u ON f.archived_by = u.id
         LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
         WHERE f.id = ?",
+        form_id.into_inner().to_string(),
     )
-    .bind(form_id.into_inner().to_string())
     .fetch_optional(&mut **txn)
     .await?;
 
-    row.map(archived_form_row_from_db_row).transpose()
+    row.map(TryInto::try_into).transpose()
 }
 
 async fn insert_form_root(
@@ -558,6 +584,7 @@ async fn insert_form_root(
 
     let answer_settings = form.answer_settings();
     let answer_visibility = answer_settings.visibility().to_string();
+    let hide_author = answer_settings.author_publication_policy().hides_author();
     let allow_temporary_answers = *answer_settings.allow_temporary_answers();
     let default_answer_title = answer_settings
         .default_answer_title()
@@ -568,32 +595,35 @@ async fn insert_form_root(
     let acceptance_period_end_at = answer_settings.acceptance_period().end_at().to_owned();
     let discord_webhook_url = discord_webhook_url_for_persistence(form.settings());
 
-    sqlx::query(
+    sqlx::query!(
         r#"INSERT INTO form_meta_data
-        (id, title, description, visibility, answer_visibility, allow_temporary_answers,
+        (id, title, description, visibility, answer_visibility, hide_author, allow_temporary_answers,
          acceptance_period_start_at, acceptance_period_end_at, default_answer_title,
          created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        form_id,
+        title,
+        description,
+        visibility,
+        answer_visibility,
+        hide_author,
+        allow_temporary_answers,
+        acceptance_period_start_at,
+        acceptance_period_end_at,
+        default_answer_title,
+        user_id,
+        user_id,
     )
-    .bind(form_id.clone())
-    .bind(title)
-    .bind(description)
-    .bind(visibility)
-    .bind(answer_visibility)
-    .bind(allow_temporary_answers)
-    .bind(acceptance_period_start_at)
-    .bind(acceptance_period_end_at)
-    .bind(default_answer_title)
-    .bind(user_id.clone())
-    .bind(user_id)
     .execute(&mut **txn)
     .await?;
 
-    sqlx::query(r"INSERT INTO form_discord_webhooks (form_id, url) VALUES (?, ?)")
-        .bind(form_id)
-        .bind(discord_webhook_url)
-        .execute(&mut **txn)
-        .await?;
+    sqlx::query!(
+        r"INSERT INTO form_discord_webhooks (form_id, url) VALUES (?, ?)",
+        form_id,
+        discord_webhook_url,
+    )
+    .execute(&mut **txn)
+    .await?;
 
     Ok(())
 }
@@ -620,6 +650,7 @@ async fn update_form_root(
 
     let answer_settings = form.answer_settings();
     let answer_visibility = answer_settings.visibility().to_string();
+    let hide_author = answer_settings.author_publication_policy().hides_author();
     let allow_temporary_answers = *answer_settings.allow_temporary_answers();
     let default_answer_title = answer_settings
         .default_answer_title()
@@ -631,38 +662,40 @@ async fn update_form_root(
 
     let discord_webhook_url = discord_webhook_url_for_persistence(form.settings());
 
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE form_meta_data SET
             title = ?,
             description = ?,
             visibility = ?,
             answer_visibility = ?,
+            hide_author = ?,
             allow_temporary_answers = ?,
             acceptance_period_start_at = ?,
             acceptance_period_end_at = ?,
             default_answer_title = ?,
             updated_by = ?
             WHERE id = ?"#,
+        title,
+        description,
+        visibility,
+        answer_visibility,
+        hide_author,
+        allow_temporary_answers,
+        acceptance_period_start_at,
+        acceptance_period_end_at,
+        default_answer_title,
+        updated_by_id,
+        form_id,
     )
-    .bind(title)
-    .bind(description)
-    .bind(visibility)
-    .bind(answer_visibility)
-    .bind(allow_temporary_answers)
-    .bind(acceptance_period_start_at)
-    .bind(acceptance_period_end_at)
-    .bind(default_answer_title)
-    .bind(updated_by_id)
-    .bind(form_id.clone())
     .execute(&mut **txn)
     .await?;
 
-    sqlx::query(
+    sqlx::query!(
         r#"INSERT INTO form_discord_webhooks (form_id, url) VALUES (?, ?)
         ON DUPLICATE KEY UPDATE url = VALUES(url)"#,
+        form_id,
+        discord_webhook_url,
     )
-    .bind(form_id)
-    .bind(discord_webhook_url)
     .execute(&mut **txn)
     .await?;
 
@@ -677,114 +710,101 @@ async fn copy_active_form_to_archive(
     let archived_at = *form.archived_at();
     let archived_by = form.archived_by().to_string();
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, ?, ?
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, ?, ?
         FROM form_meta_data
         WHERE id = ?",
-    )
-    .bind(archived_at)
-    .bind(archived_by)
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        archived_at,
+        archived_by,
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_form_questions
         (question_id, form_id, template_key, position, title, description, question_type, is_required)
         SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
         FROM form_questions WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_form_choices (id, question_id, position, label)
         SELECT c.id, c.question_id, c.position, c.label
         FROM form_choices c
         INNER JOIN form_questions q ON c.question_id = q.question_id
         WHERE q.form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_form_discord_webhooks (id, form_id, url)
         SELECT id, form_id, url FROM form_discord_webhooks WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
     copy_form_group_restrictions_to_archive(txn, &form_id).await?;
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM answers WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_real_answers (id, answer_id, question_id, answer)
         SELECT r.id, r.answer_id, r.question_id, r.answer
         FROM real_answers r
         INNER JOIN answers a ON r.answer_id = a.id
         WHERE a.form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_form_answer_comments (id, answer_id, commented_by, content, timestamp)
         SELECT c.id, c.answer_id, c.commented_by, c.content, c.timestamp
         FROM form_answer_comments c
         INNER JOIN answers a ON c.answer_id = a.id
         WHERE a.form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_messages (id, related_answer_id, sender, body, timestamp)
         SELECT m.id, m.related_answer_id, m.sender, m.body, m.timestamp
         FROM messages m
         INNER JOIN answers a ON m.related_answer_id = a.id
         WHERE a.form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_label_settings_for_forms (id, form_id, label_id)
         SELECT id, form_id, label_id FROM label_settings_for_forms WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_label_settings_for_form_answers (id, answer_id, label_id)
         SELECT s.id, s.answer_id, s.label_id
         FROM label_settings_for_form_answers s
         INNER JOIN answers a ON s.answer_id = a.id
         WHERE a.form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query("DELETE FROM form_meta_data WHERE id = ?")
-        .bind(form_id)
-        .execute(&mut **txn)
-        .await?;
+    execute_typed_query!(txn, "DELETE FROM form_meta_data WHERE id = ?", form_id);
 
     Ok(())
 }
@@ -795,109 +815,100 @@ async fn restore_archived_form_to_active(
 ) -> Result<(), InfraError> {
     let form_id = form_id.into_inner().to_string();
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by
         FROM archived_form_meta_data
         WHERE id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO form_questions
         (question_id, form_id, template_key, position, title, description, question_type, is_required)
         SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
         FROM archived_form_questions WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO form_choices (question_id, position, label)
         SELECT question_id, position, label
         FROM archived_form_choices
         WHERE question_id IN (
             SELECT question_id FROM archived_form_questions WHERE form_id = ?
         )",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO form_discord_webhooks (form_id, url)
         SELECT form_id, url FROM archived_form_discord_webhooks WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
     restore_form_group_restrictions_from_archive(txn, &form_id).await?;
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM archived_answers WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO real_answers (id, answer_id, question_id, answer)
         SELECT id, answer_id, question_id, answer
         FROM archived_real_answers
         WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO form_answer_comments (id, answer_id, commented_by, content, timestamp)
         SELECT id, answer_id, commented_by, content, timestamp
         FROM archived_form_answer_comments
         WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO messages (id, related_answer_id, sender, body, timestamp)
         SELECT id, related_answer_id, sender, body, timestamp
         FROM archived_messages
         WHERE related_answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO label_settings_for_forms (form_id, label_id)
         SELECT form_id, label_id FROM archived_label_settings_for_forms WHERE form_id = ?",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query(
+    execute_typed_query!(
+        txn,
         r"INSERT INTO label_settings_for_form_answers (answer_id, label_id)
         SELECT answer_id, label_id
         FROM archived_label_settings_for_form_answers
         WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
-    )
-    .bind(&form_id)
-    .execute(&mut **txn)
-    .await?;
+        &form_id,
+    );
 
-    sqlx::query("DELETE FROM archived_form_meta_data WHERE id = ?")
-        .bind(form_id)
-        .execute(&mut **txn)
-        .await?;
+    execute_typed_query!(
+        txn,
+        "DELETE FROM archived_form_meta_data WHERE id = ?",
+        form_id,
+    );
 
     Ok(())
 }
@@ -987,41 +998,46 @@ impl FormDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = if let Some(position) = request.after_position() {
-                    sqlx::query(
+                    sqlx::query_as!(
+                        FormRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                    f.created_at, f.updated_at, w.url AS discord_webhook_url
+                    f.answer_visibility, f.hide_author AS `hide_author: _`,
+                    f.allow_temporary_answers AS `allow_temporary_answers: _`,
+                    f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+                    f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
+                    f.default_answer_title, f.created_at AS `created_at: _`,
+                    f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`
                     FROM form_meta_data f
                     LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
                     WHERE f.id > ?
                     ORDER BY f.id
                     LIMIT ?",
+                        position.last_form_id().into_inner().to_string(),
+                        i64::from(request.limit().overfetch_value()),
                     )
-                    .bind(position.last_form_id().into_inner().to_string())
-                    .bind(i64::from(request.limit().overfetch_value()))
                     .fetch_all(&mut **txn)
                     .await?
                 } else {
-                    sqlx::query(
+                    sqlx::query_as!(
+                        FormRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                    f.created_at, f.updated_at, w.url AS discord_webhook_url
+                    f.answer_visibility, f.hide_author AS `hide_author: _`,
+                    f.allow_temporary_answers AS `allow_temporary_answers: _`,
+                    f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+                    f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
+                    f.default_answer_title, f.created_at AS `created_at: _`,
+                    f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`
                     FROM form_meta_data f
                     LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
                     ORDER BY f.id
                     LIMIT ?",
+                        i64::from(request.limit().overfetch_value()),
                     )
-                    .bind(i64::from(request.limit().overfetch_value()))
                     .fetch_all(&mut **txn)
                     .await?
                 };
 
-                let form_rows = rows
-                    .into_iter()
-                    .map(form_row_from_db_row)
-                    .collect::<Result<Vec<_>, _>>()?;
+                let form_rows = rows;
 
                 let form_ids = form_rows.iter().map(|r| r.id.clone()).collect_vec();
                 let group_restrictions =
@@ -1075,22 +1091,21 @@ impl FormDatabase for ConnectionPool {
     async fn list_all(&self) -> Result<Vec<ActiveFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let rows = sqlx::query(
+                let form_rows = sqlx::query_as!(
+                    FormRow,
                     r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                    f.created_at, f.updated_at, w.url AS discord_webhook_url
+                    f.answer_visibility, f.hide_author AS `hide_author: _`,
+                    f.allow_temporary_answers AS `allow_temporary_answers: _`,
+                    f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+                    f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
+                    f.default_answer_title, f.created_at AS `created_at: _`,
+                    f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`
                     FROM form_meta_data f
                     LEFT JOIN form_discord_webhooks w ON f.id = w.form_id
                     ORDER BY f.id",
                 )
                 .fetch_all(&mut **txn)
                 .await?;
-
-                let form_rows = rows
-                    .into_iter()
-                    .map(form_row_from_db_row)
-                    .collect::<Result<Vec<_>, _>>()?;
 
                 let form_ids = form_rows.iter().map(|r| r.id.clone()).collect_vec();
                 let group_restrictions =
@@ -1154,12 +1169,16 @@ impl FormDatabase for ConnectionPool {
                 let rows = if let Some(query_text) = query_text {
                     let like = format!("%{query_text}%");
                     if let Some(position) = request.after_position() {
-                        sqlx::query(
+                        sqlx::query_as!(
+                            ArchivedFormQueryRow,
                             r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
-                        f.archived_at, u.name AS archived_by_name,
+                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.allow_temporary_answers AS `allow_temporary_answers: _`,
+                        f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+                        f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
+                        f.default_answer_title, f.created_at AS `created_at: _`,
+                        f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`,
+                        f.archived_at AS `archived_at: _`, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
@@ -1168,22 +1187,26 @@ impl FormDatabase for ConnectionPool {
                             AND (f.title LIKE ? OR f.description LIKE ?)
                         ORDER BY f.archived_at DESC, f.id ASC
                         LIMIT ?",
+                            position.last_archived_at(),
+                            position.last_archived_at(),
+                            position.last_form_id().into_inner().to_string(),
+                            &like,
+                            &like,
+                            i64::from(request.limit().overfetch_value()),
                         )
-                        .bind(position.last_archived_at())
-                        .bind(position.last_archived_at())
-                        .bind(position.last_form_id().into_inner().to_string())
-                        .bind(&like)
-                        .bind(&like)
-                        .bind(i64::from(request.limit().overfetch_value()))
                         .fetch_all(&mut **txn)
                         .await?
                     } else {
-                        sqlx::query(
+                        sqlx::query_as!(
+                            ArchivedFormQueryRow,
                             r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
-                        f.archived_at, u.name AS archived_by_name,
+                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.allow_temporary_answers AS `allow_temporary_answers: _`,
+                        f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+                        f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
+                        f.default_answer_title, f.created_at AS `created_at: _`,
+                        f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`,
+                        f.archived_at AS `archived_at: _`, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
@@ -1191,20 +1214,24 @@ impl FormDatabase for ConnectionPool {
                         WHERE f.title LIKE ? OR f.description LIKE ?
                         ORDER BY f.archived_at DESC, f.id ASC
                         LIMIT ?",
+                            &like,
+                            &like,
+                            i64::from(request.limit().overfetch_value()),
                         )
-                        .bind(&like)
-                        .bind(&like)
-                        .bind(i64::from(request.limit().overfetch_value()))
                         .fetch_all(&mut **txn)
                         .await?
                     }
                 } else if let Some(position) = request.after_position() {
-                    sqlx::query(
+                    sqlx::query_as!(
+                        ArchivedFormQueryRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
-                        f.archived_at, u.name AS archived_by_name,
+                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.allow_temporary_answers AS `allow_temporary_answers: _`,
+                        f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+                        f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
+                        f.default_answer_title, f.created_at AS `created_at: _`,
+                        f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`,
+                        f.archived_at AS `archived_at: _`, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
@@ -1212,36 +1239,40 @@ impl FormDatabase for ConnectionPool {
                         WHERE f.archived_at < ? OR (f.archived_at = ? AND f.id > ?)
                         ORDER BY f.archived_at DESC, f.id ASC
                         LIMIT ?",
+                        position.last_archived_at(),
+                        position.last_archived_at(),
+                        position.last_form_id().into_inner().to_string(),
+                        i64::from(request.limit().overfetch_value()),
                     )
-                    .bind(position.last_archived_at())
-                    .bind(position.last_archived_at())
-                    .bind(position.last_form_id().into_inner().to_string())
-                    .bind(i64::from(request.limit().overfetch_value()))
                     .fetch_all(&mut **txn)
                     .await?
                 } else {
-                    sqlx::query(
+                    sqlx::query_as!(
+                        ArchivedFormQueryRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.allow_temporary_answers,
-            f.acceptance_period_start_at, f.acceptance_period_end_at, f.default_answer_title,
-                        f.created_at, f.updated_at, w.url AS discord_webhook_url,
-                        f.archived_at, u.name AS archived_by_name,
+                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.allow_temporary_answers AS `allow_temporary_answers: _`,
+                        f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
+                        f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
+                        f.default_answer_title, f.created_at AS `created_at: _`,
+                        f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`,
+                        f.archived_at AS `archived_at: _`, u.name AS archived_by_name,
                         u.id AS archived_by_id, u.role AS archived_by_role
                         FROM archived_form_meta_data f
                         INNER JOIN users u ON f.archived_by = u.id
                         LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id
                         ORDER BY f.archived_at DESC, f.id ASC
                         LIMIT ?",
+                        i64::from(request.limit().overfetch_value()),
                     )
-                    .bind(i64::from(request.limit().overfetch_value()))
                     .fetch_all(&mut **txn)
                     .await?
                 };
 
                 let form_rows = rows
                     .into_iter()
-                    .map(archived_form_row_from_db_row)
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .map(TryInto::try_into)
+                    .collect::<Result<Vec<ArchivedFormRow>, InfraError>>()?;
 
                 let form_ids = form_rows.iter().map(|r| r.form.id.clone()).collect_vec();
                 let group_restrictions =

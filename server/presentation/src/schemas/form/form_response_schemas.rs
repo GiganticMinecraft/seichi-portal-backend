@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
+use domain::account::models::AccountUser;
 use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
-    answer::{AnswerEntry, AnswerLabel, FormAnswerContent},
+    answer::{AnswerLabel, FormAnswerContent},
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
@@ -10,11 +11,10 @@ use domain::form::{
     },
     question::{Choice, Question, QuestionType},
 };
-use domain::{account::models::AccountUser, auth::Actor};
 use itertools::Itertools;
 use serde::Serialize;
 use types::non_empty_string::NonEmptyString;
-use usecase::models::CommentWithAuthor;
+use usecase::models::{CommentWithAuthor, PublishedAnswerAuthor, PublishedAnswerEntry};
 use uuid::Uuid;
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -42,6 +42,7 @@ impl From<domain::form::models::AnswerVisibility> for AnswerVisibility {
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct AnswerSettingsSchema {
+    pub hide_author: bool,
     #[schema(value_type = Option<String>)]
     pub default_answer_title: DefaultAnswerTitle,
     pub visibility: AnswerVisibility,
@@ -53,6 +54,7 @@ pub struct AnswerSettingsSchema {
 impl AnswerSettingsSchema {
     pub fn from_answer_settings(answer_settings: &AnswerSettings) -> Self {
         Self {
+            hide_author: answer_settings.author_publication_policy().hides_author(),
             default_answer_title: answer_settings.default_answer_title().to_owned(),
             visibility: answer_settings.visibility().to_owned().into(),
             acceptance_period: AnswerAcceptancePeriodSchema {
@@ -346,19 +348,20 @@ pub enum AnswerAuthor {
     Temporary {
         temporary_user: TemporaryAnswerAuthor,
     },
+    #[serde(rename = "ANONYMOUS")]
+    Anonymous,
 }
 
-impl From<Actor> for AnswerAuthor {
-    fn from(val: Actor) -> Self {
+impl From<PublishedAnswerAuthor> for AnswerAuthor {
+    fn from(val: PublishedAnswerAuthor) -> Self {
         match val {
-            Actor::AccountUser(user) => AnswerAuthor::AuthenticatedUser { user: user.into() },
-            Actor::TemporaryAnswerAuthor(temporary_user) => AnswerAuthor::Temporary {
+            PublishedAnswerAuthor::AuthenticatedUser(user) => {
+                AnswerAuthor::AuthenticatedUser { user: user.into() }
+            }
+            PublishedAnswerAuthor::Temporary(temporary_user) => AnswerAuthor::Temporary {
                 temporary_user: temporary_user.into(),
             },
-            Actor::Anonymous => {
-                unreachable!("Anonymous user cannot be an answer author")
-            }
-            Actor::System => unreachable!("System actor cannot be an answer author"),
+            PublishedAnswerAuthor::Anonymous => AnswerAuthor::Anonymous,
         }
     }
 }
@@ -550,24 +553,15 @@ pub struct AnswerListPageResponse {
 }
 
 impl FormAnswer {
-    pub fn new(
-        answer: AnswerEntry,
-        form_id: FormId,
-        author: Actor,
-        labels: Vec<AnswerLabel>,
-    ) -> Self {
+    pub fn new(answer: PublishedAnswerEntry, form_id: FormId, labels: Vec<AnswerLabel>) -> Self {
         FormAnswer {
-            id: answer.id().to_owned().into(),
-            author: author.into(),
+            id: answer.id.into(),
+            author: answer.author.into(),
             form_id: form_id.into_inner(),
-            timestamp: answer.timestamp().to_owned(),
-            title: answer
-                .title()
-                .to_owned()
-                .into_inner()
-                .map(|title| title.to_string()),
+            timestamp: answer.timestamp,
+            title: answer.title.into_inner().map(|title| title.to_string()),
             answers: answer
-                .contents()
+                .contents
                 .iter()
                 .map(AnswerContent::from_ref)
                 .collect_vec(),
@@ -594,6 +588,7 @@ pub struct SenderSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::form::answer::{AnswerId, AnswerTitle};
     use domain::form::models::DiscordWebhookUrl;
     use domain::form::question::{Choice, Question};
     use types::non_empty_string::NonEmptyString;
@@ -676,5 +671,26 @@ mod tests {
                 .get("discord_webhook_url")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn anonymous_answer_author_uses_the_anonymous_api_variant() {
+        let answer = PublishedAnswerEntry {
+            id: AnswerId::from(Uuid::new_v4()),
+            author: PublishedAnswerAuthor::Anonymous,
+            timestamp: Utc::now(),
+            title: AnswerTitle::new(None),
+            contents: vec![],
+        };
+
+        let serialized = serde_json::to_value(FormAnswer::new(
+            answer,
+            FormId::from(Uuid::new_v4()),
+            vec![],
+        ))
+        .unwrap();
+
+        assert_eq!(serialized["author"]["type"], "ANONYMOUS");
+        assert_eq!(serialized["author"].as_object().unwrap().len(), 1);
     }
 }

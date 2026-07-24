@@ -16,7 +16,8 @@ use tokio::{
 };
 use tracing::warn;
 use usecase::application_event::{
-    ApplicationActor, ApplicationEvent, ApplicationEventPublisher, EventDetail,
+    AnswerSubmissionActor, ApplicationActor, ApplicationEvent, ApplicationEventPublisher,
+    EventDetail,
 };
 
 const EVENT_CHANNEL_CAPACITY: usize = 256;
@@ -107,6 +108,17 @@ fn actor_fields(actor: ApplicationActor) -> Vec<DiscordWebhookField> {
     .collect()
 }
 
+fn answer_submission_actor_fields(actor: AnswerSubmissionActor) -> Vec<DiscordWebhookField> {
+    match actor {
+        AnswerSubmissionActor::Identified(actor) => actor_fields(actor),
+        AnswerSubmissionActor::AuthorHidden => vec![DiscordWebhookField::new(
+            "回答者".to_string(),
+            "回答者は非公開です".to_string(),
+            false,
+        )],
+    }
+}
+
 fn detail_fields(details: Vec<EventDetail>) -> Vec<DiscordWebhookField> {
     details
         .into_iter()
@@ -121,6 +133,21 @@ fn form_fields(
 ) -> Vec<DiscordWebhookField> {
     [
         actor_fields(actor),
+        vec![
+            DiscordWebhookField::new("フォーム".to_string(), form_title, false),
+            DiscordWebhookField::new("フォームID".to_string(), form_id, true),
+        ],
+    ]
+    .concat()
+}
+
+fn answer_submission_form_fields(
+    actor: AnswerSubmissionActor,
+    form_id: String,
+    form_title: String,
+) -> Vec<DiscordWebhookField> {
+    [
+        answer_submission_actor_fields(actor),
         vec![
             DiscordWebhookField::new("フォーム".to_string(), form_title, false),
             DiscordWebhookField::new("フォームID".to_string(), form_id, true),
@@ -208,7 +235,7 @@ pub(crate) fn message_from_event(
         } => {
             let link_url = format!("{frontend}/forms/{form_id}/answers/{answer_id}");
             let fields = [
-                form_fields(actor, form_id, form_title),
+                answer_submission_form_fields(actor, form_id, form_title),
                 vec![DiscordWebhookField::new(
                     "回答ID".to_string(),
                     answer_id,
@@ -347,5 +374,30 @@ mod tests {
         );
 
         assert_eq!(message.link_url, "https://portal.example.com/forms/form-id");
+    }
+
+    #[test]
+    fn anonymous_answer_event_hides_actor_identity_in_the_message() {
+        let message = message_from_event(
+            ApplicationEvent::AnswerSubmitted {
+                actor: AnswerSubmissionActor::AuthorHidden,
+                form_id: "form-id".to_string(),
+                form_title: "Form".to_string(),
+                answer_id: "answer-id".to_string(),
+                details: vec![],
+            },
+            "https://discord.com/api/webhooks/123/token".to_string(),
+            "https://portal.example.com/",
+        );
+
+        assert!(message.fields.iter().any(|field| {
+            field.name == "回答者" && field.value == "回答者は非公開です"
+        }));
+        assert!(
+            message
+                .fields
+                .iter()
+                .all(|field| field.name != "実行者" && field.name != "実行者ID")
+        );
     }
 }

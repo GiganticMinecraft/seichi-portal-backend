@@ -12,12 +12,7 @@ use crate::schemas::{
 
 impl From<AnswerDetails> for FormAnswer {
     fn from(details: AnswerDetails) -> Self {
-        Self::new(
-            details.form_answer,
-            details.form_id,
-            details.author,
-            details.labels,
-        )
+        Self::new(details.answer, details.form_id, details.labels)
     }
 }
 
@@ -108,7 +103,6 @@ mod tests {
     use chrono::Utc;
     use domain::{
         account::models::{AccountUser, Role, UserGroup, UserGroupName},
-        auth::Actor,
         form::{
             answer::{
                 AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
@@ -123,7 +117,10 @@ mod tests {
         },
     };
     use types::non_empty_vec::NonEmptyVec;
-    use usecase::models::{ActiveFormWithLabels, AnswerDetails, CommentWithAuthor};
+    use usecase::models::{
+        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, PublishedAnswerAuthor,
+        PublishedAnswerEntry,
+    };
     use uuid::Uuid;
 
     #[test]
@@ -240,8 +237,10 @@ mod tests {
             users: vec![searched_user],
             answers: vec![AnswerDetails {
                 form_id,
-                form_answer: answer,
-                author: Actor::from(answer_author.clone()),
+                answer: PublishedAnswerEntry::new(
+                    answer,
+                    PublishedAnswerAuthor::AuthenticatedUser(answer_author.clone()),
+                ),
                 labels: vec![AnswerLabel::new(
                     "answer label".to_string().try_into().unwrap(),
                 )],

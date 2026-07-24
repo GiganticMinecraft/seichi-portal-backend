@@ -14,8 +14,8 @@ use domain::{
     auth::Actor,
     form::{
         models::{
-            AllowedUserGroups, ArchivedForm, ArchivedFormPagePosition, FormDescription, FormId,
-            FormLabel, FormPagePosition,
+            AllowedUserGroups, AnswerAuthorPublicationPolicy, ArchivedForm,
+            ArchivedFormPagePosition, FormDescription, FormId, FormLabel, FormPagePosition,
         },
         question::{Choice, Question, QuestionSet, QuestionType},
     },
@@ -332,20 +332,27 @@ pub async fn create_form_handler(
         answer_group_ids,
         acceptance_period,
         default_answer_title,
+        hide_author,
     ) = settings
         .map(|settings| {
             let answer_settings = settings.answer_settings;
-            let (answer_visibility, acceptance_period, default_answer_title, answer_group_ids) =
-                answer_settings
-                    .map(|answer_settings| {
-                        (
-                            answer_settings.visibility,
-                            answer_settings.acceptance_period,
-                            answer_settings.default_answer_title,
-                            answer_settings.answer_group_ids,
-                        )
-                    })
-                    .unwrap_or_default();
+            let (
+                answer_visibility,
+                acceptance_period,
+                default_answer_title,
+                answer_group_ids,
+                hide_author,
+            ) = answer_settings
+                .map(|answer_settings| {
+                    (
+                        answer_settings.visibility,
+                        answer_settings.acceptance_period,
+                        answer_settings.default_answer_title,
+                        answer_settings.answer_group_ids,
+                        answer_settings.hide_author,
+                    )
+                })
+                .unwrap_or_default();
 
             (
                 settings.discord_webhook_url.and_then(|url| url.0),
@@ -356,6 +363,7 @@ pub async fn create_form_handler(
                 answer_group_ids,
                 acceptance_period,
                 default_answer_title,
+                hide_author,
             )
         })
         .unwrap_or_default();
@@ -373,6 +381,7 @@ pub async fn create_form_handler(
             answer_group_ids.map(AllowedUserGroups::new),
             acceptance_period,
             default_answer_title,
+            hide_author.map(AnswerAuthorPublicationPolicy::from_hide_author),
             &user,
         )
         .await
@@ -549,6 +558,7 @@ pub async fn update_form_handler(
         allow_temporary_answers,
         answer_visibility,
         answer_group_ids,
+        hide_author,
     ) = if let Some(settings) = &targets.settings {
         (
             settings
@@ -574,9 +584,13 @@ pub async fn update_form_handler(
                 .answer_settings
                 .as_ref()
                 .and_then(|answer_settings| answer_settings.answer_group_ids.to_owned()),
+            settings
+                .answer_settings
+                .as_ref()
+                .and_then(|answer_settings| answer_settings.hide_author),
         )
     } else {
-        (None, None, None, None, None, None, None, None)
+        (None, None, None, None, None, None, None, None, None)
     };
     let questions = targets
         .questions
@@ -599,6 +613,7 @@ pub async fn update_form_handler(
             allow_temporary_answers,
             answer_visibility,
             answer_group_ids.map(AllowedUserGroups::new),
+            hide_author.map(AnswerAuthorPublicationPolicy::from_hide_author),
             questions,
             labels,
         )

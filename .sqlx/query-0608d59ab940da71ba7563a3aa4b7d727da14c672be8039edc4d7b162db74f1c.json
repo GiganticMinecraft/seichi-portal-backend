@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_label_settings_for_forms (id, form_id, label_id)\n        SELECT id, form_id, label_id FROM label_settings_for_forms WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "0608d59ab940da71ba7563a3aa4b7d727da14c672be8039edc4d7b162db74f1c"
+}

@@ -1,5 +1,8 @@
 use crate::{
-    models::{ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, CrossSearchOutput},
+    models::{
+        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, CrossSearchOutput,
+        PublishedAnswerAuthor, PublishedAnswerEntry,
+    },
     user_reference_resolver::resolve_user_references,
 };
 use domain::repository::form::answer_entry_repository::AnswerEntryRepository;
@@ -11,7 +14,7 @@ use domain::{
     account::models::AccountUser,
     auth::Actor,
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerId},
+        answer::{AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId},
         comment::Comment,
         models::{ActiveForm, FormId},
     },
@@ -191,6 +194,12 @@ impl<
     ) -> Result<Option<AnswerDetails>, Error> {
         let answer_id = *answer.id();
         let form_id = *answer.form_id();
+        let Some(form) = self.active_form_repository.get(form_id).await? else {
+            return Ok(None);
+        };
+        let Ok(form) = form.try_read(actor.clone()) else {
+            return Ok(None);
+        };
         let labels = self
             .form_answer_label_repository
             .get_labels_for_answers_by_answer_id(answer_id)
@@ -202,32 +211,36 @@ impl<
                     .map(|label| label.into_inner())
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let users = resolve_user_references(
-            self.user_repository,
-            account_user,
-            answer
-                .author()
-                .authenticated_user_id()
-                .into_iter()
-                .collect(),
-        )
-        .await?;
-        let author = match answer.author() {
-            AnswerAuthor::AuthenticatedUser(user_id) => {
-                let Some(user) = users.get(user_id).cloned() else {
-                    return Ok(None);
-                };
-                Actor::AccountUser(user)
-            }
-            AnswerAuthor::Temporary(temporary_user) => {
-                Actor::TemporaryAnswerAuthor(temporary_user.clone())
+        let author = match form.answer_settings().author_disclosure_for(actor) {
+            AnswerAuthorDisclosure::Anonymous => PublishedAnswerAuthor::Anonymous,
+            AnswerAuthorDisclosure::Disclosed => {
+                let users = resolve_user_references(
+                    self.user_repository,
+                    account_user,
+                    answer
+                        .author()
+                        .authenticated_user_id()
+                        .into_iter()
+                        .collect(),
+                )
+                .await?;
+                match answer.author() {
+                    AnswerAuthor::AuthenticatedUser(user_id) => {
+                        let Some(user) = users.get(user_id).cloned() else {
+                            return Ok(None);
+                        };
+                        PublishedAnswerAuthor::AuthenticatedUser(user)
+                    }
+                    AnswerAuthor::Temporary(temporary_user) => {
+                        PublishedAnswerAuthor::Temporary(temporary_user.clone())
+                    }
+                }
             }
         };
 
         Ok(Some(AnswerDetails {
             form_id,
-            form_answer: answer.into_inner(),
-            author,
+            answer: PublishedAnswerEntry::new(answer.into_inner(), author),
             labels,
         }))
     }
@@ -708,8 +721,9 @@ mod tests {
         account::models::{Role, UserGroup, UserGroupName},
         form::{
             answer::{
-                AnswerAuthor, AnswerEntry, AnswerSettings, AnswerTitle, AnswerVisibility,
-                FormAnswerContent, FormAnswerContentId, PostedAnswerContents,
+                AnswerAuthor, AnswerAuthorPublicationPolicy, AnswerEntry, AnswerSettings,
+                AnswerTitle, AnswerVisibility, FormAnswerContent, FormAnswerContentId,
+                PostedAnswerContents,
             },
             comment::{Comment, CommentContent, CommentId},
             models::{AllowedUserGroups, FormDescription, FormSettings, FormTitle},
@@ -934,7 +948,7 @@ mod tests {
 
         let answer_ids = answers
             .iter()
-            .map(|answer| *answer.form_answer.id())
+            .map(|answer| answer.answer.id)
             .collect::<Vec<_>>();
         assert_eq!(
             answer_ids,
@@ -944,6 +958,76 @@ mod tests {
                 visible_answer_a_id
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn search_answers_keeps_an_answer_with_a_hidden_missing_author_as_anonymous() {
+        let member_group = UserGroup::new(UserGroupName::new(
+            "members".to_string().try_into().unwrap(),
+        ));
+        let actor = AccountUser::with_groups(
+            "viewer".to_string(),
+            Uuid::from_u128(20).into(),
+            Role::StandardUser,
+            vec![member_group.clone()],
+        );
+        let form = form_restricted_to("hidden author", &member_group).change_answer_settings(
+            AnswerSettings::default()
+                .change_visibility(AnswerVisibility::PUBLIC)
+                .change_author_publication_policy(AnswerAuthorPublicationPolicy::Hide),
+        );
+        let form_id = *form.id();
+        let question_id = *form.questions().as_slice()[0].id();
+        let answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::AuthenticatedUser(Uuid::from_u128(999).into()),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(
+                form.questions().as_slice(),
+                vec![FormAnswerContent {
+                    id: FormAnswerContentId::from(Uuid::new_v4()),
+                    question_id: question_id.into(),
+                    answer: "body".to_string(),
+                }],
+            )
+            .unwrap(),
+        );
+        let answer_id = *answer.id();
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_search_answers()
+            .return_once(move |_, _| Ok(vec![AnswerSearchHit { answer_id }]));
+        let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository
+            .expect_get_labels_for_answers_by_answer_id()
+            .returning(|_| Ok(vec![]));
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let comment_repository = MockCommentRepository::new();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_repository: &comment_repository,
+        };
+
+        let answers = use_case
+            .search_answers(&actor, "answer".to_string(), Some(form_id))
+            .await
+            .unwrap();
+
+        assert_eq!(answers.len(), 1);
+        assert_eq!(answers[0].answer.id, answer_id);
+        assert!(matches!(
+            answers[0].answer.author,
+            PublishedAnswerAuthor::Anonymous
+        ));
     }
 
     #[tokio::test]
@@ -1114,7 +1198,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(output.answers.len(), 1);
-        assert_eq!(*output.answers[0].form_answer.id(), visible_answer_id);
+        assert_eq!(output.answers[0].answer.id, visible_answer_id);
     }
 
     #[tokio::test]
@@ -1256,7 +1340,7 @@ mod tests {
         let answer_ids = output
             .answers
             .iter()
-            .map(|answer| *answer.form_answer.id())
+            .map(|answer| answer.answer.id)
             .collect::<Vec<_>>();
         assert_eq!(answer_ids, vec![answer_id, answer_id]);
 

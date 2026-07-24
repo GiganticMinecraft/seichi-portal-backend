@@ -3,10 +3,11 @@ use domain::{
     account::models::AccountUser,
     auth::Actor,
     form::models::{
-        ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility,
-        ArchivedForm, ArchivedFormPagePosition, DefaultAnswerTitle, DiscordWebhookUrl,
-        FormDescription, FormId, FormLabel, FormLabelAssignment, FormLabelId, FormPagePosition,
-        FormSettings, FormTitle, Question, QuestionSet, Visibility,
+        ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerAuthorPublicationPolicy,
+        AnswerSettings, AnswerVisibility, ArchivedForm, ArchivedFormPagePosition,
+        DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
+        FormLabelAssignment, FormLabelId, FormPagePosition, FormSettings, FormTitle, Question,
+        QuestionSet, Visibility,
     },
     pagination::{Page, PageLimit, PageRequest},
     repository::{
@@ -94,6 +95,7 @@ impl<
         answer_groups: Option<AllowedUserGroups>,
         acceptance_period: Option<AnswerAcceptancePeriod>,
         default_answer_title: Option<DefaultAnswerTitle>,
+        author_publication_policy: Option<AnswerAuthorPublicationPolicy>,
         user: &AccountUser,
     ) -> Result<ActiveForm, Error> {
         let user_as_user = Actor::from(user.clone());
@@ -145,6 +147,10 @@ impl<
             Some(default_answer_title) => {
                 answer_settings.change_default_answer_title(default_answer_title)
             }
+            None => answer_settings,
+        };
+        let answer_settings = match author_publication_policy {
+            Some(policy) => answer_settings.change_author_publication_policy(policy),
             None => answer_settings,
         };
 
@@ -419,6 +425,7 @@ impl<
         allow_temporary_answers: Option<bool>,
         answer_visibility: Option<AnswerVisibility>,
         answer_groups: Option<AllowedUserGroups>,
+        author_publication_policy: Option<AnswerAuthorPublicationPolicy>,
         questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
@@ -529,6 +536,10 @@ impl<
             let updated_answer_settings = match allow_temporary_answers {
                 None => updated_answer_settings,
                 Some(a) => updated_answer_settings.change_allow_temporary_answers(a),
+            };
+            let updated_answer_settings = match author_publication_policy {
+                None => updated_answer_settings,
+                Some(policy) => updated_answer_settings.change_author_publication_policy(policy),
             };
 
             let updated_form = match title {
@@ -653,6 +664,10 @@ fn form_creation_details(form: &ActiveForm) -> Vec<EventDetail> {
             format_default_answer_title(form.answer_settings().default_answer_title()),
         ),
         EventDetail::new(
+            "回答者の公開",
+            format_author_publication_policy(*form.answer_settings().author_publication_policy()),
+        ),
+        EventDetail::new(
             "匿名回答",
             format_allowed(*form.answer_settings().allow_temporary_answers()),
         ),
@@ -730,6 +745,16 @@ fn form_update_details(before: &ActiveForm, after: &ActiveForm) -> Vec<EventDeta
                 format_allowed(*after.answer_settings().allow_temporary_answers()),
             )
         }),
+        (before.answer_settings().author_publication_policy()
+            != after.answer_settings().author_publication_policy())
+        .then(|| {
+            EventDetail::new(
+                "回答者の公開",
+                format_author_publication_policy(
+                    *after.answer_settings().author_publication_policy(),
+                ),
+            )
+        }),
     ]
     .into_iter()
     .flatten()
@@ -787,6 +812,13 @@ fn format_default_answer_title(title: &DefaultAnswerTitle) -> String {
 
 fn format_allowed(allowed: bool) -> &'static str {
     if allowed { "許可" } else { "不許可" }
+}
+
+fn format_author_publication_policy(policy: AnswerAuthorPublicationPolicy) -> &'static str {
+    match policy {
+        AnswerAuthorPublicationPolicy::Publish => "公開",
+        AnswerAuthorPublicationPolicy::Hide => "非公開",
+    }
 }
 
 fn question_details(questions: &[Question]) -> impl Iterator<Item = EventDetail> + '_ {
@@ -1078,6 +1110,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 &user,
             )
             .await
@@ -1089,6 +1122,8 @@ mod tests {
             [ApplicationEvent::FormCreated { form_id, details, .. }]
                 if form_id == &created_form.id().to_string()
                     && details.iter().any(|detail| detail.name == "説明")
+                    && details.iter().any(|detail|
+                        detail.name == "回答者の公開" && detail.value == "公開")
         ));
     }
 
@@ -1108,6 +1143,7 @@ mod tests {
             .update_form(
                 &user,
                 form.id().to_owned(),
+                None,
                 None,
                 None,
                 None,
@@ -1154,17 +1190,18 @@ mod tests {
                 Some(FormTitle::new(
                     "Updated form".to_string().try_into().unwrap(),
                 )),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
+                None, // description
+                None, // acceptance_period
+                None, // discord_webhook_url
+                None, // default_answer_title
+                None, // visibility
+                None, // allowed_user_groups
+                None, // allow_temporary_answers
+                None, // answer_visibility
+                None, // answer_groups
+                Some(AnswerAuthorPublicationPolicy::Hide),
+                None, // questions
+                None, // label_ids
             )
             .await
             .unwrap();
@@ -1174,6 +1211,8 @@ mod tests {
             [ApplicationEvent::FormUpdated { changes, .. }]
                 if changes.iter().any(|detail|
                     detail.name == "タイトル" && detail.value == "Updated form")
+                    && changes.iter().any(|detail|
+                        detail.name == "回答者の公開" && detail.value == "非公開")
         ));
     }
 
@@ -1195,6 +1234,7 @@ mod tests {
                 &user,
                 form_id,
                 Some(title),
+                None,
                 None,
                 None,
                 None,

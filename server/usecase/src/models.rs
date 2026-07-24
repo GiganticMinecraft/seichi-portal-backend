@@ -1,8 +1,11 @@
+use chrono::{DateTime, Utc};
 use domain::{
     account::models::{AccountUser, DiscordUser},
-    auth::Actor,
     form::{
-        answer::{AnswerEntry, AnswerLabel},
+        answer::{
+            AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
+            TemporaryAnswerAuthor,
+        },
         comment::Comment,
         message::Message,
         models::{ActiveForm, ArchivedForm, FormId, FormLabel},
@@ -10,10 +13,35 @@ use domain::{
     },
 };
 
+pub enum PublishedAnswerAuthor {
+    AuthenticatedUser(AccountUser),
+    Temporary(TemporaryAnswerAuthor),
+    Anonymous,
+}
+
+pub struct PublishedAnswerEntry {
+    pub id: AnswerId,
+    pub author: PublishedAnswerAuthor,
+    pub timestamp: DateTime<Utc>,
+    pub title: AnswerTitle,
+    pub contents: Vec<FormAnswerContent>,
+}
+
+impl PublishedAnswerEntry {
+    pub fn new(answer: AnswerEntry, author: PublishedAnswerAuthor) -> Self {
+        Self {
+            id: *answer.id(),
+            author,
+            timestamp: *answer.timestamp(),
+            title: answer.title().to_owned(),
+            contents: answer.contents().to_vec(),
+        }
+    }
+}
+
 pub struct AnswerDetails {
     pub form_id: FormId,
-    pub form_answer: AnswerEntry,
-    pub author: Actor,
+    pub answer: PublishedAnswerEntry,
     pub labels: Vec<AnswerLabel>,
 }
 

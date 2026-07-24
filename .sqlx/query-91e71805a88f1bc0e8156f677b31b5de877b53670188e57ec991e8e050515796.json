@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO real_answers (id, answer_id, question_id, answer)\n        SELECT id, answer_id, question_id, answer\n        FROM archived_real_answers\n        WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "91e71805a88f1bc0e8156f677b31b5de877b53670188e57ec991e8e050515796"
+}
