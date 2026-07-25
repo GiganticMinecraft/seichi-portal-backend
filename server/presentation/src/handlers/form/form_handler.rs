@@ -42,7 +42,7 @@ use crate::schemas::{
     form::{
         form_request_schemas::{
             ArchivedFormListQuery, ChoiceSchema, FormCreateSchema, FormListQuery, FormUpdateSchema,
-            QuestionSchema,
+            QuestionSchema, into_default_answer_title, into_discord_webhook_url,
         },
         form_response_schemas::{
             ArchivedFormListPageResponse, ArchivedFormSchema, FormListPageResponse, FormMetaSchema,
@@ -323,65 +323,25 @@ pub async fn create_form_handler(
     let questions = into_create_questions(questions)
         .map_err(errors::Error::from)
         .map_err(handle_error)?;
-    let (
-        discord_webhook_url,
-        visibility,
-        allowed_group_ids,
-        allow_temporary_answers,
-        answer_visibility,
-        answer_group_ids,
-        acceptance_period,
-        default_answer_title,
-        hide_author,
-    ) = settings
-        .map(|settings| {
-            let answer_settings = settings.answer_settings;
-            let (
-                answer_visibility,
-                acceptance_period,
-                default_answer_title,
-                answer_group_ids,
-                hide_author,
-            ) = answer_settings
-                .map(|answer_settings| {
-                    (
-                        answer_settings.visibility,
-                        answer_settings.acceptance_period,
-                        answer_settings.default_answer_title,
-                        answer_settings.answer_group_ids,
-                        answer_settings.hide_author,
-                    )
-                })
-                .unwrap_or_default();
-
-            (
-                settings.discord_webhook_url.and_then(|url| url.0),
-                settings.visibility,
-                settings.allowed_group_ids,
-                settings.allow_temporary_answers,
-                answer_visibility,
-                answer_group_ids,
-                acceptance_period,
-                default_answer_title,
-                hide_author,
-            )
-        })
-        .unwrap_or_default();
+    let settings = settings.unwrap_or_default();
+    let answer_settings = settings.answer_settings.unwrap_or_default();
 
     let form = form_use_case
         .create_form(
             title,
             form_description,
             questions,
-            discord_webhook_url,
-            visibility,
-            allowed_group_ids.map(AllowedUserGroups::new),
-            allow_temporary_answers,
-            answer_visibility,
-            answer_group_ids.map(AllowedUserGroups::new),
-            acceptance_period,
-            default_answer_title,
-            hide_author.map(AnswerAuthorPublicationPolicy::from_hide_author),
+            into_discord_webhook_url(settings.discord_webhook_url),
+            settings.visibility,
+            settings.allowed_group_ids.map(AllowedUserGroups::new),
+            settings.allow_temporary_answers,
+            answer_settings.visibility,
+            answer_settings.answer_group_ids.map(AllowedUserGroups::new),
+            answer_settings.acceptance_period,
+            into_default_answer_title(answer_settings.default_answer_title),
+            answer_settings
+                .hide_author
+                .map(AnswerAuthorPublicationPolicy::from_hide_author),
             &user,
         )
         .await
@@ -547,57 +507,21 @@ pub async fn update_form_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Json(targets) = json.map_err_to_error().map_err(handle_error)?;
 
-    let title = targets.title;
-    let description = targets.description.map(FormDescription::new);
-    let (
-        acceptance_period,
-        discord_webhook_url,
-        default_answer_title,
-        visibility,
-        allowed_group_ids,
-        allow_temporary_answers,
-        answer_visibility,
-        answer_group_ids,
-        hide_author,
-    ) = if let Some(settings) = &targets.settings {
-        (
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.acceptance_period.to_owned()),
-            settings
-                .discord_webhook_url
-                .to_owned()
-                .and_then(|url| url.0),
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.default_answer_title.to_owned()),
-            settings.visibility,
-            settings.allowed_group_ids.to_owned(),
-            settings.allow_temporary_answers,
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.visibility.to_owned()),
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.answer_group_ids.to_owned()),
-            settings
-                .answer_settings
-                .as_ref()
-                .and_then(|answer_settings| answer_settings.hide_author),
-        )
-    } else {
-        (None, None, None, None, None, None, None, None, None)
-    };
-    let questions = targets
-        .questions
+    let FormUpdateSchema {
+        title,
+        description,
+        settings,
+        questions,
+        labels,
+    } = targets;
+
+    let description = description.map(FormDescription::new);
+    let settings = settings.unwrap_or_default();
+    let answer_settings = settings.answer_settings.unwrap_or_default();
+    let questions = questions
         .map(into_upsert_question_inputs)
         .transpose()
         .map_err(handle_error)?;
-    let labels = targets.labels;
 
     let (updated_form, labels) = form_use_case
         .update_form(
@@ -605,15 +529,17 @@ pub async fn update_form_handler(
             form_id,
             title,
             description,
-            acceptance_period,
-            discord_webhook_url,
-            default_answer_title,
-            visibility,
-            allowed_group_ids.map(AllowedUserGroups::new),
-            allow_temporary_answers,
-            answer_visibility,
-            answer_group_ids.map(AllowedUserGroups::new),
-            hide_author.map(AnswerAuthorPublicationPolicy::from_hide_author),
+            answer_settings.acceptance_period,
+            into_discord_webhook_url(settings.discord_webhook_url),
+            into_default_answer_title(answer_settings.default_answer_title),
+            settings.visibility,
+            settings.allowed_group_ids.map(AllowedUserGroups::new),
+            settings.allow_temporary_answers,
+            answer_settings.visibility,
+            answer_settings.answer_group_ids.map(AllowedUserGroups::new),
+            answer_settings
+                .hide_author
+                .map(AnswerAuthorPublicationPolicy::from_hide_author),
             questions,
             labels,
         )

@@ -6467,7 +6467,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Discord Webhook URL。キーを省略すると変更なし、`null` を指定すると通知を無効化する。",
+            "minLength": 1
           },
           "visibility": {
             "type": [

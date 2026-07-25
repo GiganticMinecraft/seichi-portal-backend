@@ -11,6 +11,32 @@ use serde::{Deserialize, Deserializer};
 use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 
+use crate::schemas::field_update::FieldUpdate;
+
+/// usecase 境界の「`None` = 変更なし / `Some` = 設定」規約へ写す。
+/// 解除は「値のない `DiscordWebhookUrl` を設定する」ことで表す。
+/// `DiscordWebhookUrl` の既定値が「URL なし」であり、`FormSettings` も
+/// 未設定をこの既定値で表している。
+pub fn into_discord_webhook_url(
+    field: FieldUpdate<DiscordWebhookUrlSchema>,
+) -> Option<DiscordWebhookUrl> {
+    match field {
+        FieldUpdate::Unchanged => None,
+        FieldUpdate::Clear => Some(DiscordWebhookUrl::default()),
+        FieldUpdate::Set(url) => Some(url.0),
+    }
+}
+
+/// usecase 境界の「`None` = 変更なし / `Some` = 設定」規約へ写す。
+/// 解除は「値のない `DefaultAnswerTitle` を設定する」ことで表す。
+pub fn into_default_answer_title(field: FieldUpdate<NonEmptyString>) -> Option<DefaultAnswerTitle> {
+    match field {
+        FieldUpdate::Unchanged => None,
+        FieldUpdate::Clear => Some(DefaultAnswerTitle::new(None)),
+        FieldUpdate::Set(title) => Some(DefaultAnswerTitle::new(Some(title))),
+    }
+}
+
 #[derive(Deserialize, Debug, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct FormListQuery {
@@ -63,13 +89,14 @@ pub struct FormCreateSchema {
     pub questions: NonEmptyVec<QuestionSchema>,
 }
 
-#[derive(Deserialize, Debug, utoipa::ToSchema)]
+#[derive(Deserialize, Debug, Default, utoipa::ToSchema)]
 pub struct AnswerSettingsSchema {
     #[serde(default)]
     pub hide_author: Option<bool>,
+    /// 回答の既定タイトル。キーを省略すると変更なし、`null` を指定すると設定を解除する。
     #[serde(default)]
-    #[schema(value_type = Option<String>)]
-    pub default_answer_title: Option<DefaultAnswerTitle>,
+    #[schema(value_type = Option<String>, min_length = 1)]
+    pub default_answer_title: FieldUpdate<NonEmptyString>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub visibility: Option<AnswerVisibility>,
@@ -87,11 +114,12 @@ pub struct AnswerAcceptancePeriodInput {
     pub end_at: Option<String>,
 }
 
-#[derive(Deserialize, Debug, utoipa::ToSchema)]
+#[derive(Deserialize, Debug, Default, utoipa::ToSchema)]
 pub struct FormSettingsSchema {
+    /// Discord Webhook URL。キーを省略すると変更なし、`null` を指定すると通知を無効化する。
     #[serde(default)]
-    #[schema(value_type = Option<Option<String>>)]
-    pub discord_webhook_url: Option<DiscordWebhookUrlSchema>,
+    #[schema(value_type = Option<String>, min_length = 1)]
+    pub discord_webhook_url: FieldUpdate<DiscordWebhookUrlSchema>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub visibility: Option<Visibility>,
@@ -104,35 +132,31 @@ pub struct FormSettingsSchema {
     pub answer_settings: Option<AnswerSettingsSchema>,
 }
 
-#[derive(Clone)]
-pub struct DiscordWebhookUrlSchema(pub(crate) Option<DiscordWebhookUrl>);
+/// 値として指定された Discord Webhook URL。
+/// 「値がない」状態は `FieldUpdate` が表すため、この型は必ず URL を保持する。
+pub struct DiscordWebhookUrlSchema(DiscordWebhookUrl);
 
 impl std::fmt::Debug for DiscordWebhookUrlSchema {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_tuple("DiscordWebhookUrlSchema")
-            .field(&self.0.as_ref().map(|_| "[REDACTED]"))
+            .field(&"[REDACTED]")
             .finish()
     }
 }
 
 impl<'de> Deserialize<'de> for DiscordWebhookUrlSchema {
+    /// `DiscordWebhookUrl` の derive された `Deserialize` は `try_new` を通らず
+    /// regex 検証を飛ばすため、この手書き impl を消して derive に委ねてはならない。
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let url: Option<String> = Option::deserialize(deserializer)?;
-        match url {
-            Some(url) => {
-                let non_empty_url =
-                    NonEmptyString::try_new(url).map_err(serde::de::Error::custom)?;
-                let discord_webhook_url = DiscordWebhookUrl::try_new(Some(non_empty_url))
-                    .map_err(serde::de::Error::custom)?;
+        let url = NonEmptyString::deserialize(deserializer)?;
 
-                Ok(DiscordWebhookUrlSchema(Some(discord_webhook_url)))
-            }
-            None => Ok(DiscordWebhookUrlSchema(None)),
-        }
+        DiscordWebhookUrl::try_new(Some(url))
+            .map(Self)
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -141,16 +165,124 @@ mod tests {
     use super::*;
     use types::non_empty_string::NonEmptyString;
 
+    /// リクエストの JSON が usecase 境界へ渡す値になるまでを通して観測する。
+    /// 外側の `Option` が「変更するか」、内側の `Option` が「設定するか解除するか」を表す。
+    fn discord_webhook_url_update(json: &str) -> Option<Option<String>> {
+        let settings = serde_json::from_str::<FormSettingsSchema>(json).unwrap();
+
+        into_discord_webhook_url(settings.discord_webhook_url)
+            .map(|url| url.into_inner().map(NonEmptyString::into_inner))
+    }
+
+    fn default_answer_title_update(json: &str) -> Option<Option<String>> {
+        let settings = serde_json::from_str::<AnswerSettingsSchema>(json).unwrap();
+
+        into_default_answer_title(settings.default_answer_title)
+            .map(|title| title.into_inner().map(NonEmptyString::into_inner))
+    }
+
+    #[test]
+    fn omitted_discord_webhook_url_changes_nothing_while_null_clears_it() {
+        assert_eq!(discord_webhook_url_update(r#"{}"#), None);
+        assert_eq!(
+            discord_webhook_url_update(r#"{"discord_webhook_url":null}"#),
+            Some(None)
+        );
+        assert_eq!(
+            discord_webhook_url_update(
+                r#"{"discord_webhook_url":"https://discord.com/api/webhooks/123/token"}"#
+            ),
+            Some(Some(
+                "https://discord.com/api/webhooks/123/token".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn discord_webhook_url_rejects_empty_and_non_discord_urls() {
+        for url in [
+            "\"\"",
+            "\"   \"",
+            "\"https://example.com/webhooks/123/token\"",
+        ] {
+            let json = format!(r#"{{"discord_webhook_url":{url}}}"#);
+
+            assert!(
+                serde_json::from_str::<FormSettingsSchema>(&json).is_err(),
+                "{url} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn omitted_default_answer_title_changes_nothing_while_null_clears_it() {
+        assert_eq!(default_answer_title_update(r#"{}"#), None);
+        assert_eq!(
+            default_answer_title_update(r#"{"default_answer_title":null}"#),
+            Some(None)
+        );
+        assert_eq!(
+            default_answer_title_update(r#"{"default_answer_title":"回答"}"#),
+            Some(Some("回答".to_string()))
+        );
+    }
+
+    #[test]
+    fn default_answer_title_rejects_empty_strings() {
+        for title in ["\"\"", "\"   \""] {
+            let json = format!(r#"{{"default_answer_title":{title}}}"#);
+
+            assert!(
+                serde_json::from_str::<AnswerSettingsSchema>(&json).is_err(),
+                "{title} should be rejected"
+            );
+        }
+    }
+
+    /// 型が生成するスキーマだけを見ている。`AnswerSettingsSchema` は
+    /// レスポンス側と名前が衝突していて `docs/openapi.json` にはリクエスト側が
+    /// 出ないため、`default_answer_title` については実文書を検証できていない。
+    #[test]
+    fn openapi_documents_nullable_settings_fields_as_optional() {
+        fn assert_optional_and_nullable(schema: serde_json::Value, field: &str) {
+            let required = schema["required"]
+                .as_array()
+                .map(|fields| fields.as_slice())
+                .unwrap_or_default();
+
+            assert!(
+                !required.iter().any(|name| name == field),
+                "{field} must stay optional so that omitting it means no change"
+            );
+            assert!(
+                schema["properties"][field]["type"]
+                    .as_array()
+                    .is_some_and(|types| types.iter().any(|value| value == "null")),
+                "{field} must be documented as nullable so that clients can clear it"
+            );
+        }
+
+        assert_optional_and_nullable(
+            serde_json::to_value(<FormSettingsSchema as utoipa::PartialSchema>::schema()).unwrap(),
+            "discord_webhook_url",
+        );
+        assert_optional_and_nullable(
+            serde_json::to_value(<AnswerSettingsSchema as utoipa::PartialSchema>::schema())
+                .unwrap(),
+            "default_answer_title",
+        );
+    }
+
     #[test]
     fn discord_webhook_url_schema_debug_redacts_the_token() {
         let secret = "super-secret-token";
-        let schema = DiscordWebhookUrlSchema(Some(
+        let schema = DiscordWebhookUrlSchema(
             DiscordWebhookUrl::try_new(Some(
                 NonEmptyString::try_new(format!("https://discord.com/api/webhooks/123/{secret}"))
                     .unwrap(),
             ))
             .unwrap(),
-        ));
+        );
 
         assert!(!format!("{schema:?}").contains(secret));
     }
