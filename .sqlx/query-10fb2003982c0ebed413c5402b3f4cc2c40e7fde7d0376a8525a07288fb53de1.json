@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_choices (question_id, position, label)\n        SELECT question_id, position, label\n        FROM archived_form_choices\n        WHERE question_id IN (\n            SELECT question_id FROM archived_form_questions WHERE form_id = ?\n        )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "10fb2003982c0ebed413c5402b3f4cc2c40e7fde7d0376a8525a07288fb53de1"
+}

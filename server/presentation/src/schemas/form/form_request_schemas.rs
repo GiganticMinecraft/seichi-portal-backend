@@ -66,6 +66,8 @@ pub struct FormCreateSchema {
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
 pub struct AnswerSettingsSchema {
     #[serde(default)]
+    pub hide_author: Option<bool>,
+    #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub default_answer_title: Option<DefaultAnswerTitle>,
     #[serde(default)]

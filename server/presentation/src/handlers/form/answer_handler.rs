@@ -256,9 +256,8 @@ pub async fn get_all_answers(
             .into_iter()
             .map(|answer_details| {
                 FormAnswer::new(
-                    answer_details.form_answer,
+                    answer_details.answer,
                     answer_details.form_id,
-                    answer_details.author,
                     answer_details.labels,
                 )
             })
@@ -302,9 +301,8 @@ pub async fn get_answer_handler(
         .map_err(handle_error)?;
 
     Ok(GetAnswerResponse::Ok(FormAnswer::new(
-        answer_details.form_answer,
+        answer_details.answer,
         answer_details.form_id,
-        answer_details.author,
         answer_details.labels,
     )))
 }
@@ -356,9 +354,8 @@ pub async fn get_answer_by_form_id_handler(
             .into_iter()
             .map(|answer_details| {
                 FormAnswer::new(
-                    answer_details.form_answer,
+                    answer_details.answer,
                     answer_details.form_id,
-                    answer_details.author,
                     answer_details.labels,
                 )
             })
@@ -510,9 +507,8 @@ pub async fn update_answer_handler(
         .map_err(handle_error)?;
 
     Ok(UpdateAnswerResponse::Ok(FormAnswer::new(
-        answer_details.form_answer,
+        answer_details.answer,
         answer_details.form_id,
-        answer_details.author,
         answer_details.labels,
     )))
 }

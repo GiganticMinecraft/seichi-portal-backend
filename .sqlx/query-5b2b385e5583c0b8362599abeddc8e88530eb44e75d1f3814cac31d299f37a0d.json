@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_discord_webhooks (form_id, url) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5b2b385e5583c0b8362599abeddc8e88530eb44e75d1f3814cac31d299f37a0d"
+}

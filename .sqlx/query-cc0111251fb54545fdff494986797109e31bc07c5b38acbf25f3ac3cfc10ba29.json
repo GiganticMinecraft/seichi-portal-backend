@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_messages (id, related_answer_id, sender, body, timestamp)\n        SELECT m.id, m.related_answer_id, m.sender, m.body, m.timestamp\n        FROM messages m\n        INNER JOIN answers a ON m.related_answer_id = a.id\n        WHERE a.form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "cc0111251fb54545fdff494986797109e31bc07c5b38acbf25f3ac3cfc10ba29"
+}

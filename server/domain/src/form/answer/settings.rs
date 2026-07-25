@@ -18,6 +18,53 @@ use crate::{
 };
 
 #[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub enum AnswerAuthorPublicationPolicy {
+    #[default]
+    Publish,
+    Hide,
+}
+
+impl AnswerAuthorPublicationPolicy {
+    pub fn from_hide_author(hide_author: bool) -> Self {
+        if hide_author {
+            Self::Hide
+        } else {
+            Self::Publish
+        }
+    }
+
+    pub fn hides_author(self) -> bool {
+        self == Self::Hide
+    }
+
+    pub fn disclosure_for(self, actor: &Actor) -> AnswerAuthorDisclosure {
+        match actor {
+            Actor::AccountUser(user) if user.role() == &Role::Administrator => {
+                AnswerAuthorDisclosure::Disclosed
+            }
+            Actor::System => AnswerAuthorDisclosure::Disclosed,
+            _ if self == Self::Hide => AnswerAuthorDisclosure::Anonymous,
+            _ => AnswerAuthorDisclosure::Disclosed,
+        }
+    }
+
+    pub fn default_title_author_name(self, actual_name: &str) -> &str {
+        if self == Self::Hide {
+            "匿名"
+        } else {
+            actual_name
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum AnswerAuthorDisclosure {
+    Disclosed,
+    Anonymous,
+}
+
+#[cfg_attr(test, derive(Arbitrary))]
 #[derive(Clone, DerivingVia, Default, Debug, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: Option::<NonEmptyString>), Deserialize(via: Option::<NonEmptyString>
 ))]
@@ -101,6 +148,8 @@ pub struct AnswerSettings {
     allow_temporary_answers: bool,
     #[serde(default)]
     answer_groups: AllowedUserGroups,
+    #[serde(default)]
+    author_publication_policy: AnswerAuthorPublicationPolicy,
 }
 
 impl AnswerSettings {
@@ -116,6 +165,7 @@ impl AnswerSettings {
             acceptance_period,
             allow_temporary_answers,
             answer_groups: AllowedUserGroups::unrestricted(),
+            author_publication_policy: AnswerAuthorPublicationPolicy::default(),
         }
     }
 
@@ -149,6 +199,20 @@ impl AnswerSettings {
             answer_groups,
             ..self
         }
+    }
+
+    pub fn change_author_publication_policy(
+        self,
+        author_publication_policy: AnswerAuthorPublicationPolicy,
+    ) -> Self {
+        Self {
+            author_publication_policy,
+            ..self
+        }
+    }
+
+    pub fn author_disclosure_for(&self, actor: &Actor) -> AnswerAuthorDisclosure {
+        self.author_publication_policy.disclosure_for(actor)
     }
 
     /// `actor` が `author` として回答を作成してよいかを、受付期間と一時回答の可否から判定します。
@@ -391,5 +455,29 @@ mod tests {
         assert!(settings.can_read_entry(&entry, &Actor::from(member)));
         assert!(!settings.can_read_entry(&entry, &Actor::from(outsider)));
         assert!(settings.can_read_entry(&entry, &Actor::from(active_user(Role::Administrator))));
+    }
+
+    #[test]
+    fn hidden_author_is_anonymous_to_standard_users_but_disclosed_to_administrators() {
+        let settings = AnswerSettings::default()
+            .change_author_publication_policy(AnswerAuthorPublicationPolicy::Hide);
+
+        assert_eq!(
+            settings.author_disclosure_for(&Actor::from(active_user(Role::StandardUser))),
+            AnswerAuthorDisclosure::Anonymous
+        );
+        assert_eq!(
+            settings.author_disclosure_for(&Actor::from(active_user(Role::Administrator))),
+            AnswerAuthorDisclosure::Disclosed
+        );
+    }
+
+    #[test]
+    fn published_author_is_the_default_policy() {
+        assert_eq!(
+            AnswerSettings::default()
+                .author_disclosure_for(&Actor::from(active_user(Role::StandardUser))),
+            AnswerAuthorDisclosure::Disclosed
+        );
     }
 }

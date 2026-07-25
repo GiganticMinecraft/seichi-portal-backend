@@ -6,6 +6,12 @@ pub struct ApplicationActor {
     pub account_id: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnswerSubmissionActor {
+    Identified(ApplicationActor),
+    AuthorHidden,
+}
+
 impl From<&AccountUser> for ApplicationActor {
     fn from(user: &AccountUser) -> Self {
         Self {
@@ -65,7 +71,7 @@ pub enum ApplicationEvent {
         form_title: String,
     },
     AnswerSubmitted {
-        actor: ApplicationActor,
+        actor: AnswerSubmissionActor,
         form_id: String,
         form_title: String,
         answer_id: String,

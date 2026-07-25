@@ -11,7 +11,10 @@ pub use author::{AnswerAuthor, TemporaryAnswerAuthor, TemporaryAnswerAuthorId};
 pub use content::{FormAnswerContent, FormAnswerContentId, PostedAnswerContents};
 pub use entry::{AnswerEntry, AnswerId, AnswerPagePosition};
 pub use label::{AnswerLabel, AnswerLabelId};
-pub use settings::{AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, DefaultAnswerTitle};
+pub use settings::{
+    AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy, AnswerSettings,
+    AnswerVisibility, DefaultAnswerTitle,
+};
 pub use submitter::AnswerSubmitter;
 pub use submitter_restriction::{
     AnswerSubmitterRestriction, AnswerSubmitterRestrictionHistory, AnswerSubmitterRestrictionId,

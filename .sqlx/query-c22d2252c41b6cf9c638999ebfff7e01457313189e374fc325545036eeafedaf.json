@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_form_answer_comments (id, answer_id, commented_by, content, timestamp)\n        SELECT c.id, c.answer_id, c.commented_by, c.content, c.timestamp\n        FROM form_answer_comments c\n        INNER JOIN answers a ON c.answer_id = a.id\n        WHERE a.form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c22d2252c41b6cf9c638999ebfff7e01457313189e374fc325545036eeafedaf"
+}

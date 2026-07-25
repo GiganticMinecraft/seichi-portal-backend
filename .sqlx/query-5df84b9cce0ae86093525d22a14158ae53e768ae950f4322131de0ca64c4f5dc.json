@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO messages (id, related_answer_id, sender, body, timestamp)\n        SELECT id, related_answer_id, sender, body, timestamp\n        FROM archived_messages\n        WHERE related_answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "5df84b9cce0ae86093525d22a14158ae53e768ae950f4322131de0ca64c4f5dc"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_form_discord_webhooks (id, form_id, url)\n        SELECT id, form_id, url FROM form_discord_webhooks WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "78b0538234a913b692d898b4b3bf2ae036cf0e6df1592e6af64585e7d70aa76c"
+}

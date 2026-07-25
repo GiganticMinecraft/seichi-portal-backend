@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM archived_form_meta_data WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d91e8c1e87ff652ce2513a3ef7075860299db21b34dda40ae4f000e56a3f3ad1"
+}

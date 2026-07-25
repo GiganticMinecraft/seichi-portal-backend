@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 
 pub use crate::form::{
-    answer::{AnswerAcceptancePeriod, AnswerSettings, AnswerVisibility, DefaultAnswerTitle},
+    answer::{
+        AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy,
+        AnswerSettings, AnswerVisibility, DefaultAnswerTitle,
+    },
     label::{FormLabel, FormLabelAssignment, FormLabelId, FormLabelName},
     question::{Question, QuestionSet},
     settings::{AllowedUserGroups, DiscordWebhookUrl, FormSettings, Visibility},

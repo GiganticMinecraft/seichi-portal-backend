@@ -5,8 +5,9 @@ use domain::{
     form::answer::TemporaryAnswerAuthor,
     form::{
         answer::{
-            AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerPagePosition, AnswerSubmitter,
-            AnswerTitle, FormAnswerContent, PostedAnswerContents,
+            AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
+            AnswerPagePosition, AnswerSubmitter, AnswerTitle, FormAnswerContent,
+            PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
@@ -32,12 +33,13 @@ use futures::{StreamExt, stream};
 
 use crate::{
     application_event::{
-        ApplicationActor, ApplicationEvent, ApplicationEventPublisher, EventDetail,
+        AnswerSubmissionActor, ApplicationActor, ApplicationEvent, ApplicationEventPublisher,
+        EventDetail,
     },
     forms::discord_answer_webhook::{
         DiscordAnswerWebhookField, DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier,
     },
-    models::AnswerDetails,
+    models::{AnswerDetails, PublishedAnswerAuthor, PublishedAnswerEntry},
     user_reference_resolver::resolve_user_references,
 };
 use common::config::FRONTEND;
@@ -85,32 +87,38 @@ impl<
         actor: &AccountUser,
         form_id: FormId,
         form_answer: Allowed<AnswerEntry, Read>,
+        author_disclosure: AnswerAuthorDisclosure,
         labels: Vec<AnswerLabel>,
     ) -> Result<AnswerDetails, Error> {
-        let user_ids = form_answer
-            .author()
-            .authenticated_user_id()
-            .into_iter()
-            .collect();
+        let author = match author_disclosure {
+            AnswerAuthorDisclosure::Anonymous => PublishedAnswerAuthor::Anonymous,
+            AnswerAuthorDisclosure::Disclosed => {
+                let user_ids = form_answer
+                    .author()
+                    .authenticated_user_id()
+                    .into_iter()
+                    .collect();
+                let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
 
-        let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
-
-        let author = match form_answer.author() {
-            AnswerAuthor::AuthenticatedUser(user_id) => Actor::AccountUser(
-                users
-                    .get(user_id)
-                    .cloned()
-                    .ok_or(Error::from(errors::usecase::UseCaseError::UserNotFound))?,
-            ),
-            AnswerAuthor::Temporary(temporary_user) => {
-                Actor::TemporaryAnswerAuthor(temporary_user.clone())
+                match form_answer.author() {
+                    AnswerAuthor::AuthenticatedUser(user_id) => {
+                        PublishedAnswerAuthor::AuthenticatedUser(
+                            users
+                                .get(user_id)
+                                .cloned()
+                                .ok_or(Error::from(errors::usecase::UseCaseError::UserNotFound))?,
+                        )
+                    }
+                    AnswerAuthor::Temporary(temporary_user) => {
+                        PublishedAnswerAuthor::Temporary(temporary_user.clone())
+                    }
+                }
             }
         };
 
         Ok(AnswerDetails {
             form_id,
-            form_answer: form_answer.into_inner(),
-            author,
+            answer: PublishedAnswerEntry::new(form_answer.into_inner(), author),
             labels,
         })
     }
@@ -119,7 +127,8 @@ impl<
         &self,
         form: &Allowed<ActiveForm, Read>,
         answer_entry: &Allowed<AnswerEntry, domain::types::authorization_guard::Create>,
-        respondent: String,
+        author_disclosure: AnswerAuthorDisclosure,
+        respondent: &str,
     ) {
         let Some(notifier) = self.discord_answer_webhook_notifier else {
             return;
@@ -164,7 +173,13 @@ impl<
                     "フォーム名".to_string(),
                     form.title().to_owned().into_inner().into_inner(),
                 ),
-                DiscordAnswerWebhookField::new("回答者".to_string(), respondent),
+                DiscordAnswerWebhookField::new(
+                    "回答者".to_string(),
+                    match author_disclosure {
+                        AnswerAuthorDisclosure::Disclosed => respondent.to_owned(),
+                        AnswerAuthorDisclosure::Anonymous => "回答者は非公開です".to_string(),
+                    },
+                ),
             ],
             answer_fields,
         ]
@@ -220,7 +235,9 @@ impl<
             form.value().title(),
             &questions,
             &posted_answers,
-            user.name(),
+            form.answer_settings()
+                .author_publication_policy()
+                .default_title_author_name(user.name()),
         )?;
 
         let answer_entry = form.try_accept_answer(submitter, title, posted_answers)?;
@@ -231,14 +248,28 @@ impl<
 
         if let Some(publisher) = self.application_event_publisher {
             publisher.publish(answer_submitted_event(
-                ApplicationActor::from(&user),
+                match form
+                    .answer_settings()
+                    .author_disclosure_for(&Actor::Anonymous)
+                {
+                    AnswerAuthorDisclosure::Disclosed => {
+                        AnswerSubmissionActor::Identified(ApplicationActor::from(&user))
+                    }
+                    AnswerAuthorDisclosure::Anonymous => AnswerSubmissionActor::AuthorHidden,
+                },
                 &form,
                 &answer_entry,
             ));
         }
 
-        self.notify_discord_answer_webhook(&form, &answer_entry, user.name().to_string())
-            .await;
+        self.notify_discord_answer_webhook(
+            &form,
+            &answer_entry,
+            form.answer_settings()
+                .author_disclosure_for(&Actor::Anonymous),
+            user.name(),
+        )
+        .await;
 
         Ok(())
     }
@@ -269,7 +300,9 @@ impl<
             form.value().title(),
             &questions,
             &posted_answers,
-            temporary_user.name(),
+            form.answer_settings()
+                .author_publication_policy()
+                .default_title_author_name(temporary_user.name()),
         )?;
 
         let respondent = temporary_user.name().to_owned();
@@ -282,14 +315,28 @@ impl<
 
         if let Some(publisher) = self.application_event_publisher {
             publisher.publish(answer_submitted_event(
-                application_actor,
+                match form
+                    .answer_settings()
+                    .author_disclosure_for(&Actor::Anonymous)
+                {
+                    AnswerAuthorDisclosure::Disclosed => {
+                        AnswerSubmissionActor::Identified(application_actor)
+                    }
+                    AnswerAuthorDisclosure::Anonymous => AnswerSubmissionActor::AuthorHidden,
+                },
                 &form,
                 &answer_entry,
             ));
         }
 
-        self.notify_discord_answer_webhook(&form, &answer_entry, respondent)
-            .await;
+        self.notify_discord_answer_webhook(
+            &form,
+            &answer_entry,
+            form.answer_settings()
+                .author_disclosure_for(&Actor::Anonymous),
+            &respondent,
+        )
+        .await;
 
         Ok(())
     }
@@ -321,7 +368,8 @@ impl<
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.build_answer_details(user, form_id, form_answer, labels)
+        let author_disclosure = form.answer_settings().author_disclosure_for(&actor);
+        self.build_answer_details(user, form_id, form_answer, author_disclosure, labels)
             .await
     }
 
@@ -339,6 +387,7 @@ impl<
             .list_by_form(&form, request)
             .await?;
         let (visible_answers, next) = page.into_parts();
+        let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
 
         let answers = stream::iter(visible_answers)
             .then(|form_answer| async {
@@ -355,7 +404,7 @@ impl<
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
-                self.build_answer_details(actor, form_id, form_answer, labels)
+                self.build_answer_details(actor, form_id, form_answer, author_disclosure, labels)
                     .await
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
@@ -389,13 +438,29 @@ impl<
             .list_all(&readable_forms, request)
             .await?;
         let (visible_answers, next) = page.into_parts();
-        let visible_answers: Vec<(FormId, Allowed<AnswerEntry, Read>)> = visible_answers
-            .into_iter()
-            .map(|entry| (*entry.value().form_id(), entry))
-            .collect();
+        let publication_by_form_id = readable_forms
+            .iter()
+            .map(|form| {
+                (
+                    *form.id(),
+                    form.answer_settings().author_disclosure_for(&actor_ref),
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        let visible_answers: Vec<(FormId, AnswerAuthorDisclosure, Allowed<AnswerEntry, Read>)> =
+            visible_answers
+                .into_iter()
+                .filter_map(|entry| {
+                    let form_id = *entry.value().form_id();
+                    publication_by_form_id
+                        .get(&form_id)
+                        .copied()
+                        .map(|disclosure| (form_id, disclosure, entry))
+                })
+                .collect();
 
         let answers = stream::iter(visible_answers)
-            .then(|(form_id, form_answer)| {
+            .then(|(form_id, author_disclosure, form_answer)| {
                 let user = user.clone();
                 async move {
                     let actor_ref = Actor::from(user.clone());
@@ -413,8 +478,14 @@ impl<
                         })
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    self.build_answer_details(&user, form_id, form_answer, labels)
-                        .await
+                    self.build_answer_details(
+                        &user,
+                        form_id,
+                        form_answer,
+                        author_disclosure,
+                        labels,
+                    )
+                    .await
                 }
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
@@ -487,13 +558,14 @@ impl<
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.build_answer_details(actor, form_id, form_answer, labels)
+        let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
+        self.build_answer_details(actor, form_id, form_answer, author_disclosure, labels)
             .await
     }
 }
 
 fn answer_submitted_event(
-    actor: ApplicationActor,
+    actor: AnswerSubmissionActor,
     form: &Allowed<ActiveForm, Read>,
     answer: &Allowed<AnswerEntry, domain::types::authorization_guard::Create>,
 ) -> ApplicationEvent {
@@ -533,8 +605,8 @@ mod tests {
                 FormAnswerContentId,
             },
             models::{
-                AnswerSettings, DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormTitle,
-                QuestionSet,
+                AnswerAuthorPublicationPolicy, AnswerSettings, DefaultAnswerTitle,
+                DiscordWebhookUrl, FormDescription, FormTitle, QuestionSet,
             },
             question::Question,
         },
@@ -745,8 +817,10 @@ mod tests {
         assert!(matches!(
             publisher.events().as_slice(),
             [ApplicationEvent::AnswerSubmitted { actor, details, .. }]
-                if actor.display_name == "user"
-                    && actor.account_id.is_some()
+                if matches!(actor, AnswerSubmissionActor::Identified(ApplicationActor {
+                    display_name,
+                    account_id: Some(_),
+                }) if display_name == "user")
                     && details.iter().any(|detail| detail.value == "answer")
         ));
     }
@@ -798,8 +872,10 @@ mod tests {
         assert!(matches!(
             publisher.events().as_slice(),
             [ApplicationEvent::AnswerSubmitted { actor, details, .. }]
-                if actor.display_name == "temporary user"
-                    && actor.account_id.is_none()
+                if matches!(actor, AnswerSubmissionActor::Identified(ApplicationActor {
+                    display_name,
+                    account_id: None,
+                }) if display_name == "temporary user")
                     && details.iter().all(|detail| !detail.value.contains("contact"))
         ));
         assert!(matches!(
@@ -808,6 +884,125 @@ mod tests {
                 if notification.fields.iter().all(|field| !field.value.contains("contact"))
                     && notification.fields.iter().any(|field|
                         field.name == "回答者" && field.value == "temporary user")
+        ));
+    }
+
+    #[tokio::test]
+    async fn hidden_author_is_removed_from_title_and_both_discord_notifications() {
+        unsafe { std::env::set_var("FRONTEND_URL", "https://example.com") };
+        let form = sample_form()
+            .change_answer_settings(
+                AnswerSettings::default()
+                    .change_default_answer_title(DefaultAnswerTitle::new(Some(
+                        "$username".to_string().try_into().unwrap(),
+                    )))
+                    .change_author_publication_policy(AnswerAuthorPublicationPolicy::Hide),
+            )
+            .change_settings(
+                domain::form::models::FormSettings::new().change_discord_webhook_url(
+                    DiscordWebhookUrl::try_new(Some(
+                        "https://discord.com/api/webhooks/123/token"
+                            .to_string()
+                            .try_into()
+                            .unwrap(),
+                    ))
+                    .unwrap(),
+                ),
+            );
+        let form_id = *form.id();
+        let answer = answer_to(&form);
+        let user = active_user("secret user", Role::StandardUser);
+        let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        let labels = EmptyAnswerLabelRepository;
+        let publisher = RecordingPublisher::default();
+        let notifier = RecordingDiscordAnswerWebhookNotifier::default();
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            answer_submitter_restriction_repository: &repositories
+                .answer_submitter_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: Some(&notifier),
+            application_event_publisher: Some(&publisher),
+        };
+
+        usecase
+            .post_answers(user, form_id, vec![answer])
+            .await
+            .unwrap();
+
+        assert_eq!(
+            only_posted_answer_title(&repositories, form_id).await,
+            "匿名"
+        );
+        assert!(matches!(
+            publisher.events().as_slice(),
+            [ApplicationEvent::AnswerSubmitted {
+                actor: AnswerSubmissionActor::AuthorHidden,
+                ..
+            }]
+        ));
+        assert!(matches!(
+            notifier.notifications().as_slice(),
+            [notification]
+                if notification.fields.iter().any(|field|
+                    field.name == "回答者" && field.value == "回答者は非公開です")
+                    && notification.fields.iter().all(|field|
+                        !field.value.contains("secret user"))
+        ));
+    }
+
+    #[tokio::test]
+    async fn hidden_answer_author_is_anonymous_to_its_author_and_identified_to_administrator() {
+        let form = sample_form().change_answer_settings(
+            AnswerSettings::default()
+                .change_author_publication_policy(AnswerAuthorPublicationPolicy::Hide),
+        );
+        let form_id = *form.id();
+        let author = active_user("answer author", Role::StandardUser);
+        let administrator = active_user("administrator", Role::Administrator);
+        let answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::AuthenticatedUser(*author.id()),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository =
+            crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories.user_repository.save_user(author.clone());
+        let labels = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            answer_submitter_restriction_repository: &repositories
+                .answer_submitter_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: None,
+            application_event_publisher: None,
+        };
+
+        let answer_for_author = usecase
+            .get_answers(form_id, answer_id, &author)
+            .await
+            .unwrap();
+        let answer_for_administrator = usecase
+            .get_answers(form_id, answer_id, &administrator)
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            answer_for_author.answer.author,
+            PublishedAnswerAuthor::Anonymous
+        ));
+        assert!(matches!(
+            answer_for_administrator.answer.author,
+            PublishedAnswerAuthor::AuthenticatedUser(user)
+                if user.id() == author.id() && user.name() == "answer author"
         ));
     }
 
