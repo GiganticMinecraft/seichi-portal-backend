@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use domain::{
     account::models::{AccountUser, UserSnapshot},
     form::{
-        answer::AnswerId,
+        answer::AnswerEntry,
         message::{
             DeletedMessage, Message, MessageBody, MessageHistoryAction, MessageHistoryEntry,
             MessageHistoryPagePosition, MessagePost,
@@ -12,7 +12,7 @@ use domain::{
     },
     pagination::{Page, PageRequest},
     repository::form::message_thread_repository::MessageThreadRepository,
-    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
 use errors::{Error, infra::InfraError};
 use std::str::FromStr;
@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{
-        components::{DatabaseComponents, FormMessageDatabase, FormMessageThreadDatabase},
+        components::{DatabaseComponents, FormMessageDatabase},
         connection::DatabaseTransaction,
     },
     repository::Repository,
@@ -31,57 +31,21 @@ impl<Client> MessageThreadRepository for Repository<Client>
 where
     Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
 {
-    #[tracing::instrument(skip(self))]
-    async fn create(&self, message_thread: Allowed<MessageThread, Create>) -> Result<(), Error> {
-        let operated_by = account_user_snapshot(message_thread.actor())?;
-        let thread = message_thread.into_inner();
-
-        self.client
-            .form_message_thread()
-            .create_message_thread(&thread, &operated_by)
-            .await?;
-
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_by_answer_id(
+    #[tracing::instrument(skip(self, answer))]
+    async fn get_for_answer(
         &self,
-        answer_id: AnswerId,
-    ) -> Result<Option<AuthorizationGuard<MessageThread, Read>>, Error> {
-        let answer_id_str = answer_id.into_inner().to_string();
-
-        let Some(answer_author_id_str) = self
-            .client
-            .form_message_thread()
-            .get_thread_author_by_answer_id(&answer_id_str)
-            .await?
-        else {
-            return Ok(None);
-        };
-
+        answer: &Allowed<AnswerEntry, Read>,
+    ) -> Result<Allowed<MessageThread, Read>, Error> {
         let messages = self
             .client
             .form_message()
-            .fetch_messages_by_answer_id(answer_id)
+            .fetch_messages_by_answer_id(*answer.id())
             .await?
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        let thread = unsafe {
-            MessageThread::from_raw_parts(
-                answer_id,
-                Uuid::from_str(&answer_author_id_str)
-                    .map_err(InfraError::from)?
-                    .into(),
-                messages,
-            )
-        };
-
-        Ok(Some(AuthorizationGuard::<MessageThread, Read>::from(
-            thread,
-        )))
+        answer.message_thread(messages).map_err(Error::from)
     }
 
     #[tracing::instrument(skip(self))]

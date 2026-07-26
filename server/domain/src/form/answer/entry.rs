@@ -5,7 +5,7 @@ use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    account::models::{Role, UserId},
+    account::models::Role,
     auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
@@ -13,43 +13,14 @@ use crate::{
             Comment, CommentContent, CommentHistoryEntry, DeletedComment,
             can_read_deleted_comment_history,
         },
-        message::Message,
-        message_thread::MessageThread,
         models::{ActiveForm, FormId},
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuard, AuthorizationRole, BelongsTo, Create, GuardedBy,
-        ParentGuarded, Read, Update,
+        Allowed, AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
     },
 };
 
 pub type AnswerId = types::Id<AnswerEntry>;
-
-pub struct AuthenticatedAnswerMessageExchange {
-    answer_id: AnswerId,
-    answer_author_id: UserId,
-    actor: Actor,
-}
-
-impl AuthenticatedAnswerMessageExchange {
-    pub fn answer_author_id(&self) -> UserId {
-        self.answer_author_id
-    }
-
-    pub fn start_thread(
-        self,
-        initial_message: Message,
-    ) -> Result<Allowed<MessageThread, Create>, DomainError> {
-        let Self {
-            answer_id,
-            answer_author_id,
-            actor,
-        } = self;
-        let thread = MessageThread::start(answer_id, answer_author_id, initial_message);
-
-        AuthorizationGuard::from(thread).try_create(actor)
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AnswerPagePosition {
@@ -130,20 +101,6 @@ impl GuardedBy<ActiveForm, Create> for AnswerEntry {
 }
 
 impl Allowed<AnswerEntry, Read> {
-    pub fn authorize_message_exchange(
-        &self,
-    ) -> Result<AuthenticatedAnswerMessageExchange, DomainError> {
-        let AnswerAuthor::AuthenticatedUser(answer_author_id) = self.value().author() else {
-            return Err(DomainError::Forbidden);
-        };
-
-        Ok(AuthenticatedAnswerMessageExchange {
-            answer_id: *self.value().id(),
-            answer_author_id: *answer_author_id,
-            actor: self.actor().clone(),
-        })
-    }
-
     pub fn can_read_deleted_comment_history(&self) -> bool {
         can_read_deleted_comment_history(self.actor())
     }
@@ -197,13 +154,14 @@ impl Allowed<AnswerEntry, Read> {
 mod tests {
     use super::*;
     use crate::{
-        account::models::AccountUser,
+        account::models::{AccountUser, UserId},
         form::{
             answer::TemporaryAnswerAuthor,
-            message::MessageBody,
+            message::{Message, MessageBody},
             models::{FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
+        types::authorization_guard::AuthorizationGuard,
     };
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
@@ -255,22 +213,21 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_answer_starts_authorized_message_thread() {
+    fn authenticated_answer_constructs_readable_message_thread() {
         let actor = administrator();
         let answer_author_id = UserId::from(Uuid::new_v4());
         let answer = readable_answer(AnswerAuthor::AuthenticatedUser(answer_author_id), &actor);
         let answer_id = *answer.id();
 
-        let exchange = answer.authorize_message_exchange().unwrap();
-        let thread = exchange.start_thread(message_from(&actor)).unwrap();
+        let thread = answer.message_thread(vec![message_from(&actor)]).unwrap();
 
         assert_eq!(thread.answer_id(), &answer_id);
-        assert_eq!(thread.answer_author_id(), &answer_author_id);
         assert_eq!(thread.messages().len(), 1);
+        assert_eq!(thread.actor(), answer.actor());
     }
 
     #[test]
-    fn temporary_answer_cannot_start_message_thread() {
+    fn administrator_can_construct_temporary_answer_message_thread() {
         let actor = administrator();
         let answer = readable_answer(
             AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
@@ -280,8 +237,8 @@ mod tests {
             &actor,
         );
 
-        let result = answer.authorize_message_exchange();
+        let result = answer.message_thread(Vec::new());
 
-        assert!(matches!(result, Err(DomainError::Forbidden)));
+        assert!(result.is_ok());
     }
 }

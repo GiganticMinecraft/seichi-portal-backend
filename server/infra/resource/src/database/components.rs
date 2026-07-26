@@ -21,7 +21,6 @@ use domain::{
         answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerSubmitterRestriction},
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
-        message_thread::MessageThread,
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
             FormLabelName, FormPagePosition,
@@ -41,7 +40,6 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormAnswerDatabase: FormAnswerDatabase;
     type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
     type ConcreteFormMessageDatabase: FormMessageDatabase;
-    type ConcreteFormMessageThreadDatabase: FormMessageThreadDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
     type ConcreteAnswerSubmitterRestrictionDatabase: AnswerSubmitterRestrictionDatabase;
@@ -56,7 +54,6 @@ pub trait DatabaseComponents: Send + Sync {
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
-    fn form_message_thread(&self) -> &Self::ConcreteFormMessageThreadDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
     fn answer_submitter_restriction(&self) -> &Self::ConcreteAnswerSubmitterRestrictionDatabase;
@@ -182,20 +179,6 @@ pub trait FormMessageDatabase: Send + Sync {
         request: PageRequest<MessageHistoryPagePosition>,
         includes_deleted_history: bool,
     ) -> Result<Page<MessageHistoryRecord, MessageHistoryPagePosition>, InfraError>;
-}
-
-#[automock]
-#[async_trait]
-pub trait FormMessageThreadDatabase: Send + Sync {
-    async fn create_message_thread(
-        &self,
-        message_thread: &MessageThread,
-        operated_by: &UserSnapshot,
-    ) -> Result<(), InfraError>;
-    async fn get_thread_author_by_answer_id(
-        &self,
-        answer_id: &str,
-    ) -> Result<Option<String>, InfraError>;
 }
 
 #[automock]

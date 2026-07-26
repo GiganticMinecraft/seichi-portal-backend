@@ -95,31 +95,20 @@ impl<
         let form_answer = self
             .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
-        let message_exchange = form_answer.authorize_message_exchange()?;
-        let notification_recipient_id = message_exchange.answer_author_id();
 
         let message = Message::new(*actor.id(), message_body);
         let message_id = message.id().to_string();
         let message_body = message.body().as_str().to_owned();
         let message_sender_id = *message.sender_id();
 
-        let post_result = match self
+        let thread = self
             .message_thread_repository
-            .get_by_answer_id(answer_id)
+            .get_for_answer(&form_answer)
             .await?
-        {
-            Some(thread_guard) => {
-                let thread = thread_guard.into_update().try_update(actor_user.clone())?;
-                let post = thread.authorize_message_post(message)?;
-                self.message_thread_repository.append(post).await
-            }
-            None => {
-                let thread = message_exchange.start_thread(message)?;
-                self.message_thread_repository.create(thread).await
-            }
-        };
-
-        post_result?;
+            .try_into_update()?;
+        let post = thread.try_post_message(message)?;
+        let notification_recipient_id = *post.answer_author_id();
+        self.message_thread_repository.append(post).await?;
         if let Some(publisher) = self.application_event_publisher {
             publisher.publish(ApplicationEvent::MessageCreated {
                 actor: ApplicationActor::from(actor),
@@ -187,20 +176,16 @@ impl<
         answer_id: AnswerId,
     ) -> Result<Vec<MessageWithSender>, Error> {
         let actor_user = Actor::from(actor.clone());
-        self.read_answer_entry(&actor_user, form_id, answer_id)
+        let form_answer = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
-        let messages = match self
+        let messages = self
             .message_thread_repository
-            .get_by_answer_id(answer_id)
+            .get_for_answer(&form_answer)
             .await?
-        {
-            None => vec![],
-            Some(thread_guard) => {
-                let thread = thread_guard.try_read(actor_user.clone())?;
-                thread.messages().to_vec()
-            }
-        };
+            .messages()
+            .to_vec();
 
         let sender_ids = messages.iter().map(|m| *m.sender_id()).collect();
         let senders = resolve_user_references(self.user_repository, actor, sender_ids).await?;
@@ -226,17 +211,16 @@ impl<
         body: Option<MessageBody>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        self.read_answer_entry(&actor_user, form_id, answer_id)
+        let form_answer = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         if let Some(body) = body {
             let thread = self
                 .message_thread_repository
-                .get_by_answer_id(answer_id)
+                .get_for_answer(&form_answer)
                 .await?
-                .ok_or(Error::from(MessageNotFound))?
-                .into_update()
-                .try_update(actor_user)?;
+                .try_into_update()?;
 
             let current = thread
                 .find_message(*message_id)
@@ -272,16 +256,15 @@ impl<
         message_id: &MessageId,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        self.read_answer_entry(&actor_user, form_id, answer_id)
+        let form_answer = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         let thread = self
             .message_thread_repository
-            .get_by_answer_id(answer_id)
+            .get_for_answer(&form_answer)
             .await?
-            .ok_or(Error::from(MessageNotFound))?
-            .into_update()
-            .try_update(actor_user)?;
+            .try_into_update()?;
 
         let message_body = thread
             .find_message(*message_id)
@@ -315,16 +298,13 @@ impl<
         request: PageRequest<MessageHistoryPagePosition>,
     ) -> Result<Page<Allowed<MessageHistoryEntry, Read>, MessageHistoryPagePosition>, Error> {
         let actor_user = Actor::from(actor.clone());
-        self.read_answer_entry(&actor_user, form_id, answer_id)
+        let form_answer = self
+            .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
-        let Some(thread) = self
+        let thread = self
             .message_thread_repository
-            .get_by_answer_id(answer_id)
-            .await?
-        else {
-            return Ok(Page::new(Vec::new(), None));
-        };
-        let thread = thread.try_read(actor_user)?;
+            .get_for_answer(&form_answer)
+            .await?;
         self.message_thread_repository
             .history(&thread, request)
             .await
@@ -343,14 +323,17 @@ mod tests {
     use domain::{
         account::models::{AccountUser, Role, UserId},
         form::{
-            answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, TemporaryAnswerAuthor},
+            answer::{
+                AnswerAuthor, AnswerEntry, AnswerId, AnswerSettings, AnswerTitle, AnswerVisibility,
+                TemporaryAnswerAuthor,
+            },
             message::{DeletedMessage, MessageHistoryEntry, MessageId, MessagePost},
             message_thread::MessageThread,
             models::{ActiveForm, FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
         notification::models::{NotificationContent, NotificationType},
-        pagination::Page,
+        pagination::{Page, PageLimit},
         types::authorization_guard::{Create, Update},
     };
     use types::non_empty_vec::NonEmptyVec;
@@ -371,55 +354,61 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct InMemoryMessageThreadRepository(Mutex<Option<MessageThread>>);
+    struct InMemoryMessageThreadRepository(Mutex<Vec<(AnswerId, Message)>>);
 
     impl InMemoryMessageThreadRepository {
-        fn with_thread(thread: MessageThread) -> Self {
-            Self(Mutex::new(Some(thread)))
+        fn with_messages(answer_id: AnswerId, messages: Vec<Message>) -> Self {
+            Self(Mutex::new(
+                messages
+                    .into_iter()
+                    .map(|message| (answer_id, message))
+                    .collect(),
+            ))
         }
 
         fn only_message_id(&self) -> MessageId {
-            *self.0.lock().unwrap().as_ref().unwrap().messages()[0].id()
+            *self.0.lock().unwrap()[0].1.id()
         }
 
         fn message_count(&self) -> usize {
+            self.0.lock().unwrap().len()
+        }
+
+        fn stored_messages(&self) -> Vec<Message> {
             self.0
                 .lock()
                 .unwrap()
-                .as_ref()
-                .map_or(0, |thread| thread.messages().len())
-        }
-
-        fn stored_thread(&self) -> Option<MessageThread> {
-            self.0.lock().unwrap().clone()
+                .iter()
+                .map(|(_, message)| message.clone())
+                .collect()
         }
     }
 
     #[async_trait]
     impl MessageThreadRepository for InMemoryMessageThreadRepository {
-        async fn create(&self, thread: Allowed<MessageThread, Create>) -> Result<(), Error> {
-            *self.0.lock().unwrap() = Some(thread.into_inner());
-            Ok(())
-        }
-
-        async fn get_by_answer_id(
+        async fn get_for_answer(
             &self,
-            answer_id: AnswerId,
-        ) -> Result<Option<AuthorizationGuard<MessageThread, Read>>, Error> {
-            Ok(self
+            answer: &Allowed<AnswerEntry, Read>,
+        ) -> Result<Allowed<MessageThread, Read>, Error> {
+            let answer_id = *answer.id();
+            let messages = self
                 .0
                 .lock()
                 .unwrap()
-                .as_ref()
-                .filter(|thread| *thread.answer_id() == answer_id)
-                .cloned()
-                .map(AuthorizationGuard::from))
+                .iter()
+                .filter(|(related_answer_id, _)| *related_answer_id == answer_id)
+                .map(|(_, message)| message.clone())
+                .collect();
+            answer.message_thread(messages).map_err(Error::from)
         }
 
         async fn append(&self, post: Allowed<MessagePost, Create>) -> Result<(), Error> {
-            let mut stored = self.0.lock().unwrap();
-            let thread = stored.take().unwrap();
-            *stored = Some(thread.add_message(post.into_inner().into_message()));
+            let post = post.into_inner();
+            let answer_id = *post.answer_id();
+            self.0
+                .lock()
+                .unwrap()
+                .push((answer_id, post.into_message()));
             Ok(())
         }
 
@@ -429,27 +418,15 @@ mod tests {
             _updated_at: chrono::DateTime<Utc>,
         ) -> Result<(), Error> {
             let message = message.into_inner();
-            let mut stored = self.0.lock().unwrap();
-            let thread = stored.take().unwrap();
-            let messages = thread
-                .messages()
-                .iter()
-                .cloned()
-                .map(|stored_message| {
-                    if stored_message.id() == message.id() {
-                        message.clone()
-                    } else {
-                        stored_message
-                    }
-                })
-                .collect();
-            *stored = Some(unsafe {
-                MessageThread::from_raw_parts(
-                    *thread.answer_id(),
-                    *thread.answer_author_id(),
-                    messages,
-                )
-            });
+            if let Some(stored_message) = self
+                .0
+                .lock()
+                .unwrap()
+                .iter_mut()
+                .find(|(_, stored_message)| stored_message.id() == message.id())
+            {
+                stored_message.1 = message;
+            }
             Ok(())
         }
 
@@ -458,21 +435,10 @@ mod tests {
             message: Allowed<DeletedMessage, Create>,
         ) -> Result<(), Error> {
             let message_id = *message.message().id();
-            let mut stored = self.0.lock().unwrap();
-            let thread = stored.take().unwrap();
-            let messages = thread
-                .messages()
-                .iter()
-                .filter(|stored_message| *stored_message.id() != message_id)
-                .cloned()
-                .collect();
-            *stored = Some(unsafe {
-                MessageThread::from_raw_parts(
-                    *thread.answer_id(),
-                    *thread.answer_author_id(),
-                    messages,
-                )
-            });
+            self.0
+                .lock()
+                .unwrap()
+                .retain(|(_, stored_message)| *stored_message.id() != message_id);
             Ok(())
         }
 
@@ -502,18 +468,22 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct FailingNotificator(AtomicBool);
+    struct FailingNotificator {
+        called: AtomicBool,
+        recipient: Mutex<Option<UserId>>,
+    }
 
     #[async_trait]
     impl Notificator for FailingNotificator {
         async fn notify(
             &self,
-            _recipient: UserId,
+            recipient: UserId,
             _notification_type: NotificationType,
             _notification_preference: &NotificationPreference,
             _content: &NotificationContent,
         ) -> Result<(), Error> {
-            self.0.store(true, Ordering::Relaxed);
+            self.called.store(true, Ordering::Relaxed);
+            *self.recipient.lock().unwrap() = Some(recipient);
             Err(errors::domain::DomainError::InvalidEntity {
                 message: "notification failed".to_string(),
             }
@@ -597,10 +567,13 @@ mod tests {
             )
             .await;
 
-        assert_eq!(result, Err(errors::domain::DomainError::Forbidden.into()));
+        assert_eq!(
+            result,
+            Err(errors::domain::DomainError::MessagePostingNotSupportedForTemporaryAnswer.into())
+        );
         assert_eq!(messages.message_count(), 0);
         assert!(publisher.0.lock().unwrap().is_empty());
-        assert!(!notificator.0.load(Ordering::Relaxed));
+        assert!(!notificator.called.load(Ordering::Relaxed));
     }
 
     #[tokio::test]
@@ -609,20 +582,14 @@ mod tests {
         let (form, answer) = form_and_temporary_answer();
         let form_id = *form.id();
         let answer_id = *answer.id();
-        let existing_thread = unsafe {
-            MessageThread::from_raw_parts(
-                answer_id,
-                UserId::from(Uuid::new_v4()),
-                vec![Message::new(
-                    *actor.id(),
-                    MessageBody::new("existing".to_string().try_into().unwrap()),
-                )],
-            )
-        };
+        let existing_messages = vec![Message::new(
+            *actor.id(),
+            MessageBody::new("existing".to_string().try_into().unwrap()),
+        )];
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
         repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
-        let messages = InMemoryMessageThreadRepository::with_thread(existing_thread);
-        let thread_before_post = messages.stored_thread();
+        let messages = InMemoryMessageThreadRepository::with_messages(answer_id, existing_messages);
+        let messages_before_post = messages.stored_messages();
         let publisher = RecordingPublisher::default();
         let notificator = FailingNotificator::default();
         let usecase = MessageUseCase {
@@ -644,10 +611,13 @@ mod tests {
             )
             .await;
 
-        assert_eq!(result, Err(errors::domain::DomainError::Forbidden.into()));
-        assert_eq!(messages.stored_thread(), thread_before_post);
+        assert_eq!(
+            result,
+            Err(errors::domain::DomainError::MessagePostingNotSupportedForTemporaryAnswer.into())
+        );
+        assert_eq!(messages.stored_messages(), messages_before_post);
         assert!(publisher.0.lock().unwrap().is_empty());
-        assert!(!notificator.0.load(Ordering::Relaxed));
+        assert!(!notificator.called.load(Ordering::Relaxed));
     }
 
     #[tokio::test]
@@ -682,6 +652,94 @@ mod tests {
         }
 
         assert_eq!(messages.message_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn empty_thread_reads_empty_and_unknown_message_mutations_return_message_not_found() {
+        let actor = user();
+        let (form, answer) = form_and_answer(&actor);
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let messages = InMemoryMessageThreadRepository::default();
+        let usecase = MessageUseCase {
+            notification_repository: &repositories.notification_repository,
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            message_thread_repository: &messages,
+            application_event_publisher: None,
+        };
+        let unknown_message_id = MessageId::new();
+
+        let fetched = usecase
+            .get_messages(&actor, form_id, answer_id)
+            .await
+            .unwrap();
+        let history = usecase
+            .get_history(
+                &actor,
+                form_id,
+                answer_id,
+                PageRequest::first(PageLimit::default_limit()),
+            )
+            .await
+            .unwrap();
+        let update = usecase
+            .update_message_body(
+                &actor,
+                form_id,
+                answer_id,
+                &unknown_message_id,
+                Some(MessageBody::new("updated".to_string().try_into().unwrap())),
+            )
+            .await;
+        let delete = usecase
+            .delete_message(&actor, form_id, answer_id, &unknown_message_id)
+            .await;
+
+        assert!(fetched.is_empty());
+        assert!(history.items().is_empty());
+        assert_eq!(update, Err(Error::from(MessageNotFound)));
+        assert_eq!(delete, Err(Error::from(MessageNotFound)));
+    }
+
+    #[tokio::test]
+    async fn empty_message_body_update_is_a_no_op_for_answer_reader() {
+        let actor = AccountUser::new(
+            "reader".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::StandardUser,
+        );
+        let answer_author = AccountUser::new(
+            "answer_author".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::StandardUser,
+        );
+        let (form, answer) = form_and_answer(&answer_author);
+        let form = form.change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let messages = InMemoryMessageThreadRepository::default();
+        let usecase = MessageUseCase {
+            notification_repository: &repositories.notification_repository,
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            message_thread_repository: &messages,
+            application_event_publisher: None,
+        };
+
+        let result = usecase
+            .update_message_body(&actor, form_id, answer_id, &MessageId::new(), None)
+            .await;
+
+        assert_eq!(result, Ok(()));
     }
 
     #[tokio::test]
@@ -758,6 +816,7 @@ mod tests {
             UserId::from(Uuid::new_v4()),
             Role::StandardUser,
         );
+        let recipient_id = *recipient.id();
         let (form, answer) = form_and_answer(&recipient);
         let form_id = *form.id();
         let answer_id = *answer.id();
@@ -787,7 +846,8 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert!(notificator.0.load(Ordering::Relaxed));
+        assert!(notificator.called.load(Ordering::Relaxed));
+        assert_eq!(*notificator.recipient.lock().unwrap(), Some(recipient_id));
         assert!(matches!(
             publisher.0.lock().unwrap().as_slice(),
             [ApplicationEvent::MessageCreated { body, .. }] if body == "saved"

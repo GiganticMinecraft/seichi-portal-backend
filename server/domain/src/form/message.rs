@@ -101,16 +101,21 @@ pub struct Message {
     timestamp: DateTime<Utc>,
 }
 
-/// 既存のメッセージスレッドへ投稿するメッセージと、その所属先を表す。
+/// 回答のメッセージスレッドへの、認可済みの投稿要求を表す。
 #[derive(Getters, Debug)]
 pub struct MessagePost {
-    answer_id: crate::form::answer::AnswerId,
+    answer_id: AnswerId,
+    answer_author_id: UserId,
     message: Message,
 }
 
 impl MessagePost {
-    pub(crate) fn new(answer_id: crate::form::answer::AnswerId, message: Message) -> Self {
-        Self { answer_id, message }
+    pub(crate) fn new(answer_id: AnswerId, answer_author_id: UserId, message: Message) -> Self {
+        Self {
+            answer_id,
+            answer_author_id,
+            message,
+        }
     }
 
     pub fn into_message(self) -> Message {
@@ -125,6 +130,7 @@ impl AuthorizationRole for MessagePost {
 impl BelongsTo<MessageThread> for MessagePost {
     fn belongs_to(&self, parent: &MessageThread) -> bool {
         self.answer_id() == parent.answer_id()
+            && parent.answer_author().authenticated_user_id() == Some(*self.answer_author_id())
     }
 }
 
@@ -192,7 +198,7 @@ mod tests {
     use super::*;
     use crate::{
         account::models::{AccountUser, Role},
-        form::answer::AnswerId,
+        form::answer::{AnswerAuthor, AnswerId},
         types::authorization_guard::{AuthorizationGuard, Read, Update},
     };
     use errors::domain::DomainError;
@@ -210,7 +216,7 @@ mod tests {
         let thread = unsafe {
             MessageThread::from_raw_parts(
                 answer_id,
-                user_id,
+                AnswerAuthor::AuthenticatedUser(user_id),
                 vec![Message::new(
                     user_id,
                     MessageBody::new("owned message".to_string().try_into().unwrap()),
@@ -243,7 +249,13 @@ mod tests {
             UserId::from(Uuid::new_v4()),
             Role::Administrator,
         );
-        let thread = unsafe { MessageThread::from_raw_parts(answer_id, *author.id(), Vec::new()) };
+        let thread = unsafe {
+            MessageThread::from_raw_parts(
+                answer_id,
+                AnswerAuthor::AuthenticatedUser(*author.id()),
+                Vec::new(),
+            )
+        };
         let standard_readable_thread = AuthorizationGuard::<_, Read>::from(thread.clone())
             .try_read(Actor::from(author.clone()))
             .unwrap();
