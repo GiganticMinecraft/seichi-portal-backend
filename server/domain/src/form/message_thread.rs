@@ -69,11 +69,15 @@ impl DeleteTransition for MessageDeletionTarget {
 }
 
 impl MessageThread {
-    pub fn new(answer_id: AnswerId, answer_author_id: UserId) -> Self {
+    pub(super) fn start(
+        answer_id: AnswerId,
+        answer_author_id: UserId,
+        initial_message: Message,
+    ) -> Self {
         Self {
             answer_id,
             answer_author_id,
-            messages: Vec::new(),
+            messages: vec![initial_message],
         }
     }
 
@@ -214,10 +218,13 @@ mod tests {
     }
 
     fn thread_for_answer_author(answer_author_id: UserId) -> MessageThread {
-        MessageThread::new(
-            answer_id("00000000-0000-7000-8000-000000000001"),
-            answer_author_id,
-        )
+        unsafe {
+            MessageThread::from_raw_parts(
+                answer_id("00000000-0000-7000-8000-000000000001"),
+                answer_author_id,
+                Vec::new(),
+            )
+        }
     }
 
     fn message_body(value: &str) -> MessageBody {

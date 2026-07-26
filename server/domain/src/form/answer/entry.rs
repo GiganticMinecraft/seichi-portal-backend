@@ -5,7 +5,7 @@ use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    account::models::Role,
+    account::models::{Role, UserId},
     auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
@@ -13,14 +13,43 @@ use crate::{
             Comment, CommentContent, CommentHistoryEntry, DeletedComment,
             can_read_deleted_comment_history,
         },
+        message::Message,
+        message_thread::MessageThread,
         models::{ActiveForm, FormId},
     },
     types::authorization_guard::{
-        Allowed, AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
+        Allowed, AuthorizationGuard, AuthorizationRole, BelongsTo, Create, GuardedBy,
+        ParentGuarded, Read, Update,
     },
 };
 
 pub type AnswerId = types::Id<AnswerEntry>;
+
+pub struct AuthenticatedAnswerMessageExchange {
+    answer_id: AnswerId,
+    answer_author_id: UserId,
+    actor: Actor,
+}
+
+impl AuthenticatedAnswerMessageExchange {
+    pub fn answer_author_id(&self) -> UserId {
+        self.answer_author_id
+    }
+
+    pub fn start_thread(
+        self,
+        initial_message: Message,
+    ) -> Result<Allowed<MessageThread, Create>, DomainError> {
+        let Self {
+            answer_id,
+            answer_author_id,
+            actor,
+        } = self;
+        let thread = MessageThread::start(answer_id, answer_author_id, initial_message);
+
+        AuthorizationGuard::from(thread).try_create(actor)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AnswerPagePosition {
@@ -101,6 +130,20 @@ impl GuardedBy<ActiveForm, Create> for AnswerEntry {
 }
 
 impl Allowed<AnswerEntry, Read> {
+    pub fn authorize_message_exchange(
+        &self,
+    ) -> Result<AuthenticatedAnswerMessageExchange, DomainError> {
+        let AnswerAuthor::AuthenticatedUser(answer_author_id) = self.value().author() else {
+            return Err(DomainError::Forbidden);
+        };
+
+        Ok(AuthenticatedAnswerMessageExchange {
+            answer_id: *self.value().id(),
+            answer_author_id: *answer_author_id,
+            actor: self.actor().clone(),
+        })
+    }
+
     pub fn can_read_deleted_comment_history(&self) -> bool {
         can_read_deleted_comment_history(self.actor())
     }
@@ -147,5 +190,98 @@ impl Allowed<AnswerEntry, Read> {
         deleted_at: DateTime<Utc>,
     ) -> Result<Allowed<DeletedComment, Create>, DomainError> {
         self.authorize_delete(comment)?.delete(deleted_at)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        account::models::AccountUser,
+        form::{
+            answer::TemporaryAnswerAuthor,
+            message::MessageBody,
+            models::{FormDescription, FormTitle, QuestionSet},
+            question::Question,
+        },
+    };
+    use types::non_empty_vec::NonEmptyVec;
+    use uuid::Uuid;
+
+    fn administrator() -> AccountUser {
+        AccountUser::new(
+            "administrator".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::Administrator,
+        )
+    }
+
+    fn readable_answer(author: AnswerAuthor, actor: &AccountUser) -> Allowed<AnswerEntry, Read> {
+        let question = Question::new_text(
+            "body".to_string().try_into().unwrap(),
+            0,
+            "Body".to_string().try_into().unwrap(),
+            None,
+            false,
+        )
+        .unwrap();
+        let form = ActiveForm::new(
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new(String::new()),
+            QuestionSet::try_new(NonEmptyVec::try_new(vec![question]).unwrap()).unwrap(),
+        );
+        let answer = unsafe {
+            AnswerEntry::from_raw_parts(
+                AnswerId::new(),
+                *form.id(),
+                author,
+                Utc::now(),
+                AnswerTitle::new(None),
+                Vec::new(),
+            )
+        };
+        let form = AuthorizationGuard::<_, Read>::from(form)
+            .try_read(Actor::from(actor.clone()))
+            .unwrap();
+
+        form.authorize_read(answer).unwrap()
+    }
+
+    fn message_from(actor: &AccountUser) -> Message {
+        Message::new(
+            *actor.id(),
+            MessageBody::new("initial message".to_string().try_into().unwrap()),
+        )
+    }
+
+    #[test]
+    fn authenticated_answer_starts_authorized_message_thread() {
+        let actor = administrator();
+        let answer_author_id = UserId::from(Uuid::new_v4());
+        let answer = readable_answer(AnswerAuthor::AuthenticatedUser(answer_author_id), &actor);
+        let answer_id = *answer.id();
+
+        let exchange = answer.authorize_message_exchange().unwrap();
+        let thread = exchange.start_thread(message_from(&actor)).unwrap();
+
+        assert_eq!(thread.answer_id(), &answer_id);
+        assert_eq!(thread.answer_author_id(), &answer_author_id);
+        assert_eq!(thread.messages().len(), 1);
+    }
+
+    #[test]
+    fn temporary_answer_cannot_start_message_thread() {
+        let actor = administrator();
+        let answer = readable_answer(
+            AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+                "temporary user".to_string(),
+                "temporary@example.com".to_string(),
+            )),
+            &actor,
+        );
+
+        let result = answer.authorize_message_exchange();
+
+        assert!(matches!(result, Err(DomainError::Forbidden)));
     }
 }

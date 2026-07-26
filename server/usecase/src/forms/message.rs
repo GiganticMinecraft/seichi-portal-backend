@@ -1,6 +1,5 @@
 use chrono::Utc;
 use common::config::FRONTEND;
-use domain::form::message_thread::MessageThread;
 use domain::form::models::FormId;
 use domain::notification::models::{NotificationContent, NotificationType};
 use domain::notification::notificator::Notificator;
@@ -96,15 +95,12 @@ impl<
         let form_answer = self
             .read_answer_entry(&actor_user, form_id, answer_id)
             .await?;
+        let message_exchange = form_answer.authorize_message_exchange()?;
+        let notification_recipient_id = message_exchange.answer_author_id();
 
         let message = Message::new(*actor.id(), message_body);
         let message_id = message.id().to_string();
         let message_body = message.body().as_str().to_owned();
-        let notification_recipient_id = form_answer
-            .author()
-            .authenticated_user_id()
-            .ok_or(Error::from(UserNotFound))?;
-
         let message_sender_id = *message.sender_id();
 
         let post_result = match self
@@ -118,15 +114,8 @@ impl<
                 self.message_thread_repository.append(post).await
             }
             None => {
-                let answer_author_id = form_answer
-                    .author()
-                    .authenticated_user_id()
-                    .ok_or(Error::from(UserNotFound))?;
-                let thread = MessageThread::new(answer_id, answer_author_id).add_message(message);
-                let guard = AuthorizationGuard::<MessageThread, Create>::from(thread);
-                self.message_thread_repository
-                    .create(guard.try_create(actor_user.clone())?)
-                    .await
+                let thread = message_exchange.start_thread(message)?;
+                self.message_thread_repository.create(thread).await
             }
         };
 
@@ -354,8 +343,9 @@ mod tests {
     use domain::{
         account::models::{AccountUser, Role, UserId},
         form::{
-            answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle},
+            answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, TemporaryAnswerAuthor},
             message::{DeletedMessage, MessageHistoryEntry, MessageId, MessagePost},
+            message_thread::MessageThread,
             models::{ActiveForm, FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
@@ -384,8 +374,24 @@ mod tests {
     struct InMemoryMessageThreadRepository(Mutex<Option<MessageThread>>);
 
     impl InMemoryMessageThreadRepository {
+        fn with_thread(thread: MessageThread) -> Self {
+            Self(Mutex::new(Some(thread)))
+        }
+
         fn only_message_id(&self) -> MessageId {
             *self.0.lock().unwrap().as_ref().unwrap().messages()[0].id()
+        }
+
+        fn message_count(&self) -> usize {
+            self.0
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map_or(0, |thread| thread.messages().len())
+        }
+
+        fn stored_thread(&self) -> Option<MessageThread> {
+            self.0.lock().unwrap().clone()
         }
     }
 
@@ -523,7 +529,7 @@ mod tests {
         )
     }
 
-    fn form_and_answer(user: &AccountUser) -> (ActiveForm, AnswerEntry) {
+    fn form_and_answer_author(author: AnswerAuthor) -> (ActiveForm, AnswerEntry) {
         let question = Question::new_text(
             "body".to_string().try_into().unwrap(),
             0,
@@ -541,13 +547,141 @@ mod tests {
             AnswerEntry::from_raw_parts(
                 AnswerId::new(),
                 *form.id(),
-                AnswerAuthor::AuthenticatedUser(*user.id()),
+                author,
                 Utc::now(),
                 AnswerTitle::new(None),
                 Vec::new(),
             )
         };
         (form, answer)
+    }
+
+    fn form_and_answer(user: &AccountUser) -> (ActiveForm, AnswerEntry) {
+        form_and_answer_author(AnswerAuthor::AuthenticatedUser(*user.id()))
+    }
+
+    fn form_and_temporary_answer() -> (ActiveForm, AnswerEntry) {
+        form_and_answer_author(AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+            "temporary user".to_string(),
+            "temporary@example.com".to_string(),
+        )))
+    }
+
+    #[tokio::test]
+    async fn temporary_answer_rejects_message_without_external_side_effects() {
+        let actor = user();
+        let (form, answer) = form_and_temporary_answer();
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let messages = InMemoryMessageThreadRepository::default();
+        let publisher = RecordingPublisher::default();
+        let notificator = FailingNotificator::default();
+        let usecase = MessageUseCase {
+            notification_repository: &repositories.notification_repository,
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            message_thread_repository: &messages,
+            application_event_publisher: Some(&publisher),
+        };
+
+        let result = usecase
+            .post_message(
+                &actor,
+                form_id,
+                MessageBody::new("must not be saved".to_string().try_into().unwrap()),
+                answer_id,
+                &notificator,
+            )
+            .await;
+
+        assert_eq!(result, Err(errors::domain::DomainError::Forbidden.into()));
+        assert_eq!(messages.message_count(), 0);
+        assert!(publisher.0.lock().unwrap().is_empty());
+        assert!(!notificator.0.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn temporary_answer_with_existing_thread_rejects_message_without_external_side_effects() {
+        let actor = user();
+        let (form, answer) = form_and_temporary_answer();
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let existing_thread = unsafe {
+            MessageThread::from_raw_parts(
+                answer_id,
+                UserId::from(Uuid::new_v4()),
+                vec![Message::new(
+                    *actor.id(),
+                    MessageBody::new("existing".to_string().try_into().unwrap()),
+                )],
+            )
+        };
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let messages = InMemoryMessageThreadRepository::with_thread(existing_thread);
+        let thread_before_post = messages.stored_thread();
+        let publisher = RecordingPublisher::default();
+        let notificator = FailingNotificator::default();
+        let usecase = MessageUseCase {
+            notification_repository: &repositories.notification_repository,
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            message_thread_repository: &messages,
+            application_event_publisher: Some(&publisher),
+        };
+
+        let result = usecase
+            .post_message(
+                &actor,
+                form_id,
+                MessageBody::new("must not be appended".to_string().try_into().unwrap()),
+                answer_id,
+                &notificator,
+            )
+            .await;
+
+        assert_eq!(result, Err(errors::domain::DomainError::Forbidden.into()));
+        assert_eq!(messages.stored_thread(), thread_before_post);
+        assert!(publisher.0.lock().unwrap().is_empty());
+        assert!(!notificator.0.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn authenticated_answer_accepts_initial_and_follow_up_messages() {
+        let actor = user();
+        let (form, answer) = form_and_answer(&actor);
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let messages = InMemoryMessageThreadRepository::default();
+        let usecase = MessageUseCase {
+            notification_repository: &repositories.notification_repository,
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            message_thread_repository: &messages,
+            application_event_publisher: None,
+        };
+
+        for body in ["initial", "follow up"] {
+            usecase
+                .post_message(
+                    &actor,
+                    form_id,
+                    MessageBody::new(body.to_string().try_into().unwrap()),
+                    answer_id,
+                    &NoopNotificator,
+                )
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(messages.message_count(), 2);
     }
 
     #[tokio::test]

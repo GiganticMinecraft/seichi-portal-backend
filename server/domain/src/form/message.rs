@@ -207,10 +207,16 @@ mod tests {
             Role::StandardUser,
         ));
         let answer_id: AnswerId = Uuid::new_v4().into();
-        let thread = MessageThread::new(answer_id, user_id).add_message(Message::new(
-            user_id,
-            MessageBody::new("owned message".to_string().try_into().unwrap()),
-        ));
+        let thread = unsafe {
+            MessageThread::from_raw_parts(
+                answer_id,
+                user_id,
+                vec![Message::new(
+                    user_id,
+                    MessageBody::new("owned message".to_string().try_into().unwrap()),
+                )],
+            )
+        };
         let foreign_message = Message::new(
             user_id,
             MessageBody::new("foreign message".to_string().try_into().unwrap()),
@@ -237,7 +243,7 @@ mod tests {
             UserId::from(Uuid::new_v4()),
             Role::Administrator,
         );
-        let thread = MessageThread::new(answer_id, *author.id());
+        let thread = unsafe { MessageThread::from_raw_parts(answer_id, *author.id(), Vec::new()) };
         let standard_readable_thread = AuthorizationGuard::<_, Read>::from(thread.clone())
             .try_read(Actor::from(author.clone()))
             .unwrap();
