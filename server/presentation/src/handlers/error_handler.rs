@@ -67,6 +67,12 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             "Message body is empty.",
             "EMPTY_MESSAGE_BODY",
         ),
+        DomainError::MessagePostingNotSupportedForTemporaryAnswer => problem_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Unprocessable Entity",
+            "Messages cannot be posted to temporary answers.",
+            "MESSAGE_POSTING_NOT_SUPPORTED_FOR_TEMPORARY_ANSWER",
+        ),
         DomainError::Conversion { source } => {
             tracing::error!("Conversion Error: {}", source);
             problem_response(
@@ -367,5 +373,38 @@ pub fn handle_error(err: Error) -> Response {
         Error::Infra { source } => handle_infra_error(source).into_response(),
         Error::Validation { source } => handle_validation_error(source).into_response(),
         Error::Presentation { source } => handle_presentation_error(source).into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{body::to_bytes, http::header::CONTENT_TYPE};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn temporary_answer_message_posting_error_is_an_unprocessable_entity_problem() {
+        let response =
+            handle_error(DomainError::MessagePostingNotSupportedForTemporaryAnswer.into());
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE).unwrap(),
+            "application/problem+json"
+        );
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(problem["status"], 422);
+        assert_eq!(problem["title"], "Unprocessable Entity");
+        assert_eq!(
+            problem["errorCode"],
+            "MESSAGE_POSTING_NOT_SUPPORTED_FOR_TEMPORARY_ANSWER"
+        );
+        assert_eq!(
+            problem["detail"],
+            "Messages cannot be posted to temporary answers."
+        );
     }
 }

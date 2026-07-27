@@ -18,6 +18,8 @@ pub enum DomainError {
     },
     #[error("Empty message body.")]
     EmptyMessageBody,
+    #[error("Messages cannot be posted to temporary answers.")]
+    MessagePostingNotSupportedForTemporaryAnswer,
     #[error("Invalid answer acceptance period.")]
     InvalidAnswerAcceptancePeriod,
     #[error("Invalid Discord webhook url.")]

@@ -3,25 +3,25 @@ use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
 
 use crate::{
-    account::models::{Role::Administrator, UserId, UserSnapshot},
+    account::models::{Role::Administrator, UserSnapshot},
     auth::Actor,
     form::{
-        answer::AnswerId,
+        answer::{AnswerAuthor, AnswerEntry, AnswerId},
         message::{
             DeletedMessage, Message, MessageBody, MessageHistoryEntry, MessageId, MessagePost,
             can_read_deleted_message_history,
         },
     },
     types::authorization_guard::{
-        Allowed, AuthorizationGuardDefinitions, AuthorizationRole, BelongsTo, Create, Delete,
-        DeleteTransition, GuardedBy, ParentGuarded, Read, SelfGuarded, Update,
+        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizationRole, BelongsTo,
+        Create, Delete, DeleteTransition, GuardedBy, ParentGuarded, Read, SelfGuarded, Update,
     },
 };
 
 #[derive(UnsafeFromRawParts, Clone, Debug, PartialEq)]
 pub struct MessageThread {
     answer_id: AnswerId,
-    answer_author_id: UserId,
+    answer_author: AnswerAuthor,
     messages: Vec<Message>,
 }
 
@@ -69,27 +69,20 @@ impl DeleteTransition for MessageDeletionTarget {
 }
 
 impl MessageThread {
-    pub fn new(answer_id: AnswerId, answer_author_id: UserId) -> Self {
-        Self {
-            answer_id,
-            answer_author_id,
-            messages: Vec::new(),
-        }
-    }
-
     pub fn answer_id(&self) -> &AnswerId {
         &self.answer_id
     }
 
-    pub fn answer_author_id(&self) -> &UserId {
-        &self.answer_author_id
+    pub(crate) fn answer_author(&self) -> &AnswerAuthor {
+        &self.answer_author
     }
 
     pub fn messages(&self) -> &[Message] {
         &self.messages
     }
 
-    pub fn add_message(self, message: Message) -> Self {
+    #[cfg(test)]
+    pub(crate) fn add_message(self, message: Message) -> Self {
         Self {
             messages: self.messages.into_iter().chain([message]).collect(),
             ..self
@@ -101,12 +94,38 @@ impl MessageThread {
     }
 }
 
+impl Allowed<AnswerEntry, Read> {
+    pub fn message_thread(
+        &self,
+        messages: Vec<Message>,
+    ) -> Result<Allowed<MessageThread, Read>, DomainError> {
+        let thread = MessageThread {
+            answer_id: *self.id(),
+            answer_author: self.author().clone(),
+            messages,
+        };
+
+        AuthorizationGuard::from(thread).try_read(self.actor().clone())
+    }
+}
+
 impl Allowed<MessageThread, Update> {
-    pub fn authorize_message_post(
+    pub fn try_post_message(
         &self,
         message: Message,
     ) -> Result<Allowed<MessagePost, Create>, DomainError> {
-        self.authorize_create(MessagePost::new(*self.answer_id(), message))
+        let answer_author_id = match self.answer_author() {
+            AnswerAuthor::AuthenticatedUser(answer_author_id) => *answer_author_id,
+            AnswerAuthor::Temporary(_) => {
+                return Err(DomainError::MessagePostingNotSupportedForTemporaryAnswer);
+            }
+        };
+
+        self.authorize_create(MessagePost::new(
+            *self.answer_id(),
+            answer_author_id,
+            message,
+        ))
     }
 
     pub fn authorize_message_update(
@@ -155,12 +174,15 @@ impl Allowed<MessageThread, Read> {
     }
 }
 
-fn is_answer_author_or_administrator(actor: &Actor, answer_author_id: &UserId) -> bool {
+fn is_answer_author_or_administrator(actor: &Actor, answer_author: &AnswerAuthor) -> bool {
     matches!(
-        actor,
-        Actor::AccountUser(user)
+        (actor, answer_author),
+        (Actor::AccountUser(user), _)
             if user.role() == &Administrator
-                || *user.id() == *answer_author_id
+    ) || matches!(
+        (actor, answer_author),
+        (Actor::AccountUser(user), AnswerAuthor::AuthenticatedUser(answer_author_id))
+            if user.id() == answer_author_id
     )
 }
 
@@ -169,21 +191,16 @@ impl AuthorizationRole for MessageThread {
 }
 
 impl AuthorizationGuardDefinitions for MessageThread {
-    fn can_create(&self, actor: &Actor) -> bool {
-        matches!(
-            actor,
-            Actor::AccountUser(user)
-                if user.role() == &Administrator
-                    && self.messages.iter().all(|message| message.sender_id() == user.id())
-        )
+    fn can_create(&self, _actor: &Actor) -> bool {
+        false
     }
 
     fn can_read(&self, actor: &Actor) -> bool {
-        is_answer_author_or_administrator(actor, &self.answer_author_id)
+        is_answer_author_or_administrator(actor, &self.answer_author)
     }
 
     fn can_update(&self, actor: &Actor) -> bool {
-        is_answer_author_or_administrator(actor, &self.answer_author_id)
+        is_answer_author_or_administrator(actor, &self.answer_author)
     }
 
     fn can_delete(&self, _actor: &Actor) -> bool {
@@ -195,9 +212,9 @@ impl AuthorizationGuardDefinitions for MessageThread {
 mod tests {
     use super::*;
     use crate::{
-        account::models::{AccountUser, Role},
+        account::models::{AccountUser, Role, UserId},
         form::answer::TemporaryAnswerAuthor,
-        types::authorization_guard::{AuthorizationGuard, Create, Delete, Read},
+        types::authorization_guard::{AuthorizationGuard, Delete, Read},
     };
     use uuid::Uuid;
 
@@ -214,10 +231,13 @@ mod tests {
     }
 
     fn thread_for_answer_author(answer_author_id: UserId) -> MessageThread {
-        MessageThread::new(
-            answer_id("00000000-0000-7000-8000-000000000001"),
-            answer_author_id,
-        )
+        unsafe {
+            MessageThread::from_raw_parts(
+                answer_id("00000000-0000-7000-8000-000000000001"),
+                AnswerAuthor::AuthenticatedUser(answer_author_id),
+                Vec::new(),
+            )
+        }
     }
 
     fn message_body(value: &str) -> MessageBody {
@@ -226,75 +246,6 @@ mod tests {
 
     fn message_from(sender_id: UserId, body: &str) -> Message {
         Message::new(sender_id, message_body(body))
-    }
-
-    #[test]
-    fn only_administrator_can_create_message_thread() {
-        let answer_author_id = user_id("00000000-0000-7000-8000-000000000101");
-        let admin_id = user_id("00000000-0000-7000-8000-000000000102");
-        let admin = Actor::from(active_user("admin", admin_id, Role::Administrator));
-        let answer_author = Actor::from(active_user(
-            "answer_author",
-            answer_author_id,
-            Role::StandardUser,
-        ));
-        let other_user = Actor::from(active_user(
-            "other_user",
-            user_id("00000000-0000-7000-8000-000000000103"),
-            Role::StandardUser,
-        ));
-        let temporary_user = Actor::from(TemporaryAnswerAuthor::new(
-            "temporary_user".to_string(),
-            "temporary@example.com".to_string(),
-        ));
-
-        assert!(
-            AuthorizationGuard::<_, Create>::from(
-                thread_for_answer_author(answer_author_id)
-                    .add_message(message_from(admin_id, "initial message"))
-            )
-            .try_create(admin)
-            .is_ok()
-        );
-        assert!(
-            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
-                .try_create(answer_author)
-                .is_err()
-        );
-        assert!(
-            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
-                .try_create(other_user)
-                .is_err()
-        );
-        assert!(
-            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
-                .try_create(temporary_user)
-                .is_err()
-        );
-        assert!(
-            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
-                .try_create(Actor::Anonymous)
-                .is_err()
-        );
-        assert!(
-            AuthorizationGuard::<_, Create>::from(thread_for_answer_author(answer_author_id))
-                .try_create(Actor::System)
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn administrator_cannot_create_thread_with_another_users_message() {
-        let answer_author_id = user_id("00000000-0000-7000-8000-000000000111");
-        let admin_id = user_id("00000000-0000-7000-8000-000000000112");
-        let other_user_id = user_id("00000000-0000-7000-8000-000000000113");
-        let admin = Actor::from(active_user("admin", admin_id, Role::Administrator));
-        let thread = thread_for_answer_author(answer_author_id)
-            .add_message(message_from(other_user_id, "forged sender"));
-
-        let result = AuthorizationGuard::<_, Create>::from(thread).try_create(admin);
-
-        assert!(matches!(result, Err(DomainError::Forbidden)));
     }
 
     #[test]
@@ -451,12 +402,52 @@ mod tests {
                 .try_update(answer_author)
                 .unwrap();
 
-        let result = allowed_thread.authorize_message_post(message_from(
+        let result = allowed_thread.try_post_message(message_from(
             another_user_id,
             "message with a different sender",
         ));
 
         assert!(matches!(result, Err(DomainError::Forbidden)));
+    }
+
+    #[test]
+    fn temporary_answer_thread_is_admin_only_and_rejects_message_posts() {
+        let admin_id = user_id("00000000-0000-7000-8000-000000000561");
+        let admin = Actor::from(active_user("admin", admin_id, Role::Administrator));
+        let temporary_author = AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+            "temporary_user".to_string(),
+            "temporary@example.com".to_string(),
+        ));
+        let thread = unsafe {
+            MessageThread::from_raw_parts(
+                answer_id("00000000-0000-7000-8000-000000000562"),
+                temporary_author,
+                Vec::new(),
+            )
+        };
+        let standard_user = Actor::from(active_user(
+            "standard_user",
+            user_id("00000000-0000-7000-8000-000000000563"),
+            Role::StandardUser,
+        ));
+
+        assert!(
+            AuthorizationGuard::<_, Read>::from(thread.clone())
+                .try_read(standard_user)
+                .is_err()
+        );
+
+        let thread = AuthorizationGuard::<_, Read>::from(thread)
+            .try_read(admin)
+            .unwrap()
+            .try_into_update()
+            .unwrap();
+        let result = thread.try_post_message(message_from(admin_id, "forbidden"));
+
+        assert!(matches!(
+            result,
+            Err(DomainError::MessagePostingNotSupportedForTemporaryAnswer)
+        ));
     }
 
     #[test]

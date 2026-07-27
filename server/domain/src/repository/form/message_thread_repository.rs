@@ -5,24 +5,23 @@ use mockall::automock;
 
 use crate::{
     form::{
-        answer::AnswerId,
+        answer::AnswerEntry,
         message::{
             DeletedMessage, Message, MessageHistoryEntry, MessageHistoryPagePosition, MessagePost,
         },
         message_thread::MessageThread,
     },
     pagination::{Page, PageRequest},
-    types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
 
 #[automock]
 #[async_trait]
 pub trait MessageThreadRepository: Send + Sync + 'static {
-    async fn create(&self, message_thread: Allowed<MessageThread, Create>) -> Result<(), Error>;
-    async fn get_by_answer_id(
+    async fn get_for_answer(
         &self,
-        answer_id: AnswerId,
-    ) -> Result<Option<AuthorizationGuard<MessageThread, Read>>, Error>;
+        answer: &Allowed<AnswerEntry, Read>,
+    ) -> Result<Allowed<MessageThread, Read>, Error>;
     async fn append(&self, post: Allowed<MessagePost, Create>) -> Result<(), Error>;
     async fn update_message(
         &self,

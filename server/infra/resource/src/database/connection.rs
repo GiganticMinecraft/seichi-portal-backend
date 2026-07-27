@@ -137,7 +137,6 @@ impl DatabaseComponents for ConnectionPool {
     type ConcreteFormDatabase = Self;
     type ConcreteFormLabelDatabase = Self;
     type ConcreteFormMessageDatabase = Self;
-    type ConcreteFormMessageThreadDatabase = Self;
     type ConcreteAnswerSubmitterRestrictionDatabase = Self;
     type ConcreteNotificationDatabase = Self;
     type ConcreteSearchDatabase = Self;
@@ -164,10 +163,6 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase {
-        self
-    }
-
-    fn form_message_thread(&self) -> &Self::ConcreteFormMessageThreadDatabase {
         self
     }
 
