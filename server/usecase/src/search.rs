@@ -1,7 +1,7 @@
 use crate::{
     models::{
-        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, CrossSearchOutput,
-        PublishedAnswerAuthor, PublishedAnswerEntry,
+        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, CrossSearchComment,
+        CrossSearchOutput, PublishedAnswerAuthor, PublishedAnswerEntry,
     },
     user_reference_resolver::resolve_user_references,
 };
@@ -266,30 +266,33 @@ impl<
             .await
     }
 
-    async fn comments_with_authors(
+    async fn cross_search_comments_with_authors(
         &self,
         account_user: &AccountUser,
-        comments: Vec<Comment>,
-    ) -> Result<Vec<CommentWithAuthor>, Error> {
+        comments: Vec<(FormId, Comment)>,
+    ) -> Result<Vec<CrossSearchComment>, Error> {
         let users = resolve_user_references(
             self.user_repository,
             account_user,
             comments
                 .iter()
-                .map(|comment| *comment.commented_by())
+                .map(|(_, comment)| *comment.commented_by())
                 .collect(),
         )
         .await?;
 
         Ok(comments
             .into_iter()
-            .filter_map(|comment| {
+            .filter_map(|(form_id, comment)| {
                 users
                     .get(comment.commented_by())
                     .cloned()
-                    .map(|commented_by| CommentWithAuthor {
-                        comment,
-                        commented_by,
+                    .map(|commented_by| CrossSearchComment {
+                        form_id,
+                        comment: CommentWithAuthor {
+                            comment,
+                            commented_by,
+                        },
                     })
             })
             .collect())
@@ -412,7 +415,7 @@ impl<
             .visible_answer_details(account_user, actor_ref, answers, &visible_answers_by_id)
             .await?;
 
-        let visible_comments: Vec<Comment> = stream::iter(comments)
+        let visible_comments: Vec<(FormId, Comment)> = stream::iter(comments)
             .map(|comment| {
                 let visible_answers_by_id = &visible_answers_by_id;
 
@@ -421,6 +424,7 @@ impl<
                     else {
                         return Ok::<_, Error>(None);
                     };
+                    let form_id = *answer.form_id();
 
                     Ok::<_, Error>(
                         self.comment_repository
@@ -428,7 +432,7 @@ impl<
                             .await?
                             .into_iter()
                             .find(|loaded| *loaded.value().comment_id() == comment.comment_id)
-                            .map(|comment| comment.into_inner()),
+                            .map(|comment| (form_id, comment.into_inner())),
                     )
                 }
             })
@@ -437,7 +441,7 @@ impl<
             .try_collect()
             .await?;
         let visible_comments = self
-            .comments_with_authors(account_user, visible_comments)
+            .cross_search_comments_with_authors(account_user, visible_comments)
             .await?;
 
         Ok(CrossSearchOutput {
@@ -1215,6 +1219,7 @@ mod tests {
         let form = form_restricted_to("comments", &member_group).change_answer_settings(
             AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
         );
+        let form_id = *form.id();
         let question_id = *form.questions().as_slice()[0].id();
         let answer = AnswerEntry::new(
             *form.id(),
@@ -1347,8 +1352,188 @@ mod tests {
         let comment_ids = output
             .comments
             .iter()
-            .map(|comment| *comment.comment.comment_id())
+            .map(|comment| *comment.comment.comment.comment_id())
             .collect::<Vec<_>>();
         assert_eq!(comment_ids, vec![second_comment_id, first_comment_id]);
+
+        let form_ids = output
+            .comments
+            .iter()
+            .map(|comment| comment.form_id)
+            .collect::<Vec<_>>();
+        assert_eq!(form_ids, vec![form_id, form_id]);
+    }
+
+    #[tokio::test]
+    async fn cross_search_comments_keep_authorized_answers_parent_form_and_exclude_unavailable_or_unreadable_hits()
+     {
+        let member_group = UserGroup::new(UserGroupName::new(
+            "members".to_string().try_into().unwrap(),
+        ));
+        let other_group =
+            UserGroup::new(UserGroupName::new("other".to_string().try_into().unwrap()));
+        let actor = AccountUser::with_groups(
+            "viewer".to_string(),
+            Uuid::from_u128(20).into(),
+            Role::StandardUser,
+            vec![member_group.clone()],
+        );
+        let form_a = form_restricted_to("comments a", &member_group).change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let form_b = form_restricted_to("comments b", &member_group).change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let unreadable_form = form_restricted_to("comments hidden", &other_group);
+        let form_a_id = *form_a.id();
+        let form_b_id = *form_b.id();
+        let answer = |form: &ActiveForm| {
+            AnswerEntry::new(
+                *form.id(),
+                AnswerAuthor::AuthenticatedUser(*actor.id()),
+                AnswerTitle::default(),
+                PostedAnswerContents::try_new(
+                    form.questions().as_slice(),
+                    vec![FormAnswerContent {
+                        id: FormAnswerContentId::from(Uuid::new_v4()),
+                        question_id: (*form.questions().as_slice()[0].id()).into(),
+                        answer: "body".to_string(),
+                    }],
+                )
+                .unwrap(),
+            )
+        };
+        let answer_a = answer(&form_a);
+        let answer_b = answer(&form_b);
+        let unreadable_answer = answer(&unreadable_form);
+        let answer_a_id = *answer_a.id();
+        let answer_b_id = *answer_b.id();
+        let unreadable_answer_id = *unreadable_answer.id();
+        let unavailable_answer_id = AnswerId::from(Uuid::from_u128(21));
+        let first_comment_id = CommentId::from(Uuid::from_u128(22));
+        let missing_author_comment_id = CommentId::from(Uuid::from_u128(23));
+        let second_comment_id = CommentId::from(Uuid::from_u128(24));
+        let unavailable_comment_id = CommentId::from(Uuid::from_u128(25));
+        let unreadable_comment_id = CommentId::from(Uuid::from_u128(27));
+        let comment = |answer_id, comment_id, commented_by, content: &str| unsafe {
+            Comment::from_raw_parts(
+                answer_id,
+                comment_id,
+                CommentContent::new(content.to_string().try_into().unwrap()),
+                Utc::now(),
+                commented_by,
+            )
+        };
+        let first_comment = comment(answer_a_id, first_comment_id, *actor.id(), "first");
+        let missing_author_comment = comment(
+            answer_a_id,
+            missing_author_comment_id,
+            Uuid::from_u128(26).into(),
+            "missing author",
+        );
+        let second_comment = comment(answer_b_id, second_comment_id, *actor.id(), "second");
+        let unreadable_comment = comment(
+            unreadable_answer_id,
+            unreadable_comment_id,
+            *actor.id(),
+            "unreadable",
+        );
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_search_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_users()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_answers()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_answers()
+            .returning(|_, _| Ok(vec![]));
+        search_repository
+            .expect_search_comments()
+            .returning(move |_| {
+                Ok(vec![
+                    CommentSearchHit {
+                        comment_id: second_comment_id,
+                        answer_id: answer_b_id,
+                    },
+                    CommentSearchHit {
+                        comment_id: unavailable_comment_id,
+                        answer_id: unavailable_answer_id,
+                    },
+                    CommentSearchHit {
+                        comment_id: unreadable_comment_id,
+                        answer_id: unreadable_answer_id,
+                    },
+                    CommentSearchHit {
+                        comment_id: missing_author_comment_id,
+                        answer_id: answer_a_id,
+                    },
+                    CommentSearchHit {
+                        comment_id: first_comment_id,
+                        answer_id: answer_a_id,
+                    },
+                ])
+            });
+
+        let active_form_repository =
+            InMemoryActiveFormRepository::new(vec![form_a, form_b, unreadable_form]);
+        let answer_label_repository = MockAnswerLabelRepository::new();
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        user_repository.save_user(actor.clone());
+        let answer_entry_repository =
+            InMemoryAnswerEntryRepository::new(vec![answer_a, answer_b, unreadable_answer]);
+        let mut comment_repository = MockCommentRepository::new();
+        comment_repository
+            .expect_find_by_answer()
+            .returning(move |answer| {
+                let comments = match *answer.id() {
+                    id if id == answer_a_id => {
+                        vec![first_comment.clone(), missing_author_comment.clone()]
+                    }
+                    id if id == answer_b_id => vec![second_comment.clone()],
+                    id if id == unreadable_answer_id => vec![unreadable_comment.clone()],
+                    _ => vec![],
+                };
+
+                comments
+                    .into_iter()
+                    .map(|comment| answer.authorize_comment(comment).map_err(Error::from))
+                    .collect()
+            });
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_repository: &comment_repository,
+        };
+
+        let output = use_case
+            .cross_search(&actor, "comment".to_string())
+            .await
+            .unwrap();
+
+        let comment_parent_pairs = output
+            .comments
+            .iter()
+            .map(|comment| (*comment.comment.comment.comment_id(), comment.form_id))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            comment_parent_pairs,
+            vec![
+                (second_comment_id, form_b_id),
+                (first_comment_id, form_a_id)
+            ]
+        );
     }
 }

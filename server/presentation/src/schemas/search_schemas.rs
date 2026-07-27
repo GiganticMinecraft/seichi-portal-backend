@@ -1,7 +1,7 @@
 use domain::form::{answer::AnswerId, models::FormId};
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
-use usecase::models::{AnswerDetails, CommentWithAuthor, CrossSearchOutput};
+use usecase::models::{AnswerDetails, CrossSearchComment, CrossSearchOutput};
 
 use crate::schemas::{
     form::form_response_schemas::{
@@ -34,16 +34,19 @@ pub struct AnswerSearchQuery {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct SearchCommentSchema {
     #[schema(value_type = String, format = "uuid")]
+    pub form_id: FormId,
+    #[schema(value_type = String, format = "uuid")]
     pub answer_id: AnswerId,
     #[serde(flatten)]
     pub comment: AnswerComment,
 }
 
-impl From<CommentWithAuthor> for SearchCommentSchema {
-    fn from(value: CommentWithAuthor) -> Self {
+impl From<CrossSearchComment> for SearchCommentSchema {
+    fn from(value: CrossSearchComment) -> Self {
         Self {
-            answer_id: *value.comment.answer_id(),
-            comment: value.into(),
+            form_id: value.form_id,
+            answer_id: *value.comment.comment.answer_id(),
+            comment: value.comment.into(),
         }
     }
 }
@@ -118,8 +121,8 @@ mod tests {
     };
     use types::non_empty_vec::NonEmptyVec;
     use usecase::models::{
-        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, PublishedAnswerAuthor,
-        PublishedAnswerEntry,
+        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, CrossSearchComment,
+        PublishedAnswerAuthor, PublishedAnswerEntry,
     };
     use uuid::Uuid;
 
@@ -251,9 +254,12 @@ mod tests {
             label_for_answers: vec![AnswerLabel::new(
                 "matching answer label".to_string().try_into().unwrap(),
             )],
-            comments: vec![CommentWithAuthor {
-                comment,
-                commented_by: answer_author,
+            comments: vec![CrossSearchComment {
+                form_id,
+                comment: CommentWithAuthor {
+                    comment,
+                    commented_by: answer_author,
+                },
             }],
         });
 
@@ -303,6 +309,7 @@ mod tests {
             serialized["comments"][0]["answer_id"],
             answer_id.to_string()
         );
+        assert_eq!(serialized["comments"][0]["form_id"], form_id.to_string());
         assert_eq!(serialized["comments"][0]["id"], comment_id.to_string());
         assert_eq!(
             serialized["comments"][0]["commented_by"]["name"],
