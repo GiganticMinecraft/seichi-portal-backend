@@ -6955,10 +6955,15 @@
           {
             "type": "object",
             "required": [
+              "form_id",
               "answer_id"
             ],
             "properties": {
               "answer_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "form_id": {
                 "type": "string",
                 "format": "uuid"
               }

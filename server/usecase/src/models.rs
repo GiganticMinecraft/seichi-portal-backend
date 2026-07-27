@@ -61,6 +61,11 @@ pub struct CommentWithAuthor {
     pub commented_by: AccountUser,
 }
 
+pub struct CrossSearchComment {
+    pub form_id: FormId,
+    pub comment: CommentWithAuthor,
+}
+
 pub struct MessageWithSender {
     pub message: Message,
     pub sender: AccountUser,
@@ -82,5 +87,5 @@ pub struct CrossSearchOutput {
     pub answers: Vec<AnswerDetails>,
     pub label_for_forms: Vec<FormLabel>,
     pub label_for_answers: Vec<AnswerLabel>,
-    pub comments: Vec<CommentWithAuthor>,
+    pub comments: Vec<CrossSearchComment>,
 }
