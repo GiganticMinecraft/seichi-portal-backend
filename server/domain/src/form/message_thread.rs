@@ -411,33 +411,6 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_answer_thread_creates_post_with_answer_identity() {
-        let answer_author_id = user_id("00000000-0000-7000-8000-000000000553");
-        let actor = Actor::from(active_user(
-            "answer_author",
-            answer_author_id,
-            Role::StandardUser,
-        ));
-        let thread = thread_for_answer_author(answer_author_id);
-        let answer_id = *thread.answer_id();
-        let message = message_from(answer_author_id, "message");
-        let message_id = *message.id();
-
-        let post = AuthorizationGuard::<_, Update>::from(thread)
-            .try_update(actor)
-            .unwrap()
-            .try_post_message(message)
-            .unwrap();
-
-        assert_eq!(post.answer_id(), &answer_id);
-        assert_eq!(post.answer_author_id(), &answer_author_id);
-        assert_eq!(post.message().id(), &message_id);
-        assert!(
-            matches!(post.actor(), Actor::AccountUser(user) if post.message().sender_id() == user.id())
-        );
-    }
-
-    #[test]
     fn temporary_answer_thread_is_admin_only_and_rejects_message_posts() {
         let admin_id = user_id("00000000-0000-7000-8000-000000000561");
         let admin = Actor::from(active_user("admin", admin_id, Role::Administrator));

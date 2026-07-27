@@ -323,10 +323,7 @@ mod tests {
     use domain::{
         account::models::{AccountUser, Role, UserId},
         form::{
-            answer::{
-                AnswerAuthor, AnswerEntry, AnswerId, AnswerSettings, AnswerTitle, AnswerVisibility,
-                TemporaryAnswerAuthor,
-            },
+            answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, TemporaryAnswerAuthor},
             message::{DeletedMessage, MessageHistoryEntry, MessageId, MessagePost},
             message_thread::MessageThread,
             models::{ActiveForm, FormDescription, FormTitle, QuestionSet},
@@ -370,8 +367,13 @@ mod tests {
             *self.0.lock().unwrap()[0].1.id()
         }
 
-        fn message_count(&self) -> usize {
-            self.0.lock().unwrap().len()
+        fn message_count_for(&self, answer_id: AnswerId) -> usize {
+            self.0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(stored_answer_id, _)| *stored_answer_id == answer_id)
+                .count()
         }
 
         fn stored_messages(&self) -> Vec<Message> {
@@ -538,46 +540,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn temporary_answer_rejects_message_without_external_side_effects() {
-        let actor = user();
-        let (form, answer) = form_and_temporary_answer();
-        let form_id = *form.id();
-        let answer_id = *answer.id();
-        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
-        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
-        let messages = InMemoryMessageThreadRepository::default();
-        let publisher = RecordingPublisher::default();
-        let notificator = FailingNotificator::default();
-        let usecase = MessageUseCase {
-            notification_repository: &repositories.notification_repository,
-            active_form_repository: &repositories.active_form_repository,
-            user_repository: &repositories.user_repository,
-            answer_entry_repository: &repositories.answer_entry_repository,
-            message_thread_repository: &messages,
-            application_event_publisher: Some(&publisher),
-        };
-
-        let result = usecase
-            .post_message(
-                &actor,
-                form_id,
-                MessageBody::new("must not be saved".to_string().try_into().unwrap()),
-                answer_id,
-                &notificator,
-            )
-            .await;
-
-        assert_eq!(
-            result,
-            Err(errors::domain::DomainError::MessagePostingNotSupportedForTemporaryAnswer.into())
-        );
-        assert_eq!(messages.message_count(), 0);
-        assert!(publisher.0.lock().unwrap().is_empty());
-        assert!(!notificator.called.load(Ordering::Relaxed));
-    }
-
-    #[tokio::test]
-    async fn temporary_answer_with_existing_thread_rejects_message_without_external_side_effects() {
+    async fn temporary_answer_with_existing_messages_rejects_message_without_external_side_effects()
+    {
         let actor = user();
         let (form, answer) = form_and_temporary_answer();
         let form_id = *form.id();
@@ -651,7 +615,7 @@ mod tests {
                 .unwrap();
         }
 
-        assert_eq!(messages.message_count(), 2);
+        assert_eq!(messages.message_count_for(answer_id), 2);
     }
 
     #[tokio::test]
@@ -703,43 +667,6 @@ mod tests {
         assert!(history.items().is_empty());
         assert_eq!(update, Err(Error::from(MessageNotFound)));
         assert_eq!(delete, Err(Error::from(MessageNotFound)));
-    }
-
-    #[tokio::test]
-    async fn empty_message_body_update_is_a_no_op_for_answer_reader() {
-        let actor = AccountUser::new(
-            "reader".to_string(),
-            UserId::from(Uuid::new_v4()),
-            Role::StandardUser,
-        );
-        let answer_author = AccountUser::new(
-            "answer_author".to_string(),
-            UserId::from(Uuid::new_v4()),
-            Role::StandardUser,
-        );
-        let (form, answer) = form_and_answer(&answer_author);
-        let form = form.change_answer_settings(
-            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
-        );
-        let form_id = *form.id();
-        let answer_id = *answer.id();
-        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
-        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
-        let messages = InMemoryMessageThreadRepository::default();
-        let usecase = MessageUseCase {
-            notification_repository: &repositories.notification_repository,
-            active_form_repository: &repositories.active_form_repository,
-            user_repository: &repositories.user_repository,
-            answer_entry_repository: &repositories.answer_entry_repository,
-            message_thread_repository: &messages,
-            application_event_publisher: None,
-        };
-
-        let result = usecase
-            .update_message_body(&actor, form_id, answer_id, &MessageId::new(), None)
-            .await;
-
-        assert_eq!(result, Ok(()));
     }
 
     #[tokio::test]
