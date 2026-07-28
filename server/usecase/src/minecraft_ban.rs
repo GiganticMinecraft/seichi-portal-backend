@@ -15,6 +15,8 @@ impl<Repo: MinecraftBanRepository> MinecraftBanUseCase<'_, Repo> {
         actor: &AccountUser,
         user_id: Uuid,
     ) -> Result<Vec<MinecraftBan>, Error> {
+        let user_id = user_id.into();
+
         self.repository
             .list_by_user_id(user_id)
             .await?
@@ -43,9 +45,9 @@ mod tests {
     impl MinecraftBanRepository for EmptyMinecraftBanRepository {
         async fn list_by_user_id(
             &self,
-            user_id: Uuid,
+            user_id: UserId,
         ) -> Result<AuthorizationGuard<MinecraftBanHistory, Read>, Error> {
-            Ok(MinecraftBanHistory::new(user_id.into(), vec![])?.into())
+            Ok(MinecraftBanHistory::new(user_id, vec![])?.into())
         }
     }
 
