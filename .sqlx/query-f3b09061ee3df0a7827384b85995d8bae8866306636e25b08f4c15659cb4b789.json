@@ -1,0 +1,82 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            SELECT\n                uuid,\n                reason,\n                `time` AS punished_at_millis,\n                `until` AS expires_at_millis\n            FROM litebans_bans\n            WHERE uuid = ?\n            ORDER BY `time` DESC, id DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uuid",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.litebans_bans",
+            "name": "uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reason",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 8192
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.litebans_bans",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "punished_at_millis",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.litebans_bans",
+            "name": "time"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expires_at_millis",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.litebans_bans",
+            "name": "until"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f3b09061ee3df0a7827384b85995d8bae8866306636e25b08f4c15659cb4b789"
+}

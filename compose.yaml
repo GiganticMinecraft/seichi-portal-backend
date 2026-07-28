@@ -77,6 +77,8 @@ services:
     volumes:
       - ./docker/seed-debug-users.sh:/seed-debug-users.sh
       - ./docker/seed-debug-users.sql:/seed-debug-users.sql
+      - ./docker/minecraft-bans-schema.sql:/minecraft-bans-schema.sql
+      - ./docker/seed-debug-minecraft-bans.sql:/seed-debug-minecraft-bans.sql
     entrypoint: ["sh", "/seed-debug-users.sh"]
     networks:
       - seichi_portal

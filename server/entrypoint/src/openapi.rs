@@ -21,6 +21,7 @@ use utoipa_axum::routes;
         presentation::schemas::user::AnswerSubmitterRestrictionRequest,
         presentation::schemas::user::AnswerSubmitterRestrictionResponse,
         presentation::schemas::user::AnswerSubmitterRestrictionHistoryResponse,
+        presentation::schemas::user::MinecraftPunishmentResponse,
         presentation::schemas::form::form_response_schemas::AnswerComment,
         presentation::schemas::form::form_response_schemas::AnswerContent,
         presentation::schemas::form::form_response_schemas::AnswerLabels,
@@ -195,6 +196,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         .routes(routes!(
             user_handler::get_answer_submitter_restriction_history
         ))
+        .routes(routes!(user_handler::get_minecraft_punishments))
         .routes(routes!(search_handler::cross_search))
         .routes(routes!(search_handler::search_users))
         .routes(routes!(search_handler::search_answers))

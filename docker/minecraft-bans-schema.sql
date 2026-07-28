@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS litebans_bans (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid VARCHAR(36) NULL,
+    ip VARCHAR(45) NULL,
+    reason VARCHAR(2048) NOT NULL,
+    banned_by_uuid VARCHAR(36) NULL,
+    banned_by_name VARCHAR(128) NULL,
+    removed_by_uuid VARCHAR(36) NULL,
+    removed_by_name VARCHAR(128) NULL,
+    removed_by_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `time` BIGINT NOT NULL,
+    `until` BIGINT NOT NULL,
+    server_scope VARCHAR(32) NULL,
+    server_origin VARCHAR(32) NULL,
+    silent BIT(1) NOT NULL,
+    ipban BIT(1) NOT NULL,
+    ipban_wildcard BIT(1) NOT NULL,
+    active BIT(1) NOT NULL,
+    removed_by_reason VARCHAR(2048) NULL,
+    template TINYINT UNSIGNED NOT NULL DEFAULT 255,
+    PRIMARY KEY (id),
+    KEY litebans_bans_uuid_time (uuid, `time`, id)
+);

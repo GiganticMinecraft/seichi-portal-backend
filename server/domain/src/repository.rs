@@ -2,6 +2,7 @@ pub mod answer_submitter_restriction_repository;
 pub mod form;
 pub mod global_discord_webhook_repository;
 pub mod health_check_repository;
+pub mod minecraft_ban_repository;
 pub mod notification_repository;
 pub mod search_repository;
 pub mod user_repository;
@@ -19,6 +20,7 @@ pub trait Repositories: Send + Sync {
     type ConcreteSearchRepository: search_repository::SearchRepository;
     type ConcreteNotificationRepository: notification_repository::NotificationRepository;
     type ConcreteHealthCheckRepository: health_check_repository::HealthCheckRepository;
+    type ConcreteMinecraftBanRepository: minecraft_ban_repository::MinecraftBanRepository;
     fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository;
     fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository;
     fn answer_entry_repository(&self) -> &Self::ConcreteAnswerEntryRepository;
@@ -33,4 +35,5 @@ pub trait Repositories: Send + Sync {
     fn search_repository(&self) -> &Self::ConcreteSearchRepository;
     fn notification_repository(&self) -> &Self::ConcreteNotificationRepository;
     fn health_check_repository(&self) -> &Self::ConcreteHealthCheckRepository;
+    fn minecraft_ban_repository(&self) -> &Self::ConcreteMinecraftBanRepository;
 }

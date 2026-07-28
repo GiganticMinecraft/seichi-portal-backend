@@ -3,6 +3,7 @@ pub mod application_event;
 pub mod forms;
 pub mod global_discord_webhook;
 pub mod health_check;
+pub mod minecraft_ban;
 pub mod models;
 pub mod notification;
 pub mod search;

@@ -1,6 +1,7 @@
 pub mod answer_submitter_restriction_repository_impl;
 pub mod form_repository_impls;
 pub mod global_discord_webhook_repository_impl;
+pub mod minecraft_ban_repository_impl;
 pub mod notification_repository_impl;
 pub mod search_repository_impl;
 pub mod user_repository_impl;
@@ -83,6 +84,7 @@ impl<
     type ConcreteSearchRepository = Repository<Client>;
     type ConcreteUserRepository = Repository<Client>;
     type ConcreteHealthCheckRepository = H;
+    type ConcreteMinecraftBanRepository = Repository<Client>;
 
     fn active_form_repository(&self) -> &Self::ConcreteActiveFormRepository {
         &self.db
@@ -116,6 +118,10 @@ impl<
 
     fn health_check_repository(&self) -> &Self::ConcreteHealthCheckRepository {
         &self.health_check
+    }
+
+    fn minecraft_ban_repository(&self) -> &Self::ConcreteMinecraftBanRepository {
+        &self.db
     }
 
     fn archived_form_repository(&self) -> &Self::ConcreteArchivedFormRepository {
