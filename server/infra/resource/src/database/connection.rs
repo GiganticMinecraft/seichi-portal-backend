@@ -40,16 +40,12 @@ impl ConnectionPool {
             .connect(&database_url)
             .await
             .unwrap_or_else(|_| panic!("Cannot establish portal database connection."));
-        let minecraft_bans_pool = match std::env::var("MINECRAFT_BANS_DATABASE_URL") {
-            Ok(database_url) => MySqlPoolOptions::new()
-                .connect(&database_url)
-                .await
-                .unwrap_or_else(|_| panic!("Cannot establish Minecraft bans database connection.")),
-            Err(std::env::VarError::NotPresent) => rdb_pool.clone(),
-            Err(std::env::VarError::NotUnicode(_)) => {
-                panic!("Cannot establish Minecraft bans database connection.")
-            }
-        };
+        let minecraft_bans_database_url = std::env::var("MINECRAFT_BANS_DATABASE_URL")
+            .unwrap_or_else(|_| panic!("MINECRAFT_BANS_DATABASE_URL is not set."));
+        let minecraft_bans_pool = MySqlPoolOptions::new()
+            .connect(&minecraft_bans_database_url)
+            .await
+            .unwrap_or_else(|_| panic!("Cannot establish Minecraft bans database connection."));
 
         Self {
             rdb_pool,

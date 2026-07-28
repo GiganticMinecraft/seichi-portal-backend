@@ -90,7 +90,7 @@ pub struct MinecraftPunishmentResponse {
 impl From<domain::minecraft_ban::MinecraftBan> for MinecraftPunishmentResponse {
     fn from(value: domain::minecraft_ban::MinecraftBan) -> Self {
         Self {
-            uuid: value.uuid().to_string(),
+            uuid: value.user_id().to_string(),
             reason: value.reason().to_owned(),
             punished_at: *value.punished_at(),
             expires_at: *value.expires_at(),

@@ -18,10 +18,17 @@ impl<Repo: MinecraftBanRepository> MinecraftBanUseCase<'_, Repo> {
         actor: &AccountUser,
         user_id: Uuid,
     ) -> Result<Vec<MinecraftBan>, Error> {
-        let history = AuthorizationGuard::<_, Read>::from(MinecraftBanHistory::new(user_id.into()))
-            .try_read(Actor::from(actor.clone()))?;
+        let actor = Actor::from(actor.clone());
+        let history =
+            AuthorizationGuard::<_, Read>::from(MinecraftBanHistory::new(user_id.into(), vec![])?)
+                .try_read(actor.clone())?;
 
-        self.repository.list(history).await
+        self.repository
+            .list_by_user_id(history)
+            .await?
+            .try_read(actor)
+            .map(|history| history.into_inner().into_minecraft_bans())
+            .map_err(Into::into)
     }
 }
 
@@ -32,9 +39,9 @@ mod tests {
     use async_trait::async_trait;
     use domain::{
         account::models::{Role, UserId},
-        minecraft_ban::{MinecraftBan, MinecraftBanHistory},
+        minecraft_ban::MinecraftBanHistory,
         repository::minecraft_ban_repository::MinecraftBanRepository,
-        types::authorization_guard::{Allowed, Read},
+        types::authorization_guard::{Allowed, AuthorizationGuard, Read},
     };
     use errors::domain::DomainError;
 
@@ -47,12 +54,12 @@ mod tests {
 
     #[async_trait]
     impl MinecraftBanRepository for RecordingMinecraftBanRepository {
-        async fn list(
+        async fn list_by_user_id(
             &self,
-            _history: Allowed<MinecraftBanHistory, Read>,
-        ) -> Result<Vec<MinecraftBan>, Error> {
+            history: Allowed<MinecraftBanHistory, Read>,
+        ) -> Result<AuthorizationGuard<MinecraftBanHistory, Read>, Error> {
             self.called.store(true, Ordering::SeqCst);
-            Ok(vec![])
+            Ok(MinecraftBanHistory::new(history.user_id(), vec![])?.into())
         }
     }
 
@@ -93,7 +100,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn another_standard_user_is_forbidden_before_repository_is_called() {
+    async fn another_standard_user_is_forbidden() {
         let actor = user(1, Role::StandardUser);
         let repository = RecordingMinecraftBanRepository::default();
         let usecase = MinecraftBanUseCase {
