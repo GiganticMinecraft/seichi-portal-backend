@@ -26,6 +26,7 @@ use domain::{
             FormLabelName, FormPagePosition,
         },
     },
+    minecraft_ban::MinecraftBan,
     notification::models::NotificationPreference,
     pagination::{Page, PageRequest},
     search::models::SearchableFieldsWithOperation,
@@ -47,6 +48,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteDiscordAPI: DiscordAPI;
     type ConcreteNotificationDatabase: NotificationDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
+    type ConcreteMinecraftBanDatabase: MinecraftBanDatabase;
     type TransactionAcrossComponents: Send + Sync;
 
     async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
@@ -61,6 +63,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn discord_api(&self) -> &Self::ConcreteDiscordAPI;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
     fn notification(&self) -> &Self::ConcreteNotificationDatabase;
+    fn minecraft_ban(&self) -> &Self::ConcreteMinecraftBanDatabase;
 }
 
 #[automock]
@@ -298,6 +301,14 @@ pub trait AnswerSubmitterRestrictionDatabase: Send + Sync {
     ) -> Result<Vec<AnswerSubmitterRestriction>, InfraError>;
     async fn restrict(&self, restriction: &AnswerSubmitterRestriction) -> Result<(), InfraError>;
     async fn lift(&self, submitter_id: Uuid, lifted_by: Uuid) -> Result<(), InfraError>;
+}
+
+#[async_trait]
+pub trait MinecraftBanDatabase: Send + Sync {
+    async fn list_by_user_id(
+        &self,
+        user_id: domain::account::models::UserId,
+    ) -> Result<Vec<MinecraftBan>, InfraError>;
 }
 
 #[automock]

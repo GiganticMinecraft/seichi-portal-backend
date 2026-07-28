@@ -19,14 +19,18 @@ use domain::{
 use resource::repository::RealInfrastructureRepository;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use usecase::{answer_submitter_restriction::AnswerSubmitterRestrictionUseCase, user::UserUseCase};
+use usecase::{
+    answer_submitter_restriction::AnswerSubmitterRestrictionUseCase,
+    minecraft_ban::MinecraftBanUseCase, user::UserUseCase,
+};
 use uuid::Uuid;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::user::{
     AnswerSubmitterRestrictionHistoryResponse, AnswerSubmitterRestrictionRequest,
-    AnswerSubmitterRestrictionResponse, UserGroupRequest, UserGroupSchema, UserInfoResponse,
-    UserListPageResponse, UserListQuery, UserSchema, UserUpdateSchema,
+    AnswerSubmitterRestrictionResponse, MinecraftPunishmentResponse, UserGroupRequest,
+    UserGroupSchema, UserInfoResponse, UserListPageResponse, UserListQuery, UserSchema,
+    UserUpdateSchema,
 };
 use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
 use axum::response::Response;
@@ -159,6 +163,20 @@ impl IntoResponse for GetAnswerSubmitterRestrictionResponse {
 pub enum GetAnswerSubmitterRestrictionHistoryResponse {
     #[response(status = 200, description = "The request has succeeded.")]
     Ok(Vec<AnswerSubmitterRestrictionHistoryResponse>),
+}
+
+#[derive(utoipa::IntoResponses)]
+pub enum GetMinecraftPunishmentsResponse {
+    #[response(status = 200, description = "The request has succeeded.")]
+    Ok(Vec<MinecraftPunishmentResponse>),
+}
+
+impl IntoResponse for GetMinecraftPunishmentsResponse {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
 }
 
 impl IntoResponse for GetAnswerSubmitterRestrictionHistoryResponse {
@@ -754,6 +772,39 @@ pub async fn get_answer_submitter_restriction_history(
 
     Ok(GetAnswerSubmitterRestrictionHistoryResponse::Ok(
         restrictions.into_iter().map(Into::into).collect(),
+    ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/users/{uuid}/minecraft-punishments",
+    summary = "MinecraftのBAN履歴の取得",
+    params(
+        ("uuid" = String, Path, description = "User UUID"),
+    ),
+    responses(
+        GetMinecraftPunishmentsResponse,
+        BadRequest,
+        Unauthorized,
+        Forbidden,
+        InternalServerError,
+    ),
+    security(("bearer" = [])),
+    tag = "Users"
+)]
+pub async fn get_minecraft_punishments(
+    Extension(actor): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<Uuid>, PathRejection>,
+) -> Result<GetMinecraftPunishmentsResponse, Response> {
+    let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
+    let usecase = MinecraftBanUseCase {
+        repository: repository.minecraft_ban_repository(),
+    };
+    let punishments = usecase.list(&actor, uuid).await.map_err(handle_error)?;
+
+    Ok(GetMinecraftPunishmentsResponse::Ok(
+        punishments.into_iter().map(Into::into).collect(),
     ))
 }
 

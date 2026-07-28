@@ -14,6 +14,7 @@ pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
     pub(crate) rdb_pool: sqlx::MySqlPool,
+    pub(crate) minecraft_bans_pool: sqlx::MySqlPool,
     pub(crate) meilisearch_client: meilisearch_sdk::client::Client,
 }
 
@@ -35,11 +36,24 @@ impl ConnectionPool {
         let database_url = Self::database_url();
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
 
-        Self {
-            rdb_pool: MySqlPoolOptions::new()
+        let rdb_pool = MySqlPoolOptions::new()
+            .connect(&database_url)
+            .await
+            .unwrap_or_else(|_| panic!("Cannot establish portal database connection."));
+        let minecraft_bans_pool = match std::env::var("MINECRAFT_BANS_DATABASE_URL") {
+            Ok(database_url) => MySqlPoolOptions::new()
                 .connect(&database_url)
                 .await
-                .unwrap_or_else(|_| panic!("Cannot establish connect to {database_url}.")),
+                .unwrap_or_else(|_| panic!("Cannot establish Minecraft bans database connection.")),
+            Err(std::env::VarError::NotPresent) => rdb_pool.clone(),
+            Err(std::env::VarError::NotUnicode(_)) => {
+                panic!("Cannot establish Minecraft bans database connection.")
+            }
+        };
+
+        Self {
+            rdb_pool,
+            minecraft_bans_pool,
             meilisearch_client: meilisearch_sdk::client::Client::new(host, api_key.to_owned())
                 .unwrap_or_else(|_| panic!("Cannot establish connect to MeiliSearch.")),
         }
@@ -140,6 +154,7 @@ impl DatabaseComponents for ConnectionPool {
     type ConcreteAnswerSubmitterRestrictionDatabase = Self;
     type ConcreteNotificationDatabase = Self;
     type ConcreteSearchDatabase = Self;
+    type ConcreteMinecraftBanDatabase = Self;
     type ConcreteUserDatabase = Self;
     type TransactionAcrossComponents = DatabaseTransaction;
 
@@ -191,6 +206,10 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn notification(&self) -> &Self::ConcreteNotificationDatabase {
+        self
+    }
+
+    fn minecraft_ban(&self) -> &Self::ConcreteMinecraftBanDatabase {
         self
     }
 }

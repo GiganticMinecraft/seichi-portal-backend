@@ -79,6 +79,25 @@ pub struct AnswerSubmitterRestrictionHistoryResponse {
     pub lifted_by: Option<String>,
 }
 
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct MinecraftPunishmentResponse {
+    pub uuid: String,
+    pub reason: String,
+    pub punished_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+impl From<domain::minecraft_ban::MinecraftBan> for MinecraftPunishmentResponse {
+    fn from(value: domain::minecraft_ban::MinecraftBan) -> Self {
+        Self {
+            uuid: value.uuid().to_string(),
+            reason: value.reason().to_owned(),
+            punished_at: *value.punished_at(),
+            expires_at: *value.expires_at(),
+        }
+    }
+}
+
 impl From<domain::form::answer::AnswerSubmitterRestriction> for AnswerSubmitterRestrictionResponse {
     fn from(value: domain::form::answer::AnswerSubmitterRestriction) -> Self {
         Self {
@@ -119,6 +138,54 @@ impl From<domain::account::models::AccountUser> for UserSchema {
             role: val.role().to_string(),
             groups,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{TimeZone, Utc};
+    use domain::{account::models::UserId, minecraft_ban::MinecraftBan};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::*;
+
+    fn ban(until: i64) -> MinecraftBan {
+        let punished_at = Utc
+            .timestamp_millis_opt(1_700_000_000_123)
+            .single()
+            .unwrap();
+        let expires_at = (until > 0).then(|| Utc.timestamp_millis_opt(until).single().unwrap());
+
+        unsafe {
+            MinecraftBan::from_raw_parts(
+                UserId::from(Uuid::from_u128(1)),
+                "reason".to_string(),
+                punished_at,
+                expires_at,
+            )
+        }
+    }
+
+    #[test]
+    fn minecraft_punishment_serializes_only_public_fields_and_nullable_expiry() {
+        let positive =
+            serde_json::to_value(MinecraftPunishmentResponse::from(ban(1_800_000_000_456)))
+                .unwrap();
+        let zero = serde_json::to_value(MinecraftPunishmentResponse::from(ban(0))).unwrap();
+        let negative = serde_json::to_value(MinecraftPunishmentResponse::from(ban(-1))).unwrap();
+
+        assert_eq!(
+            positive,
+            json!({
+                "uuid": "00000000-0000-0000-0000-000000000001",
+                "reason": "reason",
+                "punished_at": "2023-11-14T22:13:20.123Z",
+                "expires_at": "2027-01-15T08:00:00.456Z",
+            })
+        );
+        assert_eq!(zero["expires_at"], serde_json::Value::Null);
+        assert_eq!(negative["expires_at"], serde_json::Value::Null);
     }
 }
 
