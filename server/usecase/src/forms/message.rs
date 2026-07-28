@@ -522,6 +522,7 @@ mod tests {
                 author,
                 Utc::now(),
                 AnswerTitle::new(None),
+                domain::form::answer::AnswerPublication::PUBLIC,
                 Vec::new(),
             )
         };

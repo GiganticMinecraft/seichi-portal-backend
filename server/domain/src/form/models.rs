@@ -265,15 +265,24 @@ impl Allowed<ActiveForm, Read> {
 }
 
 impl Allowed<ActiveForm, Update> {
-    /// `entry` のタイトルだけを変更し、更新認可済みで返します。タイトル以外が変わらないことは
-    /// [`AnswerEntry::with_title`] による構築で保証され、所属と更新権限は [`ActiveForm`] の
+    /// `entry` のタイトルと個別公開状態を変更し、更新認可済みで返します。指定しない値が変わらないことは
+    /// [`AnswerEntry::with_title`] と [`AnswerEntry::change_publication`] による構築で保証され、所属と更新権限は [`ActiveForm`] の
     /// ガード経由で保証される。
-    pub fn change_entry_title(
+    pub fn change_entry_meta(
         &self,
         entry: AnswerEntry,
-        title: AnswerTitle,
+        title: Option<AnswerTitle>,
+        publication: Option<crate::form::answer::AnswerPublication>,
     ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
-        self.authorize_update(entry.with_title(title))
+        let entry = match title {
+            Some(title) => entry.with_title(title),
+            None => entry,
+        };
+        let entry = match publication {
+            Some(publication) => entry.change_publication(publication),
+            None => entry,
+        };
+        self.authorize_update(entry)
     }
 }
 

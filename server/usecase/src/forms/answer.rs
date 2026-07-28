@@ -6,7 +6,7 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
-            AnswerPagePosition, AnswerSubmitter, AnswerTitle, FormAnswerContent,
+            AnswerPagePosition, AnswerPublication, AnswerSubmitter, AnswerTitle, FormAnswerContent,
             PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
@@ -510,12 +510,18 @@ impl<
         answer_id: AnswerId,
         actor: &AccountUser,
         title: Option<AnswerTitle>,
+        publication: Option<AnswerPublication>,
     ) -> Result<AnswerDetails, Error> {
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
 
-        let form_answer = match title {
-            Some(title) => {
+        let form_answer = match (title, publication) {
+            (None, None) => self
+                .answer_entry_repository
+                .get(&form, answer_id)
+                .await?
+                .ok_or(AnswerNotFound)?,
+            (title, publication) => {
                 let form_update = self
                     .active_form_repository
                     .get(form_id)
@@ -528,7 +534,8 @@ impl<
                     .get(&form, answer_id)
                     .await?
                     .ok_or(AnswerNotFound)?;
-                let updated_entry = form_update.change_entry_title(entry.into_inner(), title)?;
+                let updated_entry =
+                    form_update.change_entry_meta(entry.into_inner(), title, publication)?;
 
                 self.answer_entry_repository
                     .update(&form_update, &updated_entry)
@@ -539,11 +546,6 @@ impl<
                     .await?
                     .ok_or(AnswerNotFound)?
             }
-            None => self
-                .answer_entry_repository
-                .get(&form, answer_id)
-                .await?
-                .ok_or(AnswerNotFound)?,
         };
 
         let labels = self
@@ -1003,6 +1005,60 @@ mod tests {
             answer_for_administrator.answer.author,
             PublishedAnswerAuthor::AuthenticatedUser(user)
                 if user.id() == author.id() && user.name() == "answer author"
+        ));
+    }
+
+    #[tokio::test]
+    async fn administrator_can_make_an_answer_private_and_third_parties_cannot_read_it() {
+        let form = sample_form().change_answer_settings(
+            AnswerSettings::default()
+                .change_visibility(domain::form::models::AnswerVisibility::PUBLIC),
+        );
+        let form_id = *form.id();
+        let author = active_user("answer author", Role::StandardUser);
+        let administrator = active_user("administrator", Role::Administrator);
+        let third_party = active_user("third party", Role::StandardUser);
+        let answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::AuthenticatedUser(*author.id()),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository =
+            crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories.user_repository.save_user(author);
+        let labels = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            answer_submitter_restriction_repository: &repositories
+                .answer_submitter_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: None,
+            application_event_publisher: None,
+        };
+
+        let updated = usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                None,
+                Some(AnswerPublication::PRIVATE),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.answer.publication, AnswerPublication::PRIVATE);
+        assert!(matches!(
+            usecase.get_answers(form_id, answer_id, &third_party).await,
+            Err(Error::Domain {
+                source: DomainError::Forbidden
+            })
         ));
     }
 

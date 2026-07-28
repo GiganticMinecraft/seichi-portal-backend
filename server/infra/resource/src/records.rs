@@ -7,7 +7,10 @@ use domain::{
     },
     form::answer::TemporaryAnswerAuthor,
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerLabel, AnswerTitle, FormAnswerContent},
+        answer::{
+            AnswerAuthor, AnswerEntry, AnswerLabel, AnswerPublication, AnswerTitle,
+            FormAnswerContent,
+        },
         comment::{Comment, CommentContent},
         message::{Message, MessageBody},
         models::{
@@ -318,6 +321,7 @@ pub struct FormAnswerRecord {
     pub timestamp: DateTime<Utc>,
     pub form_id: String,
     pub title: Option<String>,
+    pub publication: String,
     pub contents: Vec<FormAnswerContentRecord>,
     pub messages: Vec<MessageRecord>,
 }
@@ -337,6 +341,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             timestamp,
             form_id,
             title,
+            publication,
             contents,
             messages: _,
         }: FormAnswerRecord,
@@ -356,6 +361,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                 author,
                 timestamp,
                 AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
+                AnswerPublication::try_from(publication)?,
                 contents
                     .into_iter()
                     .map(TryInto::try_into)

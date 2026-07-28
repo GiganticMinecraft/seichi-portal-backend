@@ -5718,6 +5718,13 @@
           }
         }
       },
+      "AnswerPublication": {
+        "type": "string",
+        "enum": [
+          "PUBLIC",
+          "PRIVATE"
+        ]
+      },
       "AnswerSearchResult": {
         "type": "object",
         "required": [
@@ -5868,6 +5875,12 @@
       "AnswerUpdateSchema": {
         "type": "object",
         "properties": {
+          "publication": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "title": {
             "type": [
               "string",
@@ -6213,6 +6226,7 @@
           "author",
           "form_id",
           "timestamp",
+          "publication",
           "answers",
           "labels"
         ],
@@ -6239,6 +6253,9 @@
             "items": {
               "$ref": "#/components/schemas/AnswerLabels"
             }
+          },
+          "publication": {
+            "$ref": "#/components/schemas/AnswerPublication"
           },
           "timestamp": {
             "type": "string",

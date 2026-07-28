@@ -236,6 +236,10 @@ impl AnswerSettings {
 
     /// `actor` が `entry` を閲覧できるかどうかを、回答の公開範囲をもとに判断します。
     pub fn can_read_entry(&self, entry: &AnswerEntry, actor: &Actor) -> bool {
+        if !entry.publication_allows_read(actor) {
+            return false;
+        }
+
         match actor {
             Actor::AccountUser(user) => {
                 entry.author().authenticated_user_id() == Some(*user.id())
@@ -435,6 +439,26 @@ mod tests {
         );
 
         assert!(settings.can_read_entry(&entry, &Actor::from(other)));
+    }
+
+    #[test]
+    fn private_publication_is_readable_only_by_the_author_and_administrator() {
+        let author = active_user(Role::StandardUser);
+        let other = active_user(Role::StandardUser);
+        let administrator = active_user(Role::Administrator);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()))
+            .change_publication(crate::form::answer::AnswerPublication::PRIVATE);
+        let settings = AnswerSettings::new(
+            DefaultAnswerTitle::new(None),
+            AnswerVisibility::PUBLIC,
+            AnswerAcceptancePeriod::try_new(None, None).unwrap(),
+            false,
+        );
+
+        assert!(settings.can_read_entry(&entry, &Actor::from(author)));
+        assert!(!settings.can_read_entry(&entry, &Actor::from(other)));
+        assert!(settings.can_read_entry(&entry, &Actor::from(administrator)));
+        assert!(settings.can_read_entry(&entry, &Actor::System));
     }
 
     #[test]
