@@ -16,7 +16,7 @@ jobs:
     name: Workspace version check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Verify workspace version inheritance
         run: |
           set -o pipefail
@@ -50,9 +50,9 @@ jobs:
       RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           target: ${{ matrix.cross-target }}
@@ -65,11 +65,11 @@ jobs:
     name: Lint and test server
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: echo "RUST_VERSION=$(sed -n 's/channel = "\(.*\)\"/\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
 
       - parallel:
-          - uses: actions/cache@v6
+          - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
             with:
               key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
               path: |
@@ -81,11 +81,11 @@ jobs:
               restore-keys: |
                 rust-${{ env.RUST_VERSION }}-build-
                 rust-${{ env.RUST_VERSION }}-
-          - uses: dtolnay/rust-toolchain@stable
+          - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
             with:
               toolchain: ${{ env.RUST_VERSION }}
               components: clippy, rustfmt
-          - uses: mozilla-actions/sccache-action@v0.0.10
+          - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
             with:
               version: "v0.10.0"
 
@@ -93,7 +93,7 @@ jobs:
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
       - name: Configure Cache Env
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
@@ -108,7 +108,7 @@ jobs:
           git ls-files --error-unmatch docs/openapi.json
           git diff --exit-code -- docs/openapi.json
 
-      - uses: LoliGothick/clippy-check@v0.3.2
+      - uses: LoliGothick/clippy-check@c267b18864fd79a1bb9bbde99fb51a9cd9822b9a # v0.3.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           deny: warnings
@@ -141,11 +141,11 @@ jobs:
     env:
       DATABASE_URL: mysql://user:password@127.0.0.1:3306/seichi_portal
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: echo "RUST_VERSION=$(sed -n 's/channel = \"\(.*\)\"/\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
 
       - parallel:
-          - uses: actions/cache@v6
+          - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
             with:
               key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
               path: |
@@ -157,7 +157,7 @@ jobs:
               restore-keys: |
                 rust-${{ env.RUST_VERSION }}-build-
                 rust-${{ env.RUST_VERSION }}-
-          - uses: dtolnay/rust-toolchain@stable
+          - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
             with:
               toolchain: ${{ env.RUST_VERSION }}
 
