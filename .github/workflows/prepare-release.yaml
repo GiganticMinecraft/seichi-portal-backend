@@ -1,0 +1,97 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: SemVer component to increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Calculate release version
+        id: release
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          git fetch origin main
+          git checkout --detach FETCH_HEAD
+
+          current_version="$(python3 scripts/release_version.py read Cargo.toml)"
+          next_version="$(python3 scripts/release_version.py bump "$current_version" "$BUMP")"
+          branch="release/v$next_version"
+          tag="v$next_version"
+
+          if git ls-remote --exit-code --heads origin "refs/heads/$branch"; then
+            echo "Release branch $branch already exists" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag"; then
+            echo "Release tag $tag already exists" >&2
+            exit 1
+          fi
+
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Update workspace version
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python3 scripts/release_version.py set Cargo.toml "$VERSION"
+          cargo update --workspace
+          cargo metadata --no-deps --format-version 1 \
+            | python3 scripts/release_version.py verify-workspace "$VERSION"
+
+      - name: Commit and push release branch
+        env:
+          BRANCH: ${{ steps.release.outputs.branch }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git switch -c "$BRANCH"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: prepare release v$VERSION"
+          git push origin "$BRANCH"
+
+      - name: Create release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Prepare release v$VERSION" \
+            --body "Prepares workspace version v$VERSION for release."
+
+      - name: Start Checking workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+        run: gh workflow run ci.yaml --ref "$BRANCH"

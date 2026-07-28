@@ -1,15 +1,28 @@
 name: Checking
 on:
   push:
+  workflow_dispatch:
 
 env:
   image_name: ghcr.io/giganticminecraft/seichi-poral-backend
   RUST_BACKTRACE: full
 
 permissions:
+  contents: read
   checks: write
 
 jobs:
+  workspace-version-check:
+    name: Workspace version check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify workspace version inheritance
+        run: |
+          version="$(python3 scripts/release_version.py read Cargo.toml)"
+          cargo metadata --no-deps --format-version 1 \
+            | python3 scripts/release_version.py verify-workspace "$version"
+
   rustfmt:
     name: rustfmt check
     runs-on: ubuntu-latest
@@ -17,7 +30,7 @@ jobs:
       RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
       - name: Checkout
-        uses: actions/checkout@master
+        uses: actions/checkout@v7
       - name: Setup rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
