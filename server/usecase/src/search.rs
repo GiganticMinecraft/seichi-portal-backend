@@ -725,9 +725,9 @@ mod tests {
         account::models::{Role, UserGroup, UserGroupName},
         form::{
             answer::{
-                AnswerAuthor, AnswerAuthorPublicationPolicy, AnswerEntry, AnswerSettings,
-                AnswerTitle, AnswerVisibility, FormAnswerContent, FormAnswerContentId,
-                PostedAnswerContents,
+                AnswerAuthor, AnswerAuthorPublicationPolicy, AnswerEntry, AnswerPublication,
+                AnswerSettings, AnswerTitle, AnswerVisibility, FormAnswerContent,
+                FormAnswerContentId, PostedAnswerContents,
             },
             comment::{Comment, CommentContent, CommentId},
             models::{AllowedUserGroups, FormDescription, FormSettings, FormTitle},
@@ -853,6 +853,11 @@ mod tests {
             Role::StandardUser,
             vec![member_group.clone()],
         );
+        let answer_author = AccountUser::new(
+            "answer author".to_string(),
+            Uuid::from_u128(21).into(),
+            Role::StandardUser,
+        );
         let readable_form = form_restricted_to("readable answers", &member_group)
             .change_answer_settings(
                 AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
@@ -866,7 +871,7 @@ mod tests {
             let question_id = *form.questions().as_slice()[0].id();
             AnswerEntry::new(
                 *form.id(),
-                AnswerAuthor::AuthenticatedUser(*actor.id()),
+                AnswerAuthor::AuthenticatedUser(*answer_author.id()),
                 AnswerTitle::default(),
                 PostedAnswerContents::try_new(
                     form.questions().as_slice(),
@@ -881,9 +886,12 @@ mod tests {
         };
         let visible_answer_a = answer_for(&readable_form);
         let visible_answer_b = answer_for(&readable_form);
+        let private_answer =
+            answer_for(&readable_form).change_publication(AnswerPublication::PRIVATE);
         let hidden_answer = answer_for(&hidden_form);
         let visible_answer_a_id = *visible_answer_a.id();
         let visible_answer_b_id = *visible_answer_b.id();
+        let private_answer_id = *private_answer.id();
         let hidden_answer_id = *hidden_answer.id();
 
         let mut search_repository = MockSearchRepository::new();
@@ -897,6 +905,9 @@ mod tests {
                     },
                     AnswerSearchHit {
                         answer_id: visible_answer_b_id,
+                    },
+                    AnswerSearchHit {
+                        answer_id: private_answer_id,
                     },
                     AnswerSearchHit {
                         answer_id: hidden_answer_id,
@@ -916,12 +927,18 @@ mod tests {
             .returning(|_| Ok(vec![]));
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
-        user_repository.save_user(actor.clone());
+        user_repository.save_user(answer_author.clone());
         let mut answer_entry_repository = MockAnswerEntryRepository::new();
         answer_entry_repository
             .expect_find_by_ids()
             .withf(move |_, answer_ids| {
-                answer_ids == &vec![visible_answer_b_id, hidden_answer_id, visible_answer_a_id]
+                answer_ids
+                    == &vec![
+                        visible_answer_b_id,
+                        private_answer_id,
+                        hidden_answer_id,
+                        visible_answer_a_id,
+                    ]
             })
             .return_once(move |forms, _| {
                 let form = forms
@@ -929,10 +946,10 @@ mod tests {
                     .find(|form| form.id() == visible_answer_a.form_id())
                     .unwrap();
 
-                Ok(vec![
-                    form.read_entry(visible_answer_a).unwrap(),
-                    form.read_entry(visible_answer_b).unwrap(),
-                ])
+                Ok(vec![visible_answer_a, visible_answer_b, private_answer]
+                    .into_iter()
+                    .filter_map(|answer| form.read_entry(answer).ok())
+                    .collect())
             });
         let comment_repository = MockCommentRepository::new();
         let use_case = SearchUseCase {
@@ -1387,10 +1404,11 @@ mod tests {
         let unreadable_form = form_restricted_to("comments hidden", &other_group);
         let form_a_id = *form_a.id();
         let form_b_id = *form_b.id();
+        let answer_author_id = Uuid::from_u128(28).into();
         let answer = |form: &ActiveForm| {
             AnswerEntry::new(
                 *form.id(),
-                AnswerAuthor::AuthenticatedUser(*actor.id()),
+                AnswerAuthor::AuthenticatedUser(answer_author_id),
                 AnswerTitle::default(),
                 PostedAnswerContents::try_new(
                     form.questions().as_slice(),
@@ -1405,9 +1423,11 @@ mod tests {
         };
         let answer_a = answer(&form_a);
         let answer_b = answer(&form_b);
+        let private_answer = answer(&form_a).change_publication(AnswerPublication::PRIVATE);
         let unreadable_answer = answer(&unreadable_form);
         let answer_a_id = *answer_a.id();
         let answer_b_id = *answer_b.id();
+        let private_answer_id = *private_answer.id();
         let unreadable_answer_id = *unreadable_answer.id();
         let unavailable_answer_id = AnswerId::from(Uuid::from_u128(21));
         let first_comment_id = CommentId::from(Uuid::from_u128(22));
@@ -1415,6 +1435,7 @@ mod tests {
         let second_comment_id = CommentId::from(Uuid::from_u128(24));
         let unavailable_comment_id = CommentId::from(Uuid::from_u128(25));
         let unreadable_comment_id = CommentId::from(Uuid::from_u128(27));
+        let private_comment_id = CommentId::from(Uuid::from_u128(29));
         let comment = |answer_id, comment_id, commented_by, content: &str| unsafe {
             Comment::from_raw_parts(
                 answer_id,
@@ -1437,6 +1458,12 @@ mod tests {
             unreadable_comment_id,
             *actor.id(),
             "unreadable",
+        );
+        let private_comment = comment(
+            private_answer_id,
+            private_comment_id,
+            *actor.id(),
+            "private",
         );
 
         let mut search_repository = MockSearchRepository::new();
@@ -1472,6 +1499,10 @@ mod tests {
                         answer_id: unreadable_answer_id,
                     },
                     CommentSearchHit {
+                        comment_id: private_comment_id,
+                        answer_id: private_answer_id,
+                    },
+                    CommentSearchHit {
                         comment_id: missing_author_comment_id,
                         answer_id: answer_a_id,
                     },
@@ -1488,8 +1519,12 @@ mod tests {
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
-        let answer_entry_repository =
-            InMemoryAnswerEntryRepository::new(vec![answer_a, answer_b, unreadable_answer]);
+        let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![
+            answer_a,
+            answer_b,
+            private_answer,
+            unreadable_answer,
+        ]);
         let mut comment_repository = MockCommentRepository::new();
         comment_repository
             .expect_find_by_answer()
@@ -1499,6 +1534,7 @@ mod tests {
                         vec![first_comment.clone(), missing_author_comment.clone()]
                     }
                     id if id == answer_b_id => vec![second_comment.clone()],
+                    id if id == private_answer_id => vec![private_comment.clone()],
                     id if id == unreadable_answer_id => vec![unreadable_comment.clone()],
                     _ => vec![],
                 };

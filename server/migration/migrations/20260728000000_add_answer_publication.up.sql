@@ -1,0 +1,5 @@
+ALTER TABLE answers
+    ADD COLUMN publication ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC' AFTER title;
+
+ALTER TABLE archived_answers
+    ADD COLUMN publication ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC' AFTER title;

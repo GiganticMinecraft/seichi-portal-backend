@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use domain::account::models::AccountUser;
 use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
-    answer::{AnswerLabel, FormAnswerContent},
+    answer::{AnswerLabel, AnswerPublication as DomainAnswerPublication, FormAnswerContent},
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
@@ -29,6 +29,23 @@ pub enum AnswerVisibility {
     Public,
     #[serde(rename = "PRIVATE")]
     Private,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub enum AnswerPublication {
+    #[serde(rename = "PUBLIC")]
+    Public,
+    #[serde(rename = "PRIVATE")]
+    Private,
+}
+
+impl From<DomainAnswerPublication> for AnswerPublication {
+    fn from(val: DomainAnswerPublication) -> Self {
+        match val {
+            DomainAnswerPublication::PUBLIC => AnswerPublication::Public,
+            DomainAnswerPublication::PRIVATE => AnswerPublication::Private,
+        }
+    }
 }
 
 impl From<domain::form::models::AnswerVisibility> for AnswerVisibility {
@@ -542,6 +559,7 @@ pub struct FormAnswer {
     form_id: Uuid,
     timestamp: DateTime<Utc>,
     title: Option<String>,
+    publication: AnswerPublication,
     answers: Vec<AnswerContent>,
     labels: Vec<AnswerLabels>,
 }
@@ -560,6 +578,7 @@ impl FormAnswer {
             form_id: form_id.into_inner(),
             timestamp: answer.timestamp,
             title: answer.title.into_inner().map(|title| title.to_string()),
+            publication: answer.publication.into(),
             answers: answer
                 .contents
                 .iter()
@@ -680,6 +699,7 @@ mod tests {
             author: PublishedAnswerAuthor::Anonymous,
             timestamp: Utc::now(),
             title: AnswerTitle::new(None),
+            publication: DomainAnswerPublication::PUBLIC,
             contents: vec![],
         };
 
@@ -692,5 +712,6 @@ mod tests {
 
         assert_eq!(serialized["author"]["type"], "ANONYMOUS");
         assert_eq!(serialized["author"].as_object().unwrap().len(), 1);
+        assert_eq!(serialized["publication"], "PUBLIC");
     }
 }

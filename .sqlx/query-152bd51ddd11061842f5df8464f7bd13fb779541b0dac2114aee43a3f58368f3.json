@@ -1,0 +1,218 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,\n                        users.name AS user_name, users.role AS user_role,\n                        temporary_user_id, temporary_users.name AS temporary_user_name,\n                        temporary_users.contact_text AS temporary_user_contact_text,\n                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers\n                        LEFT JOIN users ON answers.user = users.id\n                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n                        WHERE answers.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "form_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "form_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "publication",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 28
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "publication"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "author_type",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 72
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "author_type"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "user",
+        "type_info": {
+          "type": "String",
+          "flags": "MULTIPLE_KEY",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "user"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "user_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 64
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "user_role",
+        "type_info": {
+          "type": "String",
+          "flags": "ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 52
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "temporary_user_id",
+        "type_info": {
+          "type": "String",
+          "flags": "MULTIPLE_KEY",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "temporary_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "temporary_user_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.temporary_users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "temporary_user_contact_text",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.temporary_users",
+            "name": "contact_text"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "timestamp!: chrono::DateTime<chrono::Utc>",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "UNSIGNED | BINARY | TIMESTAMP",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "timestamp"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "152bd51ddd11061842f5df8464f7bd13fb779541b0dac2114aee43a3f58368f3"
+}

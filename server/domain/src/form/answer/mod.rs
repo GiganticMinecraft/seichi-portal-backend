@@ -9,7 +9,7 @@ mod title;
 
 pub use author::{AnswerAuthor, TemporaryAnswerAuthor, TemporaryAnswerAuthorId};
 pub use content::{FormAnswerContent, FormAnswerContentId, PostedAnswerContents};
-pub use entry::{AnswerEntry, AnswerId, AnswerPagePosition};
+pub use entry::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication};
 pub use label::{AnswerLabel, AnswerLabelId};
 pub use settings::{
     AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy, AnswerSettings,

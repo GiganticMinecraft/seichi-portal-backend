@@ -447,7 +447,7 @@ async fn fetch_answer_entries_page(
     form_id: Option<FormId>,
     request: PageRequest<AnswerPagePosition>,
 ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
-    let base_query = r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
+    let base_query = r"SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,
             users.name AS user_name, users.role AS user_role,
             temporary_user_id, temporary_users.name AS temporary_user_name,
             temporary_users.contact_text AS temporary_user_contact_text,
@@ -492,6 +492,7 @@ async fn fetch_answer_entries_page(
                 timestamp: row.try_get("timestamp")?,
                 form_id: row.try_get("form_id")?,
                 title: row.try_get("title")?,
+                publication: row.try_get("publication")?,
                 contents: Vec::new(),
                 messages: Vec::new(),
             })
@@ -752,8 +753,8 @@ async fn copy_active_form_to_archive(
 
     execute_typed_query!(
         txn,
-        r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
-        SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM answers WHERE form_id = ?",
+        r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, publication, timestamp)
+        SELECT id, form_id, author_type, user, temporary_user_id, title, publication, timestamp FROM answers WHERE form_id = ?",
         &form_id,
     );
 
@@ -856,8 +857,8 @@ async fn restore_archived_form_to_active(
 
     execute_typed_query!(
         txn,
-        r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
-        SELECT id, form_id, author_type, user, temporary_user_id, title, timestamp FROM archived_answers WHERE form_id = ?",
+        r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, publication, timestamp)
+        SELECT id, form_id, author_type, user, temporary_user_id, title, publication, timestamp FROM archived_answers WHERE form_id = ?",
         &form_id,
     );
 

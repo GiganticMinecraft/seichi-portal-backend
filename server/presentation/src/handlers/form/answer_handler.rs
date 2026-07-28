@@ -502,7 +502,7 @@ pub async fn update_answer_handler(
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
     let answer_details = form_answer_use_case
-        .update_answer_meta(form_id, answer_id, &user, schema.title)
+        .update_answer_meta(form_id, answer_id, &user, schema.title, schema.publication)
         .await
         .map_err(handle_error)?;
 

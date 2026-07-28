@@ -3,7 +3,7 @@ use domain::{
     account::models::{AccountUser, DiscordUser},
     form::{
         answer::{
-            AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
+            AnswerEntry, AnswerId, AnswerLabel, AnswerPublication, AnswerTitle, FormAnswerContent,
             TemporaryAnswerAuthor,
         },
         comment::Comment,
@@ -24,6 +24,7 @@ pub struct PublishedAnswerEntry {
     pub author: PublishedAnswerAuthor,
     pub timestamp: DateTime<Utc>,
     pub title: AnswerTitle,
+    pub publication: AnswerPublication,
     pub contents: Vec<FormAnswerContent>,
 }
 
@@ -34,6 +35,7 @@ impl PublishedAnswerEntry {
             author,
             timestamp: *answer.timestamp(),
             title: answer.title().to_owned(),
+            publication: *answer.publication(),
             contents: answer.contents().to_vec(),
         }
     }

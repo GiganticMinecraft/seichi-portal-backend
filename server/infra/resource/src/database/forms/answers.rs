@@ -39,25 +39,59 @@ fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Optio
     }
 }
 
-pub(crate) fn author_from_row(row: &MySqlRow) -> Result<AnswerAuthorRecord, InfraError> {
-    let author_type: String = row.try_get("author_type")?;
+pub(crate) fn author_from_values(
+    author_type: String,
+    user: Option<String>,
+    user_name: Option<String>,
+    user_role: Option<String>,
+    temporary_user_id: Option<String>,
+    temporary_user_name: Option<String>,
+    temporary_user_contact_text: Option<String>,
+) -> Result<AnswerAuthorRecord, InfraError> {
     match author_type.as_str() {
         "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(AccountUser::new(
-            row.try_get("user_name")?,
-            Uuid::from_str(&row.try_get::<String, _>("user")?)?.into(),
-            Role::from_str(&row.try_get::<String, _>("user_role")?)?,
+            user_name.ok_or_else(|| InfraError::Unexpected {
+                cause: "authenticated answer author is missing user_name".to_string(),
+            })?,
+            Uuid::from_str(&user.ok_or_else(|| InfraError::Unexpected {
+                cause: "authenticated answer author is missing user".to_string(),
+            })?)?
+            .into(),
+            Role::from_str(&user_role.ok_or_else(|| InfraError::Unexpected {
+                cause: "authenticated answer author is missing user_role".to_string(),
+            })?)?,
         ))),
         "TEMPORARY_USER" => Ok(AnswerAuthorRecord::TemporaryAnswerAuthor(unsafe {
             TemporaryAnswerAuthor::from_raw_parts(
-                Uuid::from_str(&row.try_get::<String, _>("temporary_user_id")?)?.into(),
-                row.try_get("temporary_user_name")?,
-                row.try_get("temporary_user_contact_text")?,
+                Uuid::from_str(&temporary_user_id.ok_or_else(|| InfraError::Unexpected {
+                    cause: "temporary answer author is missing temporary_user_id".to_string(),
+                })?)?
+                .into(),
+                temporary_user_name.ok_or_else(|| InfraError::Unexpected {
+                    cause: "temporary answer author is missing temporary_user_name".to_string(),
+                })?,
+                temporary_user_contact_text.ok_or_else(|| InfraError::Unexpected {
+                    cause: "temporary answer author is missing temporary_user_contact_text"
+                        .to_string(),
+                })?,
             )
         })),
         value => Err(InfraError::Unexpected {
             cause: format!("unknown answer author_type: {value}"),
         }),
     }
+}
+
+pub(crate) fn author_from_row(row: &MySqlRow) -> Result<AnswerAuthorRecord, InfraError> {
+    author_from_values(
+        row.try_get("author_type")?,
+        row.try_get("user")?,
+        row.try_get("user_name")?,
+        row.try_get("user_role")?,
+        row.try_get("temporary_user_id")?,
+        row.try_get("temporary_user_name")?,
+        row.try_get("temporary_user_contact_text")?,
+    )
 }
 
 pub(crate) async fn fetch_real_answers_by_answer_ids<T>(
@@ -214,6 +248,7 @@ impl FormAnswerDatabase for ConnectionPool {
         let temporary_user = answer.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
             .map(|title| title.into_inner());
+        let publication = answer.publication().to_string();
         let timestamp = answer.timestamp().to_owned();
         let contents = answer
             .contents()
@@ -245,14 +280,15 @@ impl FormAnswerDatabase for ConnectionPool {
                 }
 
                 sqlx::query!(
-                    r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, publication, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     answer_id,
                     form_id,
                     author_type,
                     user_id,
                     temporary_user_id,
                     title,
+                    publication,
                     timestamp,
                 )
                 .execute(&mut **txn)
@@ -285,24 +321,24 @@ impl FormAnswerDatabase for ConnectionPool {
     ) -> Result<Option<FormAnswerRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let answer_query_result_opt = sqlx::query(
-                    r"SELECT form_id, answers.id AS answer_id, title, author_type, user,
+                let answer_query_result_opt = sqlx::query!(
+                    r"SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
-                        timestamp FROM answers
+                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers
                         LEFT JOIN users ON answers.user = users.id
                         LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
                         WHERE answers.id = ?",
+                    answer_id.into_inner().to_string(),
                 )
-                .bind(answer_id.into_inner().to_string())
                 .fetch_optional(&mut **txn)
                 .await?;
 
-                let contents = sqlx::query(
+                let contents = sqlx::query!(
                     r"SELECT id, question_id, answer FROM real_answers WHERE answer_id = ?",
+                    answer_id.into_inner().to_string(),
                 )
-                .bind(answer_id.into_inner().to_string())
                 .fetch_all(&mut **txn)
                 .await?;
 
@@ -310,9 +346,9 @@ impl FormAnswerDatabase for ConnectionPool {
                     .into_iter()
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerContentRecord {
-                            id: rs.try_get("id")?,
-                            question_id: rs.try_get("question_id")?,
-                            answer: rs.try_get("answer")?,
+                            id: rs.id,
+                            question_id: rs.question_id,
+                            answer: rs.answer,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -320,11 +356,20 @@ impl FormAnswerDatabase for ConnectionPool {
                 answer_query_result_opt
                     .map(|rs| {
                         Ok::<_, InfraError>(FormAnswerRecord {
-                            id: rs.try_get("answer_id")?,
-                            author: author_from_row(&rs)?,
-                            timestamp: rs.try_get("timestamp")?,
-                            form_id: rs.try_get("form_id")?,
-                            title: rs.try_get("title")?,
+                            id: rs.answer_id,
+                            author: author_from_values(
+                                rs.author_type,
+                                rs.user,
+                                rs.user_name,
+                                rs.user_role,
+                                rs.temporary_user_id,
+                                rs.temporary_user_name,
+                                rs.temporary_user_contact_text,
+                            )?,
+                            timestamp: rs.timestamp,
+                            form_id: rs.form_id,
+                            title: rs.title,
+                            publication: rs.publication,
                             contents,
                             messages: Vec::new(),
                         })
@@ -352,7 +397,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let sql = format!(
-                    "SELECT form_id, answers.id AS answer_id, title, author_type, user,
+                    "SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
@@ -380,6 +425,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             timestamp: rs.try_get("timestamp")?,
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
+                            publication: rs.try_get("publication")?,
                             contents: Vec::new(),
                             messages: Vec::new(),
                         })
@@ -410,6 +456,7 @@ impl FormAnswerDatabase for ConnectionPool {
         let temporary_user = answer_entry.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer_entry.title().to_owned())
             .map(|title| title.into_inner());
+        let publication = answer_entry.publication().to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -427,16 +474,18 @@ impl FormAnswerDatabase for ConnectionPool {
                 }
 
                 sqlx::query!(
-                    r#"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    r#"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, publication)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
-                    title = VALUES(title)"#,
+                    title = VALUES(title),
+                    publication = VALUES(publication)"#,
                     answer_id,
                     form_id,
                     author_type,
                     user,
                     temporary_user_id,
                     title,
+                    publication,
                 )
                 .execute(&mut **txn)
                 .await?;

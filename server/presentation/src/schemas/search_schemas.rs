@@ -204,6 +204,7 @@ mod tests {
                 AnswerAuthor::AuthenticatedUser(*answer_author.id()),
                 Utc::now(),
                 AnswerTitle::new(Some("Detailed answer".to_string().try_into().unwrap())),
+                domain::form::answer::AnswerPublication::PUBLIC,
                 vec![FormAnswerContent {
                     id: FormAnswerContentId::from(Uuid::from_u128(4)),
                     question_id,
