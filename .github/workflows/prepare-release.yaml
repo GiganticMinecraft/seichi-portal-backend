@@ -1,0 +1,140 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: SemVer component to increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Calculate release version
+        id: release
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          git fetch origin main
+          git checkout --detach FETCH_HEAD
+
+          current_version="$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' Cargo.toml)"
+          if ! printf '%s\n' "$current_version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
+            echo "Invalid workspace version: $current_version" >&2
+            exit 1
+          fi
+
+          IFS=. read -r major minor patch <<< "$current_version"
+          case "$BUMP" in
+            major) next_version="$((major + 1)).0.0" ;;
+            minor) next_version="$major.$((minor + 1)).0" ;;
+            patch) next_version="$major.$minor.$((patch + 1))" ;;
+            *) echo "Unsupported version bump: $BUMP" >&2; exit 1 ;;
+          esac
+          branch="release/v$next_version"
+          tag="v$next_version"
+
+          if git ls-remote --exit-code --heads origin "refs/heads/$branch"; then
+            echo "Release branch $branch already exists" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag"; then
+            echo "Release tag $tag already exists" >&2
+            exit 1
+          fi
+
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Update workspace version
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          awk -v version="$VERSION" '
+            /^\[workspace\.package\]$/ { in_workspace_package = 1 }
+            in_workspace_package && /^\[/ && $0 != "[workspace.package]" { in_workspace_package = 0 }
+            in_workspace_package && /^[[:space:]]*version[[:space:]]*=/ {
+              print "version = \"" version "\""
+              replaced = 1
+              next
+            }
+            { print }
+            END {
+              if (!replaced) {
+                exit 1
+              }
+            }
+          ' Cargo.toml > Cargo.toml.next
+          mv Cargo.toml.next Cargo.toml
+          cargo update --workspace
+          test "$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' Cargo.toml)" = "$VERSION"
+
+          set -o pipefail
+          errors="$(
+            cargo metadata --no-deps --format-version 1 \
+              | jq -r '.workspace_members as $members | .packages[] | select(.id as $id | $members | index($id)) | [.name, .version, .manifest_path] | @tsv' \
+              | while IFS=$'\t' read -r name member_version manifest; do
+                  if [ "$member_version" != "$VERSION" ]; then
+                    echo "$name has version $member_version, expected $VERSION"
+                  fi
+                  if ! grep -qEx '[[:space:]]*version\.workspace[[:space:]]*=[[:space:]]*true[[:space:]]*' "$manifest"; then
+                    echo "$manifest must declare version.workspace = true"
+                  fi
+                done
+          )"
+          if [ -n "$errors" ]; then
+            echo "$errors" >&2
+            exit 1
+          fi
+
+      - name: Commit and push release branch
+        env:
+          BRANCH: ${{ steps.release.outputs.branch }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git switch -c "$BRANCH"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: prepare release v$VERSION"
+          git push origin "$BRANCH"
+
+      - name: Create release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Prepare release v$VERSION" \
+            --body "Prepares workspace version v$VERSION for release."
+
+      - name: Start Checking workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+        run: gh workflow run ci.yaml --ref "$BRANCH"
