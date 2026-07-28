@@ -46,10 +46,6 @@ impl MinecraftBanHistory {
     pub fn into_minecraft_bans(self) -> Vec<MinecraftBan> {
         self.minecraft_bans
     }
-
-    pub fn user_id(&self) -> UserId {
-        self.user_id
-    }
 }
 
 impl AuthorizationRole for MinecraftBanHistory {

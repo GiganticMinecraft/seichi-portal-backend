@@ -132,5 +132,7 @@ jobs:
         run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features rustls,mysql
       - name: Apply migrations
         run: cargo sqlx migrate run --source ./server/migration/migrations
+      - name: Create Minecraft bans schema
+        run: docker exec -i "${{ job.services.db.id }}" mariadb -u user -ppassword seichi_portal < docker/minecraft-bans-schema.sql
       - name: Check sqlx offline metadata
         run: cargo sqlx prepare --check --workspace

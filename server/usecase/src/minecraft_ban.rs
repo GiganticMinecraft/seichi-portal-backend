@@ -1,9 +1,6 @@
 use domain::{
-    account::models::AccountUser,
-    auth::Actor,
-    minecraft_ban::{MinecraftBan, MinecraftBanHistory},
+    account::models::AccountUser, auth::Actor, minecraft_ban::MinecraftBan,
     repository::minecraft_ban_repository::MinecraftBanRepository,
-    types::authorization_guard::{AuthorizationGuard, Read},
 };
 use errors::Error;
 use uuid::Uuid;
@@ -18,15 +15,10 @@ impl<Repo: MinecraftBanRepository> MinecraftBanUseCase<'_, Repo> {
         actor: &AccountUser,
         user_id: Uuid,
     ) -> Result<Vec<MinecraftBan>, Error> {
-        let actor = Actor::from(actor.clone());
-        let history =
-            AuthorizationGuard::<_, Read>::from(MinecraftBanHistory::new(user_id.into(), vec![])?)
-                .try_read(actor.clone())?;
-
         self.repository
-            .list_by_user_id(history)
+            .list_by_user_id(user_id)
             .await?
-            .try_read(actor)
+            .try_read(Actor::from(actor.clone()))
             .map(|history| history.into_inner().into_minecraft_bans())
             .map_err(Into::into)
     }
@@ -34,32 +26,26 @@ impl<Repo: MinecraftBanRepository> MinecraftBanUseCase<'_, Repo> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
-
     use async_trait::async_trait;
     use domain::{
         account::models::{Role, UserId},
         minecraft_ban::MinecraftBanHistory,
         repository::minecraft_ban_repository::MinecraftBanRepository,
-        types::authorization_guard::{Allowed, AuthorizationGuard, Read},
+        types::authorization_guard::{AuthorizationGuard, Read},
     };
     use errors::domain::DomainError;
 
     use super::*;
 
-    #[derive(Default)]
-    struct RecordingMinecraftBanRepository {
-        called: AtomicBool,
-    }
+    struct EmptyMinecraftBanRepository;
 
     #[async_trait]
-    impl MinecraftBanRepository for RecordingMinecraftBanRepository {
+    impl MinecraftBanRepository for EmptyMinecraftBanRepository {
         async fn list_by_user_id(
             &self,
-            history: Allowed<MinecraftBanHistory, Read>,
+            user_id: Uuid,
         ) -> Result<AuthorizationGuard<MinecraftBanHistory, Read>, Error> {
-            self.called.store(true, Ordering::SeqCst);
-            Ok(MinecraftBanHistory::new(history.user_id(), vec![])?.into())
+            Ok(MinecraftBanHistory::new(user_id.into(), vec![])?.into())
         }
     }
 
@@ -74,7 +60,7 @@ mod tests {
     #[tokio::test]
     async fn owner_can_list_an_empty_history() {
         let actor = user(1, Role::StandardUser);
-        let repository = RecordingMinecraftBanRepository::default();
+        let repository = EmptyMinecraftBanRepository;
         let usecase = MinecraftBanUseCase {
             repository: &repository,
         };
@@ -82,13 +68,12 @@ mod tests {
         let result = usecase.list(&actor, actor.id().into_inner()).await;
 
         assert_eq!(result, Ok(vec![]));
-        assert!(repository.called.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
     async fn administrator_can_list_an_empty_history() {
         let actor = user(1, Role::Administrator);
-        let repository = RecordingMinecraftBanRepository::default();
+        let repository = EmptyMinecraftBanRepository;
         let usecase = MinecraftBanUseCase {
             repository: &repository,
         };
@@ -96,13 +81,12 @@ mod tests {
         let result = usecase.list(&actor, Uuid::from_u128(2)).await;
 
         assert_eq!(result, Ok(vec![]));
-        assert!(repository.called.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
     async fn another_standard_user_is_forbidden() {
         let actor = user(1, Role::StandardUser);
-        let repository = RecordingMinecraftBanRepository::default();
+        let repository = EmptyMinecraftBanRepository;
         let usecase = MinecraftBanUseCase {
             repository: &repository,
         };
@@ -110,6 +94,5 @@ mod tests {
         let result = usecase.list(&actor, Uuid::from_u128(2)).await;
 
         assert_eq!(result, Err(Error::from(DomainError::Forbidden)));
-        assert!(!repository.called.load(Ordering::SeqCst));
     }
 }
