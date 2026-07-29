@@ -1,3 +1,4 @@
+#[cfg(test)]
 use chrono::Utc;
 use domain::{
     account::models::AccountUser,
@@ -6,7 +7,7 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
-            AnswerPagePosition, AnswerPublication, AnswerSubmitter, AnswerTitle, FormAnswerContent,
+            AnswerPagePosition, AnswerPublication, AnswerTitle, FormAnswerContent,
             PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
@@ -15,12 +16,12 @@ use domain::{
     pagination::{Page, PageRequest},
     repository::user_repository::UserRepository,
     repository::{
-        answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_repository::AnswerEntryRepository,
             answer_label_repository::AnswerLabelRepository,
         },
+        form_submission_restriction_repository::FormSubmissionRestrictionRepository,
     },
     types::authorization_guard::{Allowed, Read},
 };
@@ -49,13 +50,13 @@ pub struct AnswerUseCase<
     FormRepo: ActiveFormRepository,
     AnswerLabelRepo: AnswerLabelRepository,
     UserRepo: UserRepository,
-    AnswerSubmitterRestrictionRepo: AnswerSubmitterRestrictionRepository,
+    FormSubmissionRestrictionRepo: FormSubmissionRestrictionRepository,
     AnswerEntryRepo: AnswerEntryRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
-    pub answer_submitter_restriction_repository: &'a AnswerSubmitterRestrictionRepo,
+    pub form_submission_restriction_repository: &'a FormSubmissionRestrictionRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
     pub discord_answer_webhook_notifier: Option<&'a dyn DiscordAnswerWebhookNotifier>,
     pub application_event_publisher: Option<&'a dyn ApplicationEventPublisher>,
@@ -65,7 +66,7 @@ impl<
     R1: ActiveFormRepository,
     R2: AnswerLabelRepository,
     R3: UserRepository,
-    R4: AnswerSubmitterRestrictionRepository,
+    R4: FormSubmissionRestrictionRepository,
     R5: AnswerEntryRepository,
 > AnswerUseCase<'_, R1, R2, R3, R4, R5>
 {
@@ -215,17 +216,11 @@ impl<
         let form = form_guard.try_read(actor.clone())?;
         let questions = form.value().questions().as_slice().to_vec();
         let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
-        let restriction = self
-            .answer_submitter_restriction_repository
-            .fetch_active_by_submitter_id(user.id().into_inner())
-            .await?
-            .map(|restriction| {
-                restriction
-                    .try_read(actor.clone())
-                    .map(|restriction| restriction.into_inner())
-            })
-            .transpose()?;
-        let submitter = AnswerSubmitter::try_new(user.clone(), restriction, Utc::now())?;
+        let submitter = super::submission::authorize_form_submission(
+            user.clone(),
+            self.form_submission_restriction_repository,
+        )
+        .await?;
 
         let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             form.value()
@@ -602,10 +597,8 @@ mod tests {
     use domain::{
         account::models::Role,
         form::{
-            answer::{
-                AnswerLabelId, AnswerSubmitterRestriction, AnswerSubmitterRestrictionReason,
-                FormAnswerContentId,
-            },
+            FormSubmissionRestriction, FormSubmissionRestrictionReason,
+            answer::{AnswerLabelId, FormAnswerContentId},
             models::{
                 AnswerAuthorPublicationPolicy, AnswerSettings, DefaultAnswerTitle,
                 DiscordWebhookUrl, FormDescription, FormTitle, QuestionSet,
@@ -800,8 +793,8 @@ mod tests {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &empty_answer_label_repository,
             user_repository: &repositories.user_repository,
-            answer_submitter_restriction_repository: &repositories
-                .answer_submitter_restriction_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: Some(&publisher),
@@ -851,8 +844,8 @@ mod tests {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &empty_answer_label_repository,
             user_repository: &repositories.user_repository,
-            answer_submitter_restriction_repository: &repositories
-                .answer_submitter_restriction_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: Some(&notifier),
             application_event_publisher: Some(&publisher),
@@ -922,8 +915,8 @@ mod tests {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &labels,
             user_repository: &repositories.user_repository,
-            answer_submitter_restriction_repository: &repositories
-                .answer_submitter_restriction_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: Some(&notifier),
             application_event_publisher: Some(&publisher),
@@ -981,8 +974,8 @@ mod tests {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &labels,
             user_repository: &repositories.user_repository,
-            answer_submitter_restriction_repository: &repositories
-                .answer_submitter_restriction_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: None,
@@ -1035,8 +1028,8 @@ mod tests {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &labels,
             user_repository: &repositories.user_repository,
-            answer_submitter_restriction_repository: &repositories
-                .answer_submitter_restriction_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: None,
@@ -1063,13 +1056,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn post_answers_rejects_user_with_active_answer_submitter_restriction() {
+    async fn post_answers_rejects_user_with_active_form_submission_restriction() {
         let form = sample_form();
         let user = active_user("user", Role::StandardUser);
         let now = Utc::now();
-        let restriction = AnswerSubmitterRestriction::new(
+        let restriction = FormSubmissionRestriction::new(
             *user.id(),
-            AnswerSubmitterRestrictionReason::new("spam".to_string().try_into().unwrap()),
+            FormSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
             Uuid::new_v4().into(),
             now,
             None,
@@ -1083,15 +1076,15 @@ mod tests {
 
         let repositories = FormUseCaseTestRepositories::with_active_forms(vec![form.clone()]);
         repositories
-            .answer_submitter_restriction_repository
-            .save_answer_submitter_restriction(restriction);
+            .form_submission_restriction_repository
+            .save_form_submission_restriction(restriction);
         let empty_answer_label_repository = EmptyAnswerLabelRepository;
         let usecase = AnswerUseCase {
             active_form_repository: &repositories.active_form_repository,
             answer_label_repository: &empty_answer_label_repository,
             user_repository: &repositories.user_repository,
-            answer_submitter_restriction_repository: &repositories
-                .answer_submitter_restriction_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: None,
@@ -1101,7 +1094,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(DomainError::AnswerSubmissionRestricted {
+            Err(DomainError::SubmissionRestricted {
                 reason: "spam".to_string(),
                 expires_at: None,
             }

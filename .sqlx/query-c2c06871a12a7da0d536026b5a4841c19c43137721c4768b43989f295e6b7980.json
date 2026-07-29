@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "\n                    SELECT id, submitter_id, reason, restricted_by, restricted_at, expires_at\n                    FROM answer_submitter_restrictions\n                    WHERE submitter_id = ?\n                      AND lifted_at IS NULL\n                      AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))\n                    ORDER BY restricted_at DESC\n                    LIMIT 1\n                    ",
+  "query": "\n                    SELECT id, submitter_id, reason, restricted_by, restricted_at, expires_at, lifted_at, lifted_by\n                    FROM form_submission_restrictions\n                    WHERE submitter_id = ?\n                    ORDER BY restricted_at DESC\n                    ",
   "describe": {
     "columns": [
       {
@@ -14,7 +14,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.answer_submitter_restrictions",
+            "table": "seichi_portal.form_submission_restrictions",
             "name": "id"
           }
         }
@@ -30,7 +30,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.answer_submitter_restrictions",
+            "table": "seichi_portal.form_submission_restrictions",
             "name": "submitter_id"
           }
         }
@@ -46,7 +46,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.answer_submitter_restrictions",
+            "table": "seichi_portal.form_submission_restrictions",
             "name": "reason"
           }
         }
@@ -62,7 +62,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.answer_submitter_restrictions",
+            "table": "seichi_portal.form_submission_restrictions",
             "name": "restricted_by"
           }
         }
@@ -78,7 +78,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.answer_submitter_restrictions",
+            "table": "seichi_portal.form_submission_restrictions",
             "name": "restricted_at"
           }
         }
@@ -94,8 +94,40 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.answer_submitter_restrictions",
+            "table": "seichi_portal.form_submission_restrictions",
             "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "lifted_at",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "collation": 63,
+          "max_size": 26
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_submission_restrictions",
+            "name": "lifted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "lifted_by",
+        "type_info": {
+          "type": "String",
+          "flags": "MULTIPLE_KEY",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_submission_restrictions",
+            "name": "lifted_by"
           }
         }
       }
@@ -109,8 +141,10 @@
       false,
       false,
       false,
+      true,
+      true,
       true
     ]
   },
-  "hash": "a0da27fdcd4bb8aeaeffbdb2ebb99c2a8d890f3f4696b2a8ba9264cf3df8ea8c"
+  "hash": "c2c06871a12a7da0d536026b5a4841c19c43137721c4768b43989f295e6b7980"
 }

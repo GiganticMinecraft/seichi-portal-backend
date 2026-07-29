@@ -18,9 +18,9 @@ use utoipa_axum::routes;
         presentation::schemas::user::UserSchema,
         presentation::schemas::user::UserGroupRequest,
         presentation::schemas::user::UserGroupSchema,
-        presentation::schemas::user::AnswerSubmitterRestrictionRequest,
-        presentation::schemas::user::AnswerSubmitterRestrictionResponse,
-        presentation::schemas::user::AnswerSubmitterRestrictionHistoryResponse,
+        presentation::schemas::user::FormSubmissionRestrictionRequest,
+        presentation::schemas::user::FormSubmissionRestrictionResponse,
+        presentation::schemas::user::FormSubmissionRestrictionHistoryResponse,
         presentation::schemas::user::MinecraftPunishmentResponse,
         presentation::schemas::form::form_response_schemas::AnswerComment,
         presentation::schemas::form::form_response_schemas::AnswerContent,
@@ -189,12 +189,12 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             user_handler::remove_user_from_group
         ))
         .routes(routes!(
-            user_handler::get_answer_submitter_restriction,
-            user_handler::put_answer_submitter_restriction,
-            user_handler::delete_answer_submitter_restriction
+            user_handler::get_form_submission_restriction,
+            user_handler::put_form_submission_restriction,
+            user_handler::delete_form_submission_restriction
         ))
         .routes(routes!(
-            user_handler::get_answer_submitter_restriction_history
+            user_handler::get_form_submission_restriction_history
         ))
         .routes(routes!(user_handler::get_minecraft_punishments))
         .routes(routes!(search_handler::cross_search))

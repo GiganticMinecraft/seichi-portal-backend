@@ -1,5 +1,5 @@
-pub mod answer_submitter_restriction_repository_impl;
 pub mod form_repository_impls;
+pub mod form_submission_restriction_repository_impl;
 pub mod global_discord_webhook_repository_impl;
 pub mod minecraft_ban_repository_impl;
 pub mod notification_repository_impl;
@@ -78,7 +78,7 @@ impl<
     type ConcreteAnswerLabelRepository = Repository<Client>;
     type ConcreteCommentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
-    type ConcreteAnswerSubmitterRestrictionRepository = Repository<Client>;
+    type ConcreteFormSubmissionRestrictionRepository = Repository<Client>;
     type ConcreteMessageThreadRepository = Repository<Client>;
     type ConcreteNotificationRepository = Repository<Client>;
     type ConcreteSearchRepository = Repository<Client>;
@@ -98,9 +98,9 @@ impl<
         &self.db
     }
 
-    fn answer_submitter_restriction_repository(
+    fn form_submission_restriction_repository(
         &self,
-    ) -> &Self::ConcreteAnswerSubmitterRestrictionRepository {
+    ) -> &Self::ConcreteFormSubmissionRestrictionRepository {
         &self.db
     }
 

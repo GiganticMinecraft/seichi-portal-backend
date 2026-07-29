@@ -5110,13 +5110,13 @@
         ]
       }
     },
-    "/api/v1/users/{uuid}/answer-submitter-restriction": {
+    "/api/v1/users/{uuid}/form-submission-restriction": {
       "get": {
         "tags": [
           "Users"
         ],
-        "summary": "回答投稿者の有効な回答投稿制限の取得",
-        "operationId": "get_answer_submitter_restriction",
+        "summary": "ユーザーの有効なフォーム送信制限の取得",
+        "operationId": "get_form_submission_restriction",
         "parameters": [
           {
             "name": "uuid",
@@ -5139,7 +5139,7 @@
                       "type": "null"
                     },
                     {
-                      "$ref": "#/components/schemas/AnswerSubmitterRestrictionResponse"
+                      "$ref": "#/components/schemas/FormSubmissionRestrictionResponse"
                     }
                   ]
                 }
@@ -5207,8 +5207,8 @@
         "tags": [
           "Users"
         ],
-        "summary": "回答投稿者の回答投稿を制限する",
-        "operationId": "put_answer_submitter_restriction",
+        "summary": "ユーザーのフォーム送信を制限する",
+        "operationId": "put_form_submission_restriction",
         "parameters": [
           {
             "name": "uuid",
@@ -5224,7 +5224,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AnswerSubmitterRestrictionRequest"
+                "$ref": "#/components/schemas/FormSubmissionRestrictionRequest"
               }
             }
           },
@@ -5236,7 +5236,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnswerSubmitterRestrictionResponse"
+                  "$ref": "#/components/schemas/FormSubmissionRestrictionResponse"
                 }
               }
             }
@@ -5312,8 +5312,8 @@
         "tags": [
           "Users"
         ],
-        "summary": "回答投稿者の回答投稿制限を解除する",
-        "operationId": "delete_answer_submitter_restriction",
+        "summary": "ユーザーのフォーム送信制限を解除する",
+        "operationId": "delete_form_submission_restriction",
         "parameters": [
           {
             "name": "uuid",
@@ -5387,13 +5387,13 @@
         ]
       }
     },
-    "/api/v1/users/{uuid}/answer-submitter-restriction/history": {
+    "/api/v1/users/{uuid}/form-submission-restriction/history": {
       "get": {
         "tags": [
           "Users"
         ],
-        "summary": "回答投稿者の回答投稿制限履歴の取得",
-        "operationId": "get_answer_submitter_restriction_history",
+        "summary": "ユーザーのフォーム送信制限履歴の取得",
+        "operationId": "get_form_submission_restriction_history",
         "parameters": [
           {
             "name": "uuid",
@@ -5413,7 +5413,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/AnswerSubmitterRestrictionHistoryResponse"
+                    "$ref": "#/components/schemas/FormSubmissionRestrictionHistoryResponse"
                   }
                 }
               }
@@ -5848,107 +5848,6 @@
           },
           "visibility": {
             "$ref": "#/components/schemas/AnswerVisibility"
-          }
-        }
-      },
-      "AnswerSubmitterRestrictionHistoryResponse": {
-        "type": "object",
-        "required": [
-          "id",
-          "submitter_id",
-          "reason",
-          "restricted_by",
-          "restricted_at"
-        ],
-        "properties": {
-          "expires_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "id": {
-            "type": "string"
-          },
-          "lifted_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "lifted_by": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "reason": {
-            "type": "string"
-          },
-          "restricted_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "restricted_by": {
-            "type": "string"
-          },
-          "submitter_id": {
-            "type": "string"
-          }
-        }
-      },
-      "AnswerSubmitterRestrictionRequest": {
-        "type": "object",
-        "required": [
-          "reason"
-        ],
-        "properties": {
-          "expires_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "reason": {
-            "type": "string"
-          }
-        }
-      },
-      "AnswerSubmitterRestrictionResponse": {
-        "type": "object",
-        "required": [
-          "id",
-          "submitter_id",
-          "reason",
-          "restricted_by",
-          "restricted_at"
-        ],
-        "properties": {
-          "expires_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "id": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "restricted_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "restricted_by": {
-            "type": "string"
-          },
-          "submitter_id": {
-            "type": "string"
           }
         }
       },
@@ -6573,6 +6472,107 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "FormSubmissionRestrictionHistoryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "submitter_id",
+          "reason",
+          "restricted_by",
+          "restricted_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lifted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lifted_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "restricted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "restricted_by": {
+            "type": "string"
+          },
+          "submitter_id": {
+            "type": "string"
+          }
+        }
+      },
+      "FormSubmissionRestrictionRequest": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "FormSubmissionRestrictionResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "submitter_id",
+          "reason",
+          "restricted_by",
+          "restricted_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "restricted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "restricted_by": {
+            "type": "string"
+          },
+          "submitter_id": {
+            "type": "string"
           }
         }
       },

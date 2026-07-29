@@ -18,7 +18,8 @@ use domain::{
         UserSnapshot,
     },
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerSubmitterRestriction},
+        FormSubmissionRestriction,
+        answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
         models::{
@@ -43,7 +44,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormMessageDatabase: FormMessageDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
-    type ConcreteAnswerSubmitterRestrictionDatabase: AnswerSubmitterRestrictionDatabase;
+    type ConcreteFormSubmissionRestrictionDatabase: FormSubmissionRestrictionDatabase;
     type ConcreteUserDatabase: UserDatabase;
     type ConcreteDiscordAPI: DiscordAPI;
     type ConcreteNotificationDatabase: NotificationDatabase;
@@ -58,7 +59,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
-    fn answer_submitter_restriction(&self) -> &Self::ConcreteAnswerSubmitterRestrictionDatabase;
+    fn form_submission_restriction(&self) -> &Self::ConcreteFormSubmissionRestrictionDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
     fn discord_api(&self) -> &Self::ConcreteDiscordAPI;
     fn search(&self) -> &Self::ConcreteSearchDatabase;
@@ -290,16 +291,16 @@ pub trait UserDatabase: Send + Sync {
 
 #[automock]
 #[async_trait]
-pub trait AnswerSubmitterRestrictionDatabase: Send + Sync {
+pub trait FormSubmissionRestrictionDatabase: Send + Sync {
     async fn fetch_active_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Option<AnswerSubmitterRestriction>, InfraError>;
+    ) -> Result<Option<FormSubmissionRestriction>, InfraError>;
     async fn list_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Vec<AnswerSubmitterRestriction>, InfraError>;
-    async fn restrict(&self, restriction: &AnswerSubmitterRestriction) -> Result<(), InfraError>;
+    ) -> Result<Vec<FormSubmissionRestriction>, InfraError>;
+    async fn restrict(&self, restriction: &FormSubmissionRestriction) -> Result<(), InfraError>;
     async fn lift(&self, submitter_id: Uuid, lifted_by: Uuid) -> Result<(), InfraError>;
 }
 

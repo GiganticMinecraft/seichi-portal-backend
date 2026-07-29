@@ -5,10 +5,8 @@ use domain::{
     },
     auth::Actor,
     form::{
-        answer::{
-            AnswerEntry, AnswerId, AnswerPagePosition, AnswerSubmitterRestriction,
-            AnswerSubmitterRestrictionHistory, AnswerSubmitterRestrictionId,
-        },
+        FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
+        answer::{AnswerEntry, AnswerId, AnswerPagePosition},
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
             FormPagePosition,
@@ -17,13 +15,13 @@ use domain::{
     notification::models::NotificationPreference,
     pagination::{Page, PageRequest},
     repository::{
-        answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_repository::AnswerEntryRepository,
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
         },
+        form_submission_restriction_repository::FormSubmissionRestrictionRepository,
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
@@ -50,8 +48,7 @@ pub(crate) struct FormUseCaseTestRepositories {
     pub(crate) form_label_repository: InMemoryFormLabelRepository,
     pub(crate) answer_entry_repository: InMemoryAnswerEntryRepository,
     pub(crate) user_repository: InMemoryUserRepository,
-    pub(crate) answer_submitter_restriction_repository:
-        InMemoryAnswerSubmitterRestrictionRepository,
+    pub(crate) form_submission_restriction_repository: InMemoryFormSubmissionRestrictionRepository,
 }
 
 impl FormUseCaseTestRepositories {
@@ -842,25 +839,22 @@ impl UserRepository for InMemoryUserRepository {
 }
 
 #[derive(Default)]
-pub(crate) struct InMemoryAnswerSubmitterRestrictionRepository {
-    restrictions: Mutex<Vec<AnswerSubmitterRestriction>>,
+pub(crate) struct InMemoryFormSubmissionRestrictionRepository {
+    restrictions: Mutex<Vec<FormSubmissionRestriction>>,
 }
 
-impl InMemoryAnswerSubmitterRestrictionRepository {
-    pub(crate) fn save_answer_submitter_restriction(
-        &self,
-        restriction: AnswerSubmitterRestriction,
-    ) {
+impl InMemoryFormSubmissionRestrictionRepository {
+    pub(crate) fn save_form_submission_restriction(&self, restriction: FormSubmissionRestriction) {
         self.restrictions.lock().unwrap().push(restriction);
     }
 }
 
 #[async_trait]
-impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestrictionRepository {
+impl FormSubmissionRestrictionRepository for InMemoryFormSubmissionRestrictionRepository {
     async fn fetch_active_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Option<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error> {
+    ) -> Result<Option<AuthorizationGuard<FormSubmissionRestriction, Read>>, Error> {
         Ok(self
             .restrictions
             .lock()
@@ -878,8 +872,8 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
     async fn list_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<AuthorizationGuard<AnswerSubmitterRestrictionHistory, Read>, Error> {
-        Ok(AnswerSubmitterRestrictionHistory::new(
+    ) -> Result<AuthorizationGuard<FormSubmissionRestrictionHistory, Read>, Error> {
+        Ok(FormSubmissionRestrictionHistory::new(
             submitter_id.into(),
             self.restrictions
                 .lock()
@@ -895,7 +889,7 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
 
     async fn restrict(
         &self,
-        restriction: Allowed<AnswerSubmitterRestriction, Create>,
+        restriction: Allowed<FormSubmissionRestriction, Create>,
     ) -> Result<(), Error> {
         let restriction = restriction.into_inner();
         let mut restrictions = self.restrictions.lock().unwrap();
@@ -906,7 +900,7 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
                     && stored.is_active_at(chrono::Utc::now())
             })
             .for_each(|stored| {
-                *stored = lifted_answer_submitter_restriction(
+                *stored = lifted_form_submission_restriction(
                     stored,
                     chrono::Utc::now(),
                     *restriction.restricted_by(),
@@ -918,7 +912,7 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
 
     async fn lift(
         &self,
-        restriction: Allowed<AnswerSubmitterRestriction, Delete>,
+        restriction: Allowed<FormSubmissionRestriction, Delete>,
     ) -> Result<(), Error> {
         let lifted_by = match restriction.actor() {
             Actor::AccountUser(user) => *user.id(),
@@ -934,21 +928,20 @@ impl AnswerSubmitterRestrictionRepository for InMemoryAnswerSubmitterRestriction
                     && stored.is_active_at(chrono::Utc::now())
             })
             .for_each(|stored| {
-                *stored =
-                    lifted_answer_submitter_restriction(stored, chrono::Utc::now(), lifted_by);
+                *stored = lifted_form_submission_restriction(stored, chrono::Utc::now(), lifted_by);
             });
         Ok(())
     }
 }
 
-fn lifted_answer_submitter_restriction(
-    restriction: &AnswerSubmitterRestriction,
+fn lifted_form_submission_restriction(
+    restriction: &FormSubmissionRestriction,
     lifted_at: chrono::DateTime<chrono::Utc>,
     lifted_by: domain::account::models::UserId,
-) -> AnswerSubmitterRestriction {
+) -> FormSubmissionRestriction {
     unsafe {
-        AnswerSubmitterRestriction::from_raw_parts(
-            AnswerSubmitterRestrictionId::from(restriction.id().into_inner()),
+        FormSubmissionRestriction::from_raw_parts(
+            FormSubmissionRestrictionId::from(restriction.id().into_inner()),
             *restriction.submitter_id(),
             restriction.reason().clone(),
             *restriction.restricted_by(),

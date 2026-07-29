@@ -51,14 +51,14 @@ pub struct UserGroupRequest {
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]
-pub struct AnswerSubmitterRestrictionRequest {
+pub struct FormSubmissionRestrictionRequest {
     #[schema(value_type = String)]
     pub reason: NonEmptyString,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct AnswerSubmitterRestrictionResponse {
+pub struct FormSubmissionRestrictionResponse {
     pub id: String,
     pub submitter_id: String,
     pub reason: String,
@@ -68,7 +68,7 @@ pub struct AnswerSubmitterRestrictionResponse {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
-pub struct AnswerSubmitterRestrictionHistoryResponse {
+pub struct FormSubmissionRestrictionHistoryResponse {
     pub id: String,
     pub submitter_id: String,
     pub reason: String,
@@ -98,8 +98,8 @@ impl From<domain::minecraft_ban::MinecraftBan> for MinecraftPunishmentResponse {
     }
 }
 
-impl From<domain::form::answer::AnswerSubmitterRestriction> for AnswerSubmitterRestrictionResponse {
-    fn from(value: domain::form::answer::AnswerSubmitterRestriction) -> Self {
+impl From<domain::form::FormSubmissionRestriction> for FormSubmissionRestrictionResponse {
+    fn from(value: domain::form::FormSubmissionRestriction) -> Self {
         Self {
             id: value.id().to_string(),
             submitter_id: value.submitter_id().to_string(),
@@ -111,10 +111,8 @@ impl From<domain::form::answer::AnswerSubmitterRestriction> for AnswerSubmitterR
     }
 }
 
-impl From<domain::form::answer::AnswerSubmitterRestriction>
-    for AnswerSubmitterRestrictionHistoryResponse
-{
-    fn from(value: domain::form::answer::AnswerSubmitterRestriction) -> Self {
+impl From<domain::form::FormSubmissionRestriction> for FormSubmissionRestrictionHistoryResponse {
+    fn from(value: domain::form::FormSubmissionRestriction) -> Self {
         Self {
             id: value.id().to_string(),
             submitter_id: value.submitter_id().to_string(),

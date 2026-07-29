@@ -12,23 +12,23 @@ use crate::{
     types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
 };
 
-pub type AnswerSubmitterRestrictionId = types::Id<AnswerSubmitterRestriction>;
+pub type FormSubmissionRestrictionId = types::Id<FormSubmissionRestriction>;
 
 #[derive(Clone, DerivingVia, Debug, PartialEq)]
 #[deriving(From, Into, IntoInner, Serialize(via: NonEmptyString), Deserialize(via: NonEmptyString))]
-pub struct AnswerSubmitterRestrictionReason(NonEmptyString);
+pub struct FormSubmissionRestrictionReason(NonEmptyString);
 
-impl AnswerSubmitterRestrictionReason {
+impl FormSubmissionRestrictionReason {
     pub fn new(reason: NonEmptyString) -> Self {
         Self(reason)
     }
 }
 
 #[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
-pub struct AnswerSubmitterRestriction {
-    id: AnswerSubmitterRestrictionId,
+pub struct FormSubmissionRestriction {
+    id: FormSubmissionRestrictionId,
     submitter_id: UserId,
-    reason: AnswerSubmitterRestrictionReason,
+    reason: FormSubmissionRestrictionReason,
     restricted_by: UserId,
     restricted_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
@@ -36,23 +36,23 @@ pub struct AnswerSubmitterRestriction {
     lifted_by: Option<UserId>,
 }
 
-impl AnswerSubmitterRestriction {
+impl FormSubmissionRestriction {
     pub fn new(
         submitter_id: UserId,
-        reason: AnswerSubmitterRestrictionReason,
+        reason: FormSubmissionRestrictionReason,
         restricted_by: UserId,
         restricted_at: DateTime<Utc>,
         expires_at: Option<DateTime<Utc>>,
     ) -> Result<Self, DomainError> {
         if expires_at.is_some_and(|expires_at| expires_at <= restricted_at) {
             return Err(DomainError::InvalidEntity {
-                message: "answer submitter restriction expires_at must be later than restricted_at"
+                message: "form submission restriction expires_at must be later than restricted_at"
                     .to_string(),
             });
         }
 
         Ok(Self {
-            id: AnswerSubmitterRestrictionId::new(),
+            id: FormSubmissionRestrictionId::new(),
             submitter_id,
             reason,
             restricted_by,
@@ -69,22 +69,22 @@ impl AnswerSubmitterRestriction {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct AnswerSubmitterRestrictionHistory {
+pub struct FormSubmissionRestrictionHistory {
     submitter_id: UserId,
-    restrictions: Vec<AnswerSubmitterRestriction>,
+    restrictions: Vec<FormSubmissionRestriction>,
 }
 
-impl AnswerSubmitterRestrictionHistory {
+impl FormSubmissionRestrictionHistory {
     pub fn new(
         submitter_id: UserId,
-        restrictions: Vec<AnswerSubmitterRestriction>,
+        restrictions: Vec<FormSubmissionRestriction>,
     ) -> Result<Self, DomainError> {
         if restrictions
             .iter()
             .any(|restriction| restriction.submitter_id != submitter_id)
         {
             return Err(DomainError::InvalidEntity {
-                message: "answer submitter restriction history must contain only restrictions for the submitter".to_string(),
+                message: "form submission restriction history must contain only restrictions for the submitter".to_string(),
             });
         }
 
@@ -94,16 +94,16 @@ impl AnswerSubmitterRestrictionHistory {
         })
     }
 
-    pub fn into_restrictions(self) -> Vec<AnswerSubmitterRestriction> {
+    pub fn into_restrictions(self) -> Vec<FormSubmissionRestriction> {
         self.restrictions
     }
 }
 
-impl AuthorizationRole for AnswerSubmitterRestrictionHistory {
+impl AuthorizationRole for FormSubmissionRestrictionHistory {
     type Role = SelfGuarded;
 }
 
-impl AuthorizationGuardDefinitions for AnswerSubmitterRestrictionHistory {
+impl AuthorizationGuardDefinitions for FormSubmissionRestrictionHistory {
     fn can_create(&self, _actor: &Actor) -> bool {
         false
     }
@@ -121,11 +121,11 @@ impl AuthorizationGuardDefinitions for AnswerSubmitterRestrictionHistory {
     }
 }
 
-impl AuthorizationRole for AnswerSubmitterRestriction {
+impl AuthorizationRole for FormSubmissionRestriction {
     type Role = SelfGuarded;
 }
 
-impl AuthorizationGuardDefinitions for AnswerSubmitterRestriction {
+impl AuthorizationGuardDefinitions for FormSubmissionRestriction {
     fn can_create(&self, actor: &Actor) -> bool {
         matches!(actor, Actor::AccountUser(user) if user.role() == &Role::Administrator)
     }

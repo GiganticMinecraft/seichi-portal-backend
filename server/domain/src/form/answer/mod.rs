@@ -3,8 +3,6 @@ mod content;
 mod entry;
 mod label;
 mod settings;
-mod submitter;
-mod submitter_restriction;
 mod title;
 
 pub use author::{AnswerAuthor, TemporaryAnswerAuthor, TemporaryAnswerAuthorId};
@@ -14,10 +12,5 @@ pub use label::{AnswerLabel, AnswerLabelId};
 pub use settings::{
     AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy, AnswerSettings,
     AnswerVisibility, DefaultAnswerTitle,
-};
-pub use submitter::AnswerSubmitter;
-pub use submitter_restriction::{
-    AnswerSubmitterRestriction, AnswerSubmitterRestrictionHistory, AnswerSubmitterRestrictionId,
-    AnswerSubmitterRestrictionReason,
 };
 pub use title::AnswerTitle;

@@ -20,6 +20,7 @@ use domain::{
             answer_entry_repository::AnswerEntryRepository,
             message_thread_repository::MessageThreadRepository,
         },
+        form_submission_restriction_repository::FormSubmissionRestrictionRepository,
         notification_repository::NotificationRepository,
         user_repository::UserRepository,
     },
@@ -90,7 +91,9 @@ impl<
         message_body: MessageBody,
         answer_id: AnswerId,
         notificator: &N,
+        restriction_repository: &impl FormSubmissionRestrictionRepository,
     ) -> Result<(), Error> {
+        super::submission::authorize_form_submission(actor.clone(), restriction_repository).await?;
         let actor_user = Actor::from(actor.clone());
         let form_answer = self
             .read_answer_entry(&actor_user, form_id, answer_id)
@@ -323,6 +326,7 @@ mod tests {
     use domain::{
         account::models::{AccountUser, Role, UserId},
         form::{
+            FormSubmissionRestriction, FormSubmissionRestrictionReason,
             answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle, TemporaryAnswerAuthor},
             message::{DeletedMessage, MessageHistoryEntry, MessageId, MessagePost},
             message_thread::MessageThread,
@@ -573,6 +577,7 @@ mod tests {
                 MessageBody::new("must not be appended".to_string().try_into().unwrap()),
                 answer_id,
                 &notificator,
+                &repositories.form_submission_restriction_repository,
             )
             .await;
 
@@ -581,6 +586,69 @@ mod tests {
             Err(errors::domain::DomainError::MessagePostingNotSupportedForTemporaryAnswer.into())
         );
         assert_eq!(messages.stored_messages(), messages_before_post);
+        assert!(publisher.0.lock().unwrap().is_empty());
+        assert!(!notificator.called.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn post_message_rejects_user_with_active_form_submission_restriction_without_side_effects()
+     {
+        let actor = user();
+        let recipient = AccountUser::new(
+            "recipient".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::StandardUser,
+        );
+        let (form, answer) = form_and_answer(&recipient);
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories.user_repository.save_user(recipient);
+        repositories
+            .form_submission_restriction_repository
+            .save_form_submission_restriction(
+                FormSubmissionRestriction::new(
+                    *actor.id(),
+                    FormSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+                    UserId::from(Uuid::new_v4()),
+                    Utc::now(),
+                    None,
+                )
+                .unwrap(),
+            );
+        let messages = InMemoryMessageThreadRepository::default();
+        let publisher = RecordingPublisher::default();
+        let notificator = FailingNotificator::default();
+        let usecase = MessageUseCase {
+            notification_repository: &repositories.notification_repository,
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            message_thread_repository: &messages,
+            application_event_publisher: Some(&publisher),
+        };
+
+        let result = usecase
+            .post_message(
+                &actor,
+                form_id,
+                MessageBody::new("message".to_string().try_into().unwrap()),
+                answer_id,
+                &notificator,
+                &repositories.form_submission_restriction_repository,
+            )
+            .await;
+
+        assert_eq!(
+            result,
+            Err(errors::domain::DomainError::SubmissionRestricted {
+                reason: "spam".to_string(),
+                expires_at: None,
+            }
+            .into())
+        );
+        assert!(messages.stored_messages().is_empty());
         assert!(publisher.0.lock().unwrap().is_empty());
         assert!(!notificator.called.load(Ordering::Relaxed));
     }
@@ -611,6 +679,7 @@ mod tests {
                     MessageBody::new(body.to_string().try_into().unwrap()),
                     answer_id,
                     &NoopNotificator,
+                    &repositories.form_submission_restriction_repository,
                 )
                 .await
                 .unwrap();
@@ -697,6 +766,7 @@ mod tests {
                 original.clone(),
                 answer_id,
                 &NoopNotificator,
+                &repositories.form_submission_restriction_repository,
             )
             .await
             .unwrap();
@@ -770,6 +840,7 @@ mod tests {
                 MessageBody::new("saved".to_string().try_into().unwrap()),
                 answer_id,
                 &notificator,
+                &repositories.form_submission_restriction_repository,
             )
             .await;
 

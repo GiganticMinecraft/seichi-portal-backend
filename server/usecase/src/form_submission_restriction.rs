@@ -2,9 +2,9 @@ use chrono::{DateTime, Utc};
 use domain::{
     account::models::AccountUser,
     auth::Actor,
-    form::answer::{AnswerSubmitterRestriction, AnswerSubmitterRestrictionReason},
+    form::{FormSubmissionRestriction, FormSubmissionRestrictionReason},
     repository::{
-        answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
+        form_submission_restriction_repository::FormSubmissionRestrictionRepository,
         user_repository::UserRepository,
     },
     types::authorization_guard::{AuthorizationGuard, Create},
@@ -12,32 +12,32 @@ use domain::{
 use errors::{Error, usecase::UseCaseError};
 use uuid::Uuid;
 
-pub struct AnswerSubmitterRestrictionUseCase<
+pub struct FormSubmissionRestrictionUseCase<
     'a,
     UserRepo: UserRepository,
-    RestrictionRepo: AnswerSubmitterRestrictionRepository,
+    RestrictionRepo: FormSubmissionRestrictionRepository,
 > {
     pub user_repository: &'a UserRepo,
     pub restriction_repository: &'a RestrictionRepo,
 }
 
-impl<R1: UserRepository, R2: AnswerSubmitterRestrictionRepository>
-    AnswerSubmitterRestrictionUseCase<'_, R1, R2>
+impl<R1: UserRepository, R2: FormSubmissionRestrictionRepository>
+    FormSubmissionRestrictionUseCase<'_, R1, R2>
 {
     pub async fn restrict(
         &self,
         actor: &AccountUser,
         submitter_id: Uuid,
-        reason: AnswerSubmitterRestrictionReason,
+        reason: FormSubmissionRestrictionReason,
         expires_at: Option<DateTime<Utc>>,
-    ) -> Result<AnswerSubmitterRestriction, Error> {
+    ) -> Result<FormSubmissionRestriction, Error> {
         let actor_ref = Actor::from(actor.clone());
         self.user_repository
             .find_by(submitter_id)
             .await?
             .ok_or(Error::from(UseCaseError::UserNotFound))?;
 
-        let restriction = AnswerSubmitterRestriction::new(
+        let restriction = FormSubmissionRestriction::new(
             submitter_id.into(),
             reason,
             *actor.id(),
@@ -80,7 +80,7 @@ impl<R1: UserRepository, R2: AnswerSubmitterRestrictionRepository>
         &self,
         actor: &AccountUser,
         submitter_id: Uuid,
-    ) -> Result<Option<AnswerSubmitterRestriction>, Error> {
+    ) -> Result<Option<FormSubmissionRestriction>, Error> {
         let actor_ref = Actor::from(actor.clone());
         self.user_repository
             .find_by(submitter_id)
@@ -103,7 +103,7 @@ impl<R1: UserRepository, R2: AnswerSubmitterRestrictionRepository>
         &self,
         actor: &AccountUser,
         submitter_id: Uuid,
-    ) -> Result<Vec<AnswerSubmitterRestriction>, Error> {
+    ) -> Result<Vec<FormSubmissionRestriction>, Error> {
         let actor_ref = Actor::from(actor.clone());
         self.user_repository
             .find_by(submitter_id)
@@ -137,9 +137,9 @@ mod tests {
         let submitter = user(2, "submitter", Role::StandardUser);
         let repositories = FormUseCaseTestRepositories::default();
         repositories.user_repository.save_user(submitter.clone());
-        let usecase = AnswerSubmitterRestrictionUseCase {
+        let usecase = FormSubmissionRestrictionUseCase {
             user_repository: &repositories.user_repository,
-            restriction_repository: &repositories.answer_submitter_restriction_repository,
+            restriction_repository: &repositories.form_submission_restriction_repository,
         };
 
         let result = usecase
@@ -154,9 +154,9 @@ mod tests {
         let submitter = user(1, "submitter", Role::StandardUser);
         let repositories = FormUseCaseTestRepositories::default();
         repositories.user_repository.save_user(submitter.clone());
-        let usecase = AnswerSubmitterRestrictionUseCase {
+        let usecase = FormSubmissionRestrictionUseCase {
             user_repository: &repositories.user_repository,
-            restriction_repository: &repositories.answer_submitter_restriction_repository,
+            restriction_repository: &repositories.form_submission_restriction_repository,
         };
 
         let result = usecase

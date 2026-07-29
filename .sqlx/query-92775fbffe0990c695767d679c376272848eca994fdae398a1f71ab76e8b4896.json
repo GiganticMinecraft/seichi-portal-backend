@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                    INSERT INTO form_submission_restrictions\n                        (id, submitter_id, reason, restricted_by, restricted_at, expires_at)\n                    VALUES (?, ?, ?, ?, ?, ?)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "92775fbffe0990c695767d679c376272848eca994fdae398a1f71ab76e8b4896"
+}

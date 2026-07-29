@@ -23,9 +23,9 @@ pub use crate::form::{
 use crate::{
     account::models::UserId,
     auth::Actor,
-    form::answer::TemporaryAnswerAuthor,
+    form::{answer::TemporaryAnswerAuthor, submitter::FormSubmitter},
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerSubmitter, AnswerTitle, PostedAnswerContents},
+        answer::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
         is_administrator,
     },
     types::authorization_guard::{
@@ -186,7 +186,7 @@ impl ActiveForm {
 
     fn try_accept_answer_from_submitter(
         &self,
-        submitter: AnswerSubmitter,
+        submitter: FormSubmitter,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<AnswerEntry, DomainError> {
@@ -223,7 +223,7 @@ impl ActiveForm {
 impl Allowed<ActiveForm, Read> {
     pub fn try_accept_answer(
         &self,
-        submitter: AnswerSubmitter,
+        submitter: FormSubmitter,
         title: AnswerTitle,
         posted_answers: PostedAnswerContents,
     ) -> Result<Allowed<AnswerEntry, Create>, DomainError> {
@@ -376,7 +376,8 @@ mod tests {
         account::models::{AccountUser, Role, UserGroup, UserGroupId, UserGroupName},
         form::answer::TemporaryAnswerAuthor,
         form::{
-            answer::{AnswerSubmitter, FormAnswerContent, FormAnswerContentId},
+            FormSubmitter,
+            answer::{FormAnswerContent, FormAnswerContentId},
             question::{Question, QuestionId, QuestionType},
         },
         types::authorization_guard::{AuthorizationGuard, Read},
@@ -531,7 +532,7 @@ mod tests {
     fn try_accept_answer_respects_acceptance_period() {
         let user = active_user(Role::StandardUser);
         let actor = Actor::from(user.clone());
-        let submitter = AnswerSubmitter::try_new(user, None, Utc::now()).unwrap();
+        let submitter = FormSubmitter::try_new(user, None, Utc::now()).unwrap();
         let form = sample_form().change_answer_settings(
             AnswerSettings::default().change_acceptance_period(
                 AnswerAcceptancePeriod::try_new(

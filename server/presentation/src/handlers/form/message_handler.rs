@@ -201,6 +201,7 @@ pub async fn post_message_handler<N: Notificator>(
             MessageBody::new(message.body),
             answer_id,
             &state.notificator,
+            state.repository.form_submission_restriction_repository(),
         )
         .await
         .map_err(handle_error)?;

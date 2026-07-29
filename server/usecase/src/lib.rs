@@ -1,5 +1,5 @@
-pub mod answer_submitter_restriction;
 pub mod application_event;
+pub mod form_submission_restriction;
 pub mod forms;
 pub mod global_discord_webhook;
 pub mod health_check;

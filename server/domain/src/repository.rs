@@ -1,5 +1,5 @@
-pub mod answer_submitter_restriction_repository;
 pub mod form;
+pub mod form_submission_restriction_repository;
 pub mod global_discord_webhook_repository;
 pub mod health_check_repository;
 pub mod minecraft_ban_repository;
@@ -15,7 +15,7 @@ pub trait Repositories: Send + Sync {
     type ConcreteCommentRepository: form::comment_repository::CommentRepository;
     type ConcreteMessageThreadRepository: form::message_thread_repository::MessageThreadRepository;
     type ConcreteFormLabelRepository: form::form_label_repository::FormLabelRepository;
-    type ConcreteAnswerSubmitterRestrictionRepository: answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository;
+    type ConcreteFormSubmissionRestrictionRepository: form_submission_restriction_repository::FormSubmissionRestrictionRepository;
     type ConcreteUserRepository: user_repository::UserRepository;
     type ConcreteSearchRepository: search_repository::SearchRepository;
     type ConcreteNotificationRepository: notification_repository::NotificationRepository;
@@ -28,9 +28,9 @@ pub trait Repositories: Send + Sync {
     fn comment_repository(&self) -> &Self::ConcreteCommentRepository;
     fn message_thread_repository(&self) -> &Self::ConcreteMessageThreadRepository;
     fn form_label_repository(&self) -> &Self::ConcreteFormLabelRepository;
-    fn answer_submitter_restriction_repository(
+    fn form_submission_restriction_repository(
         &self,
-    ) -> &Self::ConcreteAnswerSubmitterRestrictionRepository;
+    ) -> &Self::ConcreteFormSubmissionRestrictionRepository;
     fn user_repository(&self) -> &Self::ConcreteUserRepository;
     fn search_repository(&self) -> &Self::ConcreteSearchRepository;
     fn notification_repository(&self) -> &Self::ConcreteNotificationRepository;

@@ -46,12 +46,12 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             "You do not have permission to access this resource.",
             "FORBIDDEN",
         ),
-        DomainError::AnswerSubmissionRestricted { reason, expires_at } => {
+        DomainError::SubmissionRestricted { reason, expires_at } => {
             problem_response_with_restriction(
                 StatusCode::FORBIDDEN,
                 "Forbidden",
-                "Answer submission is restricted.",
-                "ANSWER_SUBMISSION_RESTRICTED",
+                "Form submission is restricted.",
+                "SUBMISSION_RESTRICTED",
                 Some(ErrorRestriction { reason, expires_at }),
             )
         }

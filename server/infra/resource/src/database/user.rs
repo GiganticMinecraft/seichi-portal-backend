@@ -8,8 +8,8 @@ use domain::{
         AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
         UserPagePosition,
     },
-    form::answer::{
-        AnswerSubmitterRestriction, AnswerSubmitterRestrictionId, AnswerSubmitterRestrictionReason,
+    form::{
+        FormSubmissionRestriction, FormSubmissionRestrictionId, FormSubmissionRestrictionReason,
     },
     pagination::{Page, PageRequest},
 };
@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{
-        components::{AnswerSubmitterRestrictionDatabase, UserDatabase},
+        components::{FormSubmissionRestrictionDatabase, UserDatabase},
         connection::{ConnectionPool, DatabaseTransaction, redis_connection},
         count::count_as_u32,
     },
@@ -615,17 +615,17 @@ impl UserDatabase for ConnectionPool {
 }
 
 #[async_trait]
-impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
+impl FormSubmissionRestrictionDatabase for ConnectionPool {
     async fn fetch_active_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Option<AnswerSubmitterRestriction>, InfraError> {
+    ) -> Result<Option<FormSubmissionRestriction>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let row = sqlx::query!(
                     r#"
                     SELECT id, submitter_id, reason, restricted_by, restricted_at, expires_at
-                    FROM answer_submitter_restrictions
+                    FROM form_submission_restrictions
                     WHERE submitter_id = ?
                       AND lifted_at IS NULL
                       AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP(6))
@@ -638,7 +638,7 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
                 .await?;
 
                 row.map(|row| {
-                    answer_submitter_restriction_from_row(AnswerSubmitterRestrictionRowData {
+                    form_submission_restriction_from_row(FormSubmissionRestrictionRowData {
                         id: row.id,
                         submitter_id: row.submitter_id,
                         reason: row.reason,
@@ -658,13 +658,13 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
     async fn list_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Vec<AnswerSubmitterRestriction>, InfraError> {
+    ) -> Result<Vec<FormSubmissionRestriction>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let rows = sqlx::query!(
                     r#"
                     SELECT id, submitter_id, reason, restricted_by, restricted_at, expires_at, lifted_at, lifted_by
-                    FROM answer_submitter_restrictions
+                    FROM form_submission_restrictions
                     WHERE submitter_id = ?
                     ORDER BY restricted_at DESC
                     "#,
@@ -675,7 +675,7 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
 
                 rows.into_iter()
                     .map(|row| {
-                        answer_submitter_restriction_from_row(AnswerSubmitterRestrictionRowData {
+                        form_submission_restriction_from_row(FormSubmissionRestrictionRowData {
                             id: row.id,
                             submitter_id: row.submitter_id,
                             reason: row.reason,
@@ -692,7 +692,7 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
         .await
     }
 
-    async fn restrict(&self, restriction: &AnswerSubmitterRestriction) -> Result<(), InfraError> {
+    async fn restrict(&self, restriction: &FormSubmissionRestriction) -> Result<(), InfraError> {
         let restriction_id = restriction.id().to_string();
         let submitter_id = restriction.submitter_id().to_string();
         let reason = restriction.reason().to_owned().into_inner().into_inner();
@@ -704,7 +704,7 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
             Box::pin(async move {
                 sqlx::query!(
                     r#"
-                    UPDATE answer_submitter_restrictions
+                    UPDATE form_submission_restrictions
                     SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
                     WHERE submitter_id = ?
                       AND lifted_at IS NULL
@@ -718,7 +718,7 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
 
                 sqlx::query!(
                     r#"
-                    INSERT INTO answer_submitter_restrictions
+                    INSERT INTO form_submission_restrictions
                         (id, submitter_id, reason, restricted_by, restricted_at, expires_at)
                     VALUES (?, ?, ?, ?, ?, ?)
                     "#,
@@ -743,7 +743,7 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
             Box::pin(async move {
                 sqlx::query!(
                     r#"
-                    UPDATE answer_submitter_restrictions
+                    UPDATE form_submission_restrictions
                     SET lifted_at = UTC_TIMESTAMP(6), lifted_by = ?
                     WHERE submitter_id = ?
                       AND lifted_at IS NULL
@@ -762,7 +762,7 @@ impl AnswerSubmitterRestrictionDatabase for ConnectionPool {
     }
 }
 
-struct AnswerSubmitterRestrictionRowData {
+struct FormSubmissionRestrictionRowData {
     id: String,
     submitter_id: String,
     reason: String,
@@ -773,14 +773,14 @@ struct AnswerSubmitterRestrictionRowData {
     lifted_by: Option<String>,
 }
 
-fn answer_submitter_restriction_from_row(
-    row: AnswerSubmitterRestrictionRowData,
-) -> Result<AnswerSubmitterRestriction, InfraError> {
+fn form_submission_restriction_from_row(
+    row: FormSubmissionRestrictionRowData,
+) -> Result<FormSubmissionRestriction, InfraError> {
     Ok(unsafe {
-        AnswerSubmitterRestriction::from_raw_parts(
-            AnswerSubmitterRestrictionId::from(Uuid::parse_str(&row.id)?),
+        FormSubmissionRestriction::from_raw_parts(
+            FormSubmissionRestrictionId::from(Uuid::parse_str(&row.id)?),
             Uuid::parse_str(&row.submitter_id)?.into(),
-            AnswerSubmitterRestrictionReason::new(row.reason.try_into().map_err(
+            FormSubmissionRestrictionReason::new(row.reason.try_into().map_err(
                 |err: errors::validation::ValidationError| InfraError::Unexpected {
                     cause: err.to_string(),
                 },

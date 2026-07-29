@@ -147,7 +147,7 @@ impl DatabaseComponents for ConnectionPool {
     type ConcreteFormDatabase = Self;
     type ConcreteFormLabelDatabase = Self;
     type ConcreteFormMessageDatabase = Self;
-    type ConcreteAnswerSubmitterRestrictionDatabase = Self;
+    type ConcreteFormSubmissionRestrictionDatabase = Self;
     type ConcreteNotificationDatabase = Self;
     type ConcreteSearchDatabase = Self;
     type ConcreteMinecraftBanDatabase = Self;
@@ -185,7 +185,7 @@ impl DatabaseComponents for ConnectionPool {
         self
     }
 
-    fn answer_submitter_restriction(&self) -> &Self::ConcreteAnswerSubmitterRestrictionDatabase {
+    fn form_submission_restriction(&self) -> &Self::ConcreteFormSubmissionRestrictionDatabase {
         self
     }
 
