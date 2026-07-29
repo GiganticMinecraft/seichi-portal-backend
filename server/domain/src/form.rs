@@ -7,6 +7,14 @@ pub mod models;
 pub mod question;
 pub mod service;
 pub mod settings;
+pub mod submission_restriction;
+pub mod submitter;
+
+pub use submission_restriction::{
+    FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
+    FormSubmissionRestrictionReason,
+};
+pub use submitter::FormSubmitter;
 
 use crate::{account::models::Role::Administrator, auth::Actor};
 

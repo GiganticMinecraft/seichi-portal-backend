@@ -11,8 +11,8 @@ pub enum DomainError {
     NotFound,
     #[error("Access to forbidden resource.")]
     Forbidden,
-    #[error("Answer submission is restricted.")]
-    AnswerSubmissionRestricted {
+    #[error("Form submission is restricted.")]
+    SubmissionRestricted {
         reason: String,
         expires_at: Option<chrono::DateTime<chrono::Utc>>,
     },

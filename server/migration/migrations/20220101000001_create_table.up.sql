@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS users(
     role ENUM('ADMINISTRATOR', 'STANDARD_USER') NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS answer_submitter_restrictions(
+CREATE TABLE IF NOT EXISTS form_submission_restrictions(
     id CHAR(36) NOT NULL PRIMARY KEY,
     submitter_id CHAR(36) NOT NULL,
     reason TEXT NOT NULL,
@@ -13,11 +13,11 @@ CREATE TABLE IF NOT EXISTS answer_submitter_restrictions(
     expires_at DATETIME(6),
     lifted_at DATETIME(6),
     lifted_by CHAR(36),
-    INDEX idx_answer_submitter_restrictions_submitter_id(submitter_id),
-    INDEX idx_answer_submitter_restrictions_active(submitter_id, lifted_at, expires_at),
-    FOREIGN KEY fk_answer_submitter_restrictions_submitter_id(submitter_id) REFERENCES users(id),
-    FOREIGN KEY fk_answer_submitter_restrictions_restricted_by(restricted_by) REFERENCES users(id),
-    FOREIGN KEY fk_answer_submitter_restrictions_lifted_by(lifted_by) REFERENCES users(id)
+    INDEX idx_form_submission_restrictions_submitter_id(submitter_id),
+    INDEX idx_form_submission_restrictions_active(submitter_id, lifted_at, expires_at),
+    FOREIGN KEY fk_form_submission_restrictions_submitter_id(submitter_id) REFERENCES users(id),
+    FOREIGN KEY fk_form_submission_restrictions_restricted_by(restricted_by) REFERENCES users(id),
+    FOREIGN KEY fk_form_submission_restrictions_lifted_by(lifted_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS temporary_users(

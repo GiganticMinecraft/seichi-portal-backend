@@ -1,29 +1,29 @@
 use async_trait::async_trait;
 use domain::{
     auth::Actor,
-    form::answer::{AnswerSubmitterRestriction, AnswerSubmitterRestrictionHistory},
-    repository::answer_submitter_restriction_repository::AnswerSubmitterRestrictionRepository,
+    form::{FormSubmissionRestriction, FormSubmissionRestrictionHistory},
+    repository::form_submission_restriction_repository::FormSubmissionRestrictionRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read},
 };
 use errors::{Error, domain::DomainError};
 use uuid::Uuid;
 
 use crate::{
-    database::components::{AnswerSubmitterRestrictionDatabase, DatabaseComponents},
+    database::components::{DatabaseComponents, FormSubmissionRestrictionDatabase},
     repository::Repository,
 };
 
 #[async_trait]
-impl<Client: DatabaseComponents + 'static> AnswerSubmitterRestrictionRepository
+impl<Client: DatabaseComponents + 'static> FormSubmissionRestrictionRepository
     for Repository<Client>
 {
     async fn fetch_active_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Option<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error> {
+    ) -> Result<Option<AuthorizationGuard<FormSubmissionRestriction, Read>>, Error> {
         Ok(self
             .client
-            .answer_submitter_restriction()
+            .form_submission_restriction()
             .fetch_active_by_submitter_id(submitter_id)
             .await?
             .map(Into::into))
@@ -32,11 +32,11 @@ impl<Client: DatabaseComponents + 'static> AnswerSubmitterRestrictionRepository
     async fn list_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<AuthorizationGuard<AnswerSubmitterRestrictionHistory, Read>, Error> {
-        Ok(AnswerSubmitterRestrictionHistory::new(
+    ) -> Result<AuthorizationGuard<FormSubmissionRestrictionHistory, Read>, Error> {
+        Ok(FormSubmissionRestrictionHistory::new(
             submitter_id.into(),
             self.client
-                .answer_submitter_restriction()
+                .form_submission_restriction()
                 .list_by_submitter_id(submitter_id)
                 .await?,
         )?
@@ -45,10 +45,10 @@ impl<Client: DatabaseComponents + 'static> AnswerSubmitterRestrictionRepository
 
     async fn restrict(
         &self,
-        restriction: Allowed<AnswerSubmitterRestriction, Create>,
+        restriction: Allowed<FormSubmissionRestriction, Create>,
     ) -> Result<(), Error> {
         self.client
-            .answer_submitter_restriction()
+            .form_submission_restriction()
             .restrict(restriction.value())
             .await
             .map_err(Into::into)
@@ -56,7 +56,7 @@ impl<Client: DatabaseComponents + 'static> AnswerSubmitterRestrictionRepository
 
     async fn lift(
         &self,
-        restriction: Allowed<AnswerSubmitterRestriction, Delete>,
+        restriction: Allowed<FormSubmissionRestriction, Delete>,
     ) -> Result<(), Error> {
         let lifted_by = match restriction.actor() {
             Actor::AccountUser(user) => user.id().into_inner(),
@@ -64,7 +64,7 @@ impl<Client: DatabaseComponents + 'static> AnswerSubmitterRestrictionRepository
         };
 
         self.client
-            .answer_submitter_restriction()
+            .form_submission_restriction()
             .lift(restriction.submitter_id().into_inner(), lifted_by)
             .await
             .map_err(Into::into)

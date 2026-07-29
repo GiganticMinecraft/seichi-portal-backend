@@ -5,3 +5,4 @@ pub mod discord_answer_webhook;
 pub mod form;
 pub mod form_label;
 pub mod message;
+pub(crate) mod submission;

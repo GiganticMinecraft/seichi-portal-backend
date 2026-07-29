@@ -28,7 +28,7 @@ DROP TABLE IF EXISTS
     discord_notification_settings,
     discord_linked_users,
     temporary_users,
-    answer_submitter_restrictions,
+    form_submission_restrictions,
     users,
     archived_form_answer_groups,
     archived_form_allowed_user_groups,

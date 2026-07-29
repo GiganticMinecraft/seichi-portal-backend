@@ -229,6 +229,7 @@ pub async fn post_form_comment(
             form_id,
             answer_id,
             CommentContent::new(comment_schema.content),
+            repository.form_submission_restriction_repository(),
         )
         .await
         .map_err(handle_error)?;

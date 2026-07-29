@@ -13,6 +13,7 @@ use domain::{
         active_form_repository::ActiveFormRepository,
         answer_entry_repository::AnswerEntryRepository, comment_repository::CommentRepository,
     },
+    repository::form_submission_restriction_repository::FormSubmissionRestrictionRepository,
     repository::user_repository::UserRepository,
     types::authorization_guard::{Allowed, Read},
 };
@@ -116,7 +117,9 @@ impl<R1: ActiveFormRepository, R2: UserRepository, R3: AnswerEntryRepository, R4
         form_id: FormId,
         answer_id: AnswerId,
         content: CommentContent,
+        restriction_repository: &impl FormSubmissionRestrictionRepository,
     ) -> Result<(), Error> {
+        super::submission::authorize_form_submission(actor.clone(), restriction_repository).await?;
         let actor_user = Actor::from(actor.clone());
         let entry = self
             .read_answer_entry(&actor_user, form_id, answer_id)
@@ -243,6 +246,7 @@ mod tests {
     use domain::{
         account::models::{AccountUser, Role, UserId},
         form::{
+            FormSubmissionRestriction, FormSubmissionRestrictionReason,
             answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerTitle},
             comment::{CommentHistoryEntry, DeletedComment},
             models::{ActiveForm, FormDescription, FormTitle, QuestionSet},
@@ -391,7 +395,13 @@ mod tests {
 
         let original = CommentContent::new("original".to_string().try_into().unwrap());
         usecase
-            .post_comment(&user, form_id, answer_id, original.clone())
+            .post_comment(
+                &user,
+                form_id,
+                answer_id,
+                original.clone(),
+                &repositories.form_submission_restriction_repository,
+            )
             .await
             .unwrap();
         let comment_id = *comments.only_comment().comment_id();
@@ -429,5 +439,58 @@ mod tests {
                 ApplicationEvent::CommentDeleted { content: deleted, .. }
             ] if created == "original" && updated == "updated" && deleted == "updated"
         ));
+    }
+
+    #[tokio::test]
+    async fn post_comment_rejects_user_with_active_form_submission_restriction_without_side_effects()
+     {
+        let user = user();
+        let (form, answer) = form_and_answer(&user);
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories
+            .form_submission_restriction_repository
+            .save_form_submission_restriction(
+                FormSubmissionRestriction::new(
+                    *user.id(),
+                    FormSubmissionRestrictionReason::new("spam".to_string().try_into().unwrap()),
+                    UserId::from(Uuid::new_v4()),
+                    Utc::now(),
+                    None,
+                )
+                .unwrap(),
+            );
+        let comments = InMemoryCommentRepository::default();
+        let publisher = RecordingPublisher::default();
+        let usecase = CommentUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            comment_repository: &comments,
+            application_event_publisher: Some(&publisher),
+        };
+
+        let result = usecase
+            .post_comment(
+                &user,
+                form_id,
+                answer_id,
+                CommentContent::new("comment".to_string().try_into().unwrap()),
+                &repositories.form_submission_restriction_repository,
+            )
+            .await;
+
+        assert_eq!(
+            result,
+            Err(errors::domain::DomainError::SubmissionRestricted {
+                reason: "spam".to_string(),
+                expires_at: None,
+            }
+            .into())
+        );
+        assert_eq!(comments.size().await.unwrap(), 0);
+        assert!(publisher.0.lock().unwrap().is_empty());
     }
 }

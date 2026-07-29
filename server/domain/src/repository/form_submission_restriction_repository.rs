@@ -4,30 +4,30 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    form::answer::{AnswerSubmitterRestriction, AnswerSubmitterRestrictionHistory},
+    form::{FormSubmissionRestriction, FormSubmissionRestrictionHistory},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read},
 };
 
 #[automock]
 #[async_trait]
-pub trait AnswerSubmitterRestrictionRepository: Send + Sync + 'static {
+pub trait FormSubmissionRestrictionRepository: Send + Sync + 'static {
     async fn fetch_active_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<Option<AuthorizationGuard<AnswerSubmitterRestriction, Read>>, Error>;
+    ) -> Result<Option<AuthorizationGuard<FormSubmissionRestriction, Read>>, Error>;
 
     async fn list_by_submitter_id(
         &self,
         submitter_id: Uuid,
-    ) -> Result<AuthorizationGuard<AnswerSubmitterRestrictionHistory, Read>, Error>;
+    ) -> Result<AuthorizationGuard<FormSubmissionRestrictionHistory, Read>, Error>;
 
     async fn restrict(
         &self,
-        restriction: Allowed<AnswerSubmitterRestriction, Create>,
+        restriction: Allowed<FormSubmissionRestriction, Create>,
     ) -> Result<(), Error>;
 
     async fn lift(
         &self,
-        restriction: Allowed<AnswerSubmitterRestriction, Delete>,
+        restriction: Allowed<FormSubmissionRestriction, Delete>,
     ) -> Result<(), Error>;
 }

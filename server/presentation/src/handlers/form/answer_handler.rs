@@ -62,8 +62,7 @@ fn build_answer_use_case<'a>(
         active_form_repository: repository.active_form_repository(),
         answer_label_repository: repository.answer_label_repository(),
         user_repository: repository.user_repository(),
-        answer_submitter_restriction_repository: repository
-            .answer_submitter_restriction_repository(),
+        form_submission_restriction_repository: repository.form_submission_restriction_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         discord_answer_webhook_notifier,
         application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),

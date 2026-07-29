@@ -12,7 +12,7 @@ use axum_extra::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use domain::{
     account::models::{AccountUser, UserPagePosition, UserSessionExpires},
-    form::answer::AnswerSubmitterRestrictionReason,
+    form::FormSubmissionRestrictionReason,
     pagination::{PageLimit, PageRequest},
     repository::Repositories,
 };
@@ -20,15 +20,15 @@ use resource::repository::RealInfrastructureRepository;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use usecase::{
-    answer_submitter_restriction::AnswerSubmitterRestrictionUseCase,
+    form_submission_restriction::FormSubmissionRestrictionUseCase,
     minecraft_ban::MinecraftBanUseCase, user::UserUseCase,
 };
 use uuid::Uuid;
 
 use crate::schemas::error_responses::*;
 use crate::schemas::user::{
-    AnswerSubmitterRestrictionHistoryResponse, AnswerSubmitterRestrictionRequest,
-    AnswerSubmitterRestrictionResponse, MinecraftPunishmentResponse, UserGroupRequest,
+    FormSubmissionRestrictionHistoryResponse, FormSubmissionRestrictionRequest,
+    FormSubmissionRestrictionResponse, MinecraftPunishmentResponse, UserGroupRequest,
     UserGroupSchema, UserInfoResponse, UserListPageResponse, UserListQuery, UserSchema,
     UserUpdateSchema,
 };
@@ -146,12 +146,12 @@ impl IntoResponse for DeleteUserGroupResponse {
 }
 
 #[derive(utoipa::IntoResponses)]
-pub enum GetAnswerSubmitterRestrictionResponse {
+pub enum GetFormSubmissionRestrictionResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Option<AnswerSubmitterRestrictionResponse>),
+    Ok(Option<FormSubmissionRestrictionResponse>),
 }
 
-impl IntoResponse for GetAnswerSubmitterRestrictionResponse {
+impl IntoResponse for GetFormSubmissionRestrictionResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
@@ -160,9 +160,9 @@ impl IntoResponse for GetAnswerSubmitterRestrictionResponse {
 }
 
 #[derive(utoipa::IntoResponses)]
-pub enum GetAnswerSubmitterRestrictionHistoryResponse {
+pub enum GetFormSubmissionRestrictionHistoryResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(Vec<AnswerSubmitterRestrictionHistoryResponse>),
+    Ok(Vec<FormSubmissionRestrictionHistoryResponse>),
 }
 
 #[derive(utoipa::IntoResponses)]
@@ -179,7 +179,7 @@ impl IntoResponse for GetMinecraftPunishmentsResponse {
     }
 }
 
-impl IntoResponse for GetAnswerSubmitterRestrictionHistoryResponse {
+impl IntoResponse for GetFormSubmissionRestrictionHistoryResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
@@ -188,12 +188,12 @@ impl IntoResponse for GetAnswerSubmitterRestrictionHistoryResponse {
 }
 
 #[derive(utoipa::IntoResponses)]
-pub enum PutAnswerSubmitterRestrictionResponse {
+pub enum PutFormSubmissionRestrictionResponse {
     #[response(status = 200, description = "The request has succeeded.")]
-    Ok(AnswerSubmitterRestrictionResponse),
+    Ok(FormSubmissionRestrictionResponse),
 }
 
-impl IntoResponse for PutAnswerSubmitterRestrictionResponse {
+impl IntoResponse for PutFormSubmissionRestrictionResponse {
     fn into_response(self) -> Response {
         match self {
             Self::Ok(body) => (StatusCode::OK, Json(body)).into_response(),
@@ -699,13 +699,13 @@ pub async fn remove_user_from_group(
 
 #[utoipa::path(
     get,
-    path = "/users/{uuid}/answer-submitter-restriction",
-    summary = "回答投稿者の有効な回答投稿制限の取得",
+    path = "/users/{uuid}/form-submission-restriction",
+    summary = "ユーザーの有効なフォーム送信制限の取得",
     params(
         ("uuid" = String, Path, description = "User UUID"),
     ),
     responses(
-        GetAnswerSubmitterRestrictionResponse,
+        GetFormSubmissionRestrictionResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -715,14 +715,14 @@ pub async fn remove_user_from_group(
     security(("bearer" = [])),
     tag = "Users"
 )]
-pub async fn get_answer_submitter_restriction(
+pub async fn get_form_submission_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetAnswerSubmitterRestrictionResponse, Response> {
-    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+) -> Result<GetFormSubmissionRestrictionResponse, Response> {
+    let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
-        restriction_repository: repository.answer_submitter_restriction_repository(),
+        restriction_repository: repository.form_submission_restriction_repository(),
     };
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
@@ -731,20 +731,20 @@ pub async fn get_answer_submitter_restriction(
         .await
         .map_err(handle_error)?;
 
-    Ok(GetAnswerSubmitterRestrictionResponse::Ok(
+    Ok(GetFormSubmissionRestrictionResponse::Ok(
         restriction.map(Into::into),
     ))
 }
 
 #[utoipa::path(
     get,
-    path = "/users/{uuid}/answer-submitter-restriction/history",
-    summary = "回答投稿者の回答投稿制限履歴の取得",
+    path = "/users/{uuid}/form-submission-restriction/history",
+    summary = "ユーザーのフォーム送信制限履歴の取得",
     params(
         ("uuid" = String, Path, description = "User UUID"),
     ),
     responses(
-        GetAnswerSubmitterRestrictionHistoryResponse,
+        GetFormSubmissionRestrictionHistoryResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -754,14 +754,14 @@ pub async fn get_answer_submitter_restriction(
     security(("bearer" = [])),
     tag = "Users"
 )]
-pub async fn get_answer_submitter_restriction_history(
+pub async fn get_form_submission_restriction_history(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetAnswerSubmitterRestrictionHistoryResponse, Response> {
-    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+) -> Result<GetFormSubmissionRestrictionHistoryResponse, Response> {
+    let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
-        restriction_repository: repository.answer_submitter_restriction_repository(),
+        restriction_repository: repository.form_submission_restriction_repository(),
     };
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
@@ -770,7 +770,7 @@ pub async fn get_answer_submitter_restriction_history(
         .await
         .map_err(handle_error)?;
 
-    Ok(GetAnswerSubmitterRestrictionHistoryResponse::Ok(
+    Ok(GetFormSubmissionRestrictionHistoryResponse::Ok(
         restrictions.into_iter().map(Into::into).collect(),
     ))
 }
@@ -810,14 +810,14 @@ pub async fn get_minecraft_punishments(
 
 #[utoipa::path(
     put,
-    path = "/users/{uuid}/answer-submitter-restriction",
-    summary = "回答投稿者の回答投稿を制限する",
+    path = "/users/{uuid}/form-submission-restriction",
+    summary = "ユーザーのフォーム送信を制限する",
     params(
         ("uuid" = String, Path, description = "User UUID"),
     ),
-    request_body = AnswerSubmitterRestrictionRequest,
+    request_body = FormSubmissionRestrictionRequest,
     responses(
-        PutAnswerSubmitterRestrictionResponse,
+        PutFormSubmissionRestrictionResponse,
         BadRequest,
         Unauthorized,
         Forbidden,
@@ -828,15 +828,15 @@ pub async fn get_minecraft_punishments(
     security(("bearer" = [])),
     tag = "Users"
 )]
-pub async fn put_answer_submitter_restriction(
+pub async fn put_form_submission_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-    json: Result<Json<AnswerSubmitterRestrictionRequest>, JsonRejection>,
-) -> Result<PutAnswerSubmitterRestrictionResponse, Response> {
-    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+    json: Result<Json<FormSubmissionRestrictionRequest>, JsonRejection>,
+) -> Result<PutFormSubmissionRestrictionResponse, Response> {
+    let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
-        restriction_repository: repository.answer_submitter_restriction_repository(),
+        restriction_repository: repository.form_submission_restriction_repository(),
     };
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
@@ -845,21 +845,19 @@ pub async fn put_answer_submitter_restriction(
         .restrict(
             &actor,
             uuid,
-            AnswerSubmitterRestrictionReason::new(request.reason),
+            FormSubmissionRestrictionReason::new(request.reason),
             request.expires_at,
         )
         .await
         .map_err(handle_error)?;
 
-    Ok(PutAnswerSubmitterRestrictionResponse::Ok(
-        restriction.into(),
-    ))
+    Ok(PutFormSubmissionRestrictionResponse::Ok(restriction.into()))
 }
 
 #[utoipa::path(
     delete,
-    path = "/users/{uuid}/answer-submitter-restriction",
-    summary = "回答投稿者の回答投稿制限を解除する",
+    path = "/users/{uuid}/form-submission-restriction",
+    summary = "ユーザーのフォーム送信制限を解除する",
     params(
         ("uuid" = String, Path, description = "User UUID"),
     ),
@@ -874,14 +872,14 @@ pub async fn put_answer_submitter_restriction(
     security(("bearer" = [])),
     tag = "Users"
 )]
-pub async fn delete_answer_submitter_restriction(
+pub async fn delete_form_submission_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
 ) -> Result<impl IntoResponse, Response> {
-    let restriction_use_case = AnswerSubmitterRestrictionUseCase {
+    let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
-        restriction_repository: repository.answer_submitter_restriction_repository(),
+        restriction_repository: repository.form_submission_restriction_repository(),
     };
 
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
