@@ -279,6 +279,15 @@ impl Allowed<ActiveForm, Read> {
 }
 
 impl Allowed<ActiveForm, Update> {
+    /// `entry` に対する更新操作を認可します。回答メタデータ以外の、回答を起点とする
+    /// 管理者操作でも親フォームの認可境界を維持するために使います。
+    pub fn authorize_entry_update(
+        &self,
+        entry: AnswerEntry,
+    ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
+        self.authorize_update(entry)
+    }
+
     /// `entry` のタイトルと個別公開状態を変更し、更新認可済みで返します。指定しない値が変わらないことは
     /// [`AnswerEntry::with_title`] と [`AnswerEntry::change_publication`] による構築で保証され、所属と更新権限は [`ActiveForm`] の
     /// ガード経由で保証される。
@@ -296,7 +305,7 @@ impl Allowed<ActiveForm, Update> {
             Some(publication) => entry.change_publication(publication),
             None => entry,
         };
-        self.authorize_update(entry)
+        self.authorize_entry_update(entry)
     }
 }
 

@@ -1,4 +1,5 @@
 pub mod answer_label;
+pub mod answer_relations;
 pub mod answers;
 pub mod comment;
 pub mod form;

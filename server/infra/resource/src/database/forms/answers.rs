@@ -294,6 +294,14 @@ impl FormAnswerDatabase for ConnectionPool {
                 .execute(&mut **txn)
                 .await?;
 
+                sqlx::query!(
+                    "INSERT INTO answer_identities (answer_id, form_id) VALUES (?, ?)",
+                    &answer_id,
+                    &form_id,
+                )
+                .execute(&mut **txn)
+                .await?;
+
                 if !contents.is_empty() {
                     let sql = format!(
                         "INSERT INTO real_answers (id, answer_id, question_id, answer) VALUES {}",

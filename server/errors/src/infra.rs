@@ -20,6 +20,10 @@ pub enum InfraError {
     FormNotFound { id: Uuid },
     #[error("Answer Not Fount: id = {}", .id)]
     AnswerNotFount { id: i32 },
+    #[error("Answer relation source is not active: id = {}", .id)]
+    AnswerRelationSourceNotActive { id: Uuid },
+    #[error("Answer relation target is not active: id = {}", .id)]
+    AnswerRelationTargetNotActive { id: Uuid },
     #[error("Outgoing Error: {}", .cause)]
     Outgoing { cause: String },
     #[error("Unexpected Error: {}", .cause)]
@@ -68,6 +72,12 @@ impl PartialEq for InfraError {
             }
             Self::AnswerNotFount { id: left } => {
                 matches!(other, Self::AnswerNotFount { id: right } if left == right)
+            }
+            Self::AnswerRelationSourceNotActive { id: left } => {
+                matches!(other, Self::AnswerRelationSourceNotActive { id: right } if left == right)
+            }
+            Self::AnswerRelationTargetNotActive { id: left } => {
+                matches!(other, Self::AnswerRelationTargetNotActive { id: right } if left == right)
             }
             Self::Outgoing { cause: left } => {
                 matches!(other, Self::Outgoing { cause: right } if left == right)

@@ -52,6 +52,7 @@ type ResourceAnswerUseCase<'a> = AnswerUseCase<
     ResourceRepository,
     ResourceRepository,
     ResourceRepository,
+    ResourceRepository,
 >;
 
 fn build_answer_use_case<'a>(
@@ -64,6 +65,7 @@ fn build_answer_use_case<'a>(
         user_repository: repository.user_repository(),
         form_submission_restriction_repository: repository.form_submission_restriction_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
+        answer_relation_repository: repository.answer_relation_repository(),
         discord_answer_webhook_notifier,
         application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     }
@@ -254,10 +256,11 @@ pub async fn get_all_answers(
         items: answers
             .into_iter()
             .map(|answer_details| {
-                FormAnswer::new(
+                FormAnswer::with_related_answers(
                     answer_details.answer,
                     answer_details.form_id,
                     answer_details.labels,
+                    answer_details.related_answers,
                 )
             })
             .collect_vec(),
@@ -299,10 +302,11 @@ pub async fn get_answer_handler(
         .await
         .map_err(handle_error)?;
 
-    Ok(GetAnswerResponse::Ok(FormAnswer::new(
+    Ok(GetAnswerResponse::Ok(FormAnswer::with_related_answers(
         answer_details.answer,
         answer_details.form_id,
         answer_details.labels,
+        answer_details.related_answers,
     )))
 }
 
@@ -352,10 +356,11 @@ pub async fn get_answer_by_form_id_handler(
         items: answers
             .into_iter()
             .map(|answer_details| {
-                FormAnswer::new(
+                FormAnswer::with_related_answers(
                     answer_details.answer,
                     answer_details.form_id,
                     answer_details.labels,
+                    answer_details.related_answers,
                 )
             })
             .collect_vec(),
@@ -501,13 +506,21 @@ pub async fn update_answer_handler(
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
     let answer_details = form_answer_use_case
-        .update_answer_meta(form_id, answer_id, &user, schema.title, schema.publication)
+        .update_answer_meta(
+            form_id,
+            answer_id,
+            &user,
+            schema.title,
+            schema.publication,
+            schema.related_answer_ids,
+        )
         .await
         .map_err(handle_error)?;
 
-    Ok(UpdateAnswerResponse::Ok(FormAnswer::new(
+    Ok(UpdateAnswerResponse::Ok(FormAnswer::with_related_answers(
         answer_details.answer,
         answer_details.form_id,
         answer_details.labels,
+        answer_details.related_answers,
     )))
 }

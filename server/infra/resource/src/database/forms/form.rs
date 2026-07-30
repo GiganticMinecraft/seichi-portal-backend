@@ -751,6 +751,15 @@ async fn copy_active_form_to_archive(
 
     copy_form_group_restrictions_to_archive(txn, &form_id).await?;
 
+    // 関連更新は registry 行を同じ決定的順序でロックするため、アーカイブも
+    // 回答 ID 順に同じ行をロックして回答のアクティブ性判定と直列化する。
+    sqlx::query!(
+        "SELECT answer_id FROM answer_identities WHERE form_id = ? ORDER BY answer_id FOR UPDATE",
+        &form_id,
+    )
+    .fetch_all(&mut **txn)
+    .await?;
+
     execute_typed_query!(
         txn,
         r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, publication, timestamp)
@@ -854,6 +863,14 @@ async fn restore_archived_form_to_active(
     );
 
     restore_form_group_restrictions_from_archive(txn, &form_id).await?;
+
+    // archive と同じ registry 行ロック順にそろえ、関連更新との競合を直列化する。
+    sqlx::query!(
+        "SELECT answer_id FROM answer_identities WHERE form_id = ? ORDER BY answer_id FOR UPDATE",
+        &form_id,
+    )
+    .fetch_all(&mut **txn)
+    .await?;
 
     execute_typed_query!(
         txn,

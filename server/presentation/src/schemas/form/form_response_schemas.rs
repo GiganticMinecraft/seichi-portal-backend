@@ -11,6 +11,9 @@ use domain::form::{
     },
     question::{Choice, Question, QuestionType},
 };
+use domain::repository::form::answer_relation_repository::{
+    RelatedAnswerLifecycle, RelatedAnswerReference,
+};
 use itertools::Itertools;
 use serde::Serialize;
 use types::non_empty_string::NonEmptyString;
@@ -562,6 +565,34 @@ pub struct FormAnswer {
     publication: AnswerPublication,
     answers: Vec<AnswerContent>,
     labels: Vec<AnswerLabels>,
+    related_answers: Vec<RelatedAnswer>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct RelatedAnswer {
+    form_id: Uuid,
+    answer_id: Uuid,
+    lifecycle: RelatedAnswerLifecycleSchema,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RelatedAnswerLifecycleSchema {
+    Active,
+    Archived,
+}
+
+impl From<RelatedAnswerReference> for RelatedAnswer {
+    fn from(reference: RelatedAnswerReference) -> Self {
+        Self {
+            form_id: reference.form_id.into_inner(),
+            answer_id: reference.answer_id.into_inner(),
+            lifecycle: match reference.lifecycle {
+                RelatedAnswerLifecycle::Active => RelatedAnswerLifecycleSchema::Active,
+                RelatedAnswerLifecycle::Archived => RelatedAnswerLifecycleSchema::Archived,
+            },
+        }
+    }
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -572,6 +603,15 @@ pub struct AnswerListPageResponse {
 
 impl FormAnswer {
     pub fn new(answer: PublishedAnswerEntry, form_id: FormId, labels: Vec<AnswerLabel>) -> Self {
+        Self::with_related_answers(answer, form_id, labels, Vec::new())
+    }
+
+    pub fn with_related_answers(
+        answer: PublishedAnswerEntry,
+        form_id: FormId,
+        labels: Vec<AnswerLabel>,
+        related_answers: Vec<RelatedAnswerReference>,
+    ) -> Self {
         FormAnswer {
             id: answer.id.into(),
             author: answer.author.into(),
@@ -585,6 +625,7 @@ impl FormAnswer {
                 .map(AnswerContent::from_ref)
                 .collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
+            related_answers: related_answers.into_iter().map(Into::into).collect(),
         }
     }
 }

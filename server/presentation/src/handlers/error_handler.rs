@@ -221,6 +221,24 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
                 "ANSWER_NOT_FOUND",
             )
         }
+        InfraError::AnswerRelationSourceNotActive { id } => {
+            tracing::error!("Answer relation source is not active: id = {}", id);
+            problem_response(
+                StatusCode::NOT_FOUND,
+                "Not Found",
+                "Answer not found.",
+                "ANSWER_NOT_FOUND",
+            )
+        }
+        InfraError::AnswerRelationTargetNotActive { id } => {
+            tracing::error!("Answer relation target is not active: id = {}", id);
+            problem_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "Unprocessable Entity",
+                "Related answer does not exist or is archived.",
+                "INVALID_ENTITY",
+            )
+        }
         InfraError::Outgoing { cause } => {
             tracing::error!("Outgoing Error: {}", cause);
             problem_response(

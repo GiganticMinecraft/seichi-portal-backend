@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO answer_identities (answer_id, form_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "346321b56ac0ed10b182f798d6d124c0d14c79f88e7814c13e11fb604801f1b5"
+}

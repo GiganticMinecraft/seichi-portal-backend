@@ -7,7 +7,7 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
-            AnswerPagePosition, AnswerPublication, AnswerTitle, FormAnswerContent,
+            AnswerPagePosition, AnswerPublication, AnswerRelation, AnswerTitle, FormAnswerContent,
             PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
@@ -20,6 +20,7 @@ use domain::{
             active_form_repository::ActiveFormRepository,
             answer_entry_repository::AnswerEntryRepository,
             answer_label_repository::AnswerLabelRepository,
+            answer_relation_repository::AnswerRelationRepository,
         },
         form_submission_restriction_repository::FormSubmissionRestrictionRepository,
     },
@@ -52,12 +53,14 @@ pub struct AnswerUseCase<
     UserRepo: UserRepository,
     FormSubmissionRestrictionRepo: FormSubmissionRestrictionRepository,
     AnswerEntryRepo: AnswerEntryRepository,
+    AnswerRelationRepo: AnswerRelationRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub answer_label_repository: &'a AnswerLabelRepo,
     pub user_repository: &'a UserRepo,
     pub form_submission_restriction_repository: &'a FormSubmissionRestrictionRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
+    pub answer_relation_repository: &'a AnswerRelationRepo,
     pub discord_answer_webhook_notifier: Option<&'a dyn DiscordAnswerWebhookNotifier>,
     pub application_event_publisher: Option<&'a dyn ApplicationEventPublisher>,
 }
@@ -68,7 +71,8 @@ impl<
     R3: UserRepository,
     R4: FormSubmissionRestrictionRepository,
     R5: AnswerEntryRepository,
-> AnswerUseCase<'_, R1, R2, R3, R4, R5>
+    R6: AnswerRelationRepository,
+> AnswerUseCase<'_, R1, R2, R3, R4, R5, R6>
 {
     async fn read_form(
         &self,
@@ -117,11 +121,76 @@ impl<
             }
         };
 
+        let related_answers = self
+            .visible_related_answers(actor, *form_answer.id())
+            .await?;
+
         Ok(AnswerDetails {
             form_id,
             answer: PublishedAnswerEntry::new(form_answer.into_inner(), author),
             labels,
+            related_answers,
         })
+    }
+
+    async fn visible_related_answers(
+        &self,
+        user: &AccountUser,
+        answer_id: AnswerId,
+    ) -> Result<
+        Vec<domain::repository::form::answer_relation_repository::RelatedAnswerReference>,
+        Error,
+    > {
+        use domain::{
+            account::models::Role,
+            repository::form::answer_relation_repository::RelatedAnswerLifecycle,
+        };
+
+        let actor = Actor::from(user.clone());
+        let is_administrator = user.role() == &Role::Administrator;
+        let related_answers = self
+            .answer_relation_repository
+            .list_for_answer(answer_id)
+            .await?;
+
+        stream::iter(related_answers)
+            .then(|related_answer| {
+                let actor = actor.clone();
+                async move {
+                    if is_administrator {
+                        return Ok(Some(related_answer));
+                    }
+                    if related_answer.lifecycle == RelatedAnswerLifecycle::Archived {
+                        return Ok(None);
+                    }
+                    let Some(form) = self
+                        .active_form_repository
+                        .get(related_answer.form_id)
+                        .await?
+                    else {
+                        return Ok(None);
+                    };
+                    let Ok(form) = form.try_read(actor.clone()) else {
+                        return Ok(None);
+                    };
+                    match self
+                        .answer_entry_repository
+                        .get(&form, related_answer.answer_id)
+                        .await
+                    {
+                        Ok(answer) => Ok(answer.map(|_| related_answer)),
+                        Err(Error::Domain {
+                            source: DomainError::Forbidden,
+                        }) => Ok(None),
+                        Err(error) => Err(error),
+                    }
+                }
+            })
+            .collect::<Vec<Result<Option<_>, Error>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .map(|answers| answers.into_iter().flatten().collect())
     }
 
     async fn notify_discord_answer_webhook(
@@ -506,17 +575,35 @@ impl<
         actor: &AccountUser,
         title: Option<AnswerTitle>,
         publication: Option<AnswerPublication>,
+        related_answer_ids: Option<Vec<AnswerId>>,
     ) -> Result<AnswerDetails, Error> {
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
+        let related_answer_ids = related_answer_ids
+            .map(|related_answer_ids| validate_related_answer_ids(answer_id, related_answer_ids))
+            .transpose()?;
 
-        let form_answer = match (title, publication) {
-            (None, None) => self
+        if let Some(related_answer_ids) = &related_answer_ids {
+            let form_update = self
+                .active_form_repository
+                .get(form_id)
+                .await?
+                .ok_or(FormNotFound)?
+                .into_update()
+                .try_update(actor_ref.clone())?;
+            let answer = self
                 .answer_entry_repository
                 .get(&form, answer_id)
                 .await?
-                .ok_or(AnswerNotFound)?,
-            (title, publication) => {
+                .ok_or(AnswerNotFound)?;
+            let answer_update = form_update.authorize_entry_update(answer.into_inner())?;
+            self.answer_relation_repository
+                .validate_replace_for_answer(&answer_update, related_answer_ids)
+                .await?;
+        }
+
+        let form_answer = match related_answer_ids {
+            Some(related_answer_ids) => {
                 let form_update = self
                     .active_form_repository
                     .get(form_id)
@@ -532,8 +619,8 @@ impl<
                 let updated_entry =
                     form_update.change_entry_meta(entry.into_inner(), title, publication)?;
 
-                self.answer_entry_repository
-                    .update(&form_update, &updated_entry)
+                self.answer_relation_repository
+                    .update_answer_meta_and_replace(updated_entry, related_answer_ids)
                     .await?;
 
                 self.answer_entry_repository
@@ -541,6 +628,38 @@ impl<
                     .await?
                     .ok_or(AnswerNotFound)?
             }
+            None => match (title, publication) {
+                (None, None) => self
+                    .answer_entry_repository
+                    .get(&form, answer_id)
+                    .await?
+                    .ok_or(AnswerNotFound)?,
+                (title, publication) => {
+                    let form_update = self
+                        .active_form_repository
+                        .get(form_id)
+                        .await?
+                        .ok_or(FormNotFound)?
+                        .into_update()
+                        .try_update(actor_ref.clone())?;
+                    let entry = self
+                        .answer_entry_repository
+                        .get(&form, answer_id)
+                        .await?
+                        .ok_or(AnswerNotFound)?;
+                    let updated_entry =
+                        form_update.change_entry_meta(entry.into_inner(), title, publication)?;
+
+                    self.answer_entry_repository
+                        .update(&form_update, &updated_entry)
+                        .await?;
+
+                    self.answer_entry_repository
+                        .get(&form, answer_id)
+                        .await?
+                        .ok_or(AnswerNotFound)?
+                }
+            },
         };
 
         let labels = self
@@ -559,6 +678,24 @@ impl<
         self.build_answer_details(actor, form_id, form_answer, author_disclosure, labels)
             .await
     }
+}
+
+fn validate_related_answer_ids(
+    answer_id: AnswerId,
+    related_answer_ids: Vec<AnswerId>,
+) -> Result<Vec<AnswerId>, DomainError> {
+    let mut relations = std::collections::HashSet::new();
+
+    for related_answer_id in &related_answer_ids {
+        let relation = AnswerRelation::new(answer_id, *related_answer_id)?;
+        if !relations.insert(relation) {
+            return Err(DomainError::InvalidEntity {
+                message: "duplicate related answer ids are not allowed".to_string(),
+            });
+        }
+    }
+
+    Ok(related_answer_ids)
 }
 
 fn answer_submitted_event(
@@ -606,7 +743,10 @@ mod tests {
             question::Question,
         },
         pagination::PageLimit,
-        repository::form::answer_label_repository::AnswerLabelRepository,
+        repository::form::{
+            answer_label_repository::AnswerLabelRepository,
+            answer_relation_repository::{RelatedAnswerLifecycle, RelatedAnswerReference},
+        },
         types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
     };
     use errors::domain::DomainError;
@@ -796,6 +936,7 @@ mod tests {
             form_submission_restriction_repository: &repositories
                 .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: Some(&publisher),
         };
@@ -847,6 +988,7 @@ mod tests {
             form_submission_restriction_repository: &repositories
                 .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
             discord_answer_webhook_notifier: Some(&notifier),
             application_event_publisher: Some(&publisher),
         };
@@ -918,6 +1060,7 @@ mod tests {
             form_submission_restriction_repository: &repositories
                 .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
             discord_answer_webhook_notifier: Some(&notifier),
             application_event_publisher: Some(&publisher),
         };
@@ -977,6 +1120,7 @@ mod tests {
             form_submission_restriction_repository: &repositories
                 .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: None,
         };
@@ -1031,6 +1175,7 @@ mod tests {
             form_submission_restriction_repository: &repositories
                 .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: None,
         };
@@ -1042,6 +1187,7 @@ mod tests {
                 &administrator,
                 None,
                 Some(AnswerPublication::PRIVATE),
+                None,
             )
             .await
             .unwrap();
@@ -1053,6 +1199,294 @@ mod tests {
                 source: DomainError::Forbidden
             })
         ));
+    }
+
+    #[tokio::test]
+    async fn update_answer_meta_replaces_related_answers_only_when_the_command_is_present() {
+        let form = sample_form();
+        let form_id = *form.id();
+        let administrator = active_user("administrator", Role::Administrator);
+        let answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+                "author".to_string(),
+                "contact".to_string(),
+            )),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository =
+            crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![answer]);
+        let labels = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
+            discord_answer_webhook_notifier: None,
+            application_event_publisher: None,
+        };
+
+        usecase
+            .update_answer_meta(form_id, answer_id, &administrator, None, None, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            repositories
+                .answer_relation_repository
+                .replaced_targets(answer_id),
+            None
+        );
+
+        let first_target = Uuid::new_v4().into();
+        let second_target = Uuid::new_v4().into();
+        usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                None,
+                None,
+                Some(vec![first_target, second_target]),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            repositories
+                .answer_relation_repository
+                .replaced_targets(answer_id),
+            Some(vec![first_target, second_target])
+        );
+
+        usecase
+            .update_answer_meta(form_id, answer_id, &administrator, None, None, Some(vec![]))
+            .await
+            .unwrap();
+        assert_eq!(
+            repositories
+                .answer_relation_repository
+                .replaced_targets(answer_id),
+            Some(vec![])
+        );
+    }
+
+    #[tokio::test]
+    async fn update_answer_meta_rejects_invalid_related_answers_before_persisting_metadata() {
+        let form = sample_form();
+        let form_id = *form.id();
+        let administrator = active_user("administrator", Role::Administrator);
+        let answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+                "author".to_string(),
+                "contact".to_string(),
+            )),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository =
+            crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![answer]);
+        let labels = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
+            discord_answer_webhook_notifier: None,
+            application_event_publisher: None,
+        };
+
+        let self_relation = usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                Some(AnswerTitle::new(Some(
+                    "changed".to_string().try_into().unwrap(),
+                ))),
+                Some(AnswerPublication::PRIVATE),
+                Some(vec![answer_id]),
+            )
+            .await;
+        assert!(matches!(
+            self_relation,
+            Err(Error::Domain {
+                source: DomainError::InvalidEntity { .. }
+            })
+        ));
+        let unchanged_answer = usecase
+            .get_answers(form_id, answer_id, &administrator)
+            .await
+            .unwrap();
+        assert_eq!(unchanged_answer.answer.title, AnswerTitle::default());
+        assert_eq!(
+            unchanged_answer.answer.publication,
+            AnswerPublication::PUBLIC
+        );
+
+        let archived_or_missing_target = Uuid::new_v4().into();
+        repositories
+            .answer_relation_repository
+            .mark_target_archived_or_missing(archived_or_missing_target);
+        let archived_or_missing_relation = usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                Some(AnswerTitle::new(Some(
+                    "changed again".to_string().try_into().unwrap(),
+                ))),
+                Some(AnswerPublication::PRIVATE),
+                Some(vec![archived_or_missing_target]),
+            )
+            .await;
+        assert!(matches!(
+            archived_or_missing_relation,
+            Err(Error::Domain {
+                source: DomainError::InvalidEntity { .. }
+            })
+        ));
+        let still_unchanged_answer = usecase
+            .get_answers(form_id, answer_id, &administrator)
+            .await
+            .unwrap();
+        assert_eq!(still_unchanged_answer.answer.title, AnswerTitle::default());
+        assert_eq!(
+            still_unchanged_answer.answer.publication,
+            AnswerPublication::PUBLIC
+        );
+
+        let target = Uuid::new_v4().into();
+        let duplicate_relation = usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                None,
+                None,
+                Some(vec![target, target]),
+            )
+            .await;
+        assert!(matches!(
+            duplicate_relation,
+            Err(Error::Domain {
+                source: DomainError::InvalidEntity { .. }
+            })
+        ));
+        assert_eq!(
+            repositories
+                .answer_relation_repository
+                .replaced_targets(answer_id),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn related_answers_are_visible_to_standard_users_only_when_active_and_readable() {
+        let form = sample_form().change_answer_settings(
+            AnswerSettings::default()
+                .change_visibility(domain::form::models::AnswerVisibility::PUBLIC),
+        );
+        let form_id = *form.id();
+        let source = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+                "source".to_string(),
+                "contact".to_string(),
+            )),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let readable_target = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+                "target".to_string(),
+                "contact".to_string(),
+            )),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let private_target = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+                "private target".to_string(),
+                "contact".to_string(),
+            )),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        )
+        .change_publication(AnswerPublication::PRIVATE);
+        let source_id = *source.id();
+        let readable_relation = RelatedAnswerReference {
+            form_id,
+            answer_id: *readable_target.id(),
+            lifecycle: RelatedAnswerLifecycle::Active,
+        };
+        let unreadable_relation = RelatedAnswerReference {
+            form_id,
+            answer_id: *private_target.id(),
+            lifecycle: RelatedAnswerLifecycle::Active,
+        };
+        let archived_relation = RelatedAnswerReference {
+            form_id: Uuid::new_v4().into(),
+            answer_id: Uuid::new_v4().into(),
+            lifecycle: RelatedAnswerLifecycle::Archived,
+        };
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository =
+            crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![
+                source,
+                readable_target,
+                private_target,
+            ]);
+        repositories.answer_relation_repository.set_related_answers(
+            source_id,
+            vec![readable_relation, unreadable_relation, archived_relation],
+        );
+        let labels = EmptyAnswerLabelRepository;
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
+            discord_answer_webhook_notifier: None,
+            application_event_publisher: None,
+        };
+        let standard_user = active_user("standard", Role::StandardUser);
+        let administrator = active_user("administrator", Role::Administrator);
+
+        let standard_answer = usecase
+            .get_answers(form_id, source_id, &standard_user)
+            .await
+            .unwrap();
+        let administrator_answer = usecase
+            .get_answers(form_id, source_id, &administrator)
+            .await
+            .unwrap();
+
+        assert_eq!(standard_answer.related_answers, vec![readable_relation]);
+        assert_eq!(
+            administrator_answer.related_answers,
+            vec![readable_relation, unreadable_relation, archived_relation]
+        );
     }
 
     #[tokio::test]
@@ -1086,6 +1520,7 @@ mod tests {
             form_submission_restriction_repository: &repositories
                 .form_submission_restriction_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
+            answer_relation_repository: &repositories.answer_relation_repository,
             discord_answer_webhook_notifier: None,
             application_event_publisher: None,
         };

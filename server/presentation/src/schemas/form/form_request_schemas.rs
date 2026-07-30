@@ -1,7 +1,7 @@
 use domain::account::models::UserGroupId;
 use domain::form::question::{ChoiceId, QuestionId, QuestionType, TemplateKey};
 use domain::form::{
-    answer::{AnswerLabelId, AnswerPublication, AnswerTitle},
+    answer::{AnswerId, AnswerLabelId, AnswerPublication, AnswerTitle},
     models::{
         AnswerAcceptancePeriod, AnswerVisibility, DefaultAnswerTitle, DiscordWebhookUrl,
         FormLabelId, FormTitle, Visibility,
@@ -239,6 +239,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn related_answer_ids_preserves_omitted_clear_and_replace_commands() {
+        let related_answer_id = uuid::Uuid::from_u128(1);
+
+        let omitted = serde_json::from_str::<AnswerUpdateSchema>(r#"{}"#).unwrap();
+        let clear =
+            serde_json::from_str::<AnswerUpdateSchema>(r#"{"related_answer_ids":[]}"#).unwrap();
+        let replace = serde_json::from_str::<AnswerUpdateSchema>(&format!(
+            r#"{{"related_answer_ids":["{related_answer_id}"]}}"#
+        ))
+        .unwrap();
+
+        assert_eq!(omitted.related_answer_ids, None);
+        assert_eq!(clear.related_answer_ids, Some(vec![]));
+        assert_eq!(
+            replace.related_answer_ids,
+            Some(vec![AnswerId::from(related_answer_id)])
+        );
+    }
+
     /// 型が生成するスキーマだけを見ている。`AnswerSettingsSchema` は
     /// レスポンス側と名前が衝突していて `docs/openapi.json` にはリクエスト側が
     /// 出ないため、`default_answer_title` については実文書を検証できていない。
@@ -340,6 +360,10 @@ pub struct AnswerUpdateSchema {
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub publication: Option<AnswerPublication>,
+    /// 省略時は既存の関連を変更しません。空配列は全解除、配列は直接関連の全置換です。
+    #[serde(default)]
+    #[schema(value_type = Option<Vec<String>>, format = "uuid")]
+    pub related_answer_ids: Option<Vec<AnswerId>>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]

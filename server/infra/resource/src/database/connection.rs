@@ -141,6 +141,7 @@ impl ConnectionPool {
 impl DatabaseComponents for ConnectionPool {
     type ConcreteDiscordAPI = Self;
     type ConcreteFormAnswerDatabase = Self;
+    type ConcreteFormAnswerRelationDatabase = Self;
     type ConcreteFormAnswerLabelDatabase = Self;
     type ConcreteFormCommentDatabase = Self;
     type ConcreteFormDatabase = Self;
@@ -156,6 +157,10 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase {
+        self
+    }
+
+    fn form_answer_relation(&self) -> &Self::ConcreteFormAnswerRelationDatabase {
         self
     }
 

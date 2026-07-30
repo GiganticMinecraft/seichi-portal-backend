@@ -21,7 +21,13 @@ use domain::{
     },
     pagination::{PageLimit, PageRequest},
     repository::{
-        form::active_form_repository::ActiveFormRepository, search_repository::SearchRepository,
+        form::{
+            active_form_repository::ActiveFormRepository,
+            answer_relation_repository::{
+                AnswerRelationRepository, RelatedAnswerLifecycle, RelatedAnswerReference,
+            },
+        },
+        search_repository::SearchRepository,
     },
     search::models::{
         AnswerSearchHit, AnswerTitleSearchDocument, FormAnswerComments, FormMetaData,
@@ -31,7 +37,7 @@ use domain::{
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Read},
 };
-use errors::Error;
+use errors::{Error, domain::DomainError};
 use futures::{StreamExt, TryStreamExt, stream, try_join};
 use std::{
     collections::{HashMap, HashSet},
@@ -54,6 +60,7 @@ pub struct SearchUseCase<
     UserRepo: UserRepository,
     AnswerEntryRepo: AnswerEntryRepository,
     CommentThreadRepo: CommentThreadRepository,
+    AnswerRelationRepo: AnswerRelationRepository,
 > {
     pub search_repository: &'a SearchRepo,
     pub active_form_repository: &'a FormRepo,
@@ -62,6 +69,7 @@ pub struct SearchUseCase<
     pub user_repository: &'a UserRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
     pub comment_thread_repository: &'a CommentThreadRepo,
+    pub answer_relation_repository: &'a AnswerRelationRepo,
 }
 
 impl<
@@ -72,7 +80,8 @@ impl<
     R5: UserRepository,
     R6: AnswerEntryRepository,
     R7: CommentThreadRepository,
-> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
+    R8: AnswerRelationRepository,
+> SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7, R8>
 {
     async fn list_all_form_guards(
         &self,
@@ -269,11 +278,71 @@ impl<
             }
         };
 
+        let related_answers = self
+            .visible_related_answers(account_user, answer_id)
+            .await?;
+
         Ok(Some(AnswerDetails {
             form_id,
             answer: PublishedAnswerEntry::new(answer.into_inner(), author),
             labels,
+            related_answers,
         }))
+    }
+
+    async fn visible_related_answers(
+        &self,
+        account_user: &AccountUser,
+        answer_id: AnswerId,
+    ) -> Result<Vec<RelatedAnswerReference>, Error> {
+        let actor = Actor::from(account_user.clone());
+        let is_administrator = matches!(
+            account_user.role(),
+            domain::account::models::Role::Administrator
+        );
+
+        stream::iter(
+            self.answer_relation_repository
+                .list_for_answer(answer_id)
+                .await?,
+        )
+        .then(|related_answer| {
+            let actor = actor.clone();
+            async move {
+                if is_administrator {
+                    return Ok(Some(related_answer));
+                }
+                if related_answer.lifecycle == RelatedAnswerLifecycle::Archived {
+                    return Ok(None);
+                }
+                let Some(form) = self
+                    .active_form_repository
+                    .get(related_answer.form_id)
+                    .await?
+                else {
+                    return Ok(None);
+                };
+                let Ok(form) = form.try_read(actor.clone()) else {
+                    return Ok(None);
+                };
+                match self
+                    .answer_entry_repository
+                    .get(&form, related_answer.answer_id)
+                    .await
+                {
+                    Ok(answer) => Ok(answer.map(|_| related_answer)),
+                    Err(Error::Domain {
+                        source: DomainError::Forbidden,
+                    }) => Ok(None),
+                    Err(error) => Err(error),
+                }
+            }
+        })
+        .collect::<Vec<Result<Option<_>, Error>>>()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .map(|references| references.into_iter().flatten().collect())
     }
 
     async fn visible_answer_details(
@@ -756,8 +825,8 @@ fn unique_answer_ids(answer_ids: impl IntoIterator<Item = AnswerId>) -> Vec<Answ
 mod tests {
     use super::*;
     use crate::test_utils::repositories::{
-        InMemoryActiveFormRepository, InMemoryAnswerEntryRepository, InMemoryFormLabelRepository,
-        InMemoryUserRepository,
+        InMemoryActiveFormRepository, InMemoryAnswerEntryRepository,
+        InMemoryAnswerRelationRepository, InMemoryFormLabelRepository, InMemoryUserRepository,
     };
     use chrono::Utc;
     use domain::{
@@ -784,6 +853,12 @@ mod tests {
     };
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
+
+    fn empty_answer_relation_repository() -> &'static InMemoryAnswerRelationRepository {
+        static REPOSITORY: std::sync::LazyLock<InMemoryAnswerRelationRepository> =
+            std::sync::LazyLock::new(InMemoryAnswerRelationRepository::default);
+        &REPOSITORY
+    }
 
     fn form_restricted_to(title: &str, group: &UserGroup) -> ActiveForm {
         let question = Question::new_text(
@@ -871,6 +946,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let output = use_case
@@ -1002,6 +1078,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let answers = use_case
@@ -1078,6 +1155,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let answers = use_case
@@ -1116,6 +1194,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let answers = use_case
@@ -1153,6 +1232,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let answers = use_case
@@ -1253,6 +1333,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let output = use_case
@@ -1391,6 +1472,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let output = use_case
@@ -1589,6 +1671,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let output = use_case
@@ -1691,6 +1774,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            answer_relation_repository: empty_answer_relation_repository(),
         };
 
         let output = use_case

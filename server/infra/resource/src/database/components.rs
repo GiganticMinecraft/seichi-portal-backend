@@ -41,6 +41,7 @@ use uuid::Uuid;
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteFormAnswerDatabase: FormAnswerDatabase;
+    type ConcreteFormAnswerRelationDatabase: FormAnswerRelationDatabase;
     type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
     type ConcreteFormMessageDatabase: FormMessageDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
@@ -53,6 +54,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteMinecraftBanDatabase: MinecraftBanDatabase;
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
+    fn form_answer_relation(&self) -> &Self::ConcreteFormAnswerRelationDatabase;
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
@@ -118,6 +120,42 @@ pub trait FormAnswerDatabase: Send + Sync {
     async fn size(&self) -> Result<u32, InfraError>;
     /// 回答本文 (`real_answers`) の件数を返す。
     async fn content_size(&self) -> Result<u32, InfraError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RelatedAnswerRecord {
+    pub form_id: FormId,
+    pub answer_id: AnswerId,
+    pub is_archived: bool,
+}
+
+#[automock]
+#[async_trait]
+pub trait FormAnswerRelationDatabase: Send + Sync {
+    /// 関連先と source が現在アクティブな回答として存在するか、副作用なしで確認します。
+    async fn validate_answer_relation_replacement(
+        &self,
+        answer_id: AnswerId,
+        related_answer_ids: &[AnswerId],
+    ) -> Result<(), InfraError>;
+
+    /// 対象 registry 行を決定的順序でロックし、アクティブ回答だけを関連先として
+    /// 受け入れた上で、指定回答の直接関連を全置換します。
+    async fn replace_answer_relations(
+        &self,
+        answer_id: AnswerId,
+        related_answer_ids: Vec<AnswerId>,
+    ) -> Result<(), InfraError>;
+    /// 回答メタデータと関連を一つの transaction で更新します。
+    async fn update_answer_meta_and_replace_relations(
+        &self,
+        answer: &AnswerEntry,
+        related_answer_ids: Vec<AnswerId>,
+    ) -> Result<(), InfraError>;
+    async fn get_answer_relations(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<RelatedAnswerRecord>, InfraError>;
 }
 
 #[automock]

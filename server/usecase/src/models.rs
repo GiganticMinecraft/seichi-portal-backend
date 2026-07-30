@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use domain::repository::form::answer_relation_repository::RelatedAnswerReference;
 use domain::{
     account::models::{AccountUser, DiscordUser},
     form::{
@@ -45,6 +46,7 @@ pub struct AnswerDetails {
     pub form_id: FormId,
     pub answer: PublishedAnswerEntry,
     pub labels: Vec<AnswerLabel>,
+    pub related_answers: Vec<RelatedAnswerReference>,
 }
 
 pub struct ActiveFormWithLabels {

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE answers SET title = ?, publication = ? WHERE id = ? AND form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "f30e9086799857d3622550e1a9161a85a5a23911dd6be65de92eb781d46cb6c5"
+}

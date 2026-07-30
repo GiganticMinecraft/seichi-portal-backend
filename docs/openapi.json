@@ -5860,6 +5860,17 @@
               "null"
             ]
           },
+          "related_answer_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "省略時は既存の関連を変更しません。空配列は全解除、配列は直接関連の全置換です。"
+          },
           "title": {
             "type": [
               "string",
@@ -6207,7 +6218,8 @@
           "timestamp",
           "publication",
           "answers",
-          "labels"
+          "labels",
+          "related_answers"
         ],
         "properties": {
           "answers": {
@@ -6235,6 +6247,12 @@
           },
           "publication": {
             "$ref": "#/components/schemas/AnswerPublication"
+          },
+          "related_answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedAnswer"
+            }
           },
           "timestamp": {
             "type": "string",
@@ -7048,6 +7066,34 @@
               }
             ]
           }
+        ]
+      },
+      "RelatedAnswer": {
+        "type": "object",
+        "required": [
+          "form_id",
+          "answer_id",
+          "lifecycle"
+        ],
+        "properties": {
+          "answer_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "form_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/RelatedAnswerLifecycleSchema"
+          }
+        }
+      },
+      "RelatedAnswerLifecycleSchema": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "ARCHIVED"
         ]
       },
       "ReplaceAnswerLabelSchema": {

@@ -110,6 +110,7 @@ pub async fn cross_search(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_thread_repository: repository.comment_thread_repository(),
+        answer_relation_repository: repository.answer_relation_repository(),
     };
 
     let query = required_query(query).map_err(handle_error)?;
@@ -153,6 +154,7 @@ pub async fn search_users(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_thread_repository: repository.comment_thread_repository(),
+        answer_relation_repository: repository.answer_relation_repository(),
     };
 
     let query = required_query(query).map_err(handle_error)?;
@@ -198,6 +200,7 @@ pub async fn search_answers(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_thread_repository: repository.comment_thread_repository(),
+        answer_relation_repository: repository.answer_relation_repository(),
     };
 
     let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
@@ -231,6 +234,7 @@ pub async fn start_sync(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_thread_repository: repository.comment_thread_repository(),
+        answer_relation_repository: repository.answer_relation_repository(),
     };
 
     search_use_case
@@ -250,6 +254,7 @@ pub async fn start_watch_out_of_sync(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_thread_repository: repository.comment_thread_repository(),
+        answer_relation_repository: repository.answer_relation_repository(),
     };
 
     search_use_case
@@ -268,6 +273,7 @@ pub async fn initialize_search_engine(
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
         comment_thread_repository: repository.comment_thread_repository(),
+        answer_relation_repository: repository.answer_relation_repository(),
     };
 
     search_use_case.initialize_search_engine().await

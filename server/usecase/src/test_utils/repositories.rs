@@ -18,6 +18,7 @@ use domain::{
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_repository::AnswerEntryRepository,
+            answer_relation_repository::{AnswerRelationRepository, RelatedAnswerReference},
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
         },
@@ -47,6 +48,7 @@ pub(crate) struct FormUseCaseTestRepositories {
     pub(crate) notification_repository: InMemoryNotificationRepository,
     pub(crate) form_label_repository: InMemoryFormLabelRepository,
     pub(crate) answer_entry_repository: InMemoryAnswerEntryRepository,
+    pub(crate) answer_relation_repository: InMemoryAnswerRelationRepository,
     pub(crate) user_repository: InMemoryUserRepository,
     pub(crate) form_submission_restriction_repository: InMemoryFormSubmissionRestrictionRepository,
 }
@@ -249,6 +251,96 @@ impl FormLabelRepository for InMemoryFormLabelRepository {
 #[derive(Default)]
 pub(crate) struct InMemoryAnswerEntryRepository {
     answers: Mutex<Vec<AnswerEntry>>,
+}
+
+#[derive(Default)]
+pub(crate) struct InMemoryAnswerRelationRepository {
+    references_by_answer_id: Mutex<HashMap<AnswerId, Vec<RelatedAnswerReference>>>,
+    replaced_targets_by_answer_id: Mutex<HashMap<AnswerId, Vec<AnswerId>>>,
+    unavailable_target_ids: Mutex<std::collections::HashSet<AnswerId>>,
+}
+
+impl InMemoryAnswerRelationRepository {
+    pub(crate) fn set_related_answers(
+        &self,
+        answer_id: AnswerId,
+        related_answers: Vec<RelatedAnswerReference>,
+    ) {
+        self.references_by_answer_id
+            .lock()
+            .unwrap()
+            .insert(answer_id, related_answers);
+    }
+
+    pub(crate) fn replaced_targets(&self, answer_id: AnswerId) -> Option<Vec<AnswerId>> {
+        self.replaced_targets_by_answer_id
+            .lock()
+            .unwrap()
+            .get(&answer_id)
+            .cloned()
+    }
+
+    pub(crate) fn mark_target_archived_or_missing(&self, answer_id: AnswerId) {
+        self.unavailable_target_ids
+            .lock()
+            .unwrap()
+            .insert(answer_id);
+    }
+}
+
+#[async_trait]
+impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
+    async fn validate_replace_for_answer(
+        &self,
+        _answer: &Allowed<AnswerEntry, Update>,
+        related_answer_ids: &[AnswerId],
+    ) -> Result<(), Error> {
+        if related_answer_ids.iter().any(|answer_id| {
+            self.unavailable_target_ids
+                .lock()
+                .unwrap()
+                .contains(answer_id)
+        }) {
+            return Err(errors::domain::DomainError::InvalidEntity {
+                message: "related answer does not exist or is archived".to_string(),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
+    async fn replace_for_answer(
+        &self,
+        answer: Allowed<AnswerEntry, Update>,
+        related_answer_ids: Vec<AnswerId>,
+    ) -> Result<(), Error> {
+        self.replaced_targets_by_answer_id
+            .lock()
+            .unwrap()
+            .insert(*answer.id(), related_answer_ids);
+        Ok(())
+    }
+
+    async fn update_answer_meta_and_replace(
+        &self,
+        answer: Allowed<AnswerEntry, Update>,
+        related_answer_ids: Vec<AnswerId>,
+    ) -> Result<(), Error> {
+        self.replace_for_answer(answer, related_answer_ids).await
+    }
+
+    async fn list_for_answer(
+        &self,
+        answer_id: AnswerId,
+    ) -> Result<Vec<RelatedAnswerReference>, Error> {
+        Ok(self
+            .references_by_answer_id
+            .lock()
+            .unwrap()
+            .get(&answer_id)
+            .cloned()
+            .unwrap_or_default())
+    }
 }
 
 impl InMemoryAnswerEntryRepository {
