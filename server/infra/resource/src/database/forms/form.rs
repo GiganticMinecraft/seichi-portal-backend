@@ -1350,7 +1350,16 @@ impl FormDatabase for ConnectionPool {
         self.read_write_transaction(move |txn| {
             Box::pin(async move {
                 let form_id = *form.form().id();
-                if fetch_form_row(txn, form_id).await?.is_none() {
+                // コメント書込みが form_meta_data を最初にロックするため、アーカイブも同じ
+                // 行を先にロックしてから回答・コメントをコピー／削除する。
+                if sqlx::query!(
+                    "SELECT id FROM form_meta_data WHERE id = ? FOR UPDATE",
+                    form_id.to_string(),
+                )
+                .fetch_optional(&mut **txn)
+                .await?
+                .is_none()
+                {
                     return Err(InfraError::FormNotFound {
                         id: form_id.into_inner(),
                     });

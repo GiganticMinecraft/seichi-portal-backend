@@ -12,17 +12,14 @@ use domain::{
 use errors::Error;
 
 use crate::{
-    database::{
-        components::{DatabaseComponents, FormDatabase},
-        connection::DatabaseTransaction,
-    },
+    database::components::{DatabaseComponents, FormDatabase},
     repository::Repository,
 };
 
 #[async_trait]
 impl<Client> ActiveFormRepository for Repository<Client>
 where
-    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+    Client: DatabaseComponents + 'static,
 {
     #[tracing::instrument(skip(self))]
     async fn create(
@@ -101,7 +98,7 @@ where
 #[async_trait]
 impl<Client> ArchivedFormRepository for Repository<Client>
 where
-    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+    Client: DatabaseComponents + 'static,
 {
     #[tracing::instrument(skip(self))]
     async fn list(

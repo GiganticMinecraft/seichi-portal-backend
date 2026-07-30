@@ -98,22 +98,6 @@ impl<T> Allowed<T, Read> {
     {
         self.authorize_any(child)
     }
-
-    /// 読み取り認可済みの親要素から、子要素の更新認可済み値を作ります。
-    pub(crate) fn authorize_update<C>(&self, child: C) -> Result<Allowed<C, Update>, DomainError>
-    where
-        C: GuardedBy<T, Update>,
-    {
-        self.authorize_any(child)
-    }
-
-    /// 読み取り認可済みの親要素から、子要素の削除認可済み値を作ります。
-    pub(crate) fn authorize_delete<C>(&self, child: C) -> Result<Allowed<C, Delete>, DomainError>
-    where
-        C: GuardedBy<T, Delete>,
-    {
-        self.authorize_any(child)
-    }
 }
 
 #[cfg(test)]
@@ -227,19 +211,6 @@ mod test {
                 .map(Allowed::into_inner)
                 .is_ok()
         );
-        assert!(
-            read_parent
-                .authorize_update(child.clone())
-                .map(Allowed::into_inner)
-                .is_ok()
-        );
-        assert!(
-            read_parent
-                .authorize_delete(child.clone())
-                .map(Allowed::into_inner)
-                .is_ok()
-        );
-
         let update_parent = AuthorizationGuard::<_, Update>::from(parent)
             .try_update(admin)
             .unwrap();

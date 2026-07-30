@@ -36,6 +36,20 @@ use crate::{
 
 pub type FormId = types::Id<ActiveForm>;
 
+/// 永続化済みのフォーム状態から、フォーム本体の閲覧可否を再評価します。
+///
+/// コメントなど、フォームを再構成する前に同一トランザクションで可視性を確認する経路でも
+/// [`ActiveForm`] と同じ規則を使うために公開します。
+pub fn active_form_allows_read(
+    visibility: &Visibility,
+    allowed_user_groups: &AllowedUserGroups,
+    actor: &Actor,
+) -> bool {
+    matches!(actor, Actor::System)
+        || (*visibility == Visibility::PUBLIC && allowed_user_groups.allows(actor))
+        || is_administrator(actor)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FormPagePosition {
     last_form_id: FormId,
@@ -348,10 +362,11 @@ impl AuthorizationGuardDefinitions for ActiveForm {
     /// - [`FormSettings`] の [`Visibility`] が [`Visibility::PUBLIC`] である場合
     /// - [`Administrator`](crate::account::models::Role::Administrator) である場合
     fn can_read(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::System)
-            || (self.settings.visibility() == &Visibility::PUBLIC
-                && self.settings.allowed_user_groups().allows(actor))
-            || is_administrator(actor)
+        active_form_allows_read(
+            self.settings.visibility(),
+            self.settings.allowed_user_groups(),
+            actor,
+        )
     }
 
     /// [`ActiveForm`] の更新権限があるかどうかを判定します。

@@ -31,8 +31,9 @@ use domain::{
     notification::models::NotificationPreference,
     pagination::{Page, PageRequest},
     search::models::SearchableFieldsWithOperation,
+    types::authorization_guard::{Allowed, Create, Read, Update},
 };
-use errors::infra::InfraError;
+use errors::{Error, infra::InfraError};
 use mockall::automock;
 use uuid::Uuid;
 
@@ -50,9 +51,6 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteNotificationDatabase: NotificationDatabase;
     type ConcreteSearchDatabase: SearchDatabase;
     type ConcreteMinecraftBanDatabase: MinecraftBanDatabase;
-    type TransactionAcrossComponents: Send + Sync;
-
-    async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents>;
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
@@ -192,19 +190,25 @@ pub trait FormCommentDatabase: Send + Sync {
     -> Result<Option<CommentRecord>, InfraError>;
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentRecord>, InfraError>;
     async fn get_all_comments(&self) -> Result<Vec<CommentRecord>, InfraError>;
-    async fn create_comment(
+    /// `Allowed` に含まれる actor と候補値は、書込みを依頼した時点の搬送情報です。
+    /// commit の可否は、同じ read-write transaction 内でフォーム、回答、コメントをロックして
+    /// 再構成した `CommentThread` が actor を再認可して決定します。
+    async fn create_comment_authorizing_in_transaction(
         &self,
-        comment: &Comment,
-        operated_by: &UserSnapshot,
-    ) -> Result<(), InfraError>;
-    async fn update_comment_with_history(
+        form: &Allowed<ActiveForm, Read>,
+        comment: Allowed<Comment, Create>,
+    ) -> Result<(), Error>;
+    async fn update_comment_authorizing_in_transaction(
         &self,
-        comment: &Comment,
-        operated_by: &AccountUser,
+        form: &Allowed<ActiveForm, Read>,
+        comment: Allowed<Comment, Update>,
         operated_at: DateTime<Utc>,
-    ) -> Result<(), InfraError>;
-    async fn delete_comment_with_history(&self, comment: &DeletedComment)
-    -> Result<(), InfraError>;
+    ) -> Result<(), Error>;
+    async fn delete_comment_authorizing_in_transaction(
+        &self,
+        form: &Allowed<ActiveForm, Read>,
+        comment: Allowed<DeletedComment, Create>,
+    ) -> Result<(), Error>;
     async fn get_history(
         &self,
         answer_id: AnswerId,

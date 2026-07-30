@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use domain::{
     account::models::UserSnapshot,
     form::{
@@ -8,9 +7,11 @@ use domain::{
             Comment, CommentContent, CommentHistoryAction, CommentHistoryEntry,
             CommentHistoryPagePosition, DeletedComment,
         },
+        comment_thread::CommentThread,
+        models::ActiveForm,
     },
     pagination::{Page, PageRequest},
-    repository::form::comment_repository::CommentRepository,
+    repository::form::comment_thread_repository::CommentThreadRepository,
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
 use errors::{Error, infra::InfraError};
@@ -18,83 +19,91 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::{
-    database::{
-        components::{DatabaseComponents, FormCommentDatabase},
-        connection::DatabaseTransaction,
-    },
+    database::components::{DatabaseComponents, FormCommentDatabase},
     repository::Repository,
 };
 
 #[async_trait]
-impl<Client> CommentRepository for Repository<Client>
+impl<Client> CommentThreadRepository for Repository<Client>
 where
-    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+    Client: DatabaseComponents + 'static,
 {
-    #[tracing::instrument(skip(self, comment))]
-    async fn create(&self, comment: Allowed<Comment, Create>) -> Result<(), Error> {
-        let operated_by = account_user_snapshot(comment.actor())?;
-        let comment = comment.into_inner();
-
-        self.client
-            .form_comment()
-            .create_comment(&comment, &operated_by)
-            .await?;
-        Ok(())
+    #[tracing::instrument(skip(self, form, answer))]
+    async fn get_for_answer(
+        &self,
+        form: &Allowed<ActiveForm, Read>,
+        answer: AnswerEntry,
+    ) -> Result<Allowed<CommentThread, Read>, Error> {
+        form.comment_thread(answer).map_err(Error::from)
     }
 
-    #[tracing::instrument(skip(self, answer))]
-    async fn find_by_answer(
+    #[tracing::instrument(skip(self, form, answer))]
+    async fn get_with_comments_for_answer(
         &self,
-        answer: &Allowed<AnswerEntry, Read>,
-    ) -> Result<Vec<Allowed<Comment, Read>>, Error> {
-        self.client
+        form: &Allowed<ActiveForm, Read>,
+        answer: AnswerEntry,
+    ) -> Result<Allowed<CommentThread, Read>, Error> {
+        let comments = self
+            .client
             .form_comment()
-            .get_comments(*answer.value().id())
+            .get_comments(*answer.id())
             .await?
             .into_iter()
-            .map(|record| {
-                let comment = TryInto::<Comment>::try_into(record)?;
-                answer.authorize_comment(comment).map_err(Error::from)
-            })
-            .collect()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()?;
+        form.comment_thread_with_comments(answer, comments)
+            .map_err(Error::from)
+    }
+
+    #[tracing::instrument(skip(self, comment))]
+    async fn create(
+        &self,
+        form: &Allowed<ActiveForm, Read>,
+        comment: Allowed<Comment, Create>,
+    ) -> Result<(), Error> {
+        self.client
+            .form_comment()
+            .create_comment_authorizing_in_transaction(form, comment)
+            .await
     }
 
     #[tracing::instrument(skip(self, comment))]
     async fn update(
         &self,
+        form: &Allowed<ActiveForm, Read>,
         comment: Allowed<Comment, Update>,
-        updated_at: DateTime<Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<(), Error> {
-        let operated_by = account_user(comment.actor())?;
-
         self.client
             .form_comment()
-            .update_comment_with_history(comment.value(), operated_by, updated_at)
-            .await?;
-        Ok(())
+            .update_comment_authorizing_in_transaction(form, comment, updated_at)
+            .await
     }
 
     #[tracing::instrument(skip(self, comment))]
-    async fn delete(&self, comment: Allowed<DeletedComment, Create>) -> Result<(), Error> {
+    async fn delete(
+        &self,
+        form: &Allowed<ActiveForm, Read>,
+        comment: Allowed<DeletedComment, Create>,
+    ) -> Result<(), Error> {
         self.client
             .form_comment()
-            .delete_comment_with_history(comment.value())
-            .await?;
-        Ok(())
+            .delete_comment_authorizing_in_transaction(form, comment)
+            .await
     }
 
     async fn history(
         &self,
-        answer: &Allowed<AnswerEntry, Read>,
+        comment_thread: &Allowed<CommentThread, Read>,
         request: PageRequest<CommentHistoryPagePosition>,
     ) -> Result<Page<Allowed<CommentHistoryEntry, Read>, CommentHistoryPagePosition>, Error> {
         let page = self
             .client
             .form_comment()
             .get_history(
-                *answer.value().id(),
+                *comment_thread.answer_id(),
                 request,
-                answer.can_read_deleted_comment_history(),
+                comment_thread.can_read_deleted_comment_history(),
             )
             .await?;
         let (records, next) = page.into_parts();
@@ -135,7 +144,7 @@ where
                         record.operated_at,
                     )
                 };
-                answer
+                comment_thread
                     .authorize_comment_history_entry(history_entry)
                     .map_err(Error::from)
             })
@@ -143,7 +152,6 @@ where
         Ok(Page::new(items, next))
     }
 
-    #[tracing::instrument(skip(self))]
     async fn size(&self) -> Result<u32, Error> {
         self.client.form_comment().size().await.map_err(Into::into)
     }
@@ -158,20 +166,4 @@ fn comment_history_action(action: &str) -> Result<CommentHistoryAction, InfraErr
             cause: format!("invalid comment history payload for action: {action}"),
         }),
     }
-}
-
-fn account_user(
-    actor: &domain::auth::Actor,
-) -> Result<&domain::account::models::AccountUser, Error> {
-    match actor {
-        domain::auth::Actor::AccountUser(user) => Ok(user),
-        _ => Err(InfraError::Unexpected {
-            cause: "comment operation actor is not an account user".to_string(),
-        }
-        .into()),
-    }
-}
-
-fn account_user_snapshot(actor: &domain::auth::Actor) -> Result<UserSnapshot, Error> {
-    account_user(actor).map(UserSnapshot::from)
 }

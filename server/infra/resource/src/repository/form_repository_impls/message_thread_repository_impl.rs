@@ -19,17 +19,14 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::{
-    database::{
-        components::{DatabaseComponents, FormMessageDatabase},
-        connection::DatabaseTransaction,
-    },
+    database::components::{DatabaseComponents, FormMessageDatabase},
     repository::Repository,
 };
 
 #[async_trait]
 impl<Client> MessageThreadRepository for Repository<Client>
 where
-    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+    Client: DatabaseComponents + 'static,
 {
     #[tracing::instrument(skip(self, answer))]
     async fn get_for_answer(
