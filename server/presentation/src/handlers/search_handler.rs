@@ -109,7 +109,7 @@ pub async fn cross_search(
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
     };
 
     let query = required_query(query).map_err(handle_error)?;
@@ -152,7 +152,7 @@ pub async fn search_users(
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
     };
 
     let query = required_query(query).map_err(handle_error)?;
@@ -197,7 +197,7 @@ pub async fn search_answers(
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
     };
 
     let Query(search_query) = query.map_err_to_error().map_err(handle_error)?;
@@ -230,7 +230,7 @@ pub async fn start_sync(
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
     };
 
     search_use_case
@@ -249,7 +249,7 @@ pub async fn start_watch_out_of_sync(
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
     };
 
     search_use_case
@@ -267,7 +267,7 @@ pub async fn initialize_search_engine(
         form_label_repository: repository.form_label_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
     };
 
     search_use_case.initialize_search_engine().await

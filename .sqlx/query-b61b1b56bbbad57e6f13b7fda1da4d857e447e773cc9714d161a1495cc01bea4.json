@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT c.answer_id, c.commented_by AS original_author_id,\n                    u.name AS original_author_name, u.role AS original_author_role,\n                    c.content, c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                FROM form_answer_comments c\n                INNER JOIN users u ON u.id = c.commented_by\n                WHERE c.id = ? FOR UPDATE",
+  "query": "SELECT c.answer_id, c.commented_by AS original_author_id, u.name AS original_author_name,\n        u.role AS original_author_role, c.content, c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n        FROM form_answer_comments c INNER JOIN users u ON u.id = c.commented_by WHERE c.id = ?",
   "describe": {
     "columns": [
       {
@@ -112,5 +112,5 @@
       false
     ]
   },
-  "hash": "b72402d368f3416b846607ed73d4640edf17f891d9de598c7e5173c751fdd990"
+  "hash": "b61b1b56bbbad57e6f13b7fda1da4d857e447e773cc9714d161a1495cc01bea4"
 }

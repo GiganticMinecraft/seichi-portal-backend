@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_answer_comment_history\n        (id, answer_id, comment_id, original_author_id, original_author_name, original_author_role,\n         original_timestamp, action, content, operated_by_id, operated_by_name, operated_by_role, operated_at)\n        VALUES (?, ?, ?, ?, ?, ?, ?, 'CREATE', ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "bcab0deb380b48c75255975aceac89977a187bbba904fb5adb5959df6245d4a7"
+}

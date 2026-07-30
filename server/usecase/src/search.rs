@@ -7,7 +7,7 @@ use crate::{
 };
 use domain::repository::form::answer_entry_repository::AnswerEntryRepository;
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
-use domain::repository::form::comment_repository::CommentRepository;
+use domain::repository::form::comment_thread_repository::CommentThreadRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
 use domain::{
@@ -16,6 +16,7 @@ use domain::{
     form::{
         answer::{AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId},
         comment::Comment,
+        comment_thread::CommentThread,
         models::{ActiveForm, FormId},
     },
     pagination::{PageLimit, PageRequest},
@@ -52,7 +53,7 @@ pub struct SearchUseCase<
     FormLabelRepo: FormLabelRepository,
     UserRepo: UserRepository,
     AnswerEntryRepo: AnswerEntryRepository,
-    CommentRepo: CommentRepository,
+    CommentThreadRepo: CommentThreadRepository,
 > {
     pub search_repository: &'a SearchRepo,
     pub active_form_repository: &'a FormRepo,
@@ -60,7 +61,7 @@ pub struct SearchUseCase<
     pub form_label_repository: &'a FormLabelRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
-    pub comment_repository: &'a CommentRepo,
+    pub comment_thread_repository: &'a CommentThreadRepo,
 }
 
 impl<
@@ -70,7 +71,7 @@ impl<
     R4: FormLabelRepository,
     R5: UserRepository,
     R6: AnswerEntryRepository,
-    R7: CommentRepository,
+    R7: CommentThreadRepository,
 > SearchUseCase<'_, R1, R2, R3, R4, R5, R6, R7>
 {
     async fn list_all_form_guards(
@@ -126,6 +127,36 @@ impl<
             .into_iter()
             .map(|answer| (*answer.id(), answer))
             .collect())
+    }
+
+    async fn comment_thread_for_answer(
+        &self,
+        actor: &Actor,
+        answer: Allowed<AnswerEntry, Read>,
+    ) -> Result<Option<Allowed<CommentThread, Read>>, Error> {
+        let Some(form) = self.active_form_repository.get(*answer.form_id()).await? else {
+            return Ok(None);
+        };
+        let Ok(form) = form.try_read(actor.clone()) else {
+            return Ok(None);
+        };
+
+        self.comment_thread_repository
+            .get_with_comments_for_answer(&form, answer.into_inner())
+            .await
+            .map(Some)
+            .or_else(|error| {
+                if matches!(
+                    error,
+                    Error::Domain {
+                        source: errors::domain::DomainError::Forbidden
+                    }
+                ) {
+                    Ok(None)
+                } else {
+                    Err(error)
+                }
+            })
     }
 
     async fn visible_users(
@@ -425,14 +456,18 @@ impl<
                         return Ok::<_, Error>(None);
                     };
                     let form_id = *answer.form_id();
+                    let Some(thread) = self.comment_thread_for_answer(actor_ref, answer).await?
+                    else {
+                        return Ok::<_, Error>(None);
+                    };
 
                     Ok::<_, Error>(
-                        self.comment_repository
-                            .find_by_answer(&answer)
-                            .await?
-                            .into_iter()
-                            .find(|loaded| *loaded.value().comment_id() == comment.comment_id)
-                            .map(|comment| (form_id, comment.into_inner())),
+                        thread
+                            .comments()
+                            .iter()
+                            .find(|loaded| *loaded.comment_id() == comment.comment_id)
+                            .cloned()
+                            .map(|comment| (form_id, comment)),
                     )
                 }
             })
@@ -499,7 +534,7 @@ impl<
                             self.answer_entry_repository.content_size().await?,
                         ),
                         form_answer_comments: NumberOfRecords(
-                            self.comment_repository.size().await?,
+                            self.comment_thread_repository.size().await?,
                         ),
                         label_for_form_answers: NumberOfRecords(
                             self.form_answer_label_repository.size().await?,
@@ -541,14 +576,18 @@ impl<
                         let answer_documents = answer_search_documents(&answer_entries);
 
                         let comments = stream::iter(answer_entries.clone())
-                        .then(|answer| async move {
-                            self.comment_repository
-                                .find_by_answer(&answer)
+                        .then(|answer| async {
+                            let form = form_guards
+                                .iter()
+                                .find(|form| form.id() == answer.form_id())
+                                .expect("answer entries are loaded from form_guards");
+                            self.comment_thread_repository
+                                .get_with_comments_for_answer(form, answer.into_inner())
                                 .await
-                                .map(|comments| {
-                                    comments
-                                        .into_iter()
-                                        .map(|comment| comment.into_inner())
+                                .map(|thread| {
+                                    thread
+                                        .comments()
+                                        .iter()
                                         .map(|comment| {
                                             (
                                                 SearchableFields::FormAnswerComments(
@@ -737,7 +776,7 @@ mod tests {
             form::{
                 answer_entry_repository::MockAnswerEntryRepository,
                 answer_label_repository::MockAnswerLabelRepository,
-                comment_repository::MockCommentRepository,
+                comment_thread_repository::MockCommentThreadRepository,
             },
             search_repository::MockSearchRepository,
         },
@@ -816,11 +855,14 @@ mod tests {
 
         let active_form_repository =
             InMemoryActiveFormRepository::new(vec![hidden_form, readable_form]);
-        let answer_label_repository = MockAnswerLabelRepository::new();
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository
+            .expect_get_labels_for_answers_by_answer_id()
+            .returning(|_| Ok(vec![]));
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
-        let comment_repository = MockCommentRepository::new();
+        let comment_repository = MockCommentThreadRepository::new();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
             active_form_repository: &active_form_repository,
@@ -828,7 +870,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let output = use_case
@@ -951,7 +993,7 @@ mod tests {
                     .filter_map(|answer| form.read_entry(answer).ok())
                     .collect())
             });
-        let comment_repository = MockCommentRepository::new();
+        let comment_repository = MockCommentThreadRepository::new();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
             active_form_repository: &active_form_repository,
@@ -959,7 +1001,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let answers = use_case
@@ -1027,7 +1069,7 @@ mod tests {
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
-        let comment_repository = MockCommentRepository::new();
+        let comment_repository = MockCommentThreadRepository::new();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
             active_form_repository: &active_form_repository,
@@ -1035,7 +1077,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let answers = use_case
@@ -1065,7 +1107,7 @@ mod tests {
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
-        let comment_repository = MockCommentRepository::new();
+        let comment_repository = MockCommentThreadRepository::new();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
             active_form_repository: &active_form_repository,
@@ -1073,7 +1115,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let answers = use_case
@@ -1102,7 +1144,7 @@ mod tests {
         let form_label_repository = InMemoryFormLabelRepository;
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
-        let comment_repository = MockCommentRepository::new();
+        let comment_repository = MockCommentThreadRepository::new();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
             active_form_repository: &active_form_repository,
@@ -1110,7 +1152,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let answers = use_case
@@ -1202,7 +1244,7 @@ mod tests {
         user_repository.save_user(actor.clone());
         let answer_entry_repository =
             InMemoryAnswerEntryRepository::new(vec![missing_author_answer, visible_answer]);
-        let comment_repository = MockCommentRepository::new();
+        let comment_repository = MockCommentThreadRepository::new();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
             active_form_repository: &active_form_repository,
@@ -1210,7 +1252,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let output = use_case
@@ -1334,15 +1376,12 @@ mod tests {
                 Ok(vec![form.read_entry(answer).unwrap()])
             });
         let stored_comments = vec![first_comment, missing_author_comment, second_comment];
-        let mut comment_repository = MockCommentRepository::new();
+        let mut comment_repository = MockCommentThreadRepository::new();
         comment_repository
-            .expect_find_by_answer()
-            .returning(move |answer| {
-                stored_comments
-                    .iter()
-                    .cloned()
-                    .map(|comment| answer.authorize_comment(comment).map_err(Error::from))
-                    .collect()
+            .expect_get_with_comments_for_answer()
+            .returning(move |form, answer| {
+                form.comment_thread_with_comments(answer, stored_comments.clone())
+                    .map_err(Error::from)
             });
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -1351,7 +1390,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let output = use_case
@@ -1525,10 +1564,10 @@ mod tests {
             private_answer,
             unreadable_answer,
         ]);
-        let mut comment_repository = MockCommentRepository::new();
+        let mut comment_repository = MockCommentThreadRepository::new();
         comment_repository
-            .expect_find_by_answer()
-            .returning(move |answer| {
+            .expect_get_with_comments_for_answer()
+            .returning(move |form, answer| {
                 let comments = match *answer.id() {
                     id if id == answer_a_id => {
                         vec![first_comment.clone(), missing_author_comment.clone()]
@@ -1539,10 +1578,8 @@ mod tests {
                     _ => vec![],
                 };
 
-                comments
-                    .into_iter()
-                    .map(|comment| answer.authorize_comment(comment).map_err(Error::from))
-                    .collect()
+                form.comment_thread_with_comments(answer, comments)
+                    .map_err(Error::from)
             });
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -1551,7 +1588,7 @@ mod tests {
             form_label_repository: &form_label_repository,
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
-            comment_repository: &comment_repository,
+            comment_thread_repository: &comment_repository,
         };
 
         let output = use_case
@@ -1571,5 +1608,97 @@ mod tests {
                 (first_comment_id, form_a_id)
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn cross_search_excludes_comment_hits_for_private_answer_visible_to_its_author() {
+        let group = UserGroup::new(UserGroupName::new(
+            "members".to_string().try_into().unwrap(),
+        ));
+        let actor = AccountUser::with_groups(
+            "author".to_string(),
+            Uuid::new_v4().into(),
+            Role::StandardUser,
+            vec![group.clone()],
+        );
+        let form = form_restricted_to("form", &group).change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let answer = AnswerEntry::new(
+            *form.id(),
+            AnswerAuthor::AuthenticatedUser(*actor.id()),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(
+                form.questions().as_slice(),
+                vec![FormAnswerContent {
+                    id: FormAnswerContentId::new(),
+                    question_id: (*form.questions().as_slice()[0].id()).into(),
+                    answer: "answer".to_string(),
+                }],
+            )
+            .unwrap(),
+        )
+        .change_publication(AnswerPublication::PRIVATE);
+        let answer_id = *answer.id();
+        let comment_id = CommentId::new();
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_search_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_users()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_forms()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_labels_for_answers()
+            .returning(|_| Ok(vec![]));
+        search_repository
+            .expect_search_answers()
+            .returning(move |_, _| Ok(vec![AnswerSearchHit { answer_id }]));
+        search_repository
+            .expect_search_comments()
+            .returning(move |_| {
+                Ok(vec![CommentSearchHit {
+                    comment_id,
+                    answer_id,
+                }])
+            });
+
+        let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository
+            .expect_get_labels_for_answers_by_answer_id()
+            .returning(|_| Ok(vec![]));
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        user_repository.save_user(actor.clone());
+        let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        let mut comment_repository = MockCommentThreadRepository::new();
+        comment_repository
+            .expect_get_with_comments_for_answer()
+            .returning(|form, answer| {
+                form.comment_thread_with_comments(answer, Vec::new())
+                    .map_err(Error::from)
+            });
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_thread_repository: &comment_repository,
+        };
+
+        let output = use_case
+            .cross_search(&actor, "private".to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(output.answers.len(), 1);
+        assert!(output.comments.is_empty());
     }
 }

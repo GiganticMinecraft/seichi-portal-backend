@@ -13,10 +13,7 @@ use domain::repository::Repositories;
 use domain::repository::health_check_repository::HealthCheckRepository;
 
 use crate::{
-    database::{
-        components::DatabaseComponents,
-        connection::{ConnectionPool, DatabaseTransaction},
-    },
+    database::{components::DatabaseComponents, connection::ConnectionPool},
     health_check::HealthCheckRepositoryImpl,
 };
 
@@ -67,16 +64,14 @@ impl<H: HealthCheckRepository + Send + Sync + 'static> SharedRepository<Connecti
     }
 }
 
-impl<
-    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
-    H: HealthCheckRepository + Send + Sync + 'static,
-> Repositories for SharedRepository<Client, H>
+impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Sync + 'static>
+    Repositories for SharedRepository<Client, H>
 {
     type ConcreteActiveFormRepository = Repository<Client>;
     type ConcreteArchivedFormRepository = Repository<Client>;
     type ConcreteAnswerEntryRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
-    type ConcreteCommentRepository = Repository<Client>;
+    type ConcreteCommentThreadRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
     type ConcreteFormSubmissionRestrictionRepository = Repository<Client>;
     type ConcreteMessageThreadRepository = Repository<Client>;
@@ -132,7 +127,7 @@ impl<
         &self.db
     }
 
-    fn comment_repository(&self) -> &Self::ConcreteCommentRepository {
+    fn comment_thread_repository(&self) -> &Self::ConcreteCommentThreadRepository {
         &self.db
     }
 

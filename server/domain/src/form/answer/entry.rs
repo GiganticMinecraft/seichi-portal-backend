@@ -10,14 +10,10 @@ use crate::{
     auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
-        comment::{
-            Comment, CommentContent, CommentHistoryEntry, DeletedComment,
-            can_read_deleted_comment_history,
-        },
         models::{ActiveForm, FormId},
     },
     types::authorization_guard::{
-        Allowed, AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
+        AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
     },
 };
 
@@ -140,55 +136,5 @@ impl GuardedBy<ActiveForm, Create> for AnswerEntry {
         parent
             .answer_settings()
             .can_accept_answer(self.author(), actor)
-    }
-}
-
-impl Allowed<AnswerEntry, Read> {
-    pub fn can_read_deleted_comment_history(&self) -> bool {
-        can_read_deleted_comment_history(self.actor())
-    }
-
-    pub fn authorize_comment(
-        &self,
-        comment: Comment,
-    ) -> Result<Allowed<Comment, Read>, DomainError> {
-        self.authorize_read(comment)
-    }
-
-    pub fn authorize_comment_history_entry(
-        &self,
-        history_entry: CommentHistoryEntry,
-    ) -> Result<Allowed<CommentHistoryEntry, Read>, DomainError> {
-        self.authorize_read(history_entry)
-    }
-
-    pub fn create_comment(
-        &self,
-        content: CommentContent,
-    ) -> Result<Allowed<Comment, Create>, DomainError> {
-        let commented_by = match self.actor() {
-            Actor::AccountUser(user) => *user.id(),
-            _ => return Err(DomainError::Forbidden),
-        };
-
-        let comment = Comment::new(*self.value().id(), content, commented_by);
-
-        self.authorize_create(comment)
-    }
-
-    pub fn update_comment(
-        &self,
-        comment: Comment,
-        content: CommentContent,
-    ) -> Result<Allowed<Comment, Update>, DomainError> {
-        self.authorize_update(comment.with_updated_content(content))
-    }
-
-    pub fn delete_comment(
-        &self,
-        comment: Comment,
-        deleted_at: DateTime<Utc>,
-    ) -> Result<Allowed<DeletedComment, Create>, DomainError> {
-        self.authorize_delete(comment)?.delete(deleted_at)
     }
 }

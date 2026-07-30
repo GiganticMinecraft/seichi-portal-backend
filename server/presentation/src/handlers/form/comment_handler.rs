@@ -103,7 +103,7 @@ pub async fn get_comment_history(
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
         application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -166,7 +166,7 @@ pub async fn get_form_comment(
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
         application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
@@ -216,7 +216,7 @@ pub async fn post_form_comment(
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
         application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
@@ -269,7 +269,7 @@ pub async fn update_form_comment(
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
         application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 
@@ -320,7 +320,7 @@ pub async fn delete_form_comment_handler(
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
         answer_entry_repository: repository.answer_entry_repository(),
-        comment_repository: repository.comment_repository(),
+        comment_thread_repository: repository.comment_thread_repository(),
         application_event_publisher: Some(&APPLICATION_EVENT_PUBLISHER),
     };
 

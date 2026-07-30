@@ -13,17 +13,14 @@ use domain::{
 use errors::Error;
 
 use crate::{
-    database::{
-        components::{DatabaseComponents, FormAnswerDatabase, FormDatabase},
-        connection::DatabaseTransaction,
-    },
+    database::components::{DatabaseComponents, FormAnswerDatabase, FormDatabase},
     repository::Repository,
 };
 
 #[async_trait]
 impl<Client> AnswerEntryRepository for Repository<Client>
 where
-    Client: DatabaseComponents<TransactionAcrossComponents = DatabaseTransaction> + 'static,
+    Client: DatabaseComponents + 'static,
 {
     #[tracing::instrument(skip(self, form))]
     async fn get(

@@ -106,14 +106,14 @@ impl ConnectionPool {
         }
     }
 
-    pub async fn read_write_transaction<F, T, E>(&self, callback: F) -> Result<T, InfraError>
+    pub async fn read_write_transaction<F, T, E>(&self, callback: F) -> Result<T, E>
     where
         F: for<'c> FnOnce(
                 &'c mut DatabaseTransaction,
             ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'c>>
             + Send,
         T: Send,
-        E: Into<InfraError> + Send,
+        E: From<InfraError> + Send,
     {
         let mut transaction = self
             .rdb_pool
@@ -126,13 +126,12 @@ impl ConnectionPool {
         let result = callback(&mut transaction).await;
         match result {
             Ok(value) => {
-                transaction.commit().await?;
+                transaction.commit().await.map_err(InfraError::from)?;
                 Ok(value)
             }
             Err(error) => {
-                let infra_error = error.into();
                 let _ = transaction.rollback().await;
-                Err(infra_error)
+                Err(error)
             }
         }
     }
@@ -152,15 +151,6 @@ impl DatabaseComponents for ConnectionPool {
     type ConcreteSearchDatabase = Self;
     type ConcreteMinecraftBanDatabase = Self;
     type ConcreteUserDatabase = Self;
-    type TransactionAcrossComponents = DatabaseTransaction;
-
-    async fn begin_transaction(&self) -> anyhow::Result<Self::TransactionAcrossComponents> {
-        Ok(self
-            .rdb_pool
-            .begin_with("START TRANSACTION READ WRITE")
-            .await?)
-    }
-
     fn form(&self) -> &Self::ConcreteFormDatabase {
         self
     }

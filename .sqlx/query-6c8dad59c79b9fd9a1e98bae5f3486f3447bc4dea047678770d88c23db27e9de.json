@@ -1,10 +1,26 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT c.answer_id, c.commented_by AS original_author_id,\n                        u.name AS original_author_name, u.role AS original_author_role,\n                        c.content, c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM form_answer_comments c\n                    INNER JOIN users u ON u.id = c.commented_by\n                    WHERE c.id = ? FOR UPDATE",
+  "query": "SELECT c.id AS comment_id, c.answer_id, c.commented_by AS commented_by_id,\n                u.name AS commented_by_name, u.role AS commented_by_role, c.content,\n                c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n            FROM form_answer_comments c\n            INNER JOIN users u ON u.id = c.commented_by\n            WHERE c.id = ? AND c.answer_id = ? FOR UPDATE",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "comment_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_comments",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "answer_id",
         "type_info": {
           "type": "String",
@@ -20,8 +36,8 @@
         }
       },
       {
-        "ordinal": 1,
-        "name": "original_author_id",
+        "ordinal": 2,
+        "name": "commented_by_id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
@@ -36,8 +52,8 @@
         }
       },
       {
-        "ordinal": 2,
-        "name": "original_author_name",
+        "ordinal": 3,
+        "name": "commented_by_name",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
@@ -52,8 +68,8 @@
         }
       },
       {
-        "ordinal": 3,
-        "name": "original_author_role",
+        "ordinal": 4,
+        "name": "commented_by_role",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
@@ -68,7 +84,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "content",
         "type_info": {
           "type": "Blob",
@@ -84,7 +100,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "timestamp!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -101,9 +117,10 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -112,5 +129,5 @@
       false
     ]
   },
-  "hash": "1e6177ad9d605762422eb221c695f3cbcb828c1d8ceb28e47445b4ed829c0731"
+  "hash": "6c8dad59c79b9fd9a1e98bae5f3486f3447bc4dea047678770d88c23db27e9de"
 }
