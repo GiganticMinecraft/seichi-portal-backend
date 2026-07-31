@@ -2,8 +2,12 @@ use errors::domain::DomainError;
 use uuid::Uuid;
 
 use crate::{
+    auth::Actor,
     form::models::FormId,
-    types::authorization_guard::{Allowed, Read},
+    types::authorization_guard::{
+        Actions, Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizationRole,
+        Read, SelfGuarded, Update,
+    },
 };
 
 use super::{AnswerEntry, AnswerId, ArchivedAnswerEntry};
@@ -64,6 +68,65 @@ pub struct AnswerRelation {
     second: AnswerReference,
 }
 
+/// 両端点の閲覧認可を同じ利用者について確認済みである回答関連です。
+///
+/// `AnswerRelation` 自体にはフォーム設定や回答の公開状態が含まれないため、関連単体の
+/// `AuthorizationGuard` では閲覧可否を判定できません。この型は Repository が両端点の
+/// `Allowed` を確認した後に、その認可に使った `Actor` を保持した読み取り対象として
+/// 生成されます。これにより、別の利用者へ読み取り証明を再利用できません。
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadableAnswerRelation {
+    relation: AnswerRelation,
+    actor: Actor,
+}
+
+impl ReadableAnswerRelation {
+    fn new(relation: AnswerRelation, actor: Actor) -> Self {
+        Self { relation, actor }
+    }
+
+    pub fn relation(&self) -> AnswerRelation {
+        self.relation
+    }
+
+    pub fn into_relation(self) -> AnswerRelation {
+        self.relation
+    }
+
+    pub fn opposite_endpoint_for(
+        &self,
+        source: AnswerReference,
+    ) -> Result<AnswerReference, DomainError> {
+        self.relation
+            .other_endpoint(source)
+            .ok_or_else(|| DomainError::InvalidEntity {
+                message: "source answer is not an endpoint of the relation".to_string(),
+            })
+    }
+}
+
+impl AuthorizationRole for ReadableAnswerRelation {
+    type Role = SelfGuarded;
+}
+
+impl AuthorizationGuardDefinitions for ReadableAnswerRelation {
+    fn can_create(&self, _actor: &Actor) -> bool {
+        false
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        &self.actor == actor
+    }
+
+    fn can_update(&self, _actor: &Actor) -> bool {
+        false
+    }
+
+    fn can_delete(&self, _actor: &Actor) -> bool {
+        false
+    }
+}
+
 impl AnswerRelation {
     pub fn new(first: AnswerReference, second: AnswerReference) -> Result<Self, DomainError> {
         if first == second {
@@ -100,9 +163,81 @@ impl AnswerRelation {
             _ => None,
         }
     }
+
+    pub fn connects<S, T>(&self, source: &S, target: &T) -> bool
+    where
+        S: AnswerRelationEndpoint,
+        T: AnswerRelationEndpoint,
+    {
+        self.other_endpoint(source.answer_reference()) == Some(target.answer_reference())
+    }
+
+    fn authorize_read_with_proofs<S, T, SourceAction, TargetAction>(
+        self,
+        source: &Allowed<S, SourceAction>,
+        target: &Allowed<T, TargetAction>,
+    ) -> Result<Allowed<ReadableAnswerRelation, Read>, DomainError>
+    where
+        S: AnswerRelationEndpoint,
+        T: AnswerRelationEndpoint,
+        SourceAction: Actions,
+        TargetAction: Actions,
+    {
+        if source.actor() != target.actor() {
+            return Err(DomainError::InvalidEntity {
+                message: "answer relation proofs must belong to the same actor".to_string(),
+            });
+        }
+
+        if !self.connects(source.value(), target.value()) {
+            return Err(DomainError::InvalidEntity {
+                message: "answer relation endpoints do not match authorized answers".to_string(),
+            });
+        }
+
+        AuthorizationGuard::<ReadableAnswerRelation, Read>::from(ReadableAnswerRelation::new(
+            self,
+            source.actor().clone(),
+        ))
+        .try_read(source.actor().clone())
+    }
+
+    /// source と target の回答 Read proof を合成し、関連自体の Read proof を作ります。
+    pub fn authorize_read<S, T>(
+        self,
+        source: &Allowed<S, Read>,
+        target: &Allowed<T, Read>,
+    ) -> Result<Allowed<ReadableAnswerRelation, Read>, DomainError>
+    where
+        S: AnswerRelationEndpoint,
+        T: AnswerRelationEndpoint,
+    {
+        self.authorize_read_with_proofs(source, target)
+    }
+
+    /// 更新認可済みの source と、対象の Read proof から関連の Read proof を作ります。
+    pub fn authorize_read_from_update<T>(
+        self,
+        source: &Allowed<AnswerEntry, Update>,
+        target: &Allowed<T, Read>,
+    ) -> Result<Allowed<ReadableAnswerRelation, Read>, DomainError>
+    where
+        T: AnswerRelationEndpoint,
+    {
+        self.authorize_read_with_proofs(source, target)
+    }
+
+    /// 関連追加用に、source と target の更新 proof から関連の Read proof を作ります。
+    pub fn authorize_read_from_updates(
+        self,
+        source: &Allowed<AnswerEntry, Update>,
+        target: &Allowed<AnswerEntry, Update>,
+    ) -> Result<Allowed<ReadableAnswerRelation, Read>, DomainError> {
+        self.authorize_read_with_proofs(source, target)
+    }
 }
 
-impl Allowed<AnswerRelation, Read> {
+impl Allowed<ReadableAnswerRelation, Read> {
     /// 回答 identity だけを使って、認可済み関係の反対側を取り出します。
     ///
     /// 呼び出し側は同じ Repository 呼び出しで認可された source identity を渡します。
@@ -110,11 +245,7 @@ impl Allowed<AnswerRelation, Read> {
         &self,
         source: AnswerReference,
     ) -> Result<AnswerReference, DomainError> {
-        self.value()
-            .other_endpoint(source)
-            .ok_or_else(|| DomainError::InvalidEntity {
-                message: "source answer is not an endpoint of the relation".to_string(),
-            })
+        self.value().opposite_endpoint_for(source)
     }
 }
 
@@ -123,11 +254,51 @@ mod tests {
     use super::*;
     use uuid::Uuid;
 
+    #[derive(Clone, Debug, PartialEq)]
+    struct TestEndpoint(AnswerReference);
+
+    impl AnswerRelationEndpoint for TestEndpoint {
+        fn answer_reference(&self) -> AnswerReference {
+            self.0
+        }
+    }
+
+    impl AuthorizationRole for TestEndpoint {
+        type Role = SelfGuarded;
+    }
+
+    impl AuthorizationGuardDefinitions for TestEndpoint {
+        fn can_create(&self, _actor: &Actor) -> bool {
+            false
+        }
+
+        fn can_read(&self, _actor: &Actor) -> bool {
+            true
+        }
+
+        fn can_update(&self, _actor: &Actor) -> bool {
+            false
+        }
+
+        fn can_delete(&self, _actor: &Actor) -> bool {
+            false
+        }
+    }
+
     fn reference(form_id: u128, answer_id: u128) -> AnswerReference {
         AnswerReference::new(
             Uuid::from_u128(form_id).into(),
             Uuid::from_u128(answer_id).into(),
         )
+    }
+
+    fn actor(seed: u128) -> Actor {
+        crate::account::models::AccountUser::new(
+            format!("user-{seed}"),
+            Uuid::from_u128(seed).into(),
+            crate::account::models::Role::StandardUser,
+        )
+        .into()
     }
 
     #[test]
@@ -165,6 +336,71 @@ mod tests {
         assert_eq!(
             relation.other_endpoint(second_form_answer),
             Some(first_form_answer)
+        );
+    }
+
+    #[test]
+    fn authorize_read_rejects_different_actor_or_endpoint_proofs() {
+        let source_reference = reference(1, 1);
+        let target_reference = reference(2, 1);
+        let relation = AnswerRelation::new(source_reference, target_reference).unwrap();
+        let owner = actor(1);
+        let source = AuthorizationGuard::<_, Read>::from(TestEndpoint(source_reference))
+            .try_read(owner.clone())
+            .unwrap();
+        let target = AuthorizationGuard::<_, Read>::from(TestEndpoint(target_reference))
+            .try_read(owner.clone())
+            .unwrap();
+
+        assert!(relation.authorize_read(&source, &target).is_ok());
+
+        let different_actor_target =
+            AuthorizationGuard::<_, Read>::from(TestEndpoint(target_reference))
+                .try_read(actor(2))
+                .unwrap();
+        assert!(
+            relation
+                .authorize_read(&source, &different_actor_target)
+                .is_err()
+        );
+
+        let different_endpoint_target =
+            AuthorizationGuard::<_, Read>::from(TestEndpoint(reference(3, 1)))
+                .try_read(owner)
+                .unwrap();
+        assert!(
+            relation
+                .authorize_read(&source, &different_endpoint_target)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn readable_relation_guard_is_bound_to_the_actor_who_read_both_endpoints() {
+        let relation = AnswerRelation::new(reference(1, 1), reference(2, 1)).unwrap();
+        let owner: Actor = crate::account::models::AccountUser::new(
+            "owner".to_string(),
+            Uuid::from_u128(1).into(),
+            crate::account::models::Role::StandardUser,
+        )
+        .into();
+        let another_actor: Actor = crate::account::models::AccountUser::new(
+            "another".to_string(),
+            Uuid::from_u128(2).into(),
+            crate::account::models::Role::StandardUser,
+        )
+        .into();
+        let readable = ReadableAnswerRelation::new(relation, owner.clone());
+
+        assert!(
+            AuthorizationGuard::<_, Read>::from(readable.clone())
+                .try_read(owner)
+                .is_ok()
+        );
+        assert!(
+            AuthorizationGuard::<_, Read>::from(readable)
+                .try_read(another_actor)
+                .is_err()
         );
     }
 }

@@ -3,7 +3,9 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::answer::{AnswerEntry, AnswerId, AnswerRelation, ArchivedAnswerEntry},
+    form::answer::{
+        AnswerEntry, AnswerId, AnswerRelation, ArchivedAnswerEntry, ReadableAnswerRelation,
+    },
     types::authorization_guard::{Allowed, Read, Update},
 };
 
@@ -19,13 +21,13 @@ pub trait AnswerRelationRepository: Send + Sync + 'static {
     async fn list_for_answer(
         &self,
         source: &Allowed<AnswerEntry, Read>,
-    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error>;
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error>;
 
     /// 認可済みアーカイブ回答を起点にした参照です。
     async fn list_for_archived_answer(
         &self,
         source: &Allowed<ArchivedAnswerEntry, Read>,
-    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error>;
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error>;
 
     /// 関係を追加します。同じ正規化済み関係が存在する場合は成功として扱います。
     async fn add(
@@ -51,5 +53,5 @@ pub trait AnswerRelationRepository: Send + Sync + 'static {
         &self,
         source: &Allowed<AnswerEntry, Update>,
         answer_id: AnswerId,
-    ) -> Result<Option<Allowed<AnswerRelation, Read>>, Error>;
+    ) -> Result<Option<Allowed<ReadableAnswerRelation, Read>>, Error>;
 }

@@ -12,7 +12,9 @@ pub use entry::{
     AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, ArchivedAnswerEntry,
 };
 pub use label::{AnswerLabel, AnswerLabelId};
-pub use relation::{AnswerReference, AnswerRelation, AnswerRelationEndpoint};
+pub use relation::{
+    AnswerReference, AnswerRelation, AnswerRelationEndpoint, ReadableAnswerRelation,
+};
 pub use settings::{
     AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy, AnswerSettings,
     AnswerVisibility, DefaultAnswerTitle,

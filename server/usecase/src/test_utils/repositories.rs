@@ -8,7 +8,7 @@ use domain::{
         FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
-            AnswerRelation, ArchivedAnswerEntry,
+            AnswerRelation, ArchivedAnswerEntry, ReadableAnswerRelation,
         },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
@@ -434,11 +434,14 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
 
 #[derive(Default)]
 pub(crate) struct InMemoryAnswerRelationRepository {
-    relations: Mutex<Vec<Allowed<AnswerRelation, Read>>>,
+    relations: Mutex<Vec<Allowed<ReadableAnswerRelation, Read>>>,
 }
 
 impl InMemoryAnswerRelationRepository {
-    pub(crate) fn set_authorized_relations(&self, relations: Vec<Allowed<AnswerRelation, Read>>) {
+    pub(crate) fn set_authorized_relations(
+        &self,
+        relations: Vec<Allowed<ReadableAnswerRelation, Read>>,
+    ) {
         *self.relations.lock().unwrap() = relations;
     }
 }
@@ -448,7 +451,7 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
     async fn list_for_answer(
         &self,
         source: &Allowed<AnswerEntry, Read>,
-    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error> {
         let actor = source.actor();
         let source = AnswerReference::new(*source.form_id(), *source.id());
         Ok(self
@@ -466,7 +469,7 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
     async fn list_for_archived_answer(
         &self,
         source: &Allowed<ArchivedAnswerEntry, Read>,
-    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error> {
         let actor = source.actor();
         let source = AnswerReference::new(*source.form_id(), *source.id());
         Ok(self
@@ -488,7 +491,10 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
         target: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error> {
         let mut relations = self.relations.lock().unwrap();
-        if !relations.iter().any(|stored| stored.value() == &relation) {
+        if !relations
+            .iter()
+            .any(|stored| stored.value().relation() == relation)
+        {
             relations.push(relation.authorize_read_from_updates(source, target)?);
         }
         Ok(())
@@ -503,7 +509,7 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
         self.relations
             .lock()
             .unwrap()
-            .retain(|stored| *stored.value() != relation);
+            .retain(|stored| stored.value().relation() != relation);
         Ok(())
     }
 
@@ -511,7 +517,7 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
         &self,
         source: &Allowed<AnswerEntry, Update>,
         answer_id: AnswerId,
-    ) -> Result<Option<Allowed<AnswerRelation, Read>>, Error> {
+    ) -> Result<Option<Allowed<ReadableAnswerRelation, Read>>, Error> {
         let actor = source.actor();
         let source = AnswerReference::new(*source.form_id(), *source.id());
         Ok(self

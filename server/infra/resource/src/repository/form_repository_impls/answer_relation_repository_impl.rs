@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     form::answer::{
         AnswerEntry, AnswerId, AnswerReference, AnswerRelation, AnswerRelationEndpoint,
-        ArchivedAnswerEntry,
+        ArchivedAnswerEntry, ReadableAnswerRelation,
     },
     form::models::{ActiveForm, ArchivedForm},
     repository::form::answer_relation_repository::AnswerRelationRepository,
@@ -22,9 +22,13 @@ fn ensure_relation_matches_answers(
     source: &Allowed<AnswerEntry, Update>,
     target: &Allowed<AnswerEntry, Update>,
 ) -> Result<(), Error> {
-    let source_reference = AnswerReference::new(*source.form_id(), *source.id());
-    let target_reference = AnswerReference::new(*target.form_id(), *target.id());
-    if relation.other_endpoint(source_reference) != Some(target_reference) {
+    if source.actor() != target.actor() {
+        return Err(DomainError::InvalidEntity {
+            message: "answer relation proofs must belong to the same actor".to_string(),
+        }
+        .into());
+    }
+    if !relation.connects(source.value(), target.value()) {
         return Err(DomainError::InvalidEntity {
             message: "answer relation endpoints do not match authorized answers".to_string(),
         }
@@ -131,7 +135,7 @@ async fn list_for_reference<Client, Source>(
     repository: &Repository<Client>,
     source: &Allowed<Source, Read>,
     source_reference: AnswerReference,
-) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error>
+) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error>
 where
     Client: DatabaseComponents + 'static,
     Source: AnswerRelationEndpoint,
@@ -172,7 +176,7 @@ where
     async fn list_for_answer(
         &self,
         source: &Allowed<AnswerEntry, Read>,
-    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error> {
         list_for_reference(
             self,
             source,
@@ -185,7 +189,7 @@ where
     async fn list_for_archived_answer(
         &self,
         source: &Allowed<ArchivedAnswerEntry, Read>,
-    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error> {
         list_for_reference(
             self,
             source,
@@ -229,7 +233,7 @@ where
         &self,
         source: &Allowed<AnswerEntry, Update>,
         answer_id: AnswerId,
-    ) -> Result<Option<Allowed<AnswerRelation, Read>>, Error> {
+    ) -> Result<Option<Allowed<ReadableAnswerRelation, Read>>, Error> {
         let source_reference = AnswerReference::new(*source.form_id(), *source.id());
         let Some(record) = self
             .client

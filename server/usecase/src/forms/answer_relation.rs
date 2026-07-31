@@ -1,7 +1,9 @@
 use domain::{
     account::models::AccountUser,
     auth::Actor,
-    form::answer::{AnswerEntry, AnswerId, AnswerReference, AnswerRelation},
+    form::answer::{
+        AnswerEntry, AnswerId, AnswerReference, AnswerRelation, ReadableAnswerRelation,
+    },
     form::models::FormId,
     repository::form::{
         active_form_repository::ActiveFormRepository,
@@ -75,7 +77,7 @@ impl<
         &self,
         actor: &Actor,
         reference: AnswerReference,
-    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error> {
         if let Some(form) = self.active_form_repository.get(reference.form_id()).await? {
             let form = form.try_read(actor.clone())?;
             let source = self
@@ -169,7 +171,7 @@ impl<
                         message: "relation does not contain source answer".to_string(),
                     })
                 })?;
-                (relation.into_inner(), target)
+                (relation.into_inner().into_relation(), target)
             }
             None => {
                 // 関係がない場合も、指定された target 回答そのものの存在は確認する。
