@@ -9,7 +9,7 @@ use domain::{
         answer_relation_repository::AnswerRelationRepository,
         archived_form_repository::ArchivedFormRepository,
     },
-    types::authorization_guard::{Allowed, Update},
+    types::authorization_guard::{Allowed, Read, Update},
 };
 use errors::{
     Error,
@@ -71,63 +71,11 @@ impl<
             .map_err(Into::into)
     }
 
-    async fn archived_answer_is_readable(
-        &self,
-        actor: &Actor,
-        reference: AnswerReference,
-    ) -> Result<bool, Error> {
-        let Some(form) = self
-            .archived_form_repository
-            .get(reference.form_id())
-            .await?
-        else {
-            return Ok(false);
-        };
-        let form = match form.try_read(actor.clone()) {
-            Ok(form) => form,
-            Err(DomainError::Forbidden) => return Ok(false),
-            Err(error) => return Err(error.into()),
-        };
-
-        self.archived_form_repository
-            .contains_answer(&form, reference.answer_id())
-            .await
-    }
-
-    async fn target_is_readable(
-        &self,
-        actor: &Actor,
-        reference: AnswerReference,
-    ) -> Result<bool, Error> {
-        if let Some(form) = self.active_form_repository.get(reference.form_id()).await? {
-            let form = match form.try_read(actor.clone()) {
-                Ok(form) => form,
-                Err(DomainError::Forbidden) => return Ok(false),
-                Err(error) => return Err(error.into()),
-            };
-
-            return match self
-                .answer_entry_repository
-                .get(&form, reference.answer_id())
-                .await
-            {
-                Ok(Some(_)) => Ok(true),
-                Ok(None) => Ok(false),
-                Err(Error::Domain {
-                    source: DomainError::Forbidden,
-                }) => Ok(false),
-                Err(error) => Err(error),
-            };
-        }
-
-        self.archived_answer_is_readable(actor, reference).await
-    }
-
     async fn load_source_for_read(
         &self,
         actor: &Actor,
         reference: AnswerReference,
-    ) -> Result<Vec<AnswerRelation>, Error> {
+    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
         if let Some(form) = self.active_form_repository.get(reference.form_id()).await? {
             let form = form.try_read(actor.clone())?;
             let source = self
@@ -149,16 +97,14 @@ impl<
             return Err(FormNotFound.into());
         };
         let form = form.try_read(actor.clone())?;
-        if !self
+        let source = self
             .archived_form_repository
-            .contains_answer(&form, reference.answer_id())
+            .get_answer(&form, reference.answer_id())
             .await?
-        {
-            return Err(AnswerNotFound.into());
-        }
+            .ok_or(AnswerNotFound)?;
 
         self.answer_relation_repository
-            .list_for_archived_answer(&form, reference.answer_id())
+            .list_for_archived_answer(&source)
             .await
     }
 
@@ -172,15 +118,10 @@ impl<
         let actor = Actor::from(actor.clone());
         let source = AnswerReference::new(form_id, answer_id);
         let relations = self.load_source_for_read(&actor, source).await?;
-        let mut visible = Vec::new();
-        for relation in relations {
-            let Some(target) = relation.other_endpoint(source) else {
-                continue;
-            };
-            if self.target_is_readable(&actor, target).await? {
-                visible.push(target);
-            }
-        }
+        let mut visible = relations
+            .iter()
+            .filter_map(|relation| relation.opposite_endpoint_for(source).ok())
+            .collect::<Vec<_>>();
         visible.sort_unstable();
         Ok(visible)
     }
@@ -223,12 +164,12 @@ impl<
 
         let (relation, target_reference) = match relation {
             Some(relation) => {
-                let target = relation.other_endpoint(source).ok_or_else(|| {
+                let target = relation.opposite_endpoint_for(source).map_err(|_| {
                     Error::from(DomainError::InvalidEntity {
                         message: "relation does not contain source answer".to_string(),
                     })
                 })?;
-                (relation, target)
+                (relation.into_inner(), target)
             }
             None => {
                 // 関係がない場合も、指定された target 回答そのものの存在は確認する。
@@ -269,7 +210,7 @@ mod tests {
         form::{
             answer::{
                 AnswerAuthor, AnswerPublication, AnswerSettings, AnswerTitle, AnswerVisibility,
-                PostedAnswerContents,
+                ArchivedAnswerEntry, PostedAnswerContents,
             },
             models::{
                 ActiveForm, ArchivedForm, FormDescription, FormSettings, FormTitle, Visibility,
@@ -280,7 +221,7 @@ mod tests {
             active_form_repository::ActiveFormRepository,
             archived_form_repository::ArchivedFormRepository,
         },
-        types::authorization_guard::{AuthorizationGuard, Create},
+        types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read},
     };
     use errors::{Error, domain::DomainError, usecase::UseCaseError::FormNotFound};
     use std::collections::HashSet;
@@ -325,6 +266,37 @@ mod tests {
         AnswerReference::new(*answer.form_id(), *answer.id())
     }
 
+    fn readable_answer(
+        form: &ActiveForm,
+        answer: &AnswerEntry,
+        actor: &AccountUser,
+    ) -> Allowed<AnswerEntry, Read> {
+        AuthorizationGuard::<_, Read>::from(form.clone())
+            .try_read(Actor::from(actor.clone()))
+            .unwrap()
+            .read_entry(answer.clone())
+            .unwrap()
+    }
+
+    fn readable_archived_answer(
+        form: &ArchivedForm,
+        answer_id: AnswerId,
+        actor: &AccountUser,
+    ) -> Allowed<ArchivedAnswerEntry, Read> {
+        let answer = unsafe {
+            ArchivedAnswerEntry::from_raw_parts(
+                answer_id,
+                *form.form().id(),
+                AnswerPublication::PUBLIC,
+            )
+        };
+        AuthorizationGuard::<_, Read>::from(form.clone())
+            .try_read(Actor::from(actor.clone()))
+            .unwrap()
+            .read_archived_entry(answer)
+            .unwrap()
+    }
+
     #[tokio::test]
     async fn list_returns_only_readable_direct_targets() {
         let administrator = user(1, Role::Administrator);
@@ -363,14 +335,23 @@ mod tests {
                 vec![*archived_target.id()],
             );
 
-        repositories.answer_relation_repository.set_relations(vec![
-            AnswerRelation::new(reference(&source), reference(&visible_target)).unwrap(),
-            AnswerRelation::new(reference(&source), reference(&private_target)).unwrap(),
-            AnswerRelation::new(reference(&source), reference(&private_form_target)).unwrap(),
-            AnswerRelation::new(reference(&source), reference(&archived_target)).unwrap(),
-            // A second edge proves that traversal does not infer transitive relations.
-            AnswerRelation::new(reference(&visible_target), reference(&chain_target)).unwrap(),
-        ]);
+        let source_read = readable_answer(&source_form, &source, &standard_user);
+        let visible_target_read =
+            readable_answer(&visible_other_form, &visible_target, &standard_user);
+        let chain_target_read = readable_answer(&visible_other_form, &chain_target, &standard_user);
+        repositories
+            .answer_relation_repository
+            .set_authorized_relations(vec![
+                AnswerRelation::new(reference(&source), reference(&visible_target))
+                    .unwrap()
+                    .authorize_read(&source_read, &visible_target_read)
+                    .unwrap(),
+                // A second edge proves that traversal does not infer transitive relations.
+                AnswerRelation::new(reference(&visible_target), reference(&chain_target))
+                    .unwrap()
+                    .authorize_read(&visible_target_read, &chain_target_read)
+                    .unwrap(),
+            ]);
 
         let related = repositories
             .answer_relation_use_case()
@@ -489,14 +470,24 @@ mod tests {
             crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![
                 source, target, third,
             ]);
-        repositories.answer_relation_repository.set_relations(vec![
-            AnswerRelation::new(source_reference, target_reference).unwrap(),
-        ]);
+        let archived_form = ArchivedForm::new(form.clone(), Utc::now(), *administrator.id());
+        let archived_source =
+            readable_archived_answer(&archived_form, source_reference.answer_id(), &administrator);
+        let archived_target =
+            readable_archived_answer(&archived_form, target_reference.answer_id(), &administrator);
+        repositories
+            .answer_relation_repository
+            .set_authorized_relations(vec![
+                AnswerRelation::new(source_reference, target_reference)
+                    .unwrap()
+                    .authorize_read(&archived_source, &archived_target)
+                    .unwrap(),
+            ]);
         repositories.active_form_repository.remove_form(form_id);
         repositories
             .archived_form_repository
             .save_form_with_answers(
-                ArchivedForm::new(form.clone(), Utc::now(), *administrator.id()),
+                archived_form,
                 vec![
                     source_reference.answer_id(),
                     target_reference.answer_id(),

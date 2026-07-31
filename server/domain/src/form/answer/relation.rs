@@ -1,9 +1,12 @@
 use errors::domain::DomainError;
 use uuid::Uuid;
 
-use crate::form::models::FormId;
+use crate::{
+    form::models::FormId,
+    types::authorization_guard::{Allowed, Read},
+};
 
-use super::AnswerId;
+use super::{AnswerEntry, AnswerId, ArchivedAnswerEntry};
 
 /// 回答を一意に参照するための、フォーム ID と回答 ID の組です。
 ///
@@ -31,6 +34,23 @@ impl AnswerReference {
     /// DB の正規化規則と同じ順序で比較するキーを返します。
     pub(crate) fn ordering_key(self) -> (Uuid, Uuid) {
         (self.form_id.into_inner(), self.answer_id.into_inner())
+    }
+}
+
+/// 回答関連の端点として必要な identity を提供します。
+pub trait AnswerRelationEndpoint {
+    fn answer_reference(&self) -> AnswerReference;
+}
+
+impl AnswerRelationEndpoint for AnswerEntry {
+    fn answer_reference(&self) -> AnswerReference {
+        AnswerReference::new(*self.form_id(), *self.id())
+    }
+}
+
+impl AnswerRelationEndpoint for ArchivedAnswerEntry {
+    fn answer_reference(&self) -> AnswerReference {
+        AnswerReference::new(*self.form_id(), *self.id())
     }
 }
 
@@ -79,6 +99,22 @@ impl AnswerRelation {
             [first, second] if second == endpoint => Some(first),
             _ => None,
         }
+    }
+}
+
+impl Allowed<AnswerRelation, Read> {
+    /// 回答 identity だけを使って、認可済み関係の反対側を取り出します。
+    ///
+    /// 呼び出し側は同じ Repository 呼び出しで認可された source identity を渡します。
+    pub fn opposite_endpoint_for(
+        &self,
+        source: AnswerReference,
+    ) -> Result<AnswerReference, DomainError> {
+        self.value()
+            .other_endpoint(source)
+            .ok_or_else(|| DomainError::InvalidEntity {
+                message: "source answer is not an endpoint of the relation".to_string(),
+            })
     }
 }
 

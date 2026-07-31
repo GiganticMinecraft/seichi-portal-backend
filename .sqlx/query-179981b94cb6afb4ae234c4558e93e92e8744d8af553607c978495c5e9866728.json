@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT publication FROM archived_answers WHERE form_id = ? AND id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "publication",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 28
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.archived_answers",
+            "name": "publication"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "179981b94cb6afb4ae234c4558e93e92e8744d8af553607c978495c5e9866728"
+}

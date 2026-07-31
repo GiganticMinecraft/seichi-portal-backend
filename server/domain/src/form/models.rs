@@ -25,7 +25,9 @@ use crate::{
     auth::Actor,
     form::{answer::TemporaryAnswerAuthor, submitter::FormSubmitter},
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerTitle, PostedAnswerContents},
+        answer::{
+            AnswerAuthor, AnswerEntry, AnswerTitle, ArchivedAnswerEntry, PostedAnswerContents,
+        },
         is_administrator,
     },
     types::authorization_guard::{
@@ -306,6 +308,16 @@ impl Allowed<ActiveForm, Update> {
             None => entry,
         };
         self.authorize_update(entry)
+    }
+}
+
+impl Allowed<ArchivedForm, Read> {
+    /// アーカイブフォームに所属する回答 identity の Read proof を作ります。
+    pub fn read_archived_entry(
+        &self,
+        entry: ArchivedAnswerEntry,
+    ) -> Result<Allowed<ArchivedAnswerEntry, Read>, DomainError> {
+        self.authorize_read(entry)
     }
 }
 

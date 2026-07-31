@@ -20,7 +20,8 @@ use domain::{
     form::{
         FormSubmissionRestriction,
         answer::{
-            AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerReference, AnswerRelation,
+            AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerPublication, AnswerReference,
+            AnswerRelation,
         },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
@@ -88,11 +89,11 @@ pub trait FormDatabase: Send + Sync {
     -> Result<Option<ArchivedFormRecord>, InfraError>;
     async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError>;
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
-    async fn archived_answer_exists(
+    async fn archived_answer_publication(
         &self,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<bool, InfraError>;
+    ) -> Result<Option<AnswerPublication>, InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &AccountUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
     async fn list_answer_entries(

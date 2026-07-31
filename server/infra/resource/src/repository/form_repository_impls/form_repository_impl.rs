@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     account::models::AccountUser,
     form::{
-        answer::AnswerId,
+        answer::{AnswerId, ArchivedAnswerEntry},
         models::{ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormPagePosition},
     },
     pagination::{Page, PageRequest},
@@ -139,16 +139,23 @@ where
     }
 
     #[tracing::instrument(skip(self, form))]
-    async fn contains_answer(
+    async fn get_answer(
         &self,
         form: &Allowed<ArchivedForm, Read>,
         answer_id: AnswerId,
-    ) -> Result<bool, Error> {
-        self.client
+    ) -> Result<Option<Allowed<ArchivedAnswerEntry, Read>>, Error> {
+        let Some(publication) = self
+            .client
             .form()
-            .archived_answer_exists(*form.value().form().id(), answer_id)
-            .await
-            .map_err(Into::into)
+            .archived_answer_publication(*form.value().form().id(), answer_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let answer = unsafe {
+            ArchivedAnswerEntry::from_raw_parts(answer_id, *form.value().form().id(), publication)
+        };
+        Ok(Some(form.read_archived_entry(answer)?))
     }
 
     #[tracing::instrument(skip(self))]

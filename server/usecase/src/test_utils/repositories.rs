@@ -6,7 +6,10 @@ use domain::{
     auth::Actor,
     form::{
         FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
-        answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerReference, AnswerRelation},
+        answer::{
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
+            AnswerRelation, ArchivedAnswerEntry,
+        },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
             FormPagePosition,
@@ -431,11 +434,11 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
 
 #[derive(Default)]
 pub(crate) struct InMemoryAnswerRelationRepository {
-    relations: Mutex<Vec<AnswerRelation>>,
+    relations: Mutex<Vec<Allowed<AnswerRelation, Read>>>,
 }
 
 impl InMemoryAnswerRelationRepository {
-    pub(crate) fn set_relations(&self, relations: Vec<AnswerRelation>) {
+    pub(crate) fn set_authorized_relations(&self, relations: Vec<Allowed<AnswerRelation, Read>>) {
         *self.relations.lock().unwrap() = relations;
     }
 }
@@ -445,43 +448,48 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
     async fn list_for_answer(
         &self,
         source: &Allowed<AnswerEntry, Read>,
-    ) -> Result<Vec<AnswerRelation>, Error> {
+    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
+        let actor = source.actor();
         let source = AnswerReference::new(*source.form_id(), *source.id());
         Ok(self
             .relations
             .lock()
             .unwrap()
             .iter()
-            .copied()
-            .filter(|relation| relation.other_endpoint(source).is_some())
+            .filter(|relation| {
+                relation.actor() == actor && relation.opposite_endpoint_for(source).is_ok()
+            })
+            .cloned()
             .collect())
     }
 
     async fn list_for_archived_answer(
         &self,
-        source: &Allowed<ArchivedForm, Read>,
-        answer_id: AnswerId,
-    ) -> Result<Vec<AnswerRelation>, Error> {
-        let source = AnswerReference::new(*source.form().id(), answer_id);
+        source: &Allowed<ArchivedAnswerEntry, Read>,
+    ) -> Result<Vec<Allowed<AnswerRelation, Read>>, Error> {
+        let actor = source.actor();
+        let source = AnswerReference::new(*source.form_id(), *source.id());
         Ok(self
             .relations
             .lock()
             .unwrap()
             .iter()
-            .copied()
-            .filter(|relation| relation.other_endpoint(source).is_some())
+            .filter(|relation| {
+                relation.actor() == actor && relation.opposite_endpoint_for(source).is_ok()
+            })
+            .cloned()
             .collect())
     }
 
     async fn add(
         &self,
         relation: AnswerRelation,
-        _source: &Allowed<AnswerEntry, Update>,
-        _target: &Allowed<AnswerEntry, Update>,
+        source: &Allowed<AnswerEntry, Update>,
+        target: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error> {
         let mut relations = self.relations.lock().unwrap();
-        if !relations.contains(&relation) {
-            relations.push(relation);
+        if !relations.iter().any(|stored| stored.value() == &relation) {
+            relations.push(relation.authorize_read_from_updates(source, target)?);
         }
         Ok(())
     }
@@ -495,7 +503,7 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
         self.relations
             .lock()
             .unwrap()
-            .retain(|stored| *stored != relation);
+            .retain(|stored| *stored.value() != relation);
         Ok(())
     }
 
@@ -503,19 +511,20 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
         &self,
         source: &Allowed<AnswerEntry, Update>,
         answer_id: AnswerId,
-    ) -> Result<Option<AnswerRelation>, Error> {
+    ) -> Result<Option<Allowed<AnswerRelation, Read>>, Error> {
+        let actor = source.actor();
         let source = AnswerReference::new(*source.form_id(), *source.id());
         Ok(self
             .relations
             .lock()
             .unwrap()
             .iter()
-            .copied()
             .find(|relation| {
-                relation
-                    .other_endpoint(source)
-                    .is_some_and(|target| target.answer_id() == answer_id)
-            }))
+                relation.opposite_endpoint_for(source).is_ok_and(|target| {
+                    relation.actor() == actor && target.answer_id() == answer_id
+                })
+            })
+            .cloned())
     }
 }
 
@@ -607,17 +616,28 @@ impl ArchivedFormRepository for InMemoryArchivedFormRepository {
             .map(AuthorizationGuard::from))
     }
 
-    async fn contains_answer(
+    async fn get_answer(
         &self,
         form: &Allowed<ArchivedForm, Read>,
         answer_id: AnswerId,
-    ) -> Result<bool, Error> {
-        Ok(self
+    ) -> Result<Option<Allowed<ArchivedAnswerEntry, Read>>, Error> {
+        let exists = self
             .answer_ids_by_form
             .lock()
             .unwrap()
             .get(form.form().id())
-            .is_some_and(|answer_ids| answer_ids.contains(&answer_id)))
+            .is_some_and(|answer_ids| answer_ids.contains(&answer_id));
+        if !exists {
+            return Ok(None);
+        }
+        let answer = unsafe {
+            ArchivedAnswerEntry::from_raw_parts(
+                answer_id,
+                *form.form().id(),
+                AnswerPublication::PUBLIC,
+            )
+        };
+        Ok(Some(form.read_archived_entry(answer)?))
     }
 
     async fn archive(

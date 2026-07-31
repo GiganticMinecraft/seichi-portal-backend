@@ -4,7 +4,7 @@ use mockall::automock;
 
 use crate::{
     form::{
-        answer::AnswerId,
+        answer::{AnswerId, ArchivedAnswerEntry},
         models::{ArchivedForm, ArchivedFormPagePosition, FormId},
     },
     pagination::{Page, PageRequest},
@@ -23,12 +23,12 @@ pub trait ArchivedFormRepository: Send + Sync + 'static {
         &self,
         id: FormId,
     ) -> Result<Option<AuthorizationGuard<ArchivedForm, Read>>, Error>;
-    /// 認可済みアーカイブフォームに回答が存在するか確認します。
-    async fn contains_answer(
+    /// 認可済みアーカイブフォーム配下の回答 Read proof を返します。
+    async fn get_answer(
         &self,
         form: &Allowed<ArchivedForm, Read>,
         answer_id: AnswerId,
-    ) -> Result<bool, Error>;
+    ) -> Result<Option<Allowed<ArchivedAnswerEntry, Read>>, Error>;
     async fn archive(
         &self,
         form: Allowed<ArchivedForm, Create>,
