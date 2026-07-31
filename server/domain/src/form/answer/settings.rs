@@ -230,6 +230,7 @@ impl AnswerSettings {
                     && is_within_period
                     && self.answer_groups.as_slice().is_empty()
             }
+            (AnswerAuthor::ImportedFromRedmine(_), _) => false,
             _ => false,
         }
     }

@@ -9,7 +9,10 @@ use crate::{
     account::models::Role,
     auth::Actor,
     form::{
-        answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
+        answer::{
+            AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents,
+            RedmineImportedAnswerReference,
+        },
         models::{ActiveForm, ArchivedForm, FormId},
     },
     types::authorization_guard::{
@@ -77,7 +80,7 @@ impl AnswerPagePosition {
     }
 }
 
-#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Getters, Clone, PartialEq, Debug)]
 pub struct AnswerEntry {
     id: AnswerId,
     form_id: FormId,
@@ -86,9 +89,65 @@ pub struct AnswerEntry {
     title: AnswerTitle,
     publication: AnswerPublication,
     contents: Vec<FormAnswerContent>,
+    redmine_reference: Option<RedmineImportedAnswerReference>,
 }
 
 impl AnswerEntry {
+    /// 永続層から回答を復元します。呼び出し元は DB 行が整合していることを保証します。
+    ///
+    /// # Safety
+    ///
+    /// 呼び出し元は、各値が回答のドメイン不変条件を満たすことを保証しなければなりません。
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn from_raw_parts(
+        id: AnswerId,
+        form_id: FormId,
+        author: AnswerAuthor,
+        timestamp: DateTime<Utc>,
+        title: AnswerTitle,
+        publication: AnswerPublication,
+        contents: Vec<FormAnswerContent>,
+    ) -> Self {
+        Self {
+            id,
+            form_id,
+            author,
+            timestamp,
+            title,
+            publication,
+            contents,
+            redmine_reference: None,
+        }
+    }
+
+    /// 永続層から Redmine 参照を含む回答を復元します。
+    ///
+    /// # Safety
+    ///
+    /// 呼び出し元は、各値と Redmine 参照が回答のドメイン不変条件を満たすことを保証しなければなりません。
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn from_raw_parts_with_redmine_reference(
+        id: AnswerId,
+        form_id: FormId,
+        author: AnswerAuthor,
+        timestamp: DateTime<Utc>,
+        title: AnswerTitle,
+        publication: AnswerPublication,
+        contents: Vec<FormAnswerContent>,
+        redmine_reference: Option<RedmineImportedAnswerReference>,
+    ) -> Self {
+        Self {
+            id,
+            form_id,
+            author,
+            timestamp,
+            title,
+            publication,
+            contents,
+            redmine_reference,
+        }
+    }
+
     /// [`AnswerEntry`] を新しく作成します。
     pub fn new(
         form_id: FormId,
@@ -104,6 +163,7 @@ impl AnswerEntry {
             title,
             publication: AnswerPublication::PUBLIC,
             contents: contents.into_inner(),
+            redmine_reference: None,
         }
     }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,\n                        users.name AS user_name, users.role AS user_role,\n                        temporary_user_id, temporary_users.name AS temporary_user_name,\n                        temporary_users.contact_text AS temporary_user_contact_text,\n                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers\n                        LEFT JOIN users ON answers.user = users.id\n                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n                        WHERE answers.id = ?",
+  "query": "SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,\n                        users.name AS user_name, users.role AS user_role,\n                        temporary_user_id, temporary_users.name AS temporary_user_name,\n                        temporary_users.contact_text AS temporary_user_contact_text,\n                        answers.redmine_user_id, answers.redmine_author_name,\n                        redmine_reference.redmine_issue_id,\n                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers\n                        LEFT JOIN users ON answers.user = users.id\n                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n                        LEFT JOIN redmine_imported_answer_references redmine_reference\n                            ON redmine_reference.answer_id = answers.id\n                        WHERE answers.id = ?",
   "describe": {
     "columns": [
       {
@@ -74,7 +74,7 @@
           "type": "String",
           "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
           "collation": 224,
-          "max_size": 72
+          "max_size": 84
         },
         "origin": {
           "Table": {
@@ -181,6 +181,54 @@
       },
       {
         "ordinal": 11,
+        "name": "redmine_user_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "redmine_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "redmine_author_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "redmine_author_name"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "redmine_issue_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "UNIQUE_KEY | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_answer_references",
+            "name": "redmine_issue_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
         "name": "timestamp!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -211,8 +259,11 @@
       true,
       true,
       true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "152bd51ddd11061842f5df8464f7bd13fb779541b0dac2114aee43a3f58368f3"
+  "hash": "dd833fe8bc9ab000f335ff6f120851b5b0bd5b50ac55c8b0939a3b09d8fa1cbf"
 }

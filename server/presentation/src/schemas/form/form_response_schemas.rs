@@ -4,7 +4,7 @@ use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
     answer::{
         AnswerLabel, AnswerPublication as DomainAnswerPublication, AnswerReference,
-        FormAnswerContent,
+        FormAnswerContent, RedmineUserSnapshot,
     },
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
@@ -17,7 +17,9 @@ use domain::form::{
 use itertools::Itertools;
 use serde::Serialize;
 use types::non_empty_string::NonEmptyString;
-use usecase::models::{CommentWithAuthor, PublishedAnswerAuthor, PublishedAnswerEntry};
+use usecase::models::{
+    CommentAuthor, CommentWithAuthor, PublishedAnswerAuthor, PublishedAnswerEntry,
+};
 use uuid::Uuid;
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -349,6 +351,21 @@ pub struct TemporaryAnswerAuthor {
     contact_text: String,
 }
 
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct RedmineUserSnapshotResponse {
+    redmine_user_id: Option<i64>,
+    display_name: String,
+}
+
+impl From<RedmineUserSnapshot> for RedmineUserSnapshotResponse {
+    fn from(value: RedmineUserSnapshot) -> Self {
+        Self {
+            redmine_user_id: *value.redmine_user_id(),
+            display_name: value.display_name().to_owned(),
+        }
+    }
+}
+
 impl From<domain::form::answer::TemporaryAnswerAuthor> for TemporaryAnswerAuthor {
     fn from(val: domain::form::answer::TemporaryAnswerAuthor) -> Self {
         TemporaryAnswerAuthor {
@@ -368,6 +385,10 @@ pub enum AnswerAuthor {
     Temporary {
         temporary_user: TemporaryAnswerAuthor,
     },
+    #[serde(rename = "IMPORTED_FROM_REDMINE")]
+    ImportedFromRedmine {
+        redmine_user: RedmineUserSnapshotResponse,
+    },
     #[serde(rename = "ANONYMOUS")]
     Anonymous,
 }
@@ -381,6 +402,11 @@ impl From<PublishedAnswerAuthor> for AnswerAuthor {
             PublishedAnswerAuthor::Temporary(temporary_user) => AnswerAuthor::Temporary {
                 temporary_user: temporary_user.into(),
             },
+            PublishedAnswerAuthor::ImportedFromRedmine(author) => {
+                AnswerAuthor::ImportedFromRedmine {
+                    redmine_user: author.into(),
+                }
+            }
             PublishedAnswerAuthor::Anonymous => AnswerAuthor::Anonymous,
         }
     }
@@ -413,12 +439,27 @@ impl AnswerContent {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum AnswerCommentSource {
+    #[serde(rename = "PORTAL")]
+    Portal,
+    #[serde(rename = "IMPORTED_FROM_REDMINE")]
+    ImportedFromRedmine,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct AnswerComment {
     #[schema(value_type = String, format = "uuid")]
     id: CommentId,
     content: String,
     timestamp: DateTime<Utc>,
-    commented_by: User,
+    source: AnswerCommentSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    commented_by: Option<User>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    redmine_journal_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    redmine_author_snapshot: Option<RedmineUserSnapshotResponse>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -531,11 +572,26 @@ pub struct MessageHistoryPageResponse {
 
 impl From<CommentWithAuthor> for AnswerComment {
     fn from(val: CommentWithAuthor) -> Self {
+        let (source, commented_by, redmine_journal_id, redmine_author_snapshot) =
+            match val.commented_by {
+                CommentAuthor::Portal(user) => {
+                    (AnswerCommentSource::Portal, Some(user.into()), None, None)
+                }
+                CommentAuthor::ImportedFromRedmine(author) => (
+                    AnswerCommentSource::ImportedFromRedmine,
+                    None,
+                    val.comment.redmine_journal_id(),
+                    Some(author.into()),
+                ),
+            };
         AnswerComment {
             id: val.comment.comment_id().to_owned(),
             content: val.comment.content().to_string(),
             timestamp: val.comment.timestamp().to_owned(),
-            commented_by: val.commented_by.into(),
+            source,
+            commented_by,
+            redmine_journal_id,
+            redmine_author_snapshot,
         }
     }
 }
@@ -565,6 +621,7 @@ pub struct FormAnswer {
     publication: AnswerPublication,
     answers: Vec<AnswerContent>,
     labels: Vec<AnswerLabels>,
+    redmine_issue_id: Option<i64>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -603,6 +660,9 @@ impl FormAnswer {
                 .map(AnswerContent::from_ref)
                 .collect_vec(),
             labels: labels.into_iter().map(Into::into).collect_vec(),
+            redmine_issue_id: answer
+                .redmine_reference
+                .map(|reference| reference.issue_id().into_inner()),
         }
     }
 }
@@ -625,11 +685,15 @@ pub struct SenderSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::form::answer::{AnswerId, AnswerTitle};
+    use domain::form::answer::{
+        AnswerId, AnswerTitle, RedmineImportedAnswerReference, RedmineUserSnapshot,
+    };
+    use domain::form::comment::{Comment, CommentContent, CommentId};
     use domain::form::models::DiscordWebhookUrl;
     use domain::form::question::{Choice, Question};
     use types::non_empty_string::NonEmptyString;
     use types::non_empty_vec::NonEmptyVec;
+    use usecase::models::{CommentAuthor, CommentWithAuthor};
 
     #[test]
     fn question_response_schema_serializes_text_variant_without_choices() {
@@ -719,6 +783,7 @@ mod tests {
             title: AnswerTitle::new(None),
             publication: DomainAnswerPublication::PUBLIC,
             contents: vec![],
+            redmine_reference: None,
         };
 
         let serialized = serde_json::to_value(FormAnswer::new(
@@ -731,5 +796,59 @@ mod tests {
         assert_eq!(serialized["author"]["type"], "ANONYMOUS");
         assert_eq!(serialized["author"].as_object().unwrap().len(), 1);
         assert_eq!(serialized["publication"], "PUBLIC");
+    }
+
+    #[test]
+    fn imported_answer_and_comment_expose_redmine_source_metadata() {
+        let answer_id = AnswerId::from(Uuid::new_v4());
+        let answer = PublishedAnswerEntry {
+            id: answer_id,
+            author: PublishedAnswerAuthor::ImportedFromRedmine(RedmineUserSnapshot::new(
+                Some(17),
+                "Redmine author".to_string(),
+            )),
+            timestamp: Utc::now(),
+            title: AnswerTitle::new(None),
+            publication: DomainAnswerPublication::PUBLIC,
+            contents: vec![],
+            redmine_reference: Some(RedmineImportedAnswerReference::new(answer_id, 1234.into())),
+        };
+        let comment = Comment::imported_from_redmine(
+            answer_id,
+            CommentId::new(),
+            5678,
+            RedmineUserSnapshot::new(None, "Redmine commenter".to_string()),
+            CommentContent::new("imported comment".to_string().try_into().unwrap()),
+            Utc::now(),
+        );
+
+        let answer_json = serde_json::to_value(FormAnswer::new(
+            answer,
+            FormId::from(Uuid::new_v4()),
+            vec![],
+        ))
+        .unwrap();
+        let comment_json = serde_json::to_value(AnswerComment::from(CommentWithAuthor {
+            comment,
+            commented_by: CommentAuthor::ImportedFromRedmine(RedmineUserSnapshot::new(
+                None,
+                "Redmine commenter".to_string(),
+            )),
+        }))
+        .unwrap();
+
+        assert_eq!(answer_json["author"]["type"], "IMPORTED_FROM_REDMINE");
+        assert_eq!(
+            answer_json["author"]["redmine_user"]["display_name"],
+            "Redmine author"
+        );
+        assert_eq!(answer_json["redmine_issue_id"], 1234);
+        assert_eq!(comment_json["source"], "IMPORTED_FROM_REDMINE");
+        assert_eq!(comment_json["redmine_journal_id"], 5678);
+        assert_eq!(
+            comment_json["redmine_author_snapshot"]["display_name"],
+            "Redmine commenter"
+        );
+        assert!(comment_json.get("commented_by").is_none());
     }
 }

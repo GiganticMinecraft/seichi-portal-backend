@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO answers (id, form_id, author_type, user, temporary_user_id,\n                        redmine_user_id, redmine_author_name, title, publication, timestamp)\n                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "47d49479ed18c31d6b0935d7e923e689b1857d3914bd4711c1c8eca8ceaee3ae"
+}

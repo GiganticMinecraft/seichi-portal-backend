@@ -451,9 +451,13 @@ async fn fetch_answer_entries_page(
             users.name AS user_name, users.role AS user_role,
             temporary_user_id, temporary_users.name AS temporary_user_name,
             temporary_users.contact_text AS temporary_user_contact_text,
+            answers.redmine_user_id, answers.redmine_author_name,
+            redmine_reference.redmine_issue_id,
             timestamp FROM answers
             LEFT JOIN users ON answers.user = users.id
-            LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id";
+            LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
+            LEFT JOIN redmine_imported_answer_references redmine_reference
+                ON redmine_reference.answer_id = answers.id";
     let sql = match (form_id, request.after_position()) {
         (Some(_), Some(_)) => {
             format!(
@@ -495,6 +499,14 @@ async fn fetch_answer_entries_page(
                 publication: row.try_get("publication")?,
                 contents: Vec::new(),
                 messages: Vec::new(),
+                redmine_reference: row.try_get::<Option<i64>, _>("redmine_issue_id")?.map(
+                    |issue_id| {
+                        domain::form::answer::RedmineImportedAnswerReference::new(
+                            answer_id.into(),
+                            issue_id.into(),
+                        )
+                    },
+                ),
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -753,8 +765,11 @@ async fn copy_active_form_to_archive(
 
     execute_typed_query!(
         txn,
-        r"INSERT INTO archived_answers (id, form_id, author_type, user, temporary_user_id, title, publication, timestamp)
-        SELECT id, form_id, author_type, user, temporary_user_id, title, publication, timestamp FROM answers WHERE form_id = ?",
+        r"INSERT INTO archived_answers
+        (id, form_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
+         title, publication, timestamp)
+        SELECT id, form_id, author_type, user, temporary_user_id, redmine_user_id,
+            redmine_author_name, title, publication, timestamp FROM answers WHERE form_id = ?",
         &form_id,
     );
 
@@ -857,8 +872,11 @@ async fn restore_archived_form_to_active(
 
     execute_typed_query!(
         txn,
-        r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, publication, timestamp)
-        SELECT id, form_id, author_type, user, temporary_user_id, title, publication, timestamp FROM archived_answers WHERE form_id = ?",
+        r"INSERT INTO answers
+        (id, form_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
+         title, publication, timestamp)
+        SELECT id, form_id, author_type, user, temporary_user_id, redmine_user_id,
+            redmine_author_name, title, publication, timestamp FROM archived_answers WHERE form_id = ?",
         &form_id,
     );
 

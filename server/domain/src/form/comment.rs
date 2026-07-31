@@ -81,13 +81,30 @@ impl CommentContent {
     }
 }
 
-#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum CommentSource {
+    Portal {
+        commented_by: UserId,
+    },
+    ImportedFromRedmine {
+        redmine_journal_id: i64,
+        author: crate::form::answer::RedmineUserSnapshot,
+    },
+}
+
+impl CommentSource {
+    pub fn is_imported_from_redmine(&self) -> bool {
+        matches!(self, Self::ImportedFromRedmine { .. })
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Getters)]
 pub struct Comment {
     answer_id: AnswerId,
     comment_id: CommentId,
     content: CommentContent,
     timestamp: DateTime<Utc>,
-    commented_by: UserId,
+    source: CommentSource,
 }
 
 impl Comment {
@@ -97,7 +114,71 @@ impl Comment {
             comment_id: CommentId::new(),
             content,
             timestamp: Utc::now(),
-            commented_by,
+            source: CommentSource::Portal { commented_by },
+        }
+    }
+
+    pub fn imported_from_redmine(
+        answer_id: AnswerId,
+        comment_id: CommentId,
+        redmine_journal_id: i64,
+        author: crate::form::answer::RedmineUserSnapshot,
+        content: CommentContent,
+        timestamp: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            answer_id,
+            comment_id,
+            content,
+            timestamp,
+            source: CommentSource::ImportedFromRedmine {
+                redmine_journal_id,
+                author,
+            },
+        }
+    }
+
+    /// Portal コメントを DB 行から復元します。
+    ///
+    /// # Safety
+    ///
+    /// 呼び出し元は、各値が Portal コメントのドメイン不変条件を満たすことを保証しなければなりません。
+    pub unsafe fn from_raw_parts(
+        answer_id: AnswerId,
+        comment_id: CommentId,
+        content: CommentContent,
+        timestamp: DateTime<Utc>,
+        commented_by: UserId,
+    ) -> Self {
+        Self {
+            answer_id,
+            comment_id,
+            content,
+            timestamp,
+            source: CommentSource::Portal { commented_by },
+        }
+    }
+
+    pub fn commented_by(&self) -> Option<&UserId> {
+        match &self.source {
+            CommentSource::Portal { commented_by } => Some(commented_by),
+            CommentSource::ImportedFromRedmine { .. } => None,
+        }
+    }
+
+    pub fn redmine_journal_id(&self) -> Option<i64> {
+        match &self.source {
+            CommentSource::Portal { .. } => None,
+            CommentSource::ImportedFromRedmine {
+                redmine_journal_id, ..
+            } => Some(*redmine_journal_id),
+        }
+    }
+
+    pub fn redmine_author(&self) -> Option<&crate::form::answer::RedmineUserSnapshot> {
+        match &self.source {
+            CommentSource::Portal { .. } => None,
+            CommentSource::ImportedFromRedmine { author, .. } => Some(author),
         }
     }
 
@@ -132,16 +213,20 @@ impl GuardedBy<CommentThread, Read> for Comment {
 
 impl GuardedBy<CommentThread, Create> for Comment {
     fn is_allowed_for(&self, _parent: &CommentThread, actor: &Actor) -> bool {
-        matches!(actor, Actor::AccountUser(user) if user.id() == self.commented_by())
+        matches!(
+            (&self.source, actor),
+            (CommentSource::Portal { commented_by }, Actor::AccountUser(user))
+                if user.id() == commented_by
+        )
     }
 }
 
 impl GuardedBy<CommentThread, Update> for Comment {
     fn is_allowed_for(&self, _parent: &CommentThread, actor: &Actor) -> bool {
         matches!(
-            actor,
-            Actor::AccountUser(user)
-                if user.id() == self.commented_by() || user.role() == &Role::Administrator
+            (&self.source, actor),
+            (CommentSource::Portal { commented_by }, Actor::AccountUser(user))
+                if user.id() == commented_by || user.role() == &Role::Administrator
         )
     }
 }

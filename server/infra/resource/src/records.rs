@@ -9,7 +9,7 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerEntry, AnswerLabel, AnswerPublication, AnswerTitle,
-            FormAnswerContent,
+            FormAnswerContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
         },
         comment::{Comment, CommentContent},
         message::{Message, MessageBody},
@@ -257,7 +257,7 @@ impl TryFrom<UserRecord> for AccountUser {
 }
 
 #[derive(Clone)]
-pub struct CommentRecord {
+pub struct PortalCommentRecord {
     pub answer_id: String,
     pub comment_id: String,
     pub content: String,
@@ -265,6 +265,23 @@ pub struct CommentRecord {
     pub commented_by_name: String,
     pub commented_by_id: String,
     pub commented_by_role: String,
+}
+
+#[derive(Clone)]
+pub struct ImportedCommentRecord {
+    pub answer_id: String,
+    pub comment_id: String,
+    pub redmine_journal_id: i64,
+    pub redmine_user_id: Option<i64>,
+    pub redmine_author_name: String,
+    pub content: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Clone)]
+pub enum CommentRecord {
+    Portal(PortalCommentRecord),
+    ImportedFromRedmine(ImportedCommentRecord),
 }
 
 pub struct CommentHistoryRecord {
@@ -283,11 +300,11 @@ pub struct CommentHistoryRecord {
     pub operated_at: DateTime<Utc>,
 }
 
-impl TryFrom<CommentRecord> for Comment {
+impl TryFrom<PortalCommentRecord> for Comment {
     type Error = Error;
 
     fn try_from(
-        CommentRecord {
+        PortalCommentRecord {
             answer_id,
             comment_id,
             content,
@@ -295,7 +312,7 @@ impl TryFrom<CommentRecord> for Comment {
             commented_by_name: _,
             commented_by_id,
             commented_by_role: _,
-        }: CommentRecord,
+        }: PortalCommentRecord,
     ) -> Result<Self, Self::Error> {
         Ok(unsafe {
             Comment::from_raw_parts(
@@ -315,6 +332,46 @@ impl TryFrom<CommentRecord> for Comment {
     }
 }
 
+impl TryFrom<ImportedCommentRecord> for Comment {
+    type Error = Error;
+
+    fn try_from(
+        ImportedCommentRecord {
+            answer_id,
+            comment_id,
+            redmine_journal_id,
+            redmine_user_id,
+            redmine_author_name,
+            content,
+            timestamp,
+        }: ImportedCommentRecord,
+    ) -> Result<Self, Self::Error> {
+        Ok(Comment::imported_from_redmine(
+            Uuid::from_str(&answer_id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
+            Uuid::from_str(&comment_id)
+                .map_err(Into::<InfraError>::into)?
+                .into(),
+            redmine_journal_id,
+            RedmineUserSnapshot::new(redmine_user_id, redmine_author_name),
+            CommentContent::new(content.try_into()?),
+            timestamp,
+        ))
+    }
+}
+
+impl TryFrom<CommentRecord> for Comment {
+    type Error = Error;
+
+    fn try_from(record: CommentRecord) -> Result<Self, Self::Error> {
+        match record {
+            CommentRecord::Portal(record) => record.try_into(),
+            CommentRecord::ImportedFromRedmine(record) => record.try_into(),
+        }
+    }
+}
+
 pub struct FormAnswerRecord {
     pub id: String,
     pub author: AnswerAuthorRecord,
@@ -324,11 +381,13 @@ pub struct FormAnswerRecord {
     pub publication: String,
     pub contents: Vec<FormAnswerContentRecord>,
     pub messages: Vec<MessageRecord>,
+    pub redmine_reference: Option<RedmineImportedAnswerReference>,
 }
 
 pub enum AnswerAuthorRecord {
     AuthenticatedUser(AccountUser),
     TemporaryAnswerAuthor(TemporaryAnswerAuthor),
+    ImportedFromRedmine(RedmineUserSnapshot),
 }
 
 impl TryFrom<FormAnswerRecord> for AnswerEntry {
@@ -344,6 +403,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             publication,
             contents,
             messages: _,
+            redmine_reference,
         }: FormAnswerRecord,
     ) -> Result<Self, Self::Error> {
         let author = match author {
@@ -351,12 +411,32 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                 AnswerAuthor::AuthenticatedUser(*user.id())
             }
             AnswerAuthorRecord::TemporaryAnswerAuthor(user) => AnswerAuthor::Temporary(user),
+            AnswerAuthorRecord::ImportedFromRedmine(user) => {
+                AnswerAuthor::ImportedFromRedmine(user)
+            }
         };
+        if matches!(&author, AnswerAuthor::ImportedFromRedmine(_)) != redmine_reference.is_some() {
+            return Err(errors::domain::DomainError::InvalidEntity {
+                message: "imported answers must have exactly one Redmine issue reference"
+                    .to_string(),
+            }
+            .into());
+        }
+        let answer_id = Uuid::from_str(&id)
+            .map_err(Into::<InfraError>::into)?
+            .into();
+        if redmine_reference
+            .as_ref()
+            .is_some_and(|reference| reference.answer_id() != &answer_id)
+        {
+            return Err(errors::domain::DomainError::InvalidEntity {
+                message: "Redmine issue reference belongs to another answer".to_string(),
+            }
+            .into());
+        }
         unsafe {
-            Ok(AnswerEntry::from_raw_parts(
-                Uuid::from_str(&id)
-                    .map_err(Into::<InfraError>::into)?
-                    .into(),
+            Ok(AnswerEntry::from_raw_parts_with_redmine_reference(
+                answer_id,
                 FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
                 author,
                 timestamp,
@@ -366,6 +446,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<_, _>>()?,
+                redmine_reference,
             ))
         }
     }

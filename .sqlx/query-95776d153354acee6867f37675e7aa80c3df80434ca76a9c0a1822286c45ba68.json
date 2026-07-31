@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO redmine_imported_answer_references (answer_id, redmine_issue_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "95776d153354acee6867f37675e7aa80c3df80434ca76a9c0a1822286c45ba68"
+}

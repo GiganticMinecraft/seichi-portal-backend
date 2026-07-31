@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
-use domain_derive::UnsafeFromRawParts;
 use errors::domain::DomainError;
+use std::cmp::Ordering;
 
 use crate::{
     account::models::Role::Administrator,
     auth::Actor,
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerPublication, AnswerSettings},
+        answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerPublication, AnswerSettings},
         comment::{Comment, CommentContent, CommentHistoryEntry, CommentId, DeletedComment},
     },
     types::authorization_guard::{
@@ -23,21 +23,85 @@ use crate::{
 /// [`crate::form::models::ActiveForm`]、[`AnswerEntry`]、`CommentThread` をまたいで
 /// 強整合に扱われます。`CommentThread` 単独が完全な集約であることを意味するものでは
 /// ありません。
-#[derive(UnsafeFromRawParts, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CommentThread {
     answer_id: AnswerId,
+    answer_author: Option<AnswerAuthor>,
     publication: AnswerPublication,
     answer_settings: AnswerSettings,
     comments: Vec<Comment>,
 }
 
 impl CommentThread {
+    /// 永続層の既存 Portal コメントを復元するための入口です。
+    ///
+    /// 回答の著者を持たない旧来の raw 復元は、imported comment の由来検証を行いません。
+    /// 新しいロード経路は [`Self::try_new`] を使います。
+    ///
+    /// # Safety
+    ///
+    /// 呼び出し元は、コメントが回答に属し、既存の Portal コメントとして整合していることを保証しなければなりません。
+    pub unsafe fn from_raw_parts(
+        answer_id: AnswerId,
+        publication: AnswerPublication,
+        answer_settings: AnswerSettings,
+        comments: Vec<Comment>,
+    ) -> Self {
+        Self {
+            answer_id,
+            answer_author: None,
+            publication,
+            answer_settings,
+            comments,
+        }
+    }
+
+    pub fn try_new(
+        answer_id: AnswerId,
+        answer_author: AnswerAuthor,
+        publication: AnswerPublication,
+        answer_settings: AnswerSettings,
+        mut comments: Vec<Comment>,
+    ) -> Result<Self, DomainError> {
+        let mut comment_ids = std::collections::HashSet::new();
+        let mut journal_ids = std::collections::HashSet::new();
+        for comment in &comments {
+            if comment.answer_id() != &answer_id || !comment_ids.insert(*comment.comment_id()) {
+                return Err(DomainError::InvalidEntity {
+                    message: "comment thread contains a foreign or duplicate comment".to_string(),
+                });
+            }
+            if let Some(journal_id) = comment.redmine_journal_id()
+                && (!matches!(&answer_author, AnswerAuthor::ImportedFromRedmine(_))
+                    || !journal_ids.insert(journal_id))
+            {
+                return Err(DomainError::InvalidEntity {
+                        message: "Redmine comment must belong to an imported answer and have a unique journal ID".to_string(),
+                    });
+            }
+        }
+
+        comments.sort_by(compare_comments);
+
+        Ok(Self {
+            answer_id,
+            answer_author: Some(answer_author),
+            publication,
+            answer_settings,
+            comments,
+        })
+    }
+
     pub fn answer_id(&self) -> &AnswerId {
         &self.answer_id
     }
 
     pub fn comments(&self) -> &[Comment] {
         &self.comments
+    }
+
+    pub fn answer_author(&self) -> Option<&AnswerAuthor> {
+        self.answer_author.as_ref()
     }
 
     pub fn find_comment(&self, comment_id: CommentId) -> Option<&Comment> {
@@ -58,13 +122,44 @@ impl CommentThread {
     }
 }
 
+fn compare_comments(left: &Comment, right: &Comment) -> Ordering {
+    let source_order = match (left.source(), right.source()) {
+        (
+            crate::form::comment::CommentSource::ImportedFromRedmine {
+                redmine_journal_id: left_journal_id,
+                ..
+            },
+            crate::form::comment::CommentSource::ImportedFromRedmine {
+                redmine_journal_id: right_journal_id,
+                ..
+            },
+        ) => left_journal_id.cmp(right_journal_id),
+        (
+            crate::form::comment::CommentSource::ImportedFromRedmine { .. },
+            crate::form::comment::CommentSource::Portal { .. },
+        ) => Ordering::Less,
+        (
+            crate::form::comment::CommentSource::Portal { .. },
+            crate::form::comment::CommentSource::ImportedFromRedmine { .. },
+        ) => Ordering::Greater,
+        (
+            crate::form::comment::CommentSource::Portal { .. },
+            crate::form::comment::CommentSource::Portal { .. },
+        ) => left.comment_id().cmp(right.comment_id()),
+    };
+
+    left.timestamp().cmp(right.timestamp()).then(source_order)
+}
+
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use crate::{
         account::models::{AccountUser, Role, UserGroup, UserGroupId, UserGroupName, UserId},
         form::{
-            answer::{AnswerAuthor, AnswerTitle},
+            answer::{AnswerAuthor, AnswerTitle, RedmineUserSnapshot},
+            comment::CommentSource,
             models::{ActiveForm, FormDescription, FormTitle, QuestionSet},
             question::Question,
             settings::AllowedUserGroups,
@@ -333,6 +428,192 @@ mod tests {
             Err(DomainError::NotFound)
         ));
     }
+
+    #[test]
+    fn imported_comments_require_an_imported_answer_and_unique_journals() {
+        let answer_id = AnswerId::new();
+        let author = RedmineUserSnapshot::new(Some(42), "Redmine user".to_string());
+        let comment = Comment::imported_from_redmine(
+            answer_id,
+            CommentId::new(),
+            100,
+            author.clone(),
+            CommentContent::new("imported".to_string().try_into().unwrap()),
+            Utc::now(),
+        );
+
+        let imported_thread = CommentThread::try_new(
+            answer_id,
+            AnswerAuthor::ImportedFromRedmine(author.clone()),
+            AnswerPublication::PUBLIC,
+            AnswerSettings::default()
+                .change_visibility(crate::form::answer::AnswerVisibility::PUBLIC),
+            vec![comment.clone()],
+        )
+        .unwrap();
+        assert!(matches!(
+            imported_thread.comments()[0].source(),
+            CommentSource::ImportedFromRedmine { .. }
+        ));
+
+        let portal_answer_result = CommentThread::try_new(
+            answer_id,
+            AnswerAuthor::AuthenticatedUser(UserId::from(Uuid::new_v4())),
+            AnswerPublication::PUBLIC,
+            AnswerSettings::default(),
+            vec![comment.clone()],
+        );
+        assert!(matches!(
+            portal_answer_result,
+            Err(DomainError::InvalidEntity { .. })
+        ));
+
+        let duplicate = Comment::imported_from_redmine(
+            answer_id,
+            CommentId::new(),
+            100,
+            author,
+            CommentContent::new("duplicate".to_string().try_into().unwrap()),
+            Utc::now(),
+        );
+        assert!(matches!(
+            CommentThread::try_new(
+                answer_id,
+                AnswerAuthor::ImportedFromRedmine(RedmineUserSnapshot::new(
+                    Some(42),
+                    "Redmine user".to_string()
+                )),
+                AnswerPublication::PUBLIC,
+                AnswerSettings::default(),
+                vec![comment, duplicate],
+            ),
+            Err(DomainError::InvalidEntity { .. })
+        ));
+    }
+
+    #[test]
+    fn comment_thread_sorts_comments_by_timestamp_source_and_source_id() {
+        let answer_id = AnswerId::new();
+        let timestamp = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let author = RedmineUserSnapshot::new(Some(42), "Redmine user".to_string());
+        let portal_a = unsafe {
+            Comment::from_raw_parts(
+                answer_id,
+                CommentId::from(Uuid::from_u128(4)),
+                CommentContent::new("portal a".to_string().try_into().unwrap()),
+                timestamp,
+                UserId::from(Uuid::from_u128(1)),
+            )
+        };
+        let portal_b = unsafe {
+            Comment::from_raw_parts(
+                answer_id,
+                CommentId::from(Uuid::from_u128(3)),
+                CommentContent::new("portal b".to_string().try_into().unwrap()),
+                timestamp,
+                UserId::from(Uuid::from_u128(1)),
+            )
+        };
+        let imported_10 = Comment::imported_from_redmine(
+            answer_id,
+            CommentId::from(Uuid::from_u128(2)),
+            10,
+            author.clone(),
+            CommentContent::new("imported 10".to_string().try_into().unwrap()),
+            timestamp,
+        );
+        let imported_2 = Comment::imported_from_redmine(
+            answer_id,
+            CommentId::from(Uuid::from_u128(1)),
+            2,
+            author.clone(),
+            CommentContent::new("imported 2".to_string().try_into().unwrap()),
+            timestamp,
+        );
+
+        let thread = CommentThread::try_new(
+            answer_id,
+            AnswerAuthor::ImportedFromRedmine(author),
+            AnswerPublication::PUBLIC,
+            AnswerSettings::default(),
+            vec![portal_a, imported_10, portal_b, imported_2],
+        )
+        .unwrap();
+
+        let keys = thread
+            .comments()
+            .iter()
+            .map(|comment| {
+                comment
+                    .redmine_journal_id()
+                    .map(|journal_id| format!("imported-{journal_id}"))
+                    .unwrap_or_else(|| format!("portal-{}", comment.comment_id()))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            keys,
+            vec![
+                "imported-2",
+                "imported-10",
+                "portal-00000000-0000-0000-0000-000000000003",
+                "portal-00000000-0000-0000-0000-000000000004"
+            ]
+        );
+    }
+
+    #[test]
+    fn imported_comments_are_read_only_but_account_users_can_create_portal_comments() {
+        let answer_id = AnswerId::new();
+        let imported_comment = Comment::imported_from_redmine(
+            answer_id,
+            CommentId::new(),
+            101,
+            RedmineUserSnapshot::new(None, "Redmine user".to_string()),
+            CommentContent::new("imported".to_string().try_into().unwrap()),
+            Utc::now(),
+        );
+        let thread = CommentThread::try_new(
+            answer_id,
+            AnswerAuthor::ImportedFromRedmine(RedmineUserSnapshot::new(
+                None,
+                "Redmine answer author".to_string(),
+            )),
+            AnswerPublication::PUBLIC,
+            AnswerSettings::default()
+                .change_visibility(crate::form::answer::AnswerVisibility::PUBLIC),
+            vec![imported_comment.clone()],
+        )
+        .unwrap();
+        let admin = user(Role::Administrator);
+        let standard = user(Role::StandardUser);
+        let imported_comment_id = *imported_comment.comment_id();
+
+        let allowed_for_admin = AuthorizationGuard::<_, Update>::from(thread.clone())
+            .try_update(admin)
+            .unwrap();
+        assert!(matches!(
+            allowed_for_admin.authorize_comment_update(
+                imported_comment_id,
+                CommentContent::new("updated".to_string().try_into().unwrap()),
+            ),
+            Err(DomainError::Forbidden)
+        ));
+        assert!(matches!(
+            allowed_for_admin.authorize_comment_delete(imported_comment_id, Utc::now()),
+            Err(DomainError::Forbidden)
+        ));
+
+        let created = AuthorizationGuard::<_, Update>::from(thread)
+            .try_update(standard)
+            .unwrap()
+            .create_comment(CommentContent::new(
+                "portal".to_string().try_into().unwrap(),
+            ))
+            .unwrap();
+        assert!(created.value().commented_by().is_some());
+        assert!(created.value().redmine_journal_id().is_none());
+    }
 }
 
 impl AuthorizationRole for CommentThread {
@@ -381,12 +662,13 @@ impl Allowed<crate::form::models::ActiveForm, Read> {
             return Err(DomainError::NotFound);
         }
 
-        let thread = CommentThread {
-            answer_id: *answer.id(),
-            publication: *answer.publication(),
-            answer_settings: self.answer_settings().clone(),
+        let thread = CommentThread::try_new(
+            *answer.id(),
+            answer.author().clone(),
+            *answer.publication(),
+            self.answer_settings().clone(),
             comments,
-        };
+        )?;
         AuthorizationGuard::from(thread).try_read(self.actor().clone())
     }
 }

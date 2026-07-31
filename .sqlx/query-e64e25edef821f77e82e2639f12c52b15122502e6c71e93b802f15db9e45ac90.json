@@ -1,0 +1,133 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT answer_id, comment_id, redmine_journal_id, redmine_user_id,\n                        redmine_author_name, content,\n                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM redmine_imported_comments\n                    WHERE answer_id = ?\n                    ORDER BY timestamp ASC, redmine_journal_id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "answer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "comment_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "comment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "redmine_journal_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | UNIQUE_KEY | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "redmine_journal_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "redmine_user_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "redmine_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "redmine_author_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "redmine_author_name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "content",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "content"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "timestamp!: chrono::DateTime<chrono::Utc>",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "NOT_NULL | UNSIGNED | BINARY | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "timestamp"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e64e25edef821f77e82e2639f12c52b15122502e6c71e93b802f15db9e45ac90"
+}
