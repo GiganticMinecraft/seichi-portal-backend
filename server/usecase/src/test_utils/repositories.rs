@@ -490,12 +490,13 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
         source: &Allowed<AnswerEntry, Update>,
         target: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error> {
+        let authorized = relation.authorize_read_from_updates(source, target)?;
         let mut relations = self.relations.lock().unwrap();
         if !relations
             .iter()
             .any(|stored| stored.value().relation() == relation)
         {
-            relations.push(relation.authorize_read_from_updates(source, target)?);
+            relations.push(authorized);
         }
         Ok(())
     }
@@ -503,9 +504,10 @@ impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
     async fn remove(
         &self,
         relation: AnswerRelation,
-        _source: &Allowed<AnswerEntry, Update>,
-        _target: &Allowed<AnswerEntry, Update>,
+        source: &Allowed<AnswerEntry, Update>,
+        target: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error> {
+        let _ = relation.authorize_read_from_updates(source, target)?;
         self.relations
             .lock()
             .unwrap()
