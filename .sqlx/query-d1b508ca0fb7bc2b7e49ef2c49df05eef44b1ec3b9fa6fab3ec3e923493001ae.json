@@ -14,7 +14,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal_prepare.answer_relations",
+            "table": "seichi_portal.answer_relations",
             "name": "first_form_id"
           }
         }
@@ -30,7 +30,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal_prepare.answer_relations",
+            "table": "seichi_portal.answer_relations",
             "name": "first_answer_id"
           }
         }
@@ -46,7 +46,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal_prepare.answer_relations",
+            "table": "seichi_portal.answer_relations",
             "name": "second_form_id"
           }
         }
@@ -62,7 +62,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal_prepare.answer_relations",
+            "table": "seichi_portal.answer_relations",
             "name": "second_answer_id"
           }
         }
