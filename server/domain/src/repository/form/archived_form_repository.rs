@@ -3,7 +3,10 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::models::{ArchivedForm, ArchivedFormPagePosition, FormId},
+    form::{
+        answer::AnswerId,
+        models::{ArchivedForm, ArchivedFormPagePosition, FormId},
+    },
     pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
@@ -20,6 +23,12 @@ pub trait ArchivedFormRepository: Send + Sync + 'static {
         &self,
         id: FormId,
     ) -> Result<Option<AuthorizationGuard<ArchivedForm, Read>>, Error>;
+    /// 認可済みアーカイブフォームに回答が存在するか確認します。
+    async fn contains_answer(
+        &self,
+        form: &Allowed<ArchivedForm, Read>,
+        answer_id: AnswerId,
+    ) -> Result<bool, Error>;
     async fn archive(
         &self,
         form: Allowed<ArchivedForm, Create>,

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::account::models::UserGroupId;
 use domain::form::{
-    answer::{AnswerEntry, AnswerPagePosition},
+    answer::{AnswerEntry, AnswerId, AnswerPagePosition},
     models::{
         AllowedUserGroups, ArchivedFormPagePosition, FormLabelId, FormPagePosition, FormSettings,
     },
@@ -1339,6 +1339,28 @@ impl FormDatabase for ConnectionPool {
                     Some(row) => archived_form_record_from_row(txn, row).await.map(Some),
                     None => Ok(None),
                 }
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument]
+    async fn archived_answer_exists(
+        &self,
+        form_id: FormId,
+        answer_id: AnswerId,
+    ) -> Result<bool, InfraError> {
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                let count = sqlx::query_scalar!(
+                    "SELECT COUNT(*) AS `count!: i64` FROM archived_answers WHERE form_id = ? AND id = ?",
+                    form_id.to_string(),
+                    answer_id.to_string(),
+                )
+                .fetch_one(&mut **txn)
+                .await?;
+
+                Ok::<_, InfraError>(count > 0)
             })
         })
         .await

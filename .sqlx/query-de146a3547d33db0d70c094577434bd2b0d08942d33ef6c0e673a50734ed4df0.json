@@ -1,0 +1,82 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT first_form_id, first_answer_id, second_form_id, second_answer_id\n                    FROM answer_relations\n                    WHERE (first_form_id = ? AND first_answer_id = ? AND second_answer_id = ?)\n                       OR (second_form_id = ? AND second_answer_id = ? AND first_answer_id = ?)\n                    ORDER BY first_form_id, first_answer_id, second_form_id, second_answer_id\n                    LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "first_form_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal_prepare.answer_relations",
+            "name": "first_form_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "first_answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal_prepare.answer_relations",
+            "name": "first_answer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "second_form_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal_prepare.answer_relations",
+            "name": "second_form_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "second_answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal_prepare.answer_relations",
+            "name": "second_answer_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "de146a3547d33db0d70c094577434bd2b0d08942d33ef6c0e673a50734ed4df0"
+}

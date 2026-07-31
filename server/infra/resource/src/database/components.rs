@@ -19,7 +19,9 @@ use domain::{
     },
     form::{
         FormSubmissionRestriction,
-        answer::{AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId},
+        answer::{
+            AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerReference, AnswerRelation,
+        },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
         models::{
@@ -41,6 +43,7 @@ use uuid::Uuid;
 pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormDatabase: FormDatabase;
     type ConcreteFormAnswerDatabase: FormAnswerDatabase;
+    type ConcreteFormAnswerRelationDatabase: FormAnswerRelationDatabase;
     type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
     type ConcreteFormMessageDatabase: FormMessageDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
@@ -53,6 +56,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteMinecraftBanDatabase: MinecraftBanDatabase;
     fn form(&self) -> &Self::ConcreteFormDatabase;
     fn form_answer(&self) -> &Self::ConcreteFormAnswerDatabase;
+    fn form_answer_relation(&self) -> &Self::ConcreteFormAnswerRelationDatabase;
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
@@ -84,6 +88,11 @@ pub trait FormDatabase: Send + Sync {
     -> Result<Option<ArchivedFormRecord>, InfraError>;
     async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError>;
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError>;
+    async fn archived_answer_exists(
+        &self,
+        form_id: FormId,
+        answer_id: AnswerId,
+    ) -> Result<bool, InfraError>;
     async fn update(&self, form: &ActiveForm, updated_by: &AccountUser) -> Result<(), InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
     async fn list_answer_entries(
@@ -95,6 +104,28 @@ pub trait FormDatabase: Send + Sync {
         &self,
         request: PageRequest<domain::form::answer::AnswerPagePosition>,
     ) -> Result<Page<AnswerEntry, domain::form::answer::AnswerPagePosition>, InfraError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AnswerRelationRecord {
+    pub first: AnswerReference,
+    pub second: AnswerReference,
+}
+
+#[automock]
+#[async_trait]
+pub trait FormAnswerRelationDatabase: Send + Sync {
+    async fn list_for_answer(
+        &self,
+        source: AnswerReference,
+    ) -> Result<Vec<AnswerRelationRecord>, InfraError>;
+    async fn add(&self, relation: AnswerRelation) -> Result<(), InfraError>;
+    async fn remove(&self, relation: AnswerRelation) -> Result<(), InfraError>;
+    async fn find_for_source_and_answer_id(
+        &self,
+        source: AnswerReference,
+        answer_id: AnswerId,
+    ) -> Result<Option<AnswerRelationRecord>, InfraError>;
 }
 
 #[automock]

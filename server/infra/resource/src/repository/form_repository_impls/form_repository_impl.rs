@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use domain::{
     account::models::AccountUser,
-    form::models::{ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormPagePosition},
+    form::{
+        answer::AnswerId,
+        models::{ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormPagePosition},
+    },
     pagination::{Page, PageRequest},
     repository::form::{
         active_form_repository::ActiveFormRepository,
@@ -133,6 +136,19 @@ where
             .map(|form| {
                 form.map(|form| AuthorizationGuard::<ArchivedForm, Create>::from(form).into_read())
             })
+    }
+
+    #[tracing::instrument(skip(self, form))]
+    async fn contains_answer(
+        &self,
+        form: &Allowed<ArchivedForm, Read>,
+        answer_id: AnswerId,
+    ) -> Result<bool, Error> {
+        self.client
+            .form()
+            .archived_answer_exists(*form.value().form().id(), answer_id)
+            .await
+            .map_err(Into::into)
     }
 
     #[tracing::instrument(skip(self))]

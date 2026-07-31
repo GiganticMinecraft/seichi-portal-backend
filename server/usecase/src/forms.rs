@@ -1,5 +1,6 @@
 pub mod answer;
 pub mod answer_label;
+pub mod answer_relation;
 pub mod comment;
 pub mod discord_answer_webhook;
 pub mod form;
