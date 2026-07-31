@@ -2,7 +2,10 @@ use chrono::{DateTime, Utc};
 use domain::account::models::AccountUser;
 use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
-    answer::{AnswerLabel, AnswerPublication as DomainAnswerPublication, FormAnswerContent},
+    answer::{
+        AnswerLabel, AnswerPublication as DomainAnswerPublication, AnswerReference,
+        FormAnswerContent,
+    },
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
@@ -562,6 +565,21 @@ pub struct FormAnswer {
     publication: AnswerPublication,
     answers: Vec<AnswerContent>,
     labels: Vec<AnswerLabels>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct RelatedAnswerResponse {
+    pub form_id: Uuid,
+    pub answer_id: Uuid,
+}
+
+impl From<AnswerReference> for RelatedAnswerResponse {
+    fn from(reference: AnswerReference) -> Self {
+        Self {
+            form_id: reference.form_id().into_inner(),
+            answer_id: reference.answer_id().into_inner(),
+        }
+    }
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]

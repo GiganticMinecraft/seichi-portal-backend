@@ -1,5 +1,6 @@
 pub mod answer_handler;
 pub mod answer_label_handler;
+pub mod answer_relation_handler;
 pub mod comment_handler;
 pub mod form_handler;
 pub mod form_label_handler;

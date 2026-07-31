@@ -10,7 +10,7 @@ use crate::{
     auth::Actor,
     form::{
         answer::{AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents},
-        models::{ActiveForm, FormId},
+        models::{ActiveForm, ArchivedForm, FormId},
     },
     types::authorization_guard::{
         AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
@@ -18,6 +18,30 @@ use crate::{
 };
 
 pub type AnswerId = types::Id<AnswerEntry>;
+
+/// アーカイブ済みフォーム配下に保存されている回答の identity です。
+///
+/// 関連の閲覧認可に必要な、回答 ID・所属フォーム・公開状態だけを保持します。
+#[derive(UnsafeFromRawParts, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArchivedAnswerEntry {
+    id: AnswerId,
+    form_id: FormId,
+    publication: AnswerPublication,
+}
+
+impl ArchivedAnswerEntry {
+    pub fn id(&self) -> &AnswerId {
+        &self.id
+    }
+
+    pub fn form_id(&self) -> &FormId {
+        &self.form_id
+    }
+
+    pub fn publication(&self) -> &AnswerPublication {
+        &self.publication
+    }
+}
 
 /// 個別の回答を第三者へ公開するかどうかを表します。
 #[derive(
@@ -136,5 +160,23 @@ impl GuardedBy<ActiveForm, Create> for AnswerEntry {
         parent
             .answer_settings()
             .can_accept_answer(self.author(), actor)
+    }
+}
+
+impl AuthorizationRole for ArchivedAnswerEntry {
+    type Role = ParentGuarded<ArchivedForm>;
+}
+
+impl BelongsTo<ArchivedForm> for ArchivedAnswerEntry {
+    fn belongs_to(&self, parent: &ArchivedForm) -> bool {
+        self.form_id() == parent.form().id()
+    }
+}
+
+impl GuardedBy<ArchivedForm, Read> for ArchivedAnswerEntry {
+    fn is_allowed_for(&self, _parent: &ArchivedForm, actor: &Actor) -> bool {
+        matches!(self.publication, AnswerPublication::PUBLIC)
+            || matches!(actor, Actor::System)
+            || matches!(actor, Actor::AccountUser(user) if user.role() == &Role::Administrator)
     }
 }

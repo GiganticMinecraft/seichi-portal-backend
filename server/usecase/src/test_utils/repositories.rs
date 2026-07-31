@@ -6,7 +6,10 @@ use domain::{
     auth::Actor,
     form::{
         FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
-        answer::{AnswerEntry, AnswerId, AnswerPagePosition},
+        answer::{
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
+            AnswerRelation, ArchivedAnswerEntry, ReadableAnswerRelation,
+        },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
             FormPagePosition,
@@ -18,6 +21,7 @@ use domain::{
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_repository::AnswerEntryRepository,
+            answer_relation_repository::AnswerRelationRepository,
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
         },
@@ -31,6 +35,7 @@ use errors::Error;
 use std::{collections::HashMap, sync::Mutex};
 use uuid::Uuid;
 
+use crate::forms::answer_relation::AnswerRelationUseCase;
 use crate::forms::form::FormUseCase;
 
 fn not_found_error(entity: &str, id: impl std::fmt::Display) -> Error {
@@ -47,6 +52,7 @@ pub(crate) struct FormUseCaseTestRepositories {
     pub(crate) notification_repository: InMemoryNotificationRepository,
     pub(crate) form_label_repository: InMemoryFormLabelRepository,
     pub(crate) answer_entry_repository: InMemoryAnswerEntryRepository,
+    pub(crate) answer_relation_repository: InMemoryAnswerRelationRepository,
     pub(crate) user_repository: InMemoryUserRepository,
     pub(crate) form_submission_restriction_repository: InMemoryFormSubmissionRestrictionRepository,
 }
@@ -80,6 +86,23 @@ impl FormUseCaseTestRepositories {
             application_event_publisher: None,
         }
     }
+
+    pub(crate) fn answer_relation_use_case(
+        &self,
+    ) -> AnswerRelationUseCase<
+        '_,
+        InMemoryActiveFormRepository,
+        InMemoryArchivedFormRepository,
+        InMemoryAnswerEntryRepository,
+        InMemoryAnswerRelationRepository,
+    > {
+        AnswerRelationUseCase {
+            active_form_repository: &self.active_form_repository,
+            archived_form_repository: &self.archived_form_repository,
+            answer_entry_repository: &self.answer_entry_repository,
+            answer_relation_repository: &self.answer_relation_repository,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -110,6 +133,10 @@ impl InMemoryActiveFormRepository {
             .iter()
             .find(|form| *form.id() == id)
             .cloned()
+    }
+
+    pub(crate) fn remove_form(&self, id: FormId) {
+        self.forms.lock().unwrap().retain(|form| *form.id() != id);
     }
 }
 
@@ -406,8 +433,124 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
 }
 
 #[derive(Default)]
+pub(crate) struct InMemoryAnswerRelationRepository {
+    relations: Mutex<Vec<Allowed<ReadableAnswerRelation, Read>>>,
+}
+
+impl InMemoryAnswerRelationRepository {
+    pub(crate) fn set_authorized_relations(
+        &self,
+        relations: Vec<Allowed<ReadableAnswerRelation, Read>>,
+    ) {
+        *self.relations.lock().unwrap() = relations;
+    }
+}
+
+#[async_trait]
+impl AnswerRelationRepository for InMemoryAnswerRelationRepository {
+    async fn list_for_answer(
+        &self,
+        source: &Allowed<AnswerEntry, Read>,
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error> {
+        let actor = source.actor();
+        let source = AnswerReference::new(*source.form_id(), *source.id());
+        Ok(self
+            .relations
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|relation| {
+                relation.actor() == actor && relation.opposite_endpoint_for(source).is_ok()
+            })
+            .cloned()
+            .collect())
+    }
+
+    async fn list_for_archived_answer(
+        &self,
+        source: &Allowed<ArchivedAnswerEntry, Read>,
+    ) -> Result<Vec<Allowed<ReadableAnswerRelation, Read>>, Error> {
+        let actor = source.actor();
+        let source = AnswerReference::new(*source.form_id(), *source.id());
+        Ok(self
+            .relations
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|relation| {
+                relation.actor() == actor && relation.opposite_endpoint_for(source).is_ok()
+            })
+            .cloned()
+            .collect())
+    }
+
+    async fn add(
+        &self,
+        relation: AnswerRelation,
+        source: &Allowed<AnswerEntry, Update>,
+        target: &Allowed<AnswerEntry, Update>,
+    ) -> Result<(), Error> {
+        let authorized = relation.authorize_read_from_updates(source, target)?;
+        let mut relations = self.relations.lock().unwrap();
+        if !relations
+            .iter()
+            .any(|stored| stored.value().relation() == relation)
+        {
+            relations.push(authorized);
+        }
+        Ok(())
+    }
+
+    async fn remove(
+        &self,
+        relation: AnswerRelation,
+        source: &Allowed<AnswerEntry, Update>,
+        target: &Allowed<AnswerEntry, Update>,
+    ) -> Result<(), Error> {
+        let _ = relation.authorize_read_from_updates(source, target)?;
+        self.relations
+            .lock()
+            .unwrap()
+            .retain(|stored| stored.value().relation() != relation);
+        Ok(())
+    }
+
+    async fn find_for_source_and_answer_id(
+        &self,
+        source: &Allowed<AnswerEntry, Update>,
+        answer_id: AnswerId,
+    ) -> Result<Option<Allowed<ReadableAnswerRelation, Read>>, Error> {
+        let actor = source.actor();
+        let source = AnswerReference::new(*source.form_id(), *source.id());
+        Ok(self
+            .relations
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|relation| {
+                relation.opposite_endpoint_for(source).is_ok_and(|target| {
+                    relation.actor() == actor && target.answer_id() == answer_id
+                })
+            })
+            .cloned())
+    }
+}
+
+#[derive(Default)]
 pub(crate) struct InMemoryArchivedFormRepository {
     forms: Mutex<Vec<ArchivedForm>>,
+    answer_ids_by_form: Mutex<HashMap<FormId, Vec<AnswerId>>>,
+}
+
+impl InMemoryArchivedFormRepository {
+    pub(crate) fn save_form_with_answers(&self, form: ArchivedForm, answer_ids: Vec<AnswerId>) {
+        let form_id = *form.form().id();
+        self.forms.lock().unwrap().push(form);
+        self.answer_ids_by_form
+            .lock()
+            .unwrap()
+            .insert(form_id, answer_ids);
+    }
 }
 
 #[async_trait]
@@ -481,6 +624,30 @@ impl ArchivedFormRepository for InMemoryArchivedFormRepository {
             .map(AuthorizationGuard::from))
     }
 
+    async fn get_answer(
+        &self,
+        form: &Allowed<ArchivedForm, Read>,
+        answer_id: AnswerId,
+    ) -> Result<Option<Allowed<ArchivedAnswerEntry, Read>>, Error> {
+        let exists = self
+            .answer_ids_by_form
+            .lock()
+            .unwrap()
+            .get(form.form().id())
+            .is_some_and(|answer_ids| answer_ids.contains(&answer_id));
+        if !exists {
+            return Ok(None);
+        }
+        let answer = unsafe {
+            ArchivedAnswerEntry::from_raw_parts(
+                answer_id,
+                *form.form().id(),
+                AnswerPublication::PUBLIC,
+            )
+        };
+        Ok(Some(form.read_archived_entry(answer)?))
+    }
+
     async fn archive(
         &self,
         form: Allowed<ArchivedForm, Create>,
@@ -496,6 +663,10 @@ impl ArchivedFormRepository for InMemoryArchivedFormRepository {
             .lock()
             .unwrap()
             .retain(|archived_form| *archived_form.form().id() != restored_form_id);
+        self.answer_ids_by_form
+            .lock()
+            .unwrap()
+            .remove(&restored_form_id);
         Ok(())
     }
 }

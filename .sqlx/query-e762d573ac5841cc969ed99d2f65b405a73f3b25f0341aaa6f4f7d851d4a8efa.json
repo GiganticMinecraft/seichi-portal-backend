@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM answer_relations\n                    WHERE first_form_id = ? AND first_answer_id = ?\n                      AND second_form_id = ? AND second_answer_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e762d573ac5841cc969ed99d2f65b405a73f3b25f0341aaa6f4f7d851d4a8efa"
+}

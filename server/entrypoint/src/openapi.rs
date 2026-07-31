@@ -45,12 +45,14 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::QuestionResponseSchema,
         presentation::schemas::form::form_response_schemas::SelectQuestionResponseSchema,
         presentation::schemas::form::form_response_schemas::TextQuestionResponseSchema,
+        presentation::schemas::form::form_response_schemas::RelatedAnswerResponse,
         presentation::schemas::form::form_request_schemas::ChoiceSchema,
         presentation::schemas::form::form_request_schemas::QuestionDefinitionSchema,
         presentation::schemas::form::form_request_schemas::QuestionSchema,
         presentation::schemas::form::form_request_schemas::SelectQuestionSchema,
         presentation::schemas::form::form_request_schemas::TextQuestionSchema,
         presentation::schemas::form::form_request_schemas::TemporaryAnswerCreateSchema,
+        presentation::schemas::form::form_request_schemas::RelatedAnswerRequest,
         presentation::schemas::form::form_request_schemas::TemporaryUserCreateSchema,
         presentation::schemas::form::form_response_schemas::AnswerAcceptancePeriodSchema,
         presentation::schemas::form::form_response_schemas::Role,
@@ -119,8 +121,8 @@ pub fn optional_auth_api_router() -> OpenApiRouter<RealInfrastructureRepository>
 
 pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
     use presentation::handlers::form::{
-        answer_handler, answer_label_handler, comment_handler, form_handler, form_label_handler,
-        message_handler,
+        answer_handler, answer_label_handler, answer_relation_handler, comment_handler,
+        form_handler, form_label_handler, message_handler,
     };
 
     OpenApiRouter::new()
@@ -137,6 +139,11 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
         .routes(routes!(
             answer_handler::get_answer_by_form_id_handler,
             answer_handler::post_answer_handler
+        ))
+        .routes(routes!(
+            answer_relation_handler::get_related_answers_handler,
+            answer_relation_handler::add_related_answer_handler,
+            answer_relation_handler::remove_related_answer_handler
         ))
         .routes(routes!(answer_handler::get_all_answers))
         .routes(routes!(

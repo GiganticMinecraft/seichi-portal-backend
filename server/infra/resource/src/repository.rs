@@ -70,6 +70,7 @@ impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Syn
     type ConcreteActiveFormRepository = Repository<Client>;
     type ConcreteArchivedFormRepository = Repository<Client>;
     type ConcreteAnswerEntryRepository = Repository<Client>;
+    type ConcreteAnswerRelationRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
     type ConcreteCommentThreadRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
@@ -124,6 +125,10 @@ impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Syn
     }
 
     fn answer_entry_repository(&self) -> &Self::ConcreteAnswerEntryRepository {
+        &self.db
+    }
+
+    fn answer_relation_repository(&self) -> &Self::ConcreteAnswerRelationRepository {
         &self.db
     }
 

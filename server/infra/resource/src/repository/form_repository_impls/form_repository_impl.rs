@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use domain::{
     account::models::AccountUser,
-    form::models::{ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormPagePosition},
+    form::{
+        answer::{AnswerId, ArchivedAnswerEntry},
+        models::{ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormPagePosition},
+    },
     pagination::{Page, PageRequest},
     repository::form::{
         active_form_repository::ActiveFormRepository,
@@ -133,6 +136,26 @@ where
             .map(|form| {
                 form.map(|form| AuthorizationGuard::<ArchivedForm, Create>::from(form).into_read())
             })
+    }
+
+    #[tracing::instrument(skip(self, form))]
+    async fn get_answer(
+        &self,
+        form: &Allowed<ArchivedForm, Read>,
+        answer_id: AnswerId,
+    ) -> Result<Option<Allowed<ArchivedAnswerEntry, Read>>, Error> {
+        let Some(publication) = self
+            .client
+            .form()
+            .archived_answer_publication(*form.value().form().id(), answer_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let answer = unsafe {
+            ArchivedAnswerEntry::from_raw_parts(answer_id, *form.value().form().id(), publication)
+        };
+        Ok(Some(form.read_archived_entry(answer)?))
     }
 
     #[tracing::instrument(skip(self))]
