@@ -13,7 +13,7 @@ use axum::{
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
-use entrypoint::{logging, openapi, telemetry};
+use entrypoint::{logging, openapi, panic_hook, telemetry};
 use futures::join;
 use hyper::header::SET_COOKIE;
 use opentelemetry::trace::TracerProvider as _;
@@ -27,7 +27,6 @@ use presentation::handlers::search_handler::{
     initialize_search_engine, start_sync, start_watch_out_of_sync,
 };
 use resource::{database::connection::ConnectionPool, repository::Repository};
-use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde_json::json;
 use serenity::all::ShardManager;
 use tokio::{
@@ -35,7 +34,10 @@ use tokio::{
     signal,
     sync::{Notify, mpsc},
 };
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+    catch_panic::CatchPanicLayer,
+    cors::{Any, CorsLayer},
+};
 use tracing::{info, log};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
@@ -71,30 +73,10 @@ async fn main() -> anyhow::Result<()> {
         .with(tracer_provider.as_ref().map(|provider| {
             tracing_opentelemetry::layer().with_tracer(provider.tracer("seichi-portal-backend"))
         }))
-        .with(sentry::integrations::tracing::layer())
         .with(json_log_layer)
         .with(pretty_log_layer)
         .init();
-
-    let _guard = if ENV.name != "local" {
-        let _guard = sentry::init((
-            "http://481e89e767984164a62dfcb92c869db6@bugsink.seichi-minecraft/1",
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                traces_sample_rate: 1.0,
-                environment: Some(ENV.name.to_owned().into()),
-                ..Default::default()
-            },
-        ));
-        sentry::configure_scope(|scope| scope.set_level(Some(sentry::Level::Warning)));
-        Some(_guard)
-    } else {
-        None
-    };
-
-    let layer = tower::ServiceBuilder::new()
-        .layer(NewSentryLayer::new_from_top())
-        .layer(SentryHttpLayer::new().enable_transaction());
+    panic_hook::install();
 
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
@@ -171,7 +153,8 @@ async fn main() -> anyhow::Result<()> {
                 .merge(message_post_router),
         )
         .fallback(not_found_handler)
-        .layer(layer)
+        // handler 内 panic で 500 を返し、コネクションを維持する
+        .layer(CatchPanicLayer::new())
         // レスポンスヘッダーへの trace context 挿入 (OtelAxumLayer より内側に置く)
         .layer(OtelInResponseLayer)
         // リクエストごとの OTel スパン開始。/health はトレース対象外

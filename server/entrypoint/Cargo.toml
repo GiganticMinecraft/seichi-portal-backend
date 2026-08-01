@@ -17,11 +17,8 @@ opentelemetry-otlp = { version = "0.32.0", default-features = false, features = 
 opentelemetry_sdk = "0.32.1"
 presentation = { path = "../presentation" }
 resource = { path = "../infra/resource" }
-# default featureは推移的にnative-tls featureを有効しているため、native-tls (LinuxではOpenSSL) を連れてくる。これをオプトアウトするためにrustlsを使う。
-sentry = { version = "0.48.5", default-features = false, features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "tracing", "debug-images", "rustls", "tower", "tower-http"] }
 tokio = { workspace = true }
-tower = "0.5.3"
-tower-http = { version = "0.7.0", features = ["cors"] }
+tower-http = { version = "0.7.0", features = ["catch-panic", "cors"] }
 tracing = { workspace = true }
 tracing-opentelemetry = "0.33.0"
 tracing-subscriber = { version = "0.3.23", features = ["std", "registry", "env-filter"] }
