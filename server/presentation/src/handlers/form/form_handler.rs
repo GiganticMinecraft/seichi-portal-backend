@@ -402,10 +402,10 @@ pub async fn form_list_handler(
 
 #[utoipa::path(
     get,
-    path = "/forms/{id}",
+    path = "/forms/{form_id}",
     summary = "フォームの取得",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
     ),
     responses(
         GetFormResponse,
@@ -439,10 +439,10 @@ pub async fn get_form_handler(
 
 #[utoipa::path(
     post,
-    path = "/forms/{id}/archive",
+    path = "/forms/{form_id}/archive",
     summary = "フォームのアーカイブ",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
     ),
     responses(
         (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
@@ -477,11 +477,11 @@ pub async fn archive_form_handler(
 
 #[utoipa::path(
     put,
-    path = "/forms/{id}",
+    path = "/forms/{form_id}",
     summary = "フォームの更新",
     description = "questions または labels を含めた場合、その form 配下の値全体を指定内容で置換します。省略した場合は既存値を保持します。",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
     ),
     request_body = FormUpdateSchema,
     responses(
@@ -603,10 +603,10 @@ pub async fn archived_form_list_handler(
 
 #[utoipa::path(
     get,
-    path = "/archived-forms/{id}",
+    path = "/archived-forms/{form_id}",
     summary = "アーカイブ済みフォームの取得",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
     ),
     responses(
         ArchivedFormResponse,
@@ -645,10 +645,10 @@ pub async fn get_archived_form_handler(
 
 #[utoipa::path(
     post,
-    path = "/archived-forms/{id}/restore",
+    path = "/archived-forms/{form_id}/restore",
     summary = "アーカイブ済みフォームの復元",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
     ),
     responses(
         (status = 204, description = "There is no content to send for this request, but the headers may be useful."),
