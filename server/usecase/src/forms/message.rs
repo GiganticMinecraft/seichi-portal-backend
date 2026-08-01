@@ -7,7 +7,7 @@ use domain::{
     account::models::AccountUser,
     auth::Actor,
     form::{
-        answer::{AnswerEntry, AnswerId},
+        answer::{AnswerEntry, AnswerId, AnswerTitle},
         message::{
             Message, MessageBody, MessageHistoryEntry, MessageHistoryPagePosition, MessageId,
         },
@@ -39,6 +39,26 @@ use crate::{
     models::MessageWithSender,
     user_reference_resolver::resolve_user_references,
 };
+
+fn message_notification_content(
+    frontend_url: &str,
+    form_id: FormId,
+    answer_id: AnswerId,
+    answer_title: &AnswerTitle,
+    message_id: &str,
+) -> NotificationContent {
+    let title = answer_title
+        .clone()
+        .into_inner()
+        .map(|title| title.into_inner())
+        .unwrap_or_else(|| "（タイトルなし）".to_string());
+
+    NotificationContent::new(vec![
+        format!("回答『{title}』に新しいメッセージが届きました。"),
+        "以下のリンクからメッセージを確認できます。".to_string(),
+        format!("{frontend_url}/forms/{form_id}/answers/{answer_id}?messageId={message_id}"),
+    ])
+}
 
 pub struct MessageUseCase<
     'a,
@@ -112,6 +132,15 @@ impl<
         let post = thread.try_post_message(message)?;
         let notification_recipient_id = *post.answer_author_id();
         self.message_thread_repository.append(post).await?;
+        let notification_content = (message_sender_id != notification_recipient_id).then(|| {
+            message_notification_content(
+                &FRONTEND.url,
+                form_id,
+                answer_id,
+                form_answer.title(),
+                &message_id,
+            )
+        });
         if let Some(publisher) = self.application_event_publisher {
             publisher.publish(ApplicationEvent::MessageCreated {
                 actor: ApplicationActor::from(actor),
@@ -122,7 +151,7 @@ impl<
             });
         }
 
-        if message_sender_id != notification_recipient_id {
+        if let Some(notification_content) = notification_content {
             let fetched_notification_preference = self
                 .notification_repository
                 .fetch_notification_settings(notification_recipient_id.into_inner())
@@ -154,17 +183,12 @@ impl<
                 }
             };
 
-            let url = &*FRONTEND.url;
             notificator
                 .notify(
                     notification_recipient_id,
                     NotificationType::MessageReceived,
                     &notification_preference,
-                    &NotificationContent::new(vec![
-                        "あなたの回答にメッセージが送信されました。".to_string(),
-                        "メッセージを確認してください。".to_string(),
-                        format!("{url}/forms/{form_id}/answers/{answer_id}/messages"),
-                    ]),
+                    &notification_content,
                 )
                 .await?;
         }
@@ -477,6 +501,7 @@ mod tests {
     struct FailingNotificator {
         called: AtomicBool,
         recipient: Mutex<Option<UserId>>,
+        content: Mutex<Option<String>>,
     }
 
     #[async_trait]
@@ -486,10 +511,11 @@ mod tests {
             recipient: UserId,
             _notification_type: NotificationType,
             _notification_preference: &NotificationPreference,
-            _content: &NotificationContent,
+            content: &NotificationContent,
         ) -> Result<(), Error> {
             self.called.store(true, Ordering::Relaxed);
             *self.recipient.lock().unwrap() = Some(recipient);
+            *self.content.lock().unwrap() = Some(content.to_message());
             Err(errors::domain::DomainError::InvalidEntity {
                 message: "notification failed".to_string(),
             }
@@ -542,6 +568,31 @@ mod tests {
             "temporary user".to_string(),
             "temporary@example.com".to_string(),
         )))
+    }
+
+    #[test]
+    fn message_notification_content_uses_title_fallback() {
+        let (form, answer) = form_and_temporary_answer();
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let message_id = MessageId::new().to_string();
+
+        let content = message_notification_content(
+            "https://example.com",
+            form_id,
+            answer_id,
+            answer.title(),
+            &message_id,
+        );
+
+        assert_eq!(
+            content.to_message(),
+            format!(
+                "回答『（タイトルなし）』に新しいメッセージが届きました。\n\
+以下のリンクからメッセージを確認できます。\n\
+https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
+            )
+        );
     }
 
     #[tokio::test]
@@ -816,6 +867,9 @@ mod tests {
         );
         let recipient_id = *recipient.id();
         let (form, answer) = form_and_answer(&recipient);
+        let answer = answer.with_title(AnswerTitle::new(Some(
+            "回答タイトル".to_string().try_into().unwrap(),
+        )));
         let form_id = *form.id();
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
@@ -847,6 +901,15 @@ mod tests {
         assert!(result.is_err());
         assert!(notificator.called.load(Ordering::Relaxed));
         assert_eq!(*notificator.recipient.lock().unwrap(), Some(recipient_id));
+        let message_id = messages.only_message_id();
+        assert_eq!(
+            *notificator.content.lock().unwrap(),
+            Some(format!(
+                "回答『回答タイトル』に新しいメッセージが届きました。\n\
+以下のリンクからメッセージを確認できます。\n\
+https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
+            ))
+        );
         assert!(matches!(
             publisher.0.lock().unwrap().as_slice(),
             [ApplicationEvent::MessageCreated { body, .. }] if body == "saved"
