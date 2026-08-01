@@ -66,30 +66,42 @@ pub fn start_global_discord_webhook_worker(
                 Err(RecvError::Closed) => break,
             };
 
-            let setting = match repository.global_discord_webhook_repository().get().await {
-                Ok(setting) => match setting.try_read(Actor::System) {
-                    Ok(setting) => setting.into_inner(),
-                    Err(error) => {
-                        warn!(%error, "failed to authorize global Discord webhook setting read");
-                        continue;
-                    }
-                },
-                Err(error) => {
-                    warn!(%error, "failed to load global Discord webhook setting");
-                    continue;
-                }
-            };
-            let Some(url) = setting.url() else {
-                continue;
-            };
-
-            let operation = operation_name(&event);
-            let message = message_from_event(event, url.as_str().to_owned(), &frontend_url);
-            if let Err(error) = sender.send_with_retry(message).await {
-                warn!(%error, operation, "failed to send global Discord webhook after retries");
-            }
+            handle_event(&repository, &sender, &frontend_url, event).await;
         }
     })
+}
+
+/// イベント発生元とはチャンネル越しに分離されているため、通知 1 件ごとに
+/// 新しいルートスパンを作る。
+#[tracing::instrument(name = "discord_webhook.notify", parent = None, skip_all)]
+async fn handle_event(
+    repository: &RealInfrastructureRepository,
+    sender: &DiscordWebhookSender,
+    frontend_url: &str,
+    event: ApplicationEvent,
+) {
+    let setting = match repository.global_discord_webhook_repository().get().await {
+        Ok(setting) => match setting.try_read(Actor::System) {
+            Ok(setting) => setting.into_inner(),
+            Err(error) => {
+                warn!(%error, "failed to authorize global Discord webhook setting read");
+                return;
+            }
+        },
+        Err(error) => {
+            warn!(%error, "failed to load global Discord webhook setting");
+            return;
+        }
+    };
+    let Some(url) = setting.url() else {
+        return;
+    };
+
+    let operation = operation_name(&event);
+    let message = message_from_event(event, url.as_str().to_owned(), frontend_url);
+    if let Err(error) = sender.send_with_retry(message).await {
+        warn!(%error, operation, "failed to send global Discord webhook after retries");
+    }
 }
 
 fn actor_fields(actor: ApplicationActor) -> Vec<DiscordWebhookField> {
