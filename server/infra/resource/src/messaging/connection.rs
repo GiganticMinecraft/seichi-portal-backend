@@ -9,6 +9,7 @@ use lapin::{
     types::FieldTable,
 };
 use tokio::sync::{Notify, mpsc};
+use tracing::Instrument;
 
 use crate::messaging::{
     config::{RABBITMQ, RabbitMQ},
@@ -88,28 +89,43 @@ impl MessagingConnectionPool {
                         },
                         _ = async {
                             if let Some(Ok(delivery)) = consumer.next().await {
-                                let data = String::from_utf8_lossy(&delivery.data);
-                                let payload = serde_json::from_str::<RabbitMQSchema>(&data)?.payload;
+                                // Debezium CDC 由来のメッセージには trace context がないため、
+                                // delivery ごとに新しいルートスパンを作る
+                                let span = tracing::info_span!(
+                                    parent: None,
+                                    "cdc.process",
+                                    otel.kind = "consumer",
+                                    messaging.system = "rabbitmq",
+                                    messaging.operation.type = "process",
+                                    messaging.destination.name = %RABBITMQ.routing_key,
+                                );
+                                async {
+                                    let data = String::from_utf8_lossy(&delivery.data);
+                                    let payload = serde_json::from_str::<RabbitMQSchema>(&data)?.payload;
 
-                                let operation = match payload.op.to_owned() {
-                                    Operation::Create => domain::search::models::Operation::Create,
-                                    Operation::Update => domain::search::models::Operation::Update,
-                                    Operation::Delete => domain::search::models::Operation::Delete,
-                                };
-                                let data_fields = match operation {
-                                    domain::search::models::Operation::Create | domain::search::models::Operation::Update => {
-                                        payload.try_into_after()?
-                                    }
-                                    domain::search::models::Operation::Delete => {
-                                        payload.try_into_before()?
-                                    }
-                                };
+                                    let operation = match payload.op.to_owned() {
+                                        Operation::Create => domain::search::models::Operation::Create,
+                                        Operation::Update => domain::search::models::Operation::Update,
+                                        Operation::Delete => domain::search::models::Operation::Delete,
+                                    };
+                                    let data_fields = match operation {
+                                        domain::search::models::Operation::Create | domain::search::models::Operation::Update => {
+                                            payload.try_into_after()?
+                                        }
+                                        domain::search::models::Operation::Delete => {
+                                            payload.try_into_before()?
+                                        }
+                                    };
 
-                                if let Some(data_fields) = data_fields {
-                                    sender.send((SearchableFields::try_from(data_fields)?, operation)).await?;
+                                    if let Some(data_fields) = data_fields {
+                                        sender.send((SearchableFields::try_from(data_fields)?, operation)).await?;
+                                    }
+
+                                    delivery.ack(BasicAckOptions::default()).await?;
+                                    Ok::<_, InfraError>(())
                                 }
-
-                                delivery.ack(BasicAckOptions::default()).await?;
+                                .instrument(span)
+                                .await?;
                             }
                             Ok::<_, InfraError>(())
                         } => {}

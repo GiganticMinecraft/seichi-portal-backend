@@ -42,6 +42,7 @@ use std::{
 };
 use tokio::sync::{Notify, mpsc::Receiver};
 use tokio::time;
+use tracing::Instrument;
 
 const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
 
@@ -546,7 +547,12 @@ impl<
                 },
                 _ = async {
                     if let Some(data) = receiver.recv().await {
-                        self.search_repository.sync_search_engine(&[data]).await?
+                        // CDC consumer からチャンネル越しに受け取るため trace context はなく、
+                        // 同期 1 件ごとに新しいルートスパンを作る
+                        self.search_repository
+                            .sync_search_engine(&[data])
+                            .instrument(tracing::info_span!(parent: None, "search_engine.sync"))
+                            .await?
                     }
 
                     Ok::<_, Error>(())
@@ -569,137 +575,134 @@ impl<
                     break
                 },
                 _ = interval.tick() => {
-                    let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
-
-                    let repository_records = NumberOfRecordsPerAggregate {
-                        form_meta_data: NumberOfRecords(self.active_form_repository.size().await?),
-                        answers: NumberOfRecords(self.answer_entry_repository.size().await?),
-                        real_answers: NumberOfRecords(
-                            self.answer_entry_repository.content_size().await?,
-                        ),
-                        form_answer_comments: NumberOfRecords(
-                            self.comment_thread_repository.size().await?,
-                        ),
-                        label_for_form_answers: NumberOfRecords(
-                            self.form_answer_label_repository.size().await?,
-                        ),
-                        label_for_forms: NumberOfRecords(self.form_label_repository.size().await?),
-                        users: NumberOfRecords(self.user_repository.size().await?),
-                    };
-
-                    let sync_rate = search_engine_records.try_into_sync_rate(&repository_records)?;
-
-                    if sync_rate.is_out_of_sync() {
-                        let system = Actor::System;
-
-                        let form_guards = self
-                            .list_all_form_guards()
-                            .await?
-                            .into_iter()
-                            .map(|guard| guard.try_read(system.clone()).map_err(Into::into))
-                            .collect::<Result<Vec<_>, Error>>()?;
-
-                        let forms = form_guards
-                            .iter()
-                            .map(|form| {
-                                Ok((
-                                    SearchableFields::FormMetaData(
-                                        FormMetaData {
-                                            id: form.value().id().to_owned(),
-                                            title: form.value().title().to_owned(),
-                                            description: form.value().description().to_owned(),
-                                        },
-                                    ),
-                                    Operation::Update,
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?;
-
-                        let answer_entries = self.list_all_answer_entries(&form_guards).await?;
-
-                        let answer_documents = answer_search_documents(&answer_entries);
-
-                        let comments = self
-                            .comment_search_documents(&form_guards, &answer_entries)
-                            .await?;
-
-                        let labels_for_forms = self
-                            .form_label_repository
-                            .fetch_labels()
-                            .await?
-                            .into_iter()
-                            .map(|guard| {
-                                let label = guard.try_read(system.clone())?.into_inner();
-
-                                Ok((
-                                    SearchableFields::LabelForForms(
-                                        LabelForForms {
-                                            id: label.id().to_owned(),
-                                            name: label.name().to_owned().into_inner().into_inner(),
-                                        },
-                                    ),
-                                    Operation::Update,
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?;
-
-                        let labels_for_answers = self
-                            .form_answer_label_repository
-                            .get_labels_for_answers()
-                            .await?
-                            .into_iter()
-                            .map(|guard| {
-                                let label = guard.try_read(system.clone())?.into_inner();
-
-                                Ok((
-                                    SearchableFields::LabelForFormAnswers(
-                                        LabelForFormAnswers {
-                                            id: label.id().to_owned(),
-                                            name: label.name().to_owned().into_inner(),
-                                        },
-                                    ),
-                                    Operation::Update,
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?;
-
-                        let users = self
-                            .user_repository
-                            .fetch_all_users()
-                            .await?
-                            .into_iter()
-                            .map(|guard| {
-                                let user = guard.try_read(system.clone())?.into_inner();
-
-                                Ok((
-                                    SearchableFields::Users(
-                                        Users {
-                                            id: user.id().into_inner(),
-                                            name: user.name().to_owned(),
-                                        },
-                                    ),
-                                    Operation::Update,
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?;
-
-                        let data = forms
-                            .into_iter()
-                            .chain(answer_documents)
-                            .chain(comments)
-                            .chain(labels_for_forms)
-                            .chain(labels_for_answers)
-                            .chain(users)
-                            .collect::<Vec<_>>();
-
-                        self.search_repository
-                            .sync_search_engine(data.as_slice())
-                            .await?;
-                    }
+                    self.check_and_resync_search_engine().await?;
                 }
             }
         }
 
+        Ok(())
+    }
+
+    /// 検索エンジンとリポジトリのレコード数を比較し、乖離があれば全件再同期する。
+    ///
+    /// 定期実行タスクのため、実行ごとに新しいルートスパンを作る。
+    #[tracing::instrument(name = "search_engine.watch_out_of_sync", parent = None, skip_all)]
+    async fn check_and_resync_search_engine(&self) -> Result<(), Error> {
+        let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
+
+        let repository_records = NumberOfRecordsPerAggregate {
+            form_meta_data: NumberOfRecords(self.active_form_repository.size().await?),
+            answers: NumberOfRecords(self.answer_entry_repository.size().await?),
+            real_answers: NumberOfRecords(self.answer_entry_repository.content_size().await?),
+            form_answer_comments: NumberOfRecords(self.comment_thread_repository.size().await?),
+            label_for_form_answers: NumberOfRecords(
+                self.form_answer_label_repository.size().await?,
+            ),
+            label_for_forms: NumberOfRecords(self.form_label_repository.size().await?),
+            users: NumberOfRecords(self.user_repository.size().await?),
+        };
+
+        let sync_rate = search_engine_records.try_into_sync_rate(&repository_records)?;
+
+        if sync_rate.is_out_of_sync() {
+            let system = Actor::System;
+
+            let form_guards = self
+                .list_all_form_guards()
+                .await?
+                .into_iter()
+                .map(|guard| guard.try_read(system.clone()).map_err(Into::into))
+                .collect::<Result<Vec<_>, Error>>()?;
+
+            let forms = form_guards
+                .iter()
+                .map(|form| {
+                    Ok((
+                        SearchableFields::FormMetaData(FormMetaData {
+                            id: form.value().id().to_owned(),
+                            title: form.value().title().to_owned(),
+                            description: form.value().description().to_owned(),
+                        }),
+                        Operation::Update,
+                    ))
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+
+            let answer_entries = self.list_all_answer_entries(&form_guards).await?;
+
+            let answer_documents = answer_search_documents(&answer_entries);
+
+            let comments = self
+                .comment_search_documents(&form_guards, &answer_entries)
+                .await?;
+
+            let labels_for_forms = self
+                .form_label_repository
+                .fetch_labels()
+                .await?
+                .into_iter()
+                .map(|guard| {
+                    let label = guard.try_read(system.clone())?.into_inner();
+
+                    Ok((
+                        SearchableFields::LabelForForms(LabelForForms {
+                            id: label.id().to_owned(),
+                            name: label.name().to_owned().into_inner().into_inner(),
+                        }),
+                        Operation::Update,
+                    ))
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+
+            let labels_for_answers = self
+                .form_answer_label_repository
+                .get_labels_for_answers()
+                .await?
+                .into_iter()
+                .map(|guard| {
+                    let label = guard.try_read(system.clone())?.into_inner();
+
+                    Ok((
+                        SearchableFields::LabelForFormAnswers(LabelForFormAnswers {
+                            id: label.id().to_owned(),
+                            name: label.name().to_owned().into_inner(),
+                        }),
+                        Operation::Update,
+                    ))
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+
+            let users = self
+                .user_repository
+                .fetch_all_users()
+                .await?
+                .into_iter()
+                .map(|guard| {
+                    let user = guard.try_read(system.clone())?.into_inner();
+
+                    Ok((
+                        SearchableFields::Users(Users {
+                            id: user.id().into_inner(),
+                            name: user.name().to_owned(),
+                        }),
+                        Operation::Update,
+                    ))
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+
+            let data = forms
+                .into_iter()
+                .chain(answer_documents)
+                .chain(comments)
+                .chain(labels_for_forms)
+                .chain(labels_for_answers)
+                .chain(users)
+                .collect::<Vec<_>>();
+
+            self.search_repository
+                .sync_search_engine(data.as_slice())
+                .await?;
+        }
         Ok(())
     }
 
