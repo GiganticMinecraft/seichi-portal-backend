@@ -13,7 +13,7 @@ use axum::{
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
-use entrypoint::{openapi, telemetry};
+use entrypoint::{logging, openapi, telemetry};
 use futures::join;
 use hyper::header::SET_COOKIE;
 use opentelemetry::trace::TracerProvider as _;
@@ -44,17 +44,44 @@ use utoipa_swagger_ui::SwaggerUi;
 async fn main() -> anyhow::Result<()> {
     let tracer_provider = telemetry::init_tracer_provider();
 
+    // SQL 文の出力 (bind 値を含みうる) はログへ出さない
+    let stdout_log_filter = || {
+        tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+        )
+        .add_directive("sqlx::query=off".parse().expect("directive must be valid"))
+    };
+    let json_logs_enabled = logging::json_logs_enabled(
+        ENV.name.as_str(),
+        std::env::var("LOG_FORMAT").ok().as_deref(),
+    );
+    let json_log_formatter = logging::JsonWithTraceId::new();
+    let (json_log_layer, pretty_log_layer) = if json_logs_enabled {
+        (
+            Some(
+                tracing_subscriber::fmt::layer()
+                    .event_format(json_log_formatter.clone())
+                    .with_filter(stdout_log_filter()),
+            ),
+            None,
+        )
+    } else {
+        (
+            None,
+            Some(tracing_subscriber::fmt::layer().with_filter(stdout_log_filter())),
+        )
+    };
+
     tracing_subscriber::registry()
         .with(tracer_provider.as_ref().map(|provider| {
             tracing_opentelemetry::layer().with_tracer(provider.tracer("seichi-portal-backend"))
         }))
         .with(sentry::integrations::tracing::layer())
-        .with(
-            tracing_subscriber::fmt::layer().with_filter(tracing_subscriber::EnvFilter::new(
-                std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
-            )),
-        )
+        .with(json_log_layer)
+        .with(pretty_log_layer)
         .init();
+    // フォーマッタが trace_id を解決できるよう、init 済みの subscriber を登録する
+    json_log_formatter.connect_dispatch();
 
     let _guard = if ENV.name != "local" {
         let _guard = sentry::init((

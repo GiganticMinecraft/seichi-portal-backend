@@ -8,6 +8,7 @@ default-run = "entrypoint"
 anyhow = { workspace = true }
 axum = { workspace = true }
 axum-tracing-opentelemetry = "0.38.0"
+chrono = { workspace = true }
 common = { path = "../common" }
 hyper = { version = "1.11.0", features = ["full"] }
 opentelemetry = "0.32.0"
