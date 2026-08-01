@@ -10,11 +10,13 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
-use entrypoint::openapi;
+use entrypoint::{openapi, telemetry};
 use futures::join;
 use hyper::header::SET_COOKIE;
+use opentelemetry::trace::TracerProvider as _;
 use presentation::api::global_discord_webhook::start_global_discord_webhook_worker;
 use presentation::api::notificator_impl::DiscordNotificator;
 use presentation::auth::{auth, optional_auth};
@@ -40,7 +42,12 @@ use utoipa_swagger_ui::SwaggerUi;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let tracer_provider = telemetry::init_tracer_provider();
+
     tracing_subscriber::registry()
+        .with(tracer_provider.as_ref().map(|provider| {
+            tracing_opentelemetry::layer().with_tracer(provider.tracer("seichi-portal-backend"))
+        }))
         .with(sentry::integrations::tracing::layer())
         .with(
             tracing_subscriber::fmt::layer().with_filter(tracing_subscriber::EnvFilter::new(
@@ -145,6 +152,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .fallback(not_found_handler)
         .layer(layer)
+        // レスポンスヘッダーへの trace context 挿入 (OtelAxumLayer より内側に置く)
+        .layer(OtelInResponseLayer)
+        // リクエストごとの OTel スパン開始。/health はトレース対象外
+        .layer(OtelAxumLayer::default().filter(|path| !path.starts_with("/health")))
         .layer(
             CorsLayer::new()
                 .allow_methods([
@@ -187,6 +198,16 @@ async fn main() -> anyhow::Result<()> {
         messaging_conn.consumer(),
         start_watch_out_of_sync(shared_repository.to_owned(), shutdown_notifier.clone())
     );
+
+    if let Some(provider) = tracer_provider {
+        // provider.shutdown() は残りのスパンを blocking export するため専用スレッドで行う
+        tokio::task::spawn_blocking(move || {
+            if let Err(error) = provider.shutdown() {
+                info!("failed to shutdown OpenTelemetry tracer provider: {error}");
+            }
+        })
+        .await?;
+    }
 
     Ok(())
 }
