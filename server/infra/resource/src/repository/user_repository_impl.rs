@@ -16,6 +16,7 @@ use uuid::Uuid;
 use crate::{
     database::components::{DatabaseComponents, UserDatabase},
     external::discord_api::DiscordAPI,
+    outgoing::http::HTTP_CLIENT,
     repository::Repository,
 };
 
@@ -147,9 +148,7 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     }
 
     async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<AccountUser>, Error> {
-        let client = reqwest::Client::new();
-
-        let response = client
+        let response = HTTP_CLIENT
             .get("https://api.minecraftservices.com/minecraft/profile")
             .bearer_auth(token.to_owned())
             .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))

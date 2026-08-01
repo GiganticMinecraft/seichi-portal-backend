@@ -24,6 +24,8 @@ redis = { workspace = true }
 sha256 = "1.6.0"
 common = { path = "../../common" }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+reqwest-tracing = { workspace = true }
 serde_json = { workspace = true }
 meilisearch-sdk = { workspace = true }
 serenity = { workspace = true }

@@ -5,6 +5,8 @@ use errors::infra::InfraError;
 use reqwest::StatusCode;
 use serde::Serialize;
 
+use crate::outgoing::http::HTTP_CLIENT;
+
 const DISCORD_EMBED_COLOR_LIME: i32 = 65_280;
 const DISCORD_MAX_EMBED_FIELDS: usize = 25;
 const DISCORD_MAX_EMBEDS: usize = 10;
@@ -39,15 +41,11 @@ pub struct DiscordWebhookMessage {
 }
 
 #[derive(Clone)]
-pub struct DiscordWebhookSender {
-    client: reqwest::Client,
-}
+pub struct DiscordWebhookSender;
 
 impl DiscordWebhookSender {
     pub fn new() -> Self {
-        Self {
-            client: reqwest::Client::new(),
-        }
+        Self
     }
 
     pub fn retry_policy() -> RetryPolicy {
@@ -71,8 +69,7 @@ impl DiscordWebhookSender {
     async fn send(&self, message: DiscordWebhookMessage) -> Result<(), DiscordWebhookSendError> {
         let discord_webhook_url = message.discord_webhook_url.clone();
         let request = DiscordWebhookRequest::from(message);
-        let response = self
-            .client
+        let response = HTTP_CLIENT
             .post(discord_webhook_url)
             .json(&request)
             .send()

@@ -142,3 +142,14 @@ impl From<reqwest::Error> for InfraError {
         }
     }
 }
+
+impl From<reqwest_middleware::Error> for InfraError {
+    fn from(value: reqwest_middleware::Error) -> Self {
+        match value {
+            reqwest_middleware::Error::Reqwest(error) => error.into(),
+            error @ reqwest_middleware::Error::Middleware(_) => InfraError::Reqwest {
+                cause: error.to_string(),
+            },
+        }
+    }
+}
