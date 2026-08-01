@@ -1153,6 +1153,7 @@ dependencies = [
  "domain",
  "futures",
  "hyper",
+ "json-subscriber",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
@@ -2111,6 +2112,23 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "json-subscriber"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1a3442048fd2d18bf39b182881bea8de640062f86cbacf6d949478af61651d6"
+dependencies = [
+ "opentelemetry",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-core",
+ "tracing-opentelemetry",
+ "tracing-serde",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -4957,6 +4975,16 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "tracing",
  "tracing-opentelemetry",
+]
+
+[[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
 ]
 
 [[package]]
