@@ -162,6 +162,16 @@ fn merge_answer_hits(
         .collect()
 }
 
+fn add_meilisearch_stats_auth(
+    request: reqwest_middleware::RequestBuilder,
+    api_key: Option<&str>,
+) -> reqwest_middleware::RequestBuilder {
+    match api_key {
+        Some(api_key) => request.bearer_auth(api_key),
+        None => request,
+    }
+}
+
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "users"))]
@@ -425,13 +435,12 @@ impl SearchDatabase for ConnectionPool {
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError> {
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
 
-        let mut request = HTTP_CLIENT.get(format!("{}/stats", host));
-
-        if let Some(api_key) = api_key {
-            request = request.header("X-Meili-API-Key", api_key);
-        }
-
-        let response = request.send().await?;
+        let response = add_meilisearch_stats_auth(
+            HTTP_CLIENT.get(format!("{}/stats", host)),
+            api_key.as_deref(),
+        )
+        .send()
+        .await?;
 
         Ok(
             serde_json::from_str::<MeilisearchStatsSchema>(response.text().await?.as_str())?
@@ -485,7 +494,9 @@ impl SearchDatabase for ConnectionPool {
 
 #[cfg(test)]
 mod tests {
-    use super::{answer_content_documents, form_filter, merge_answer_hits};
+    use super::{
+        add_meilisearch_stats_auth, answer_content_documents, form_filter, merge_answer_hits,
+    };
     use domain::{
         form::{answer::AnswerId, models::FormId},
         search::models::{Operation, RealAnswers, SearchableFields},
@@ -502,6 +513,23 @@ mod tests {
         let form_id = FormId::from(Uuid::from_u128(1));
 
         assert_eq!(form_filter(form_id), format!("form_id = \"{form_id}\""));
+    }
+
+    #[test]
+    fn meilisearch_stats_uses_bearer_authorization() {
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build();
+        let request =
+            add_meilisearch_stats_auth(client.get("http://localhost/stats"), Some("sentinel"))
+                .build()
+                .unwrap();
+
+        assert!(
+            request
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .is_some_and(|value| value.as_bytes() == b"Bearer sentinel")
+        );
+        assert!(request.headers().get("X-Meili-API-Key").is_none());
     }
 
     #[test]

@@ -575,7 +575,9 @@ impl<
                     break
                 },
                 _ = interval.tick() => {
-                    self.check_and_resync_search_engine().await?;
+                    if let Err(error) = self.check_and_resync_search_engine().await {
+                        tracing::error!(error = %error, "failed to check search engine synchronization");
+                    }
                 }
             }
         }
