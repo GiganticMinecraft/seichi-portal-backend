@@ -308,10 +308,10 @@ pub async fn get_answer_handler(
 
 #[utoipa::path(
     get,
-    path = "/forms/{id}/answers",
+    path = "/forms/{form_id}/answers",
     summary = "回答の一覧取得",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
         AnswerListQuery,
     ),
     responses(
@@ -365,10 +365,10 @@ pub async fn get_answer_by_form_id_handler(
 
 #[utoipa::path(
     post,
-    path = "/forms/{id}/answers",
+    path = "/forms/{form_id}/answers",
     summary = "回答の作成",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
     ),
     request_body = AnswerCreateSchema,
     responses(
@@ -417,10 +417,10 @@ pub async fn post_answer_handler(
 
 #[utoipa::path(
     post,
-    path = "/forms/{id}/temporary-answers",
+    path = "/forms/{form_id}/temporary-answers",
     summary = "未ログイン回答の作成",
     params(
-        ("id" = String, Path, description = "Form ID"),
+        ("form_id" = String, Path, description = "Form ID"),
     ),
     request_body = TemporaryAnswerCreateSchema,
     responses(
