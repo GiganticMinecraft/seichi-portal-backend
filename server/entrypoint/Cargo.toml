@@ -8,9 +8,9 @@ default-run = "entrypoint"
 anyhow = { workspace = true }
 axum = { workspace = true }
 axum-tracing-opentelemetry = "0.38.0"
-chrono = { workspace = true }
 common = { path = "../common" }
 hyper = { version = "1.11.0", features = ["full"] }
+json-subscriber = { version = "0.3.0", features = ["tracing-opentelemetry-0-33"] }
 opentelemetry = "0.32.0"
 # cross ビルドの rustls 縛りに合わせ、TLS フィーチャーなし (in-cluster http://) + blocking reqwest 構成にする
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["http-proto", "trace", "reqwest-blocking-client"] }

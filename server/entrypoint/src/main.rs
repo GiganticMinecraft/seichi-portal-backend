@@ -55,14 +55,9 @@ async fn main() -> anyhow::Result<()> {
         ENV.name.as_str(),
         std::env::var("LOG_FORMAT").ok().as_deref(),
     );
-    let json_log_formatter = logging::JsonWithTraceId::new();
     let (json_log_layer, pretty_log_layer) = if json_logs_enabled {
         (
-            Some(
-                tracing_subscriber::fmt::layer()
-                    .event_format(json_log_formatter.clone())
-                    .with_filter(stdout_log_filter()),
-            ),
+            Some(logging::json_log_layer().with_filter(stdout_log_filter())),
             None,
         )
     } else {
@@ -80,8 +75,6 @@ async fn main() -> anyhow::Result<()> {
         .with(json_log_layer)
         .with(pretty_log_layer)
         .init();
-    // フォーマッタが trace_id を解決できるよう、init 済みの subscriber を登録する
-    json_log_formatter.connect_dispatch();
 
     let _guard = if ENV.name != "local" {
         let _guard = sentry::init((
