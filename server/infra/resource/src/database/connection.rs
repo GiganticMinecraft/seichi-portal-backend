@@ -75,6 +75,7 @@ impl ConnectionPool {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "mariadb"))]
     pub async fn read_only_transaction<F, T, E>(&self, callback: F) -> Result<T, InfraError>
     where
         F: for<'c> FnOnce(
@@ -106,6 +107,7 @@ impl ConnectionPool {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "mariadb"))]
     pub async fn read_write_transaction<F, T, E>(&self, callback: F) -> Result<T, E>
     where
         F: for<'c> FnOnce(
