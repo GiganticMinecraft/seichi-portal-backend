@@ -1,0 +1,26 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT (SELECT COUNT(*) FROM form_answer_comments) +\n                        (SELECT COUNT(*) FROM redmine_imported_comments c\n                         INNER JOIN answers a ON a.id = c.answer_id) AS `count!: i64`",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "BINARY",
+          "collation": 63,
+          "max_size": 22
+        },
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "38ecf3835a4113957457b60e24045eb394ed811c828613dd2c5bbaca06685bdf"
+}

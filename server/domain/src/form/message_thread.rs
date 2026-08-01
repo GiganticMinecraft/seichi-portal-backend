@@ -119,6 +119,9 @@ impl Allowed<MessageThread, Update> {
             AnswerAuthor::Temporary(_) => {
                 return Err(DomainError::MessagePostingNotSupportedForTemporaryAnswer);
             }
+            AnswerAuthor::ImportedFromRedmine(_) => {
+                return Err(DomainError::MessagePostingNotSupportedForImportedAnswer);
+            }
         };
 
         self.authorize_create(MessagePost::new(
@@ -213,7 +216,7 @@ mod tests {
     use super::*;
     use crate::{
         account::models::{AccountUser, Role, UserId},
-        form::answer::TemporaryAnswerAuthor,
+        form::answer::{RedmineUserSnapshot, TemporaryAnswerAuthor},
         types::authorization_guard::{AuthorizationGuard, Delete, Read},
     };
     use uuid::Uuid;
@@ -447,6 +450,35 @@ mod tests {
         assert!(matches!(
             result,
             Err(DomainError::MessagePostingNotSupportedForTemporaryAnswer)
+        ));
+    }
+
+    #[test]
+    fn imported_answer_thread_is_admin_readable_but_rejects_message_posts() {
+        let admin_id = user_id("00000000-0000-7000-8000-000000000571");
+        let admin = Actor::from(active_user("admin", admin_id, Role::Administrator));
+        let imported_author = AnswerAuthor::ImportedFromRedmine(RedmineUserSnapshot::new(
+            Some(7),
+            "Redmine answer author".to_string(),
+        ));
+        let thread = unsafe {
+            MessageThread::from_raw_parts(
+                answer_id("00000000-0000-7000-8000-000000000572"),
+                imported_author,
+                Vec::new(),
+            )
+        };
+
+        let thread = AuthorizationGuard::<_, Read>::from(thread)
+            .try_read(admin)
+            .unwrap()
+            .try_into_update()
+            .unwrap();
+        let result = thread.try_post_message(message_from(admin_id, "forbidden"));
+
+        assert!(matches!(
+            result,
+            Err(DomainError::MessagePostingNotSupportedForImportedAnswer)
         ));
     }
 

@@ -6,7 +6,10 @@ mod relation;
 mod settings;
 mod title;
 
-pub use author::{AnswerAuthor, TemporaryAnswerAuthor, TemporaryAnswerAuthorId};
+pub use author::{
+    AnswerAuthor, RedmineImportedAnswerReference, RedmineIssueId, RedmineUserSnapshot,
+    TemporaryAnswerAuthor, TemporaryAnswerAuthorId,
+};
 pub use content::{FormAnswerContent, FormAnswerContentId, PostedAnswerContents};
 pub use entry::{
     AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, ArchivedAnswerEntry,

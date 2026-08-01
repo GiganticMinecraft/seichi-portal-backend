@@ -121,7 +121,7 @@ mod tests {
     };
     use types::non_empty_vec::NonEmptyVec;
     use usecase::models::{
-        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, CrossSearchComment,
+        ActiveFormWithLabels, AnswerDetails, CommentAuthor, CommentWithAuthor, CrossSearchComment,
         PublishedAnswerAuthor, PublishedAnswerEntry,
     };
     use uuid::Uuid;
@@ -259,7 +259,7 @@ mod tests {
                 form_id,
                 comment: CommentWithAuthor {
                     comment,
-                    commented_by: answer_author,
+                    commented_by: CommentAuthor::Portal(answer_author),
                 },
             }],
         });

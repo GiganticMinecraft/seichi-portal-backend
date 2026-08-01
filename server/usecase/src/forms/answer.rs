@@ -113,6 +113,9 @@ impl<
                     AnswerAuthor::Temporary(temporary_user) => {
                         PublishedAnswerAuthor::Temporary(temporary_user.clone())
                     }
+                    AnswerAuthor::ImportedFromRedmine(author) => {
+                        PublishedAnswerAuthor::ImportedFromRedmine(author.clone())
+                    }
                 }
             }
         };

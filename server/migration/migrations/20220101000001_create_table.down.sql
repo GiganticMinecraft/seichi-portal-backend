@@ -1,5 +1,7 @@
 DROP TABLE IF EXISTS
     answer_relations,
+    redmine_imported_comments,
+    redmine_imported_answer_references,
     global_discord_webhook_settings,
     message_history,
     form_answer_comment_history,

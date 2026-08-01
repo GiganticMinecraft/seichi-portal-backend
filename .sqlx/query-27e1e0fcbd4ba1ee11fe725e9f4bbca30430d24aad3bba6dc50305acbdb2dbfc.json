@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO redmine_imported_answer_references (answer_id, redmine_issue_id)\n                        VALUES (?, ?)\n                        ON DUPLICATE KEY UPDATE redmine_issue_id = VALUES(redmine_issue_id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "27e1e0fcbd4ba1ee11fe725e9f4bbca30430d24aad3bba6dc50305acbdb2dbfc"
+}

@@ -4,7 +4,7 @@ use domain::{
     form::{
         answer::{
             AnswerEntry, AnswerId, AnswerLabel, AnswerPublication, AnswerTitle, FormAnswerContent,
-            TemporaryAnswerAuthor,
+            RedmineImportedAnswerReference, RedmineUserSnapshot, TemporaryAnswerAuthor,
         },
         comment::Comment,
         message::Message,
@@ -16,6 +16,7 @@ use domain::{
 pub enum PublishedAnswerAuthor {
     AuthenticatedUser(AccountUser),
     Temporary(TemporaryAnswerAuthor),
+    ImportedFromRedmine(RedmineUserSnapshot),
     Anonymous,
 }
 
@@ -26,6 +27,7 @@ pub struct PublishedAnswerEntry {
     pub title: AnswerTitle,
     pub publication: AnswerPublication,
     pub contents: Vec<FormAnswerContent>,
+    pub redmine_reference: Option<RedmineImportedAnswerReference>,
 }
 
 impl PublishedAnswerEntry {
@@ -37,6 +39,7 @@ impl PublishedAnswerEntry {
             title: answer.title().to_owned(),
             publication: *answer.publication(),
             contents: answer.contents().to_vec(),
+            redmine_reference: answer.redmine_reference().to_owned(),
         }
     }
 }
@@ -58,9 +61,14 @@ pub struct ArchivedFormDetails {
     pub labels: Vec<FormLabel>,
 }
 
+pub enum CommentAuthor {
+    Portal(AccountUser),
+    ImportedFromRedmine(RedmineUserSnapshot),
+}
+
 pub struct CommentWithAuthor {
     pub comment: Comment,
-    pub commented_by: AccountUser,
+    pub commented_by: CommentAuthor,
 }
 
 pub struct CrossSearchComment {

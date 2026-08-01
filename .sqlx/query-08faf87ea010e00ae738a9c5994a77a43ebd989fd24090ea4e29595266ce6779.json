@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM form_answer_comments\n                    INNER JOIN users ON form_answer_comments.commented_by = users.id\n                    WHERE answer_id = ?",
+  "query": "SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM form_answer_comments\n                    INNER JOIN users ON form_answer_comments.commented_by = users.id\n                    ORDER BY form_answer_comments.timestamp ASC, form_answer_comments.id ASC",
   "describe": {
     "columns": [
       {
@@ -117,7 +117,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       false,
@@ -129,5 +129,5 @@
       false
     ]
   },
-  "hash": "0e1b7e9d444822e7134952eed2089efacbad67268d88240ea6e0e52d362187b9"
+  "hash": "08faf87ea010e00ae738a9c5994a77a43ebd989fd24090ea4e29595266ce6779"
 }

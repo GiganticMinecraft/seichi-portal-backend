@@ -5961,6 +5961,24 @@
           {
             "type": "object",
             "required": [
+              "redmine_user",
+              "type"
+            ],
+            "properties": {
+              "redmine_user": {
+                "$ref": "#/components/schemas/RedmineUserSnapshotResponse"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "IMPORTED_FROM_REDMINE"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
               "type"
             ],
             "properties": {
@@ -5980,11 +5998,18 @@
           "id",
           "content",
           "timestamp",
-          "commented_by"
+          "source"
         ],
         "properties": {
           "commented_by": {
-            "$ref": "#/components/schemas/User"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ]
           },
           "content": {
             "type": "string"
@@ -5993,11 +6018,38 @@
             "type": "string",
             "format": "uuid"
           },
+          "redmine_author_snapshot": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RedmineUserSnapshotResponse"
+              }
+            ]
+          },
+          "redmine_journal_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AnswerCommentSource"
+          },
           "timestamp": {
             "type": "string",
             "format": "date-time"
           }
         }
+      },
+      "AnswerCommentSource": {
+        "type": "string",
+        "enum": [
+          "PORTAL",
+          "IMPORTED_FROM_REDMINE"
+        ]
       },
       "AnswerContent": {
         "type": "object",
@@ -6559,6 +6611,13 @@
           },
           "publication": {
             "$ref": "#/components/schemas/AnswerPublication"
+          },
+          "redmine_issue_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "timestamp": {
             "type": "string",
@@ -7373,6 +7432,24 @@
             ]
           }
         ]
+      },
+      "RedmineUserSnapshotResponse": {
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "redmine_user_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
       },
       "RelatedAnswerRequest": {
         "type": "object",

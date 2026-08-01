@@ -24,12 +24,13 @@ use domain::{
 };
 use errors::{
     Error,
+    domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, UserNotFound},
 };
 
 use crate::{
     application_event::{ApplicationActor, ApplicationEvent, ApplicationEventPublisher},
-    models::CommentWithAuthor,
+    models::{CommentAuthor, CommentWithAuthor},
     user_reference_resolver::resolve_user_references,
 };
 
@@ -110,16 +111,26 @@ impl<
     ) -> Result<Vec<CommentWithAuthor>, Error> {
         let user_ids = comments
             .iter()
-            .map(|comment| *comment.commented_by())
+            .filter_map(|comment| comment.commented_by().copied())
             .collect();
         let users = resolve_user_references(self.user_repository, actor, user_ids).await?;
         comments
             .into_iter()
             .map(|comment| {
-                let commented_by = users
-                    .get(comment.commented_by())
-                    .cloned()
-                    .ok_or(Error::from(UserNotFound))?;
+                let commented_by = match comment.commented_by() {
+                    Some(user_id) => CommentAuthor::Portal(
+                        users
+                            .get(user_id)
+                            .cloned()
+                            .ok_or(Error::from(UserNotFound))?,
+                    ),
+                    None => CommentAuthor::ImportedFromRedmine(
+                        comment
+                            .redmine_author()
+                            .cloned()
+                            .ok_or(Error::from(UserNotFound))?,
+                    ),
+                };
                 Ok(CommentWithAuthor {
                     comment,
                     commented_by,
@@ -212,17 +223,17 @@ impl<
                 .comment_thread_repository
                 .get_with_comments_for_answer(&form, answer)
                 .await?;
-            if thread
+            let authorized_thread = AuthorizationGuard::<_, Update>::from(thread.into_inner())
+                .try_update(Actor::from(actor.clone()))?;
+            let current_content = authorized_thread
                 .find_comment(comment_id)
-                .ok_or(errors::domain::DomainError::NotFound)?
+                .ok_or(DomainError::NotFound)?
                 .content()
-                == &content
-            {
+                .clone();
+            let updated = authorized_thread.authorize_comment_update(comment_id, content)?;
+            if current_content == *updated.content() {
                 return Ok(());
             }
-            let updated = AuthorizationGuard::<_, Update>::from(thread.into_inner())
-                .try_update(Actor::from(actor.clone()))?
-                .authorize_comment_update(comment_id, content)?;
             let content = updated.content().to_owned().into_inner().into_inner();
             let comment_id = updated.comment_id().to_string();
             self.comment_thread_repository
@@ -290,6 +301,7 @@ mod tests {
             answer::{
                 AnswerAuthor, AnswerPublication, AnswerSettings, AnswerTitle, AnswerVisibility,
             },
+            comment::DeletedComment,
             models::{FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
@@ -329,7 +341,7 @@ mod tests {
             _form: &Allowed<ActiveForm, Read>,
             _comment: Allowed<Comment, Create>,
         ) -> Result<(), Error> {
-            Err(errors::domain::DomainError::Forbidden.into())
+            Err(DomainError::Forbidden.into())
         }
 
         async fn update(
@@ -338,15 +350,15 @@ mod tests {
             _comment: Allowed<Comment, Update>,
             _updated_at: chrono::DateTime<Utc>,
         ) -> Result<(), Error> {
-            Err(errors::domain::DomainError::Forbidden.into())
+            Err(DomainError::Forbidden.into())
         }
 
         async fn delete(
             &self,
             _form: &Allowed<ActiveForm, Read>,
-            _comment: Allowed<domain::form::comment::DeletedComment, Create>,
+            _comment: Allowed<DeletedComment, Create>,
         ) -> Result<(), Error> {
-            Err(errors::domain::DomainError::Forbidden.into())
+            Err(DomainError::Forbidden.into())
         }
 
         async fn history(
@@ -415,7 +427,7 @@ mod tests {
             application_event_publisher: None,
         };
 
-        let forbidden = Err::<(), Error>(errors::domain::DomainError::Forbidden.into());
+        let forbidden = Err::<(), Error>(DomainError::Forbidden.into());
         assert_eq!(
             use_case
                 .get_comments(&author, form_id, answer_id)

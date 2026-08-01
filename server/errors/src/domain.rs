@@ -20,6 +20,8 @@ pub enum DomainError {
     EmptyMessageBody,
     #[error("Messages cannot be posted to temporary answers.")]
     MessagePostingNotSupportedForTemporaryAnswer,
+    #[error("Messages cannot be posted to answers imported from Redmine.")]
+    MessagePostingNotSupportedForImportedAnswer,
     #[error("Invalid answer acceptance period.")]
     InvalidAnswerAcceptancePeriod,
     #[error("Invalid Discord webhook url.")]

@@ -1,10 +1,14 @@
+use super::answers::author_from_values;
 use crate::{
     database::{
         components::FormCommentDatabase,
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    records::{CommentHistoryRecord, CommentRecord},
+    records::{
+        AnswerAuthorRecord, CommentHistoryRecord, CommentRecord, ImportedCommentRecord,
+        PortalCommentRecord,
+    },
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -15,7 +19,7 @@ use domain::{
 use domain::{
     auth::Actor,
     form::{
-        answer::{AnswerId, AnswerPublication, AnswerSettings, AnswerVisibility},
+        answer::{AnswerAuthor, AnswerId, AnswerPublication, AnswerSettings, AnswerVisibility},
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         comment_thread::CommentThread,
         models::{ActiveForm, FormId, active_form_allows_read},
@@ -23,8 +27,35 @@ use domain::{
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
-use errors::{Error, infra::InfraError};
+use errors::{Error, domain::DomainError, infra::InfraError};
+use std::cmp::Ordering;
 use uuid::Uuid;
+
+fn compare_comment_records(left: &CommentRecord, right: &CommentRecord) -> Ordering {
+    let timestamp = |record: &CommentRecord| match record {
+        CommentRecord::Portal(record) => record.timestamp,
+        CommentRecord::ImportedFromRedmine(record) => record.timestamp,
+    };
+    match timestamp(left).cmp(&timestamp(right)) {
+        Ordering::Equal => match (left, right) {
+            (
+                CommentRecord::ImportedFromRedmine(left),
+                CommentRecord::ImportedFromRedmine(right),
+            ) => left.redmine_journal_id.cmp(&right.redmine_journal_id),
+            (CommentRecord::Portal(left), CommentRecord::Portal(right)) => {
+                left.comment_id.cmp(&right.comment_id)
+            }
+            (CommentRecord::ImportedFromRedmine(_), CommentRecord::Portal(_)) => Ordering::Less,
+            (CommentRecord::Portal(_), CommentRecord::ImportedFromRedmine(_)) => Ordering::Greater,
+        },
+        ordering => ordering,
+    }
+}
+
+fn sort_comment_records(mut records: Vec<CommentRecord>) -> Vec<CommentRecord> {
+    records.sort_by(compare_comment_records);
+    records
+}
 
 #[async_trait]
 impl FormCommentDatabase for ConnectionPool {
@@ -36,7 +67,7 @@ impl FormCommentDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let comment = sqlx::query_as!(
-                    CommentRecord,
+                    PortalCommentRecord,
                     r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
@@ -45,8 +76,28 @@ impl FormCommentDatabase for ConnectionPool {
                 )
                 .fetch_optional(&mut **txn)
                 .await?;
+                if let Some(comment) = comment {
+                    return Ok::<Option<CommentRecord>, InfraError>(Some(CommentRecord::Portal(
+                        comment,
+                    )));
+                }
 
-                Ok::<_, InfraError>(comment)
+                Ok(sqlx::query_as!(
+                    ImportedCommentRecord,
+                    r"SELECT redmine_imported_comments.answer_id,
+                        redmine_imported_comments.comment_id,
+                        redmine_imported_comments.redmine_journal_id,
+                        redmine_imported_comments.redmine_user_id,
+                        redmine_imported_comments.redmine_author_name,
+                        redmine_imported_comments.content,
+                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM redmine_imported_comments
+                    WHERE comment_id = ?",
+                    comment_id.into_inner().to_string(),
+                )
+                .fetch_optional(&mut **txn)
+                .await?
+                .map(CommentRecord::ImportedFromRedmine))
             })
         })
         .await
@@ -56,18 +107,41 @@ impl FormCommentDatabase for ConnectionPool {
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let comments = sqlx::query_as!(
-                    CommentRecord,
+                let portal_comments = sqlx::query_as!(
+                    PortalCommentRecord,
                     r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM form_answer_comments
                     INNER JOIN users ON form_answer_comments.commented_by = users.id
-                    WHERE answer_id = ?",
+                    WHERE answer_id = ?
+                    ORDER BY form_answer_comments.timestamp ASC, form_answer_comments.id ASC",
+                    answer_id.into_inner().to_string(),
+                )
+                .fetch_all(&mut **txn)
+                .await?;
+                let imported_comments = sqlx::query_as!(
+                    ImportedCommentRecord,
+                    r"SELECT answer_id, comment_id, redmine_journal_id, redmine_user_id,
+                        redmine_author_name, content,
+                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM redmine_imported_comments
+                    WHERE answer_id = ?
+                    ORDER BY timestamp ASC, redmine_journal_id ASC",
                     answer_id.into_inner().to_string(),
                 )
                 .fetch_all(&mut **txn)
                 .await?;
 
-                Ok::<_, InfraError>(comments)
+                Ok::<Vec<CommentRecord>, InfraError>(sort_comment_records(
+                    portal_comments
+                        .into_iter()
+                        .map(CommentRecord::Portal)
+                        .chain(
+                            imported_comments
+                                .into_iter()
+                                .map(CommentRecord::ImportedFromRedmine),
+                        )
+                        .collect(),
+                ))
             })
         })
         .await
@@ -77,16 +151,43 @@ impl FormCommentDatabase for ConnectionPool {
     async fn get_all_comments(&self) -> Result<Vec<CommentRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let comments = sqlx::query_as!(
-                    CommentRecord,
+                let portal_comments = sqlx::query_as!(
+                    PortalCommentRecord,
                     r"SELECT form_answer_comments.id AS comment_id, answer_id, commented_by AS commented_by_id, name AS commented_by_name, role AS commented_by_role, content, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM form_answer_comments
-                    INNER JOIN users ON form_answer_comments.commented_by = users.id"
+                    INNER JOIN users ON form_answer_comments.commented_by = users.id
+                    ORDER BY form_answer_comments.timestamp ASC, form_answer_comments.id ASC"
+                )
+                .fetch_all(&mut **txn)
+                .await?;
+                let imported_comments = sqlx::query_as!(
+                    ImportedCommentRecord,
+                    r"SELECT redmine_imported_comments.answer_id,
+                        redmine_imported_comments.comment_id,
+                        redmine_imported_comments.redmine_journal_id,
+                        redmine_imported_comments.redmine_user_id,
+                        redmine_imported_comments.redmine_author_name,
+                        redmine_imported_comments.content,
+                        redmine_imported_comments.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                    FROM redmine_imported_comments
+                    INNER JOIN answers ON answers.id = redmine_imported_comments.answer_id
+                    ORDER BY redmine_imported_comments.timestamp ASC,
+                        redmine_imported_comments.redmine_journal_id ASC"
                 )
                 .fetch_all(&mut **txn)
                 .await?;
 
-                Ok::<_, InfraError>(comments)
+                Ok::<Vec<CommentRecord>, InfraError>(sort_comment_records(
+                    portal_comments
+                        .into_iter()
+                        .map(CommentRecord::Portal)
+                        .chain(
+                            imported_comments
+                                .into_iter()
+                                .map(CommentRecord::ImportedFromRedmine),
+                        )
+                        .collect(),
+                ))
             })
         })
         .await
@@ -282,12 +383,14 @@ impl FormCommentDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let size = sqlx::query_scalar!(
-                    "SELECT COUNT(*) AS `count!: i64` FROM form_answer_comments"
+                    "SELECT (SELECT COUNT(*) FROM form_answer_comments) +
+                        (SELECT COUNT(*) FROM redmine_imported_comments c
+                         INNER JOIN answers a ON a.id = c.answer_id) AS `count!: i64`"
                 )
                 .fetch_one(&mut **txn)
                 .await?;
 
-                count_as_u32(size, "form_answer_comments")
+                count_as_u32(size, "form comments")
             })
         })
         .await
@@ -311,7 +414,7 @@ async fn lock_comment_thread(
     .fetch_optional(&mut **transaction)
     .await
     .map_err(InfraError::from)?
-    .ok_or(errors::domain::DomainError::NotFound)?;
+    .ok_or(DomainError::NotFound)?;
     let form_visibility = Visibility::try_from(locked_form.visibility)?;
     let answer_visibility = AnswerVisibility::try_from(locked_form.answer_visibility)?;
 
@@ -334,7 +437,7 @@ async fn lock_comment_thread(
         &AllowedUserGroups::new(form_group_ids),
         &actor,
     ) {
-        return Err(errors::domain::DomainError::Forbidden.into());
+        return Err(DomainError::Forbidden.into());
     }
 
     let answer_group_ids = sqlx::query!(
@@ -352,19 +455,42 @@ async fn lock_comment_thread(
     })
     .collect::<Result<Vec<_>, _>>()?;
     let answer = sqlx::query!(
-        "SELECT publication FROM answers WHERE id = ? AND form_id = ? FOR UPDATE",
+        "SELECT publication, author_type, user, users.name AS user_name, users.role AS user_role,
+            temporary_user_id, temporary_users.name AS temporary_user_name,
+            temporary_users.contact_text AS temporary_user_contact_text,
+            answers.redmine_user_id, answers.redmine_author_name
+        FROM answers
+        LEFT JOIN users ON answers.user = users.id
+        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
+        WHERE answers.id = ? AND answers.form_id = ? FOR UPDATE",
         answer_id_text,
         form_id,
     )
     .fetch_optional(&mut **transaction)
     .await
     .map_err(InfraError::from)?
-    .ok_or(errors::domain::DomainError::NotFound)?;
+    .ok_or(DomainError::NotFound)?;
+
+    let answer_author = match author_from_values(
+        answer.author_type,
+        answer.user,
+        answer.user_name,
+        answer.user_role,
+        answer.temporary_user_id,
+        answer.temporary_user_name,
+        answer.temporary_user_contact_text,
+        answer.redmine_user_id,
+        answer.redmine_author_name,
+    )? {
+        AnswerAuthorRecord::AuthenticatedUser(user) => AnswerAuthor::AuthenticatedUser(*user.id()),
+        AnswerAuthorRecord::TemporaryAnswerAuthor(user) => AnswerAuthor::Temporary(user),
+        AnswerAuthorRecord::ImportedFromRedmine(user) => AnswerAuthor::ImportedFromRedmine(user),
+    };
 
     let comments = match comment_id {
-        Some(comment_id) => vec![
-            sqlx::query_as!(
-                CommentRecord,
+        Some(comment_id) => {
+            let portal_comment = sqlx::query_as!(
+                PortalCommentRecord,
                 r"SELECT c.id AS comment_id, c.answer_id, c.commented_by AS commented_by_id,
                 u.name AS commented_by_name, u.role AS commented_by_role, c.content,
                 c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
@@ -376,22 +502,40 @@ async fn lock_comment_thread(
             )
             .fetch_optional(&mut **transaction)
             .await
-            .map_err(InfraError::from)?
-            .ok_or(errors::domain::DomainError::NotFound)?
-            .try_into()?,
-        ],
+            .map_err(InfraError::from)?;
+            let record = if let Some(comment) = portal_comment {
+                CommentRecord::Portal(comment)
+            } else {
+                CommentRecord::ImportedFromRedmine(
+                    sqlx::query_as!(
+                        ImportedCommentRecord,
+                        r"SELECT answer_id, comment_id, redmine_journal_id, redmine_user_id,
+                            redmine_author_name, content,
+                            timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+                        FROM redmine_imported_comments
+                        WHERE comment_id = ? AND answer_id = ? FOR UPDATE",
+                        comment_id.to_string(),
+                        answer_id_text,
+                    )
+                    .fetch_optional(&mut **transaction)
+                    .await
+                    .map_err(InfraError::from)?
+                    .ok_or(DomainError::NotFound)?,
+                )
+            };
+            vec![record.try_into()?]
+        }
         None => Vec::new(),
     };
-    let thread = unsafe {
-        CommentThread::from_raw_parts(
-            answer_id,
-            AnswerPublication::try_from(answer.publication)?,
-            AnswerSettings::default()
-                .change_visibility(answer_visibility)
-                .change_answer_groups(AllowedUserGroups::new(answer_group_ids)),
-            comments,
-        )
-    };
+    let thread = CommentThread::try_new(
+        answer_id,
+        answer_author,
+        AnswerPublication::try_from(answer.publication)?,
+        AnswerSettings::default()
+            .change_visibility(answer_visibility)
+            .change_answer_groups(AllowedUserGroups::new(answer_group_ids)),
+        comments,
+    )?;
     AuthorizationGuard::<_, Update>::from(thread)
         .try_update(actor)
         .map_err(Into::into)
@@ -405,7 +549,10 @@ async fn insert_created_comment(
     let actor = account_user(actor)?;
     let comment_id = comment.comment_id().to_string();
     let answer_id = comment.answer_id().to_string();
-    let commented_by = comment.commented_by().to_string();
+    let commented_by = comment
+        .commented_by()
+        .ok_or(DomainError::Forbidden)?
+        .to_string();
     let content = comment.content().to_string();
     let timestamp = *comment.timestamp();
     sqlx::query!(
@@ -419,7 +566,10 @@ async fn insert_created_comment(
          original_timestamp, action, content, operated_by_id, operated_by_name, operated_by_role, operated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'CREATE', ?, ?, ?, ?, ?)",
         Uuid::now_v7().to_string(), comment.answer_id().to_string(), comment.comment_id().to_string(),
-        comment.commented_by().to_string(), actor.name(), actor.role().to_string(), timestamp,
+        comment
+            .commented_by()
+            .ok_or(DomainError::Forbidden)?
+            .to_string(), actor.name(), actor.role().to_string(), timestamp,
         comment.content().to_string(), actor.id().to_string(), actor.name(), actor.role().to_string(), timestamp,
     ).execute(&mut **transaction).await.map_err(InfraError::from)?;
     Ok(())
@@ -496,6 +646,69 @@ async fn delete_comment_with_history(
 fn account_user(actor: &Actor) -> Result<&domain::account::models::AccountUser, Error> {
     match actor {
         Actor::AccountUser(user) => Ok(user),
-        _ => Err(errors::domain::DomainError::Forbidden.into()),
+        _ => Err(DomainError::Forbidden.into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn comment_order_is_timestamp_source_kind_then_source_id() {
+        let timestamp = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let records = sort_comment_records(vec![
+            CommentRecord::Portal(PortalCommentRecord {
+                answer_id: "answer".to_string(),
+                comment_id: "b".to_string(),
+                content: "portal b".to_string(),
+                timestamp,
+                commented_by_name: "Portal user".to_string(),
+                commented_by_id: "user".to_string(),
+                commented_by_role: "STANDARD_USER".to_string(),
+            }),
+            CommentRecord::ImportedFromRedmine(ImportedCommentRecord {
+                answer_id: "answer".to_string(),
+                comment_id: "imported-10".to_string(),
+                redmine_journal_id: 10,
+                redmine_user_id: None,
+                redmine_author_name: "Redmine user".to_string(),
+                content: "imported 10".to_string(),
+                timestamp,
+            }),
+            CommentRecord::Portal(PortalCommentRecord {
+                answer_id: "answer".to_string(),
+                comment_id: "a".to_string(),
+                content: "portal a".to_string(),
+                timestamp,
+                commented_by_name: "Portal user".to_string(),
+                commented_by_id: "user".to_string(),
+                commented_by_role: "STANDARD_USER".to_string(),
+            }),
+            CommentRecord::ImportedFromRedmine(ImportedCommentRecord {
+                answer_id: "answer".to_string(),
+                comment_id: "imported-2".to_string(),
+                redmine_journal_id: 2,
+                redmine_user_id: None,
+                redmine_author_name: "Redmine user".to_string(),
+                content: "imported 2".to_string(),
+                timestamp,
+            }),
+        ]);
+
+        let keys = records
+            .into_iter()
+            .map(|record| match record {
+                CommentRecord::ImportedFromRedmine(record) => {
+                    format!("imported-{}", record.redmine_journal_id)
+                }
+                CommentRecord::Portal(record) => format!("portal-{}", record.comment_id),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            keys,
+            vec!["imported-2", "imported-10", "portal-a", "portal-b"]
+        );
     }
 }

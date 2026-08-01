@@ -3,9 +3,11 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use domain::{
     account::models::{AccountUser, Role},
-    form::answer::TemporaryAnswerAuthor,
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerId},
+        answer::{
+            AnswerAuthor, AnswerEntry, AnswerId, RedmineImportedAnswerReference,
+            RedmineUserSnapshot, TemporaryAnswerAuthor,
+        },
         models::FormId,
     },
 };
@@ -24,21 +26,54 @@ use crate::{
     records::{AnswerAuthorRecord, FormAnswerContentRecord, FormAnswerRecord, MessageRecord},
 };
 
-fn answer_author_columns(answer: &AnswerEntry) -> (String, Option<String>, Option<String>) {
+fn answer_author_columns(
+    answer: &AnswerEntry,
+) -> (
+    String,
+    Option<String>,
+    Option<String>,
+    Option<i64>,
+    Option<String>,
+) {
     match answer.author() {
         AnswerAuthor::AuthenticatedUser(user_id) => (
             "AUTHENTICATED_USER".to_string(),
             Some(user_id.to_string()),
+            None,
+            None,
             None,
         ),
         AnswerAuthor::Temporary(temporary_user) => (
             "TEMPORARY_USER".to_string(),
             None,
             Some(temporary_user.id().to_string()),
+            None,
+            None,
+        ),
+        AnswerAuthor::ImportedFromRedmine(author) => (
+            "IMPORTED_FROM_REDMINE".to_string(),
+            None,
+            None,
+            *author.redmine_user_id(),
+            Some(author.display_name().to_owned()),
         ),
     }
 }
 
+fn validated_redmine_issue_id(answer: &AnswerEntry) -> Result<Option<i64>, InfraError> {
+    let issue_id = answer
+        .redmine_reference()
+        .map(|reference| reference.issue_id().into_inner());
+    let is_imported = matches!(answer.author(), AnswerAuthor::ImportedFromRedmine(_));
+    if is_imported != issue_id.is_some() {
+        return Err(InfraError::Unexpected {
+            cause: "imported answers must have exactly one Redmine issue reference".to_string(),
+        });
+    }
+    Ok(issue_id)
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn author_from_values(
     author_type: String,
     user: Option<String>,
@@ -47,6 +82,8 @@ pub(crate) fn author_from_values(
     temporary_user_id: Option<String>,
     temporary_user_name: Option<String>,
     temporary_user_contact_text: Option<String>,
+    redmine_user_id: Option<i64>,
+    redmine_author_name: Option<String>,
 ) -> Result<AnswerAuthorRecord, InfraError> {
     match author_type.as_str() {
         "AUTHENTICATED_USER" => Ok(AnswerAuthorRecord::AuthenticatedUser(AccountUser::new(
@@ -76,6 +113,14 @@ pub(crate) fn author_from_values(
                 })?,
             )
         })),
+        "IMPORTED_FROM_REDMINE" => Ok(AnswerAuthorRecord::ImportedFromRedmine(unsafe {
+            RedmineUserSnapshot::from_raw_parts(
+                redmine_user_id,
+                redmine_author_name.ok_or_else(|| InfraError::Unexpected {
+                    cause: "imported answer author is missing redmine_author_name".to_string(),
+                })?,
+            )
+        })),
         value => Err(InfraError::Unexpected {
             cause: format!("unknown answer author_type: {value}"),
         }),
@@ -91,6 +136,8 @@ pub(crate) fn author_from_row(row: &MySqlRow) -> Result<AnswerAuthorRecord, Infr
         row.try_get("temporary_user_id")?,
         row.try_get("temporary_user_name")?,
         row.try_get("temporary_user_contact_text")?,
+        row.try_get("redmine_user_id")?,
+        row.try_get("redmine_author_name")?,
     )
 }
 
@@ -244,7 +291,9 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn post_answer(&self, answer: &AnswerEntry, form_id: FormId) -> Result<(), InfraError> {
         let answer_id = answer.id().to_owned().into_inner().to_string();
         let form_id = form_id.into_inner().to_string();
-        let (author_type, user_id, temporary_user_id) = answer_author_columns(answer);
+        let (author_type, user_id, temporary_user_id, redmine_user_id, redmine_author_name) =
+            answer_author_columns(answer);
+        let redmine_issue_id = validated_redmine_issue_id(answer)?;
         let temporary_user = answer.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer.title().to_owned())
             .map(|title| title.into_inner());
@@ -280,19 +329,32 @@ impl FormAnswerDatabase for ConnectionPool {
                 }
 
                 sqlx::query!(
-                    r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, publication, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id,
+                        redmine_user_id, redmine_author_name, title, publication, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     answer_id,
                     form_id,
                     author_type,
                     user_id,
                     temporary_user_id,
+                    redmine_user_id,
+                    redmine_author_name,
                     title,
                     publication,
                     timestamp,
                 )
                 .execute(&mut **txn)
                 .await?;
+
+                if let Some(redmine_issue_id) = redmine_issue_id {
+                    sqlx::query!(
+                        "INSERT INTO redmine_imported_answer_references (answer_id, redmine_issue_id) VALUES (?, ?)",
+                        answer_id,
+                        redmine_issue_id,
+                    )
+                    .execute(&mut **txn)
+                    .await?;
+                }
 
                 if !contents.is_empty() {
                     let sql = format!(
@@ -326,9 +388,13 @@ impl FormAnswerDatabase for ConnectionPool {
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
+                        answers.redmine_user_id, answers.redmine_author_name,
+                        redmine_reference.redmine_issue_id,
                         timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers
                         LEFT JOIN users ON answers.user = users.id
                         LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
+                        LEFT JOIN redmine_imported_answer_references redmine_reference
+                            ON redmine_reference.answer_id = answers.id
                         WHERE answers.id = ?",
                     answer_id.into_inner().to_string(),
                 )
@@ -365,6 +431,8 @@ impl FormAnswerDatabase for ConnectionPool {
                                 rs.temporary_user_id,
                                 rs.temporary_user_name,
                                 rs.temporary_user_contact_text,
+                                rs.redmine_user_id,
+                                rs.redmine_author_name,
                             )?,
                             timestamp: rs.timestamp,
                             form_id: rs.form_id,
@@ -372,6 +440,14 @@ impl FormAnswerDatabase for ConnectionPool {
                             publication: rs.publication,
                             contents,
                             messages: Vec::new(),
+                            redmine_reference: rs
+                                .redmine_issue_id
+                                .map(|issue_id| {
+                                    RedmineImportedAnswerReference::new(
+                                        answer_id,
+                                        issue_id.into(),
+                                    )
+                                }),
                         })
                     })
                     .transpose()
@@ -401,9 +477,13 @@ impl FormAnswerDatabase for ConnectionPool {
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
+                        answers.redmine_user_id, answers.redmine_author_name,
+                        redmine_reference.redmine_issue_id,
                         timestamp FROM answers
                         LEFT JOIN users ON answers.user = users.id
                         LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
+                        LEFT JOIN redmine_imported_answer_references redmine_reference
+                            ON redmine_reference.answer_id = answers.id
                         WHERE answers.id IN ({})
                         ORDER BY answers.timestamp",
                     std::iter::repeat_n("?", ids.len()).join(", ")
@@ -428,6 +508,14 @@ impl FormAnswerDatabase for ConnectionPool {
                             publication: rs.try_get("publication")?,
                             contents: Vec::new(),
                             messages: Vec::new(),
+                            redmine_reference: rs
+                                .try_get::<Option<i64>, _>("redmine_issue_id")?
+                                .map(|issue_id| {
+                                    RedmineImportedAnswerReference::new(
+                                        answer_id.into(),
+                                        issue_id.into(),
+                                    )
+                                }),
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -452,7 +540,9 @@ impl FormAnswerDatabase for ConnectionPool {
     ) -> Result<(), InfraError> {
         let answer_id = answer_entry.id().to_owned().into_inner().to_string();
         let form_id = form_id.into_inner().to_string();
-        let (author_type, user, temporary_user_id) = answer_author_columns(answer_entry);
+        let (author_type, user, temporary_user_id, redmine_user_id, redmine_author_name) =
+            answer_author_columns(answer_entry);
+        let redmine_issue_id = validated_redmine_issue_id(answer_entry)?;
         let temporary_user = answer_entry.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer_entry.title().to_owned())
             .map(|title| title.into_inner());
@@ -474,8 +564,9 @@ impl FormAnswerDatabase for ConnectionPool {
                 }
 
                 sqlx::query!(
-                    r#"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id, title, publication)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    r#"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id,
+                    redmine_user_id, redmine_author_name, title, publication)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                     title = VALUES(title),
                     publication = VALUES(publication)"#,
@@ -484,11 +575,24 @@ impl FormAnswerDatabase for ConnectionPool {
                     author_type,
                     user,
                     temporary_user_id,
+                    redmine_user_id,
+                    redmine_author_name,
                     title,
                     publication,
                 )
                 .execute(&mut **txn)
                 .await?;
+                if let Some(redmine_issue_id) = redmine_issue_id {
+                    sqlx::query!(
+                        r"INSERT INTO redmine_imported_answer_references (answer_id, redmine_issue_id)
+                        VALUES (?, ?)
+                        ON DUPLICATE KEY UPDATE redmine_issue_id = VALUES(redmine_issue_id)",
+                        answer_id,
+                        redmine_issue_id,
+                    )
+                    .execute(&mut **txn)
+                    .await?;
+                }
                 Ok::<_, InfraError>(())
             })
         })

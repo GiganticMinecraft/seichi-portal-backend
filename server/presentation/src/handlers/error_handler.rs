@@ -73,6 +73,12 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
             "Messages cannot be posted to temporary answers.",
             "MESSAGE_POSTING_NOT_SUPPORTED_FOR_TEMPORARY_ANSWER",
         ),
+        DomainError::MessagePostingNotSupportedForImportedAnswer => problem_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Unprocessable Entity",
+            "Messages cannot be posted to answers imported from Redmine.",
+            "MESSAGE_POSTING_NOT_SUPPORTED_FOR_IMPORTED_ANSWER",
+        ),
         DomainError::Conversion { source } => {
             tracing::error!("Conversion Error: {}", source);
             problem_response(

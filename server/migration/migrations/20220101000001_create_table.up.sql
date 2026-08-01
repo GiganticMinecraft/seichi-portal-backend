@@ -101,9 +101,11 @@ CREATE TABLE IF NOT EXISTS form_discord_webhooks(
 CREATE TABLE IF NOT EXISTS answers(
     id CHAR(36) NOT NULL PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
-    author_type ENUM('AUTHENTICATED_USER', 'TEMPORARY_USER') NOT NULL,
+    author_type ENUM('AUTHENTICATED_USER', 'TEMPORARY_USER', 'IMPORTED_FROM_REDMINE') NOT NULL,
     user CHAR(36),
     temporary_user_id CHAR(36),
+    redmine_user_id BIGINT,
+    redmine_author_name TEXT,
     title TEXT,
     publication ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC',
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -111,8 +113,12 @@ CREATE TABLE IF NOT EXISTS answers(
     FOREIGN KEY fk_answers_user(user) REFERENCES users(id),
     FOREIGN KEY fk_answers_temporary_user_id(temporary_user_id) REFERENCES temporary_users(id),
     CHECK (
-        (author_type = 'AUTHENTICATED_USER' AND user IS NOT NULL AND temporary_user_id IS NULL)
-        OR (author_type = 'TEMPORARY_USER' AND user IS NULL AND temporary_user_id IS NOT NULL)
+        (author_type = 'AUTHENTICATED_USER' AND user IS NOT NULL AND temporary_user_id IS NULL
+            AND redmine_user_id IS NULL AND redmine_author_name IS NULL)
+        OR (author_type = 'TEMPORARY_USER' AND user IS NULL AND temporary_user_id IS NOT NULL
+            AND redmine_user_id IS NULL AND redmine_author_name IS NULL)
+        OR (author_type = 'IMPORTED_FROM_REDMINE' AND user IS NULL AND temporary_user_id IS NULL
+            AND redmine_author_name IS NOT NULL)
     )
 );
 
@@ -133,6 +139,25 @@ CREATE TABLE IF NOT EXISTS form_answer_comments(
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY fk_form_answer_comments_answer_id(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
     FOREIGN KEY fk_form_answer_comments_commented_by(commented_by) REFERENCES users(id)
+);
+
+-- Redmine 由来の回答参照とコメントは、回答が active/archive 間を移動しても同じ UUID
+-- で参照できるよう、状態別の回答テーブルから独立して保持する。各外部 ID は全体で一意。
+CREATE TABLE IF NOT EXISTS redmine_imported_answer_references(
+    answer_id CHAR(36) NOT NULL PRIMARY KEY,
+    redmine_issue_id BIGINT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS redmine_imported_comments(
+    comment_id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL,
+    redmine_journal_id BIGINT NOT NULL UNIQUE,
+    redmine_user_id BIGINT,
+    redmine_author_name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    timestamp TIMESTAMP NOT NULL,
+    INDEX idx_redmine_imported_comments_answer_timestamp
+        (answer_id, timestamp, redmine_journal_id)
 );
 
 CREATE TABLE IF NOT EXISTS form_answer_comment_history(
@@ -261,9 +286,11 @@ CREATE TABLE IF NOT EXISTS archived_form_discord_webhooks(
 CREATE TABLE IF NOT EXISTS archived_answers(
     id CHAR(36) NOT NULL PRIMARY KEY,
     form_id CHAR(36) NOT NULL,
-    author_type ENUM('AUTHENTICATED_USER', 'TEMPORARY_USER') NOT NULL,
+    author_type ENUM('AUTHENTICATED_USER', 'TEMPORARY_USER', 'IMPORTED_FROM_REDMINE') NOT NULL,
     user CHAR(36),
     temporary_user_id CHAR(36),
+    redmine_user_id BIGINT,
+    redmine_author_name TEXT,
     title TEXT,
     publication ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC',
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -271,8 +298,12 @@ CREATE TABLE IF NOT EXISTS archived_answers(
     FOREIGN KEY fk_archived_answers_user(user) REFERENCES users(id),
     FOREIGN KEY fk_archived_answers_temporary_user_id(temporary_user_id) REFERENCES temporary_users(id),
     CHECK (
-        (author_type = 'AUTHENTICATED_USER' AND user IS NOT NULL AND temporary_user_id IS NULL)
-        OR (author_type = 'TEMPORARY_USER' AND user IS NULL AND temporary_user_id IS NOT NULL)
+        (author_type = 'AUTHENTICATED_USER' AND user IS NOT NULL AND temporary_user_id IS NULL
+            AND redmine_user_id IS NULL AND redmine_author_name IS NULL)
+        OR (author_type = 'TEMPORARY_USER' AND user IS NULL AND temporary_user_id IS NOT NULL
+            AND redmine_user_id IS NULL AND redmine_author_name IS NULL)
+        OR (author_type = 'IMPORTED_FROM_REDMINE' AND user IS NULL AND temporary_user_id IS NULL
+            AND redmine_author_name IS NOT NULL)
     )
 );
 

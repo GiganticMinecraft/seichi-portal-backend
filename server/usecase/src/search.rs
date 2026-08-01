@@ -1,6 +1,6 @@
 use crate::{
     models::{
-        ActiveFormWithLabels, AnswerDetails, CommentWithAuthor, CrossSearchComment,
+        ActiveFormWithLabels, AnswerDetails, CommentAuthor, CommentWithAuthor, CrossSearchComment,
         CrossSearchOutput, PublishedAnswerAuthor, PublishedAnswerEntry,
     },
     user_reference_resolver::resolve_user_references,
@@ -31,7 +31,7 @@ use domain::{
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Read},
 };
-use errors::Error;
+use errors::{Error, domain::DomainError};
 use futures::{StreamExt, TryStreamExt, stream, try_join};
 use std::{
     collections::{HashMap, HashSet},
@@ -149,7 +149,7 @@ impl<
                 if matches!(
                     error,
                     Error::Domain {
-                        source: errors::domain::DomainError::Forbidden
+                        source: DomainError::Forbidden
                     }
                 ) {
                     Ok(None)
@@ -157,6 +157,43 @@ impl<
                     Err(error)
                 }
             })
+    }
+
+    async fn comment_search_documents(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+        answers: &[Allowed<AnswerEntry, Read>],
+    ) -> Result<Vec<SearchableFieldsWithOperation>, Error> {
+        stream::iter(answers.iter().cloned())
+            .then(|answer| async move {
+                let form = forms
+                    .iter()
+                    .find(|form| form.id() == answer.form_id())
+                    .ok_or(DomainError::NotFound)?;
+                let thread = self
+                    .comment_thread_repository
+                    .get_with_comments_for_answer(form, answer.into_inner())
+                    .await?;
+                Ok::<_, Error>(
+                    thread
+                        .comments()
+                        .iter()
+                        .map(|comment| {
+                            (
+                                SearchableFields::FormAnswerComments(FormAnswerComments {
+                                    id: comment.comment_id().to_owned(),
+                                    answer_id: comment.answer_id().to_owned(),
+                                    content: comment.content().to_owned().into_inner().into_inner(),
+                                }),
+                                Operation::Update,
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .try_collect::<Vec<_>>()
+            .await
+            .map(|documents| documents.into_iter().flatten().collect())
     }
 
     async fn visible_users(
@@ -265,6 +302,9 @@ impl<
                     AnswerAuthor::Temporary(temporary_user) => {
                         PublishedAnswerAuthor::Temporary(temporary_user.clone())
                     }
+                    AnswerAuthor::ImportedFromRedmine(author) => {
+                        PublishedAnswerAuthor::ImportedFromRedmine(author.clone())
+                    }
                 }
             }
         };
@@ -307,7 +347,7 @@ impl<
             account_user,
             comments
                 .iter()
-                .map(|(_, comment)| *comment.commented_by())
+                .filter_map(|(_, comment)| comment.commented_by().copied())
                 .collect(),
         )
         .await?;
@@ -315,16 +355,20 @@ impl<
         Ok(comments
             .into_iter()
             .filter_map(|(form_id, comment)| {
-                users
-                    .get(comment.commented_by())
-                    .cloned()
-                    .map(|commented_by| CrossSearchComment {
-                        form_id,
-                        comment: CommentWithAuthor {
-                            comment,
-                            commented_by,
-                        },
-                    })
+                let commented_by = match comment.commented_by() {
+                    Some(user_id) => users.get(user_id).cloned().map(CommentAuthor::Portal)?,
+                    None => comment
+                        .redmine_author()
+                        .cloned()
+                        .map(CommentAuthor::ImportedFromRedmine)?,
+                };
+                Some(CrossSearchComment {
+                    form_id,
+                    comment: CommentWithAuthor {
+                        comment,
+                        commented_by,
+                    },
+                })
             })
             .collect())
     }
@@ -575,43 +619,9 @@ impl<
 
                         let answer_documents = answer_search_documents(&answer_entries);
 
-                        let comments = stream::iter(answer_entries.clone())
-                        .then(|answer| async {
-                            let form = form_guards
-                                .iter()
-                                .find(|form| form.id() == answer.form_id())
-                                .expect("answer entries are loaded from form_guards");
-                            self.comment_thread_repository
-                                .get_with_comments_for_answer(form, answer.into_inner())
-                                .await
-                                .map(|thread| {
-                                    thread
-                                        .comments()
-                                        .iter()
-                                        .map(|comment| {
-                                            (
-                                                SearchableFields::FormAnswerComments(
-                                                    FormAnswerComments {
-                                                        id: comment.comment_id().to_owned(),
-                                                        answer_id: comment.answer_id().to_owned(),
-                                                        content: comment
-                                                            .content()
-                                                            .to_owned()
-                                                            .into_inner()
-                                                            .into_inner(),
-                                                    },
-                                                ),
-                                                Operation::Update,
-                                            )
-                                        })
-                                        .collect::<Vec<_>>()
-                                })
-                        })
-                        .try_collect::<Vec<_>>()
-                        .await?
-                        .into_iter()
-                        .flatten()
-                        .collect::<Vec<_>>();
+                        let comments = self
+                            .comment_search_documents(&form_guards, &answer_entries)
+                            .await?;
 
                         let labels_for_forms = self
                             .form_label_repository
@@ -704,8 +714,11 @@ impl<
                 .collect::<Result<Vec<_>, Error>>()?;
             let answer_entries = self.list_all_answer_entries(&form_guards).await?;
             let documents = answer_search_documents(&answer_entries);
+            let comments = self
+                .comment_search_documents(&form_guards, &answer_entries)
+                .await?;
             self.search_repository
-                .sync_search_engine(&documents)
+                .sync_search_engine(&documents.into_iter().chain(comments).collect::<Vec<_>>())
                 .await?;
         }
 

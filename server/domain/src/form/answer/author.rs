@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 use crate::account::models::UserId;
 
+use super::entry::AnswerId;
+
 #[derive(DerivingVia, Debug, PartialOrd, PartialEq, Eq, Hash, Clone, Copy)]
 #[deriving(
     From,
@@ -44,24 +46,93 @@ impl TemporaryAnswerAuthor {
     }
 }
 
+/// Redmine 側で回答を書き込んだ利用者の、移行時点の表示用スナップショットです。
+///
+/// Portal の `UserId` やロールは保持しません。Redmine の利用者が Portal の認証主体に
+/// なることはなく、表示名は importer が補完した必須値として扱います。
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Debug, Clone, PartialEq, Eq)]
+pub struct RedmineUserSnapshot {
+    redmine_user_id: Option<i64>,
+    display_name: String,
+}
+
+impl RedmineUserSnapshot {
+    pub fn new(redmine_user_id: Option<i64>, display_name: String) -> Self {
+        Self {
+            redmine_user_id,
+            display_name,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum AnswerAuthor {
     AuthenticatedUser(UserId),
     Temporary(TemporaryAnswerAuthor),
+    ImportedFromRedmine(RedmineUserSnapshot),
 }
 
 impl AnswerAuthor {
     pub fn authenticated_user_id(&self) -> Option<UserId> {
         match self {
             Self::AuthenticatedUser(user_id) => Some(*user_id),
-            Self::Temporary(_) => None,
+            Self::Temporary(_) | Self::ImportedFromRedmine(_) => None,
         }
     }
 
     pub fn temporary_user(&self) -> Option<&TemporaryAnswerAuthor> {
         match self {
-            Self::AuthenticatedUser(_) => None,
+            Self::AuthenticatedUser(_) | Self::ImportedFromRedmine(_) => None,
             Self::Temporary(user) => Some(user),
+        }
+    }
+
+    pub fn redmine_user(&self) -> Option<&RedmineUserSnapshot> {
+        match self {
+            Self::ImportedFromRedmine(user) => Some(user),
+            Self::AuthenticatedUser(_) | Self::Temporary(_) => None,
+        }
+    }
+}
+
+/// Redmine の issue ID です。
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RedmineIssueId(i64);
+
+impl RedmineIssueId {
+    pub fn new(value: i64) -> Self {
+        Self(value)
+    }
+
+    pub fn into_inner(self) -> i64 {
+        self.0
+    }
+}
+
+impl From<i64> for RedmineIssueId {
+    fn from(value: i64) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<RedmineIssueId> for i64 {
+    fn from(value: RedmineIssueId) -> Self {
+        value.into_inner()
+    }
+}
+
+/// Redmine issue と Portal の回答を一対一に対応付ける参照です。
+#[derive(Serialize, Deserialize, Getters, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RedmineImportedAnswerReference {
+    answer_id: AnswerId,
+    issue_id: RedmineIssueId,
+}
+
+impl RedmineImportedAnswerReference {
+    pub fn new(answer_id: AnswerId, issue_id: RedmineIssueId) -> Self {
+        Self {
+            answer_id,
+            issue_id,
         }
     }
 }

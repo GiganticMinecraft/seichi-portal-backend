@@ -60,6 +60,12 @@ impl Payload {
                     form_answer_comments,
                 )))
             }
+            "redmine_imported_comments" => {
+                let redmine_imported_comment: FormAnswerComments = serde_json::from_value(value)?;
+                Ok(Some(ActualDataFields::FormAnswerComments(
+                    redmine_imported_comment,
+                )))
+            }
             "label_for_form_answers" => {
                 let label_for_form_answers: LabelForFormAnswers = serde_json::from_value(value)?;
                 Ok(Some(ActualDataFields::LabelForFormAnswers(
@@ -193,6 +199,7 @@ impl TryFrom<RealAnswers> for domain::search::models::RealAnswers {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FormAnswerComments {
+    #[serde(alias = "comment_id")]
     pub id: String,
     pub answer_id: String,
     pub content: String,
@@ -419,5 +426,37 @@ mod tests {
 
         assert_eq!(document.id.into_inner(), answer_id);
         assert_eq!(serde_json::to_value(document.title).unwrap(), json!(null));
+    }
+
+    #[test]
+    fn imported_comment_payload_uses_comment_id_as_the_search_document_id() {
+        let comment_id = Uuid::from_u128(3);
+        let answer_id = Uuid::from_u128(4);
+        let schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": "c",
+                "source": { "table": "redmine_imported_comments" },
+                "before": null,
+                "after": {
+                    "comment_id": comment_id.to_string(),
+                    "answer_id": answer_id.to_string(),
+                    "redmine_journal_id": 99,
+                    "redmine_author_name": "Redmine user",
+                    "content": "検索できるコメント"
+                }
+            }
+        }))
+        .unwrap();
+
+        let actual = schema.payload.try_into_after().unwrap().unwrap();
+        let SearchableFields::FormAnswerComments(document) =
+            SearchableFields::try_from(actual).unwrap()
+        else {
+            panic!("imported comments must become a comment search document");
+        };
+
+        assert_eq!(document.id.into_inner(), comment_id);
+        assert_eq!(document.answer_id.into_inner(), answer_id);
+        assert_eq!(document.content, "検索できるコメント");
     }
 }
