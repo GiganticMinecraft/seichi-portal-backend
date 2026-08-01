@@ -11,7 +11,7 @@ use crate::{
 
 #[async_trait]
 impl FormLabelDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn create_label_for_forms(&self, label: &FormLabel) -> Result<(), InfraError> {
         let label_id = label.id().to_owned().into_inner().to_string();
         let label_name = label.name().to_string();
@@ -32,7 +32,7 @@ impl FormLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn fetch_labels(&self) -> Result<Vec<FormLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -54,7 +54,7 @@ impl FormLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn fetch_labels_by_ids(
         &self,
         ids: Vec<FormLabelId>,
@@ -96,7 +96,7 @@ impl FormLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(label_id = %label_id))]
     async fn delete_label_for_forms(&self, label_id: FormLabelId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -113,7 +113,7 @@ impl FormLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(label_id = %id))]
     async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -135,7 +135,7 @@ impl FormLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(label_id = %id))]
     async fn edit_label_for_forms(
         &self,
         id: FormLabelId,
@@ -157,7 +157,7 @@ impl FormLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn fetch_labels_by_form_id(
         &self,
         form_id: FormId,
@@ -191,7 +191,7 @@ impl FormLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {

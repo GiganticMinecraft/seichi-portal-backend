@@ -240,7 +240,7 @@ pub(crate) fn attach_entry_children(
 
 #[async_trait]
 impl FormAnswerDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn post_answer(&self, answer: &AnswerEntry, form_id: FormId) -> Result<(), InfraError> {
         let answer_id = answer.id().to_owned().into_inner().to_string();
         let form_id = form_id.into_inner().to_string();
@@ -314,7 +314,7 @@ impl FormAnswerDatabase for ConnectionPool {
         }).await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn get_answers(
         &self,
         answer_id: AnswerId,
@@ -380,7 +380,7 @@ impl FormAnswerDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn get_answers_by_answer_ids(
         &self,
         answer_ids: Vec<AnswerId>,
@@ -444,7 +444,7 @@ impl FormAnswerDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn update_answer_entry(
         &self,
         answer_entry: &AnswerEntry,
@@ -495,7 +495,7 @@ impl FormAnswerDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -509,7 +509,7 @@ impl FormAnswerDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn content_size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {

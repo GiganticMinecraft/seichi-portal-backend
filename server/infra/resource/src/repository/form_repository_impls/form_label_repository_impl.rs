@@ -14,7 +14,7 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Client> {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn create_label_for_forms(&self, label: Allowed<FormLabel, Create>) -> Result<(), Error> {
         self.client
             .form_label()
@@ -23,7 +23,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn fetch_labels(&self) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error> {
         self.client
             .form_label()
@@ -35,7 +35,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn fetch_labels_by_ids(
         &self,
         ids: Vec<FormLabelId>,
@@ -50,7 +50,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(label_id = %id))]
     async fn fetch_label(
         &self,
         id: FormLabelId,
@@ -65,7 +65,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map(Into::into))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn delete_label_for_forms(&self, label: Allowed<FormLabel, Delete>) -> Result<(), Error> {
         self.client
             .form_label()
@@ -74,7 +74,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(label_id = %id))]
     async fn edit_label_for_forms(
         &self,
         id: FormLabelId,
@@ -87,7 +87,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn fetch_labels_by_form_id(
         &self,
         form_id: FormId,
@@ -102,7 +102,7 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, Error> {
         self.client.form_label().size().await.map_err(Into::into)
     }

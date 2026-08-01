@@ -974,7 +974,7 @@ async fn copy_group_restriction_table(
 
 #[async_trait]
 impl FormDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn create(&self, form: &ActiveForm, user: &AccountUser) -> Result<(), InfraError> {
         let form = form.clone();
         let user = user.clone();
@@ -991,7 +991,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn list(
         &self,
         request: PageRequest<FormPagePosition>,
@@ -1088,7 +1088,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn list_all(&self) -> Result<Vec<ActiveFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -1146,7 +1146,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn get(&self, form_id: FormId) -> Result<Option<ActiveFormRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -1159,7 +1159,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn list_archived(
         &self,
         request: PageRequest<ArchivedFormPagePosition>,
@@ -1328,7 +1328,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn get_archived(
         &self,
         form_id: FormId,
@@ -1344,7 +1344,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id, answer_id = %answer_id))]
     async fn archived_answer_publication(
         &self,
         form_id: FormId,
@@ -1371,7 +1371,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn archive(&self, form: &ArchivedForm) -> Result<ArchivedForm, InfraError> {
         let form = form.clone();
         self.read_write_transaction(move |txn| {
@@ -1411,7 +1411,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn restore(&self, form_id: FormId) -> Result<(), InfraError> {
         self.read_write_transaction(move |txn| {
             Box::pin(async move {
@@ -1427,7 +1427,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn update(&self, form: &ActiveForm, updated_by: &AccountUser) -> Result<(), InfraError> {
         let form = form.clone();
         let updated_by = updated_by.clone();
@@ -1444,7 +1444,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -1458,7 +1458,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(form_id = %form_id))]
     async fn list_answer_entries(
         &self,
         form_id: FormId,
@@ -1470,7 +1470,7 @@ impl FormDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn list_all_answer_entries(
         &self,
         request: PageRequest<AnswerPagePosition>,

@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 #[async_trait]
 impl FormCommentDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(comment_id = %comment_id))]
     async fn get_comment(
         &self,
         comment_id: CommentId,
@@ -52,7 +52,7 @@ impl FormCommentDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn get_comments(&self, answer_id: AnswerId) -> Result<Vec<CommentRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -73,7 +73,7 @@ impl FormCommentDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn get_all_comments(&self) -> Result<Vec<CommentRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -92,7 +92,7 @@ impl FormCommentDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn create_comment_authorizing_in_transaction(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -113,7 +113,7 @@ impl FormCommentDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn update_comment_authorizing_in_transaction(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -143,7 +143,7 @@ impl FormCommentDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip(self, comment))]
+    #[tracing::instrument(skip_all)]
     async fn delete_comment_authorizing_in_transaction(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -170,7 +170,7 @@ impl FormCommentDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn get_history(
         &self,
         answer_id: AnswerId,
@@ -277,7 +277,7 @@ impl FormCommentDatabase for ConnectionPool {
         }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {

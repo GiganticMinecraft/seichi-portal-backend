@@ -22,7 +22,7 @@ impl<Client> AnswerEntryRepository for Repository<Client>
 where
     Client: DatabaseComponents + 'static,
 {
-    #[tracing::instrument(skip(self, form))]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn get(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -40,7 +40,7 @@ where
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self, forms))]
+    #[tracing::instrument(skip_all)]
     async fn find_by_ids(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
@@ -73,7 +73,7 @@ where
             .collect())
     }
 
-    #[tracing::instrument(skip(self, form))]
+    #[tracing::instrument(skip_all)]
     async fn list_by_form(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -89,7 +89,7 @@ where
         Ok(Page::new(form.readable_entries(entries), next))
     }
 
-    #[tracing::instrument(skip(self, forms))]
+    #[tracing::instrument(skip_all)]
     async fn list_all(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
@@ -117,7 +117,7 @@ where
         Ok(Page::new(authorized_entries, next))
     }
 
-    #[tracing::instrument(skip(self, _form, answer_entry))]
+    #[tracing::instrument(skip_all)]
     async fn post(
         &self,
         _form: &Allowed<ActiveForm, Read>,
@@ -130,7 +130,7 @@ where
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, _form, answer_entry))]
+    #[tracing::instrument(skip_all)]
     async fn update(
         &self,
         _form: &Allowed<ActiveForm, Update>,
@@ -143,12 +143,12 @@ where
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, Error> {
         self.client.form_answer().size().await.map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn content_size(&self) -> Result<u32, Error> {
         self.client
             .form_answer()

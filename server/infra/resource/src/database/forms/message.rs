@@ -18,7 +18,7 @@ use crate::{
 
 #[async_trait]
 impl FormMessageDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn post_message(
         &self,
         message: &Message,
@@ -74,7 +74,7 @@ impl FormMessageDatabase for ConnectionPool {
         }).await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn update_message_with_history(
         &self,
         message: &Message,
@@ -148,7 +148,7 @@ impl FormMessageDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn fetch_messages_by_form_answer(
         &self,
         answers: &AnswerEntry,
@@ -174,7 +174,7 @@ impl FormMessageDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn fetch_messages_by_answer_id(
         &self,
         answer_id: AnswerId,
@@ -200,7 +200,7 @@ impl FormMessageDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(message_id = %message_id))]
     async fn fetch_message(
         &self,
         message_id: &MessageId,
@@ -226,7 +226,7 @@ impl FormMessageDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn delete_message_with_history(
         &self,
         deleted: &DeletedMessage,

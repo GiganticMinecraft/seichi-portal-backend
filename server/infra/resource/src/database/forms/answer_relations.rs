@@ -53,7 +53,7 @@ fn relation_from_row(
 
 #[async_trait]
 impl FormAnswerRelationDatabase for ConnectionPool {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn list_for_answer(
         &self,
         source: AnswerReference,
@@ -90,7 +90,7 @@ impl FormAnswerRelationDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn add(&self, relation: AnswerRelation) -> Result<(), InfraError> {
         let (first_form_id, first_answer_id, second_form_id, second_answer_id) =
             relation_columns(relation);
@@ -115,7 +115,7 @@ impl FormAnswerRelationDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn remove(&self, relation: AnswerRelation) -> Result<(), InfraError> {
         let (first_form_id, first_answer_id, second_form_id, second_answer_id) =
             relation_columns(relation);
@@ -139,7 +139,7 @@ impl FormAnswerRelationDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn find_for_source_and_answer_id(
         &self,
         source: AnswerReference,
