@@ -1,0 +1,27 @@
+changelog:
+  exclude:
+    authors:
+      - github-actions[bot]
+  categories:
+    - title: 🚀 新機能
+      labels:
+        - feature
+        - enhancement
+    - title: 🐛 バグ修正
+      labels:
+        - bug
+    - title: 🛠 リファクタリング
+      labels:
+        - refactoring
+    - title: ⚙️ CI
+      labels:
+        - ci
+    - title: 📖 ドキュメント
+      labels:
+        - documentation
+    - title: 📦 依存関係の更新
+      labels:
+        - dependencies
+    - title: その他の変更
+      labels:
+        - "*"
