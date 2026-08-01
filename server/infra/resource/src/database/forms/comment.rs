@@ -1,3 +1,4 @@
+use super::answers::author_from_values;
 use crate::{
     database::{
         components::FormCommentDatabase,
@@ -26,7 +27,7 @@ use domain::{
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
-use errors::{Error, infra::InfraError};
+use errors::{Error, domain::DomainError, infra::InfraError};
 use std::cmp::Ordering;
 use uuid::Uuid;
 
@@ -413,7 +414,7 @@ async fn lock_comment_thread(
     .fetch_optional(&mut **transaction)
     .await
     .map_err(InfraError::from)?
-    .ok_or(errors::domain::DomainError::NotFound)?;
+    .ok_or(DomainError::NotFound)?;
     let form_visibility = Visibility::try_from(locked_form.visibility)?;
     let answer_visibility = AnswerVisibility::try_from(locked_form.answer_visibility)?;
 
@@ -436,7 +437,7 @@ async fn lock_comment_thread(
         &AllowedUserGroups::new(form_group_ids),
         &actor,
     ) {
-        return Err(errors::domain::DomainError::Forbidden.into());
+        return Err(DomainError::Forbidden.into());
     }
 
     let answer_group_ids = sqlx::query!(
@@ -468,9 +469,9 @@ async fn lock_comment_thread(
     .fetch_optional(&mut **transaction)
     .await
     .map_err(InfraError::from)?
-    .ok_or(errors::domain::DomainError::NotFound)?;
+    .ok_or(DomainError::NotFound)?;
 
-    let answer_author = match super::answers::author_from_values(
+    let answer_author = match author_from_values(
         answer.author_type,
         answer.user,
         answer.user_name,
@@ -519,7 +520,7 @@ async fn lock_comment_thread(
                     .fetch_optional(&mut **transaction)
                     .await
                     .map_err(InfraError::from)?
-                    .ok_or(errors::domain::DomainError::NotFound)?,
+                    .ok_or(DomainError::NotFound)?,
                 )
             };
             vec![record.try_into()?]
@@ -550,7 +551,7 @@ async fn insert_created_comment(
     let answer_id = comment.answer_id().to_string();
     let commented_by = comment
         .commented_by()
-        .ok_or(errors::domain::DomainError::Forbidden)?
+        .ok_or(DomainError::Forbidden)?
         .to_string();
     let content = comment.content().to_string();
     let timestamp = *comment.timestamp();
@@ -567,7 +568,7 @@ async fn insert_created_comment(
         Uuid::now_v7().to_string(), comment.answer_id().to_string(), comment.comment_id().to_string(),
         comment
             .commented_by()
-            .ok_or(errors::domain::DomainError::Forbidden)?
+            .ok_or(DomainError::Forbidden)?
             .to_string(), actor.name(), actor.role().to_string(), timestamp,
         comment.content().to_string(), actor.id().to_string(), actor.name(), actor.role().to_string(), timestamp,
     ).execute(&mut **transaction).await.map_err(InfraError::from)?;
@@ -645,7 +646,7 @@ async fn delete_comment_with_history(
 fn account_user(actor: &Actor) -> Result<&domain::account::models::AccountUser, Error> {
     match actor {
         Actor::AccountUser(user) => Ok(user),
-        _ => Err(errors::domain::DomainError::Forbidden.into()),
+        _ => Err(DomainError::Forbidden.into()),
     }
 }
 

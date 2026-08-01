@@ -1,13 +1,19 @@
 use chrono::{DateTime, Utc};
 use errors::domain::DomainError;
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
     account::models::Role::Administrator,
     auth::Actor,
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerPublication, AnswerSettings},
-        comment::{Comment, CommentContent, CommentHistoryEntry, CommentId, DeletedComment},
+        answer::{
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerPublication, AnswerSettings,
+            AnswerVisibility,
+        },
+        comment::{
+            Comment, CommentContent, CommentHistoryEntry, CommentId, CommentSource, DeletedComment,
+        },
+        models::ActiveForm,
     },
     types::authorization_guard::{
         Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, AuthorizationRole, Create,
@@ -20,7 +26,7 @@ use crate::{
 /// コメントの書込みでは、フォームの回答設定、対象回答の公開状態、更新・削除対象の
 /// コメントを同一トランザクションでロックして再構成します。そのうえでこの型の認可規則を
 /// 適用してから、コメントと履歴を永続化します。したがって、書込みに必要な状態は
-/// [`crate::form::models::ActiveForm`]、[`AnswerEntry`]、`CommentThread` をまたいで
+/// [`ActiveForm`]、[`AnswerEntry`]、`CommentThread` をまたいで
 /// 強整合に扱われます。`CommentThread` 単独が完全な集約であることを意味するものでは
 /// ありません。
 #[derive(Clone, Debug, PartialEq)]
@@ -61,34 +67,16 @@ impl CommentThread {
         answer_author: AnswerAuthor,
         publication: AnswerPublication,
         answer_settings: AnswerSettings,
-        mut comments: Vec<Comment>,
+        comments: Vec<Comment>,
     ) -> Result<Self, DomainError> {
-        let mut comment_ids = std::collections::HashSet::new();
-        let mut journal_ids = std::collections::HashSet::new();
-        for comment in &comments {
-            if comment.answer_id() != &answer_id || !comment_ids.insert(*comment.comment_id()) {
-                return Err(DomainError::InvalidEntity {
-                    message: "comment thread contains a foreign or duplicate comment".to_string(),
-                });
-            }
-            if let Some(journal_id) = comment.redmine_journal_id()
-                && (!matches!(&answer_author, AnswerAuthor::ImportedFromRedmine(_))
-                    || !journal_ids.insert(journal_id))
-            {
-                return Err(DomainError::InvalidEntity {
-                        message: "Redmine comment must belong to an imported answer and have a unique journal ID".to_string(),
-                    });
-            }
-        }
-
-        comments.sort_by(compare_comments);
+        validate_comments(&answer_id, &answer_author, &comments)?;
 
         Ok(Self {
             answer_id,
             answer_author: Some(answer_author),
             publication,
             answer_settings,
-            comments,
+            comments: sorted_comments(comments),
         })
     }
 
@@ -115,7 +103,7 @@ impl CommentThread {
             actor,
             Actor::AccountUser(user)
                 if user.role() == &Administrator
-                    || (self.answer_settings.visibility() == &crate::form::answer::AnswerVisibility::PUBLIC
+                    || (self.answer_settings.visibility() == &AnswerVisibility::PUBLIC
                         && self.publication == AnswerPublication::PUBLIC
                         && self.answer_settings.answer_groups().allows(actor))
         )
@@ -125,30 +113,74 @@ impl CommentThread {
 fn compare_comments(left: &Comment, right: &Comment) -> Ordering {
     let source_order = match (left.source(), right.source()) {
         (
-            crate::form::comment::CommentSource::ImportedFromRedmine {
+            CommentSource::ImportedFromRedmine {
                 redmine_journal_id: left_journal_id,
                 ..
             },
-            crate::form::comment::CommentSource::ImportedFromRedmine {
+            CommentSource::ImportedFromRedmine {
                 redmine_journal_id: right_journal_id,
                 ..
             },
         ) => left_journal_id.cmp(right_journal_id),
-        (
-            crate::form::comment::CommentSource::ImportedFromRedmine { .. },
-            crate::form::comment::CommentSource::Portal { .. },
-        ) => Ordering::Less,
-        (
-            crate::form::comment::CommentSource::Portal { .. },
-            crate::form::comment::CommentSource::ImportedFromRedmine { .. },
-        ) => Ordering::Greater,
-        (
-            crate::form::comment::CommentSource::Portal { .. },
-            crate::form::comment::CommentSource::Portal { .. },
-        ) => left.comment_id().cmp(right.comment_id()),
+        (CommentSource::ImportedFromRedmine { .. }, CommentSource::Portal { .. }) => Ordering::Less,
+        (CommentSource::Portal { .. }, CommentSource::ImportedFromRedmine { .. }) => {
+            Ordering::Greater
+        }
+        (CommentSource::Portal { .. }, CommentSource::Portal { .. }) => {
+            left.comment_id().cmp(right.comment_id())
+        }
     };
 
     left.timestamp().cmp(right.timestamp()).then(source_order)
+}
+
+fn validate_comments(
+    answer_id: &AnswerId,
+    answer_author: &AnswerAuthor,
+    comments: &[Comment],
+) -> Result<(), DomainError> {
+    let comments_belong_to_answer = comments
+        .iter()
+        .all(|comment| comment.answer_id() == answer_id);
+    let comment_ids_are_unique = comments
+        .iter()
+        .map(|comment| *comment.comment_id())
+        .collect::<HashSet<_>>()
+        .len()
+        == comments.len();
+    if !comments_belong_to_answer || !comment_ids_are_unique {
+        return Err(DomainError::InvalidEntity {
+            message: "comment thread contains a foreign or duplicate comment".to_string(),
+        });
+    }
+
+    let imported_comment_count = comments
+        .iter()
+        .filter(|comment| comment.redmine_journal_id().is_some())
+        .count();
+    let journal_ids_are_unique = comments
+        .iter()
+        .filter_map(|comment| comment.redmine_journal_id())
+        .collect::<HashSet<_>>()
+        .len()
+        == imported_comment_count;
+    if (!matches!(answer_author, AnswerAuthor::ImportedFromRedmine(_))
+        && imported_comment_count > 0)
+        || !journal_ids_are_unique
+    {
+        return Err(DomainError::InvalidEntity {
+            message:
+                "Redmine comment must belong to an imported answer and have a unique journal ID"
+                    .to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn sorted_comments(mut comments: Vec<Comment>) -> Vec<Comment> {
+    comments.sort_by(compare_comments);
+    comments
 }
 
 #[cfg(test)]
@@ -202,8 +234,7 @@ mod tests {
     fn answer_author_has_no_exception_when_comment_thread_is_not_public() {
         let actor = user(Role::StandardUser);
         let private_form = thread(
-            AnswerSettings::default()
-                .change_visibility(crate::form::answer::AnswerVisibility::PRIVATE),
+            AnswerSettings::default().change_visibility(AnswerVisibility::PRIVATE),
             AnswerPublication::PUBLIC,
         );
         let private_entry = thread(AnswerSettings::default(), AnswerPublication::PRIVATE);
@@ -226,8 +257,7 @@ mod tests {
     fn administrator_can_read_and_update_non_public_comment_thread() {
         let administrator = user(Role::Administrator);
         let thread = thread(
-            AnswerSettings::default()
-                .change_visibility(crate::form::answer::AnswerVisibility::PRIVATE),
+            AnswerSettings::default().change_visibility(AnswerVisibility::PRIVATE),
             AnswerPublication::PRIVATE,
         );
 
@@ -260,7 +290,7 @@ mod tests {
         let outsider = user(Role::StandardUser);
         let thread = thread(
             AnswerSettings::default()
-                .change_visibility(crate::form::answer::AnswerVisibility::PUBLIC)
+                .change_visibility(AnswerVisibility::PUBLIC)
                 .change_answer_groups(AllowedUserGroups::new(vec![*group.id()])),
             AnswerPublication::PUBLIC,
         );
@@ -338,8 +368,7 @@ mod tests {
             CommentThread::from_raw_parts(
                 answer_id,
                 AnswerPublication::PUBLIC,
-                AnswerSettings::default()
-                    .change_visibility(crate::form::answer::AnswerVisibility::PUBLIC),
+                AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
                 vec![existing_comment],
             )
         };
@@ -446,8 +475,7 @@ mod tests {
             answer_id,
             AnswerAuthor::ImportedFromRedmine(author.clone()),
             AnswerPublication::PUBLIC,
-            AnswerSettings::default()
-                .change_visibility(crate::form::answer::AnswerVisibility::PUBLIC),
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
             vec![comment.clone()],
         )
         .unwrap();
@@ -580,8 +608,7 @@ mod tests {
                 "Redmine answer author".to_string(),
             )),
             AnswerPublication::PUBLIC,
-            AnswerSettings::default()
-                .change_visibility(crate::form::answer::AnswerVisibility::PUBLIC),
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
             vec![imported_comment.clone()],
         )
         .unwrap();
@@ -638,7 +665,7 @@ impl AuthorizationGuardDefinitions for CommentThread {
     }
 }
 
-impl Allowed<crate::form::models::ActiveForm, Read> {
+impl Allowed<ActiveForm, Read> {
     /// 所属と最新の回答設定を確認し、コメントをロードせずに認可済み Thread を組み立てます。
     pub fn comment_thread(
         &self,

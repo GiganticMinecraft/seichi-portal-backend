@@ -9,7 +9,10 @@ use types::non_empty_string::NonEmptyString;
 use crate::{
     account::models::{Role, UserId, UserSnapshot},
     auth::Actor,
-    form::{answer::AnswerId, comment_thread::CommentThread},
+    form::{
+        answer::{AnswerId, RedmineUserSnapshot},
+        comment_thread::CommentThread,
+    },
     types::authorization_guard::{
         AuthorizationRole, BelongsTo, Create, Delete, DeleteTransition, GuardedBy, ParentGuarded,
         Read, Update,
@@ -88,7 +91,7 @@ pub enum CommentSource {
     },
     ImportedFromRedmine {
         redmine_journal_id: i64,
-        author: crate::form::answer::RedmineUserSnapshot,
+        author: RedmineUserSnapshot,
     },
 }
 
@@ -122,7 +125,7 @@ impl Comment {
         answer_id: AnswerId,
         comment_id: CommentId,
         redmine_journal_id: i64,
-        author: crate::form::answer::RedmineUserSnapshot,
+        author: RedmineUserSnapshot,
         content: CommentContent,
         timestamp: DateTime<Utc>,
     ) -> Self {
@@ -175,7 +178,7 @@ impl Comment {
         }
     }
 
-    pub fn redmine_author(&self) -> Option<&crate::form::answer::RedmineUserSnapshot> {
+    pub fn redmine_author(&self) -> Option<&RedmineUserSnapshot> {
         match &self.source {
             CommentSource::Portal { .. } => None,
             CommentSource::ImportedFromRedmine { author, .. } => Some(author),

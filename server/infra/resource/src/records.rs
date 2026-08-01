@@ -23,7 +23,7 @@ use domain::{
     },
     notification::models::NotificationPreference,
 };
-use errors::{Error, infra::InfraError};
+use errors::{Error, domain::DomainError, infra::InfraError};
 use types::non_empty_string::NonEmptyString;
 use types::non_empty_vec::NonEmptyVec;
 use uuid::Uuid;
@@ -416,7 +416,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             }
         };
         if matches!(&author, AnswerAuthor::ImportedFromRedmine(_)) != redmine_reference.is_some() {
-            return Err(errors::domain::DomainError::InvalidEntity {
+            return Err(DomainError::InvalidEntity {
                 message: "imported answers must have exactly one Redmine issue reference"
                     .to_string(),
             }
@@ -429,7 +429,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             .as_ref()
             .is_some_and(|reference| reference.answer_id() != &answer_id)
         {
-            return Err(errors::domain::DomainError::InvalidEntity {
+            return Err(DomainError::InvalidEntity {
                 message: "Redmine issue reference belongs to another answer".to_string(),
             }
             .into());

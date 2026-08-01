@@ -31,7 +31,7 @@ use domain::{
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Read},
 };
-use errors::Error;
+use errors::{Error, domain::DomainError};
 use futures::{StreamExt, TryStreamExt, stream, try_join};
 use std::{
     collections::{HashMap, HashSet},
@@ -149,7 +149,7 @@ impl<
                 if matches!(
                     error,
                     Error::Domain {
-                        source: errors::domain::DomainError::Forbidden
+                        source: DomainError::Forbidden
                     }
                 ) {
                     Ok(None)
@@ -169,7 +169,7 @@ impl<
                 let form = forms
                     .iter()
                     .find(|form| form.id() == answer.form_id())
-                    .ok_or(errors::domain::DomainError::NotFound)?;
+                    .ok_or(DomainError::NotFound)?;
                 let thread = self
                     .comment_thread_repository
                     .get_with_comments_for_answer(form, answer.into_inner())

@@ -24,6 +24,7 @@ use domain::{
 };
 use errors::{
     Error,
+    domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, UserNotFound},
 };
 
@@ -226,7 +227,7 @@ impl<
                 .try_update(Actor::from(actor.clone()))?;
             let current_content = authorized_thread
                 .find_comment(comment_id)
-                .ok_or(errors::domain::DomainError::NotFound)?
+                .ok_or(DomainError::NotFound)?
                 .content()
                 .clone();
             let updated = authorized_thread.authorize_comment_update(comment_id, content)?;
@@ -300,6 +301,7 @@ mod tests {
             answer::{
                 AnswerAuthor, AnswerPublication, AnswerSettings, AnswerTitle, AnswerVisibility,
             },
+            comment::DeletedComment,
             models::{FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
@@ -339,7 +341,7 @@ mod tests {
             _form: &Allowed<ActiveForm, Read>,
             _comment: Allowed<Comment, Create>,
         ) -> Result<(), Error> {
-            Err(errors::domain::DomainError::Forbidden.into())
+            Err(DomainError::Forbidden.into())
         }
 
         async fn update(
@@ -348,15 +350,15 @@ mod tests {
             _comment: Allowed<Comment, Update>,
             _updated_at: chrono::DateTime<Utc>,
         ) -> Result<(), Error> {
-            Err(errors::domain::DomainError::Forbidden.into())
+            Err(DomainError::Forbidden.into())
         }
 
         async fn delete(
             &self,
             _form: &Allowed<ActiveForm, Read>,
-            _comment: Allowed<domain::form::comment::DeletedComment, Create>,
+            _comment: Allowed<DeletedComment, Create>,
         ) -> Result<(), Error> {
-            Err(errors::domain::DomainError::Forbidden.into())
+            Err(DomainError::Forbidden.into())
         }
 
         async fn history(
@@ -425,7 +427,7 @@ mod tests {
             application_event_publisher: None,
         };
 
-        let forbidden = Err::<(), Error>(errors::domain::DomainError::Forbidden.into());
+        let forbidden = Err::<(), Error>(DomainError::Forbidden.into());
         assert_eq!(
             use_case
                 .get_comments(&author, form_id, answer_id)

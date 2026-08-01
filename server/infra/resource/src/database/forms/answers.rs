@@ -3,9 +3,11 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use domain::{
     account::models::{AccountUser, Role},
-    form::answer::{RedmineUserSnapshot, TemporaryAnswerAuthor},
     form::{
-        answer::{AnswerAuthor, AnswerEntry, AnswerId},
+        answer::{
+            AnswerAuthor, AnswerEntry, AnswerId, RedmineImportedAnswerReference,
+            RedmineUserSnapshot, TemporaryAnswerAuthor,
+        },
         models::FormId,
     },
 };
@@ -441,7 +443,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             redmine_reference: rs
                                 .redmine_issue_id
                                 .map(|issue_id| {
-                                    domain::form::answer::RedmineImportedAnswerReference::new(
+                                    RedmineImportedAnswerReference::new(
                                         answer_id,
                                         issue_id.into(),
                                     )
@@ -509,7 +511,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             redmine_reference: rs
                                 .try_get::<Option<i64>, _>("redmine_issue_id")?
                                 .map(|issue_id| {
-                                    domain::form::answer::RedmineImportedAnswerReference::new(
+                                    RedmineImportedAnswerReference::new(
                                         answer_id.into(),
                                         issue_id.into(),
                                     )
