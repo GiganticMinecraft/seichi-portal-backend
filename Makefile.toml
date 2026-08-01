@@ -10,6 +10,19 @@ args = [
     "-d"
 ]
 
+# ローカル観測検証環境 (grafana/otel-lgtm) 込みで compose を起動する。
+# backend 側は OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 を設定して
+# 起動すると、http://localhost:3000 の Grafana からトレースを確認できる。
+[tasks.up-observability]
+command = "docker"
+args = [
+    "compose",
+    "--profile",
+    "observability",
+    "up",
+    "-d"
+]
+
 [tasks.run-server]
 command = "cargo"
 args = ["run", "--package", "entrypoint"]
