@@ -12,6 +12,7 @@ thiserror = "2.0.19"
 uuid = { workspace = true }
 redis = { workspace = true }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 meilisearch-sdk = { workspace = true }
 serde_json = { workspace = true }
 serenity = { workspace = true }

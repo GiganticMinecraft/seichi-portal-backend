@@ -4,6 +4,7 @@ use crate::database::{
     components::{FormAnswerDatabase, SearchDatabase},
     connection::ConnectionPool,
 };
+use crate::outgoing::http::HTTP_CLIENT;
 use crate::records::FormAnswerRecord;
 use async_trait::async_trait;
 use domain::{
@@ -422,11 +423,9 @@ impl SearchDatabase for ConnectionPool {
 
     #[tracing::instrument(skip_all)]
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError> {
-        let client = reqwest::Client::new();
-
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
 
-        let mut request = client.get(format!("{}/stats", host));
+        let mut request = HTTP_CLIENT.get(format!("{}/stats", host));
 
         if let Some(api_key) = api_key {
             request = request.header("X-Meili-API-Key", api_key);
