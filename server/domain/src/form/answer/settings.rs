@@ -6,7 +6,7 @@ use deriving_via::DerivingVia;
 use errors::domain::DomainError;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
@@ -96,14 +96,30 @@ impl TryFrom<String> for AnswerVisibility {
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
+#[derive(Serialize, Getters, Clone, Default, Debug, PartialEq)]
 pub struct AnswerAcceptancePeriod {
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    #[serde(default)]
     start_at: Option<DateTime<Utc>>,
     #[cfg_attr(test, proptest(strategy = "arbitrary_opt_date_time()"))]
-    #[serde(default)]
     end_at: Option<DateTime<Utc>>,
+}
+
+impl<'de> Deserialize<'de> for AnswerAcceptancePeriod {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawAnswerAcceptancePeriod {
+            #[serde(default)]
+            start_at: Option<DateTime<Utc>>,
+            #[serde(default)]
+            end_at: Option<DateTime<Utc>>,
+        }
+
+        let raw = RawAnswerAcceptancePeriod::deserialize(deserializer)?;
+        Self::try_new(raw.start_at, raw.end_at).map_err(serde::de::Error::custom)
+    }
 }
 
 impl AnswerAcceptancePeriod {
@@ -309,6 +325,52 @@ mod tests {
             AnswerTitle::new(None),
             PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
         )
+    }
+
+    #[test]
+    fn answer_acceptance_period_deserialization_rejects_reversed_period() {
+        let result = serde_json::from_str::<AnswerAcceptancePeriod>(
+            r#"{
+                "start_at": "2024-01-02T00:00:00Z",
+                "end_at": "2024-01-01T00:00:00Z"
+            }"#,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn answer_acceptance_period_deserialization_accepts_equal_and_partial_periods() {
+        let equal = serde_json::from_str::<AnswerAcceptancePeriod>(
+            r#"{
+                "start_at": "2024-01-01T00:00:00Z",
+                "end_at": "2024-01-01T00:00:00Z"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(equal.start_at(), equal.end_at());
+
+        let start_only = serde_json::from_str::<AnswerAcceptancePeriod>(
+            r#"{"start_at":"2024-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert!(start_only.end_at().is_none());
+
+        let end_only =
+            serde_json::from_str::<AnswerAcceptancePeriod>(r#"{"end_at":"2024-01-01T00:00:00Z"}"#)
+                .unwrap();
+        assert!(end_only.start_at().is_none());
+
+        let no_bounds = serde_json::from_str::<AnswerAcceptancePeriod>("{}").unwrap();
+        assert!(no_bounds.start_at().is_none());
+        assert!(no_bounds.end_at().is_none());
+
+        let null_bounds = serde_json::from_str::<AnswerAcceptancePeriod>(
+            r#"{"start_at":null,"end_at":null,"unknown":true}"#,
+        )
+        .unwrap();
+        assert!(null_bounds.start_at().is_none());
+        assert!(null_bounds.end_at().is_none());
     }
 
     #[test]
