@@ -1,0 +1,14 @@
+# ブランチ名の prefix から .github/release.yml のカテゴリ分けに使うラベルを付与する。
+# どの prefix にも一致しない PR はラベルなしのまま (リリースノートでは「その他の変更」扱い)。
+feature:
+  - head-branch: ['^feat/', '^feature/']
+bug:
+  - head-branch: ['^fix/', '^hotfix/']
+refactoring:
+  - head-branch: ['^refactor/', '^refactoring/']
+ci:
+  - head-branch: ['^ci/']
+documentation:
+  - head-branch: ['^docs?/']
+dependencies:
+  - head-branch: ['^deps/', '^renovate/', '^dependabot/']
