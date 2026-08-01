@@ -169,3 +169,104 @@ jobs:
         run: docker exec -i "${{ job.services.db.id }}" mariadb -u user -ppassword seichi_portal < docker/minecraft-bans-schema.sql
       - name: Check sqlx offline metadata
         run: cargo sqlx prepare --check --workspace
+
+  migration-freeze-check:
+    name: Migration freeze check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Verify applied migrations are not modified
+        run: |
+          git fetch origin main --quiet
+          base="$(git merge-base origin/main HEAD)"
+          changed="$(git diff --diff-filter=MD --name-only "$base" HEAD -- server/migration/migrations/)"
+          if [ -n "$changed" ]; then
+            echo "::error::既存のマイグレーションファイルが変更・削除されています。適用済みマイグレーションは sqlx の checksum 検証があるため編集できません。スキーマ変更は新しいマイグレーションファイルとして追加してください:"
+            printf '%s\n' "$changed"
+            exit 1
+          fi
+
+  migration-convergence-check:
+    needs: [ rustfmt ]
+    name: Migration convergence check
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mariadb:lts
+        env:
+          MYSQL_INITDB_SKIP_TZINFO: 1
+          MARIADB_ROOT_PASSWORD: root
+          MYSQL_TCP_PORT: 3306
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: echo "RUST_VERSION=$(sed -n 's/channel = \"\(.*\)\"/\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          key: rust-${{ env.RUST_VERSION }}-build-${{ hashFiles('**/Cargo.toml') }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cache/sccache/
+            target/
+          restore-keys: |
+            rust-${{ env.RUST_VERSION }}-build-
+            rust-${{ env.RUST_VERSION }}-
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Install sqlx CLI
+        run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features rustls,mysql
+
+      - name: Create databases
+        run: |
+          docker exec "${{ job.services.db.id }}" mariadb -uroot -proot -e "
+            CREATE DATABASE fresh  CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+            CREATE DATABASE legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+      - name: Load legacy (SeaORM era) schema fixture
+        run: docker exec -i "${{ job.services.db.id }}" mariadb -uroot -proot legacy < server/migration/fixtures/legacy_schema.sql
+      - name: Migrate fresh database
+        run: sqlx migrate run --source server/migration/migrations --database-url mysql://root:root@127.0.0.1:3306/fresh
+      - name: Migrate legacy database
+        run: sqlx migrate run --source server/migration/migrations --database-url mysql://root:root@127.0.0.1:3306/legacy
+
+      - name: Verify schema convergence
+        run: |
+          for db in fresh legacy; do
+            docker exec "${{ job.services.db.id }}" mariadb-dump -uroot -proot --no-data --skip-comments \
+              --ignore-table="$db"._sqlx_migrations "$db" \
+              | sed -E 's/ AUTO_INCREMENT=[0-9]+//' > "/tmp/dump_$db.sql"
+          done
+          diff -u /tmp/dump_fresh.sql /tmp/dump_legacy.sql
+
+      - name: Verify legacy data backfill
+        run: |
+          set -eu
+          q() { docker exec "${{ job.services.db.id }}" mariadb -uroot -proot -N legacy -e "$1"; }
+          assert_eq() {
+            actual="$(q "$1")"
+            if [ "$actual" != "$2" ]; then
+              echo "::error::assertion failed: $1 => '$actual' (expected '$2')"
+              exit 1
+            fi
+          }
+          assert_eq "SELECT acceptance_period_start_at FROM form_meta_data" "2026-01-01 00:00:00"
+          assert_eq "SELECT default_answer_title FROM form_meta_data" "デフォルトタイトル"
+          assert_eq "SELECT COUNT(*) FROM form_questions WHERE template_key NOT REGEXP '^q-'" "0"
+          assert_eq "SELECT GROUP_CONCAT(title ORDER BY position) FROM form_questions" "質問1,質問2,質問3"
+          assert_eq "SELECT question_type FROM form_questions WHERE title = '質問3'" "TEXT"
+          assert_eq "SELECT GROUP_CONCAT(label ORDER BY position) FROM form_choices" "選択肢A,選択肢B,選択肢C"
+          assert_eq "SELECT author_type FROM answers" "AUTHENTICATED_USER"
+          assert_eq "SELECT COUNT(*) FROM real_answers ra JOIN form_questions fq ON ra.question_id = fq.question_id" "1"
+          assert_eq "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'legacy' AND TABLE_NAME IN ('response_period', 'default_answer_titles', 'form_webhooks', 'seaql_migrations')" "0"

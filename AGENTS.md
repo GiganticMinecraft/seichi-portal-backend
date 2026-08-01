@@ -22,6 +22,10 @@ makers pretty
 
 今後 typed query (`query!`, `query_as!` など) を追加・変更する PR では、ルート `.env` の `DATABASE_URL` を使って `cargo sqlx prepare --workspace` を実行し、`.sqlx/` の更新をコミットに含めること。
 
+### マイグレーション
+
+適用済みのマイグレーションファイルは編集しない (sqlx の checksum 検証により既存環境で起動が失敗する)。スキーマ変更は必ず新しいマイグレーションファイルとして追加する。詳細は `server/migration/README.md` を参照。
+
 ## AI Agent 向けスキル
 
 このリポジトリには、実装時に守るべき規約をまとめた skill を `.agents/skills/seichi-portal-backend-coding-discipline` に置いている。
