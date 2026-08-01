@@ -24,7 +24,7 @@ impl<Client> ActiveFormRepository for Repository<Client>
 where
     Client: DatabaseComponents + 'static,
 {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn create(
         &self,
         actor: &AccountUser,
@@ -34,7 +34,7 @@ where
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn list(
         &self,
         request: PageRequest<FormPagePosition>,
@@ -52,7 +52,7 @@ where
         Ok(Page::new(forms, next))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn list_all(&self) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
         self.client
             .form()
@@ -66,7 +66,7 @@ where
             .collect()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(form_id = %id))]
     async fn get(&self, id: FormId) -> Result<Option<AuthorizationGuard<ActiveForm, Read>>, Error> {
         self.client
             .form()
@@ -79,7 +79,7 @@ where
             })
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn update_form(
         &self,
         actor: &AccountUser,
@@ -92,7 +92,7 @@ where
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, Error> {
         self.client.form().size().await.map_err(Into::into)
     }
@@ -103,7 +103,7 @@ impl<Client> ArchivedFormRepository for Repository<Client>
 where
     Client: DatabaseComponents + 'static,
 {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn list(
         &self,
         request: PageRequest<ArchivedFormPagePosition>,
@@ -122,7 +122,7 @@ where
         Ok(Page::new(forms, next))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(form_id = %id))]
     async fn get(
         &self,
         id: FormId,
@@ -138,7 +138,7 @@ where
             })
     }
 
-    #[tracing::instrument(skip(self, form))]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn get_answer(
         &self,
         form: &Allowed<ArchivedForm, Read>,
@@ -158,7 +158,7 @@ where
         Ok(Some(form.read_archived_entry(answer)?))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn archive(
         &self,
         form: Allowed<ArchivedForm, Create>,
@@ -167,7 +167,7 @@ where
         Ok(AuthorizationGuard::<ArchivedForm, Create>::from(archived_form).into_read())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn restore(&self, form: Allowed<ArchivedForm, Update>) -> Result<(), Error> {
         let form_id = *form.value().form().id();
         let _restored = form.into_inner().unarchive();

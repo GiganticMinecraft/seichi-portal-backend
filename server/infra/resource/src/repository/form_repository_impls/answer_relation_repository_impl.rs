@@ -172,7 +172,7 @@ impl<Client> AnswerRelationRepository for Repository<Client>
 where
     Client: DatabaseComponents + 'static,
 {
-    #[tracing::instrument(skip(self, source))]
+    #[tracing::instrument(skip_all)]
     async fn list_for_answer(
         &self,
         source: &Allowed<AnswerEntry, Read>,
@@ -185,7 +185,7 @@ where
         .await
     }
 
-    #[tracing::instrument(skip(self, source))]
+    #[tracing::instrument(skip_all)]
     async fn list_for_archived_answer(
         &self,
         source: &Allowed<ArchivedAnswerEntry, Read>,
@@ -198,7 +198,7 @@ where
         .await
     }
 
-    #[tracing::instrument(skip(self, source, target))]
+    #[tracing::instrument(skip_all)]
     async fn add(
         &self,
         relation: AnswerRelation,
@@ -213,7 +213,7 @@ where
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self, source, target))]
+    #[tracing::instrument(skip_all)]
     async fn remove(
         &self,
         relation: AnswerRelation,
@@ -228,7 +228,7 @@ where
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self, source))]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn find_for_source_and_answer_id(
         &self,
         source: &Allowed<AnswerEntry, Update>,

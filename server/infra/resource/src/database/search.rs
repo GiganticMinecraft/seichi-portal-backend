@@ -163,7 +163,7 @@ fn merge_answer_hits(
 
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn search_users(&self, query: &str) -> Result<Vec<UserSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -181,7 +181,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn search_forms(&self, query: &str) -> Result<Vec<FormSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -199,7 +199,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn search_labels_for_forms(
         &self,
         query: &str,
@@ -220,7 +220,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn search_labels_for_answers(
         &self,
         query: &str,
@@ -241,7 +241,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn search_answers(
         &self,
         query: &str,
@@ -281,7 +281,7 @@ impl SearchDatabase for ConnectionPool {
         ))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -300,7 +300,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn sync_search_engine(
         &self,
         data: &[SearchableFieldsWithOperation],
@@ -420,7 +420,7 @@ impl SearchDatabase for ConnectionPool {
         Ok(())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError> {
         let client = reqwest::Client::new();
 
@@ -441,7 +441,7 @@ impl SearchDatabase for ConnectionPool {
         )
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn initialize_search_engine(&self) -> Result<bool, InfraError> {
         let index_with_uid = vec![
             ("form_meta_data", "id"),

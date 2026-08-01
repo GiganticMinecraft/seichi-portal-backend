@@ -14,7 +14,7 @@ use crate::{
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<Client> {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn create_label_for_answers(
         &self,
         label: Allowed<AnswerLabel, Create>,
@@ -26,7 +26,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn get_labels_for_answers(
         &self,
     ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
@@ -40,7 +40,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(label_id = %label_id))]
     async fn get_label_for_answers(
         &self,
         label_id: AnswerLabelId,
@@ -55,7 +55,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .map(Into::<AuthorizationGuard<AnswerLabel, Read>>::into))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn get_labels_for_answers_by_label_ids(
         &self,
         label_ids: Vec<AnswerLabelId>,
@@ -70,7 +70,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
@@ -85,7 +85,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .collect::<Result<Vec<_>, _>>()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn delete_label_for_answers(
         &self,
         label: Allowed<AnswerLabel, Delete>,
@@ -97,7 +97,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn edit_label_for_answers(
         &self,
         label: Allowed<AnswerLabel, Update>,
@@ -109,7 +109,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn replace_answer_labels(
         &self,
         answer_id: AnswerId,
@@ -127,7 +127,7 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, Error> {
         self.client
             .form_answer_label()

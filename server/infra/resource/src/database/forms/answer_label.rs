@@ -13,7 +13,7 @@ use crate::{
 
 #[async_trait]
 impl FormAnswerLabelDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn create_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError> {
         let label_id = label.id().into_inner().to_string();
         let label_name = label.name().to_owned().into_inner();
@@ -34,7 +34,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
@@ -56,7 +56,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(label_id = %label_id))]
     async fn get_label_for_answers(
         &self,
         label_id: AnswerLabelId,
@@ -86,7 +86,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn get_labels_for_answers_by_label_ids(
         &self,
         label_ids: Vec<AnswerLabelId>,
@@ -128,7 +128,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn get_labels_for_answers_by_answer_id(
         &self,
         answer_id: AnswerId,
@@ -160,7 +160,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(label_id = %label_id))]
     async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), InfraError> {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -177,7 +177,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError> {
         let label_name = label.name().to_owned().into_inner();
         let label_id = label.id().to_string();
@@ -198,7 +198,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(answer_id = %answer_id))]
     async fn replace_answer_labels(
         &self,
         answer_id: AnswerId,
@@ -238,7 +238,7 @@ impl FormAnswerLabelDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {

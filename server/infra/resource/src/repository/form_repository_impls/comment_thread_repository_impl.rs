@@ -28,7 +28,7 @@ impl<Client> CommentThreadRepository for Repository<Client>
 where
     Client: DatabaseComponents + 'static,
 {
-    #[tracing::instrument(skip(self, form, answer))]
+    #[tracing::instrument(skip_all)]
     async fn get_for_answer(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -37,7 +37,7 @@ where
         form.comment_thread(answer).map_err(Error::from)
     }
 
-    #[tracing::instrument(skip(self, form, answer))]
+    #[tracing::instrument(skip_all)]
     async fn get_with_comments_for_answer(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -55,7 +55,7 @@ where
             .map_err(Error::from)
     }
 
-    #[tracing::instrument(skip(self, comment))]
+    #[tracing::instrument(skip_all)]
     async fn create(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -67,7 +67,7 @@ where
             .await
     }
 
-    #[tracing::instrument(skip(self, comment))]
+    #[tracing::instrument(skip_all)]
     async fn update(
         &self,
         form: &Allowed<ActiveForm, Read>,
@@ -80,7 +80,7 @@ where
             .await
     }
 
-    #[tracing::instrument(skip(self, comment))]
+    #[tracing::instrument(skip_all)]
     async fn delete(
         &self,
         form: &Allowed<ActiveForm, Read>,

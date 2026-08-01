@@ -12,7 +12,7 @@ use crate::{
 
 #[async_trait]
 impl NotificationDatabase for ConnectionPool {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn upsert_notification_settings(
         &self,
         notification_settings: &NotificationPreference,
@@ -40,7 +40,7 @@ impl NotificationDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, fields(recipient_id = %recipient_id))]
     async fn fetch_notification_settings(
         &self,
         recipient_id: Uuid,

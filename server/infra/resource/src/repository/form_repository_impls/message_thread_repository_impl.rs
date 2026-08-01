@@ -28,7 +28,7 @@ impl<Client> MessageThreadRepository for Repository<Client>
 where
     Client: DatabaseComponents + 'static,
 {
-    #[tracing::instrument(skip(self, answer))]
+    #[tracing::instrument(skip_all)]
     async fn get_for_answer(
         &self,
         answer: &Allowed<AnswerEntry, Read>,
@@ -45,7 +45,7 @@ where
         answer.message_thread(messages).map_err(Error::from)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     async fn append(&self, post: Allowed<MessagePost, Create>) -> Result<(), Error> {
         let operated_by = account_user_snapshot(post.actor())?;
         let post = post.into_inner();
