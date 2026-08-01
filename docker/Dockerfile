@@ -16,6 +16,8 @@ RUN chmod +x /seichi-portal-backend
 FROM ubuntu:26.04
 LABEL org.opencontainers.image.source=https://github.com/GiganticMinecraft/seichi-portal-backend
 
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY --from=init /seichi-portal-backend /seichi-portal-backend
 
 USER ubuntu
