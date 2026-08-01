@@ -235,3 +235,61 @@ pub fn versioned_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
 pub fn openapi() -> utoipa::openapi::OpenApi {
     versioned_api_router().into_openapi()
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::openapi;
+
+    fn collect_refs(value: &Value, refs: &mut Vec<String>) {
+        match value {
+            Value::Object(map) => {
+                for (key, value) in map {
+                    match (key.as_str(), value) {
+                        ("$ref", Value::String(reference)) => refs.push(reference.clone()),
+                        _ => collect_refs(value, refs),
+                    }
+                }
+            }
+            Value::Array(values) => values.iter().for_each(|value| collect_refs(value, refs)),
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn openapi_document_has_paths() {
+        let document = serde_json::to_value(openapi()).expect("OpenAPI document must serialize");
+
+        let paths = document
+            .pointer("/paths")
+            .and_then(Value::as_object)
+            .expect("OpenAPI document must have paths");
+
+        assert!(!paths.is_empty(), "OpenAPI document must not be empty");
+    }
+
+    #[test]
+    fn all_refs_in_openapi_document_are_resolvable() {
+        let document = serde_json::to_value(openapi()).expect("OpenAPI document must serialize");
+
+        let mut refs = Vec::new();
+        collect_refs(&document, &mut refs);
+
+        let unresolved = refs
+            .iter()
+            .filter(|reference| {
+                reference
+                    .strip_prefix('#')
+                    .is_none_or(|pointer| document.pointer(pointer).is_none())
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            unresolved.is_empty(),
+            "OpenAPI ドキュメントに解決できない $ref があります。\
+             ハンドラの utoipa::path で参照しているスキーマが \
+             openapi.rs の components(schemas(...)) に登録されているか確認してください: {unresolved:?}"
+        );
+    }
+}
