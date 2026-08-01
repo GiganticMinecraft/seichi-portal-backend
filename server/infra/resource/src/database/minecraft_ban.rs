@@ -15,6 +15,11 @@ struct MinecraftBanRow {
 
 #[async_trait]
 impl MinecraftBanDatabase for ConnectionPool {
+    #[tracing::instrument(skip_all, fields(
+        otel.kind = "client",
+        db.system = "mariadb",
+        db.collection.name = "litebans_bans"
+    ))]
     async fn list_by_user_id(&self, user_id: UserId) -> Result<Vec<MinecraftBan>, InfraError> {
         let rows = sqlx::query_as!(
             MinecraftBanRow,

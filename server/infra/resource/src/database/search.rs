@@ -164,7 +164,7 @@ fn merge_answer_hits(
 
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "users"))]
     async fn search_users(&self, query: &str) -> Result<Vec<UserSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -182,7 +182,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "form_meta_data"))]
     async fn search_forms(&self, query: &str) -> Result<Vec<FormSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -200,7 +200,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "label_for_forms"))]
     async fn search_labels_for_forms(
         &self,
         query: &str,
@@ -221,7 +221,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "label_for_form_answers"))]
     async fn search_labels_for_answers(
         &self,
         query: &str,
@@ -242,7 +242,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
     async fn search_answers(
         &self,
         query: &str,
@@ -282,7 +282,7 @@ impl SearchDatabase for ConnectionPool {
         ))
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "form_answer_comments"))]
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -301,7 +301,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
     async fn sync_search_engine(
         &self,
         data: &[SearchableFieldsWithOperation],
@@ -421,7 +421,7 @@ impl SearchDatabase for ConnectionPool {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError> {
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
 
@@ -440,7 +440,7 @@ impl SearchDatabase for ConnectionPool {
         )
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
     async fn initialize_search_engine(&self) -> Result<bool, InfraError> {
         let index_with_uid = vec![
             ("form_meta_data", "id"),
