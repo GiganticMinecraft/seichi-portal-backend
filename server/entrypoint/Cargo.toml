@@ -16,6 +16,10 @@ opentelemetry = "0.32.0"
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["http-proto", "trace", "reqwest-blocking-client"] }
 opentelemetry_sdk = "0.32.1"
 presentation = { path = "../presentation" }
+# 継続プロファイリング (Grafana Pyroscope への push)。
+# in-cluster http:// のみを想定し、このクレートからは TLS フィーチャーを有効化しない
+# (ワークスペースの他依存が reqwest の TLS を有効化する分は feature unification で共存する)
+pyroscope = { version = "2.1.1", default-features = false, features = ["backend-pprof-rs"] }
 resource = { path = "../infra/resource" }
 tokio = { workspace = true }
 tower-http = { version = "0.7.0", features = ["catch-panic", "cors"] }
