@@ -13,7 +13,7 @@ use axum::{
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
-use entrypoint::{logging, openapi, panic_hook, telemetry};
+use entrypoint::{logging, openapi, panic_hook, profiling, telemetry};
 use futures::join;
 use hyper::header::SET_COOKIE;
 use opentelemetry::trace::TracerProvider as _;
@@ -77,6 +77,11 @@ async fn main() -> anyhow::Result<()> {
         .with(pretty_log_layer)
         .init();
     panic_hook::install();
+
+    // 継続プロファイリング (Grafana Pyroscope への push)。
+    // PYROSCOPE_SERVER_ADDRESS 未設定なら無効。プロセスの生存期間中
+    // agent を動かし続けるため束縛だけ保持する
+    let _pyroscope_agent = profiling::start_agent();
 
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
