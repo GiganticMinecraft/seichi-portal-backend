@@ -80,8 +80,8 @@ async fn main() -> anyhow::Result<()> {
 
     // 継続プロファイリング (Grafana Pyroscope への push)。
     // PYROSCOPE_SERVER_ADDRESS 未設定なら無効。プロセスの生存期間中
-    // agent を動かし続けるため束縛だけ保持する
-    let _pyroscope_agent = profiling::start_agent();
+    // agent を動かし続け、graceful shutdown 後に flush する
+    let pyroscope_agent = profiling::start_agent();
 
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
@@ -207,6 +207,15 @@ async fn main() -> anyhow::Result<()> {
         start_watch_out_of_sync(shared_repository.to_owned(), shutdown_notifier.clone())
     );
 
+    if let Some(agent) = pyroscope_agent {
+        // stop() は最終プロファイルの送信を伴うため専用スレッドで行う
+        tokio::task::spawn_blocking(move || match agent.stop() {
+            Ok(agent) => agent.shutdown(),
+            Err(error) => info!("failed to stop Pyroscope agent: {error}"),
+        })
+        .await?;
+    }
+
     if let Some(provider) = tracer_provider {
         // provider.shutdown() は残りのスパンを blocking export するため専用スレッドで行う
         tokio::task::spawn_blocking(move || {
@@ -250,13 +259,16 @@ async fn graceful_handler(
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
 
+    // SIGTERM (Kubernetes の Pod 停止) でも Ctrl+C と同じ停止経路に集約する。
+    // ここで各コンポーネントを止めないと main の join! が完了せず、
+    // OTel / Pyroscope の flush に到達しないまま SIGKILL される
     tokio::select! {
-        _ = ctrl_c => {
-            info!("Gracefully shutdown...");
-            serenity_shared_manager.shutdown_all().await;
-            messaging_connection.shutdown().await;
-            search_engine_syncer_shutdown_notifier.notify_waiters();
-        },
+        _ = ctrl_c => {},
         _ = terminate => {},
     }
+
+    info!("Gracefully shutdown...");
+    serenity_shared_manager.shutdown_all().await;
+    messaging_connection.shutdown().await;
+    search_engine_syncer_shutdown_notifier.notify_waiters();
 }
