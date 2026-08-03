@@ -99,12 +99,14 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           target: ${{ matrix.cross-target }}
-      - name: Build binary using cross
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
+      # actions-rs/cargo (アーカイブ済み + 廃止された Node ランタイム) の use-cross 相当を直接実行する。
+      # cross は GitHub Releases のビルド済みバイナリを導入する (cargo install よりも高速)
+      - name: Install cross
+        uses: taiki-e/install-action@67729d5c413db75907f0ad1e39bb04b9c868ff60 # v2.85.7
         with:
-          use-cross: true
-          command: build
-          args: --manifest-path Cargo.toml --target ${{ matrix.cross-target }} --release
+          tool: cross@0.2.5
+      - name: Build binary using cross
+        run: cross build --manifest-path Cargo.toml --target ${{ matrix.cross-target }} --release
       - name: Upload artifact to collect in next job
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
