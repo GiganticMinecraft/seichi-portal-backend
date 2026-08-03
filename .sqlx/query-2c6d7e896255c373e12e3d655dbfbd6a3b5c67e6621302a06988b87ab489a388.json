@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,\n                        users.name AS user_name, users.role AS user_role,\n                        temporary_user_id, temporary_users.name AS temporary_user_name,\n                        temporary_users.contact_text AS temporary_user_contact_text,\n                        answers.redmine_user_id, answers.redmine_author_name,\n                        redmine_reference.redmine_issue_id,\n                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers\n                        LEFT JOIN users ON answers.user = users.id\n                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n                        LEFT JOIN redmine_imported_answer_references redmine_reference\n                            ON redmine_reference.answer_id = answers.id\n                        WHERE answers.id = ?",
+  "query": "SELECT answers.form_id, answers.id AS answer_id, answers.title, answers.publication,\n            answers.author_type, answers.user, users.name AS user_name, users.role AS user_role,\n            answers.temporary_user_id, temporary_users.name AS temporary_user_name,\n            temporary_users.contact_text AS temporary_user_contact_text,\n            answers.redmine_user_id, answers.redmine_author_name,\n            redmine_reference.redmine_issue_id,\n            answers.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n        FROM answers\n        LEFT JOIN users ON answers.user = users.id\n        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n        LEFT JOIN redmine_imported_answer_references redmine_reference\n            ON redmine_reference.answer_id = answers.id\n        WHERE (? IS NULL OR answers.form_id = ?)\n            AND (\n                ? IS NULL\n                OR answers.timestamp < ?\n                OR (answers.timestamp = ? AND answers.id < ?)\n            )\n        ORDER BY answers.timestamp DESC, answers.id DESC\n        LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -245,7 +245,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 7
     },
     "nullable": [
       false,
@@ -265,5 +265,5 @@
       false
     ]
   },
-  "hash": "dd833fe8bc9ab000f335ff6f120851b5b0bd5b50ac55c8b0939a3b09d8fa1cbf"
+  "hash": "2c6d7e896255c373e12e3d655dbfbd6a3b5c67e6621302a06988b87ab489a388"
 }

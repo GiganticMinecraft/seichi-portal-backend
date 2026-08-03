@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 use crate::{
     database::forms::answers::{
-        attach_entry_children, author_from_row, fetch_messages_by_answer_ids,
+        attach_entry_children, author_from_values, fetch_messages_by_answer_ids,
         fetch_real_answers_by_answer_ids,
     },
     database::{
@@ -447,66 +447,79 @@ async fn fetch_answer_entries_page(
     form_id: Option<FormId>,
     request: PageRequest<AnswerPagePosition>,
 ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
-    let base_query = r"SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,
-            users.name AS user_name, users.role AS user_role,
-            temporary_user_id, temporary_users.name AS temporary_user_name,
+    let form_id = form_id.map(|form_id| form_id.into_inner().to_string());
+    let (after_timestamp, after_answer_id) = request
+        .after_position()
+        .map(|position| {
+            (
+                position.last_timestamp(),
+                position.last_answer_id().into_inner().to_string(),
+            )
+        })
+        .unzip();
+
+    let answers = sqlx::query!(
+        r"SELECT answers.form_id, answers.id AS answer_id, answers.title, answers.publication,
+            answers.author_type, answers.user, users.name AS user_name, users.role AS user_role,
+            answers.temporary_user_id, temporary_users.name AS temporary_user_name,
             temporary_users.contact_text AS temporary_user_contact_text,
             answers.redmine_user_id, answers.redmine_author_name,
             redmine_reference.redmine_issue_id,
-            timestamp FROM answers
-            LEFT JOIN users ON answers.user = users.id
-            LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-            LEFT JOIN redmine_imported_answer_references redmine_reference
-                ON redmine_reference.answer_id = answers.id";
-    let sql = match (form_id, request.after_position()) {
-        (Some(_), Some(_)) => {
-            format!(
-                "{base_query} WHERE form_id = ? AND answers.id > ? ORDER BY answers.id ASC LIMIT ?"
+            answers.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+        FROM answers
+        LEFT JOIN users ON answers.user = users.id
+        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
+        LEFT JOIN redmine_imported_answer_references redmine_reference
+            ON redmine_reference.answer_id = answers.id
+        WHERE (? IS NULL OR answers.form_id = ?)
+            AND (
+                ? IS NULL
+                OR answers.timestamp < ?
+                OR (answers.timestamp = ? AND answers.id < ?)
             )
-        }
-        (Some(_), None) => {
-            format!("{base_query} WHERE form_id = ? ORDER BY answers.id ASC LIMIT ?")
-        }
-        (None, Some(_)) => {
-            format!("{base_query} WHERE answers.id > ? ORDER BY answers.id ASC LIMIT ?")
-        }
-        (None, None) => format!("{base_query} ORDER BY answers.id ASC LIMIT ?"),
-    };
-
-    let mut query = sqlx::query(AssertSqlSafe(&*sql));
-    if let Some(form_id) = form_id {
-        query = query.bind(form_id.into_inner().to_string());
-    }
-    if let Some(position) = request.after_position() {
-        query = query.bind(position.last_answer_id().into_inner().to_string());
-    }
-    let answers = query
-        .bind(i64::from(request.limit().overfetch_value()))
-        .fetch_all(&mut **txn)
-        .await?;
+        ORDER BY answers.timestamp DESC, answers.id DESC
+        LIMIT ?",
+        form_id.as_deref(),
+        form_id.as_deref(),
+        after_timestamp,
+        after_timestamp,
+        after_timestamp,
+        after_answer_id,
+        i64::from(request.limit().overfetch_value()),
+    )
+    .fetch_all(&mut **txn)
+    .await?;
 
     let form_answer_records = answers
         .into_iter()
         .map(|row| {
-            let answer_id = Uuid::parse_str(&row.try_get::<String, _>("answer_id")?)?;
+            let answer_id = Uuid::parse_str(&row.answer_id)?;
 
             Ok::<_, InfraError>(FormAnswerRecord {
-                id: answer_id.to_string(),
-                author: author_from_row(&row)?,
-                timestamp: row.try_get("timestamp")?,
-                form_id: row.try_get("form_id")?,
-                title: row.try_get("title")?,
-                publication: row.try_get("publication")?,
+                id: row.answer_id,
+                author: author_from_values(
+                    row.author_type,
+                    row.user,
+                    row.user_name,
+                    row.user_role,
+                    row.temporary_user_id,
+                    row.temporary_user_name,
+                    row.temporary_user_contact_text,
+                    row.redmine_user_id,
+                    row.redmine_author_name,
+                )?,
+                timestamp: row.timestamp,
+                form_id: row.form_id,
+                title: row.title,
+                publication: row.publication,
                 contents: Vec::new(),
                 messages: Vec::new(),
-                redmine_reference: row.try_get::<Option<i64>, _>("redmine_issue_id")?.map(
-                    |issue_id| {
-                        domain::form::answer::RedmineImportedAnswerReference::new(
-                            answer_id.into(),
-                            issue_id.into(),
-                        )
-                    },
-                ),
+                redmine_reference: row.redmine_issue_id.map(|issue_id| {
+                    domain::form::answer::RedmineImportedAnswerReference::new(
+                        answer_id.into(),
+                        issue_id.into(),
+                    )
+                }),
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -529,7 +542,7 @@ async fn fetch_answer_entries_page(
     Ok(Page::from_overfetched_items(
         entries,
         request.limit(),
-        |entry| AnswerPagePosition::new(*entry.id()),
+        |entry| AnswerPagePosition::new(*entry.timestamp(), *entry.id()),
     ))
 }
 

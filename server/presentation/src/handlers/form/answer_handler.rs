@@ -8,6 +8,7 @@ use axum::{
     response::IntoResponse,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{DateTime, Utc};
 use domain::form::answer::{AnswerPagePosition, FormAnswerContent, FormAnswerContentId};
 use domain::{
     account::models::AccountUser,
@@ -169,6 +170,7 @@ impl IntoResponse for UpdateAnswerResponse {
 
 #[derive(Deserialize, Serialize)]
 struct AnswerListCursor {
+    after_timestamp: DateTime<Utc>,
     after_answer_id: uuid::Uuid,
 }
 
@@ -185,11 +187,15 @@ fn decode_answer_list_cursor(cursor: &str) -> Result<AnswerPagePosition, Error> 
     let cursor = serde_json::from_slice::<AnswerListCursor>(&decoded)
         .map_err(|_| bad_query("Invalid cursor."))?;
 
-    Ok(AnswerPagePosition::new(cursor.after_answer_id.into()))
+    Ok(AnswerPagePosition::new(
+        cursor.after_timestamp,
+        cursor.after_answer_id.into(),
+    ))
 }
 
 fn encode_answer_list_cursor(position: AnswerPagePosition) -> Result<String, Error> {
     let cursor = AnswerListCursor {
+        after_timestamp: position.last_timestamp(),
         after_answer_id: position.last_answer_id().into_inner(),
     };
     let bytes = serde_json::to_vec(&cursor).map_err(|_| bad_query("Invalid cursor."))?;
@@ -510,4 +516,39 @@ pub async fn update_answer_handler(
         answer_details.form_id,
         answer_details.labels,
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[test]
+    fn answer_list_cursor_round_trips_timestamp_and_answer_id() {
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let answer_id = Uuid::from_u128(1);
+        let position = AnswerPagePosition::new(timestamp, answer_id.into());
+
+        let decoded =
+            decode_answer_list_cursor(&encode_answer_list_cursor(position).unwrap()).unwrap();
+
+        assert_eq!(decoded.last_timestamp(), timestamp);
+        assert_eq!(decoded.last_answer_id().into_inner(), answer_id);
+    }
+
+    #[test]
+    fn answer_list_cursor_without_timestamp_is_rejected() {
+        let old_cursor = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&serde_json::json!({
+                "after_answer_id": Uuid::from_u128(1),
+            }))
+            .unwrap(),
+        );
+
+        let response = handle_error(decode_answer_list_cursor(&old_cursor).unwrap_err());
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 }

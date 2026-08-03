@@ -79,14 +79,41 @@ where
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
-        let page = self
-            .client
-            .form()
-            .list_answer_entries(*form.id(), request)
-            .await?;
-        let (entries, next) = page.into_parts();
+        let mut scan_cursor = request.after_position().copied();
+        let mut authorized_entries = Vec::new();
 
-        Ok(Page::new(form.readable_entries(entries), next))
+        loop {
+            let page = self
+                .client
+                .form()
+                .list_answer_entries(*form.id(), PageRequest::new(scan_cursor, request.limit()))
+                .await?;
+            let (entries, next_raw) = page.into_parts();
+            authorized_entries.extend(
+                entries
+                    .into_iter()
+                    .filter_map(|entry| form.read_entry(entry).ok()),
+            );
+
+            if authorized_entries.len() > request.limit().value() as usize {
+                return Ok(Page::from_overfetched_items(
+                    authorized_entries,
+                    request.limit(),
+                    |entry| AnswerPagePosition::new(*entry.timestamp(), *entry.id()),
+                ));
+            }
+
+            match next_raw {
+                Some(_) if authorized_entries.len() == request.limit().value() as usize => {
+                    let next = authorized_entries
+                        .last()
+                        .map(|entry| AnswerPagePosition::new(*entry.timestamp(), *entry.id()));
+                    return Ok(Page::new(authorized_entries, next));
+                }
+                Some(next_raw) => scan_cursor = Some(next_raw),
+                None => return Ok(Page::new(authorized_entries, None)),
+            }
+        }
     }
 
     #[tracing::instrument(skip_all)]
@@ -99,22 +126,45 @@ where
             return Ok(Page::new(Vec::new(), None));
         }
 
-        let page = self.client.form().list_all_answer_entries(request).await?;
-        let (entries, next) = page.into_parts();
         let forms_by_id = forms
             .iter()
             .map(|form| (form.id().into_inner(), form))
             .collect::<HashMap<_, _>>();
-        let authorized_entries = entries
-            .into_iter()
-            .filter_map(|entry| {
+        let mut scan_cursor = request.after_position().copied();
+        let mut authorized_entries = Vec::new();
+
+        loop {
+            let page = self
+                .client
+                .form()
+                .list_all_answer_entries(PageRequest::new(scan_cursor, request.limit()))
+                .await?;
+            let (entries, next_raw) = page.into_parts();
+            authorized_entries.extend(entries.into_iter().filter_map(|entry| {
                 forms_by_id
                     .get(&entry.form_id().into_inner())
-                    .map(|form| form.read_entry(entry))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    .and_then(|form| form.read_entry(entry).ok())
+            }));
 
-        Ok(Page::new(authorized_entries, next))
+            if authorized_entries.len() > request.limit().value() as usize {
+                return Ok(Page::from_overfetched_items(
+                    authorized_entries,
+                    request.limit(),
+                    |entry| AnswerPagePosition::new(*entry.timestamp(), *entry.id()),
+                ));
+            }
+
+            match next_raw {
+                Some(_) if authorized_entries.len() == request.limit().value() as usize => {
+                    let next = authorized_entries
+                        .last()
+                        .map(|entry| AnswerPagePosition::new(*entry.timestamp(), *entry.id()));
+                    return Ok(Page::new(authorized_entries, next));
+                }
+                Some(next_raw) => scan_cursor = Some(next_raw),
+                None => return Ok(Page::new(authorized_entries, None)),
+            }
+        }
     }
 
     #[tracing::instrument(skip_all)]

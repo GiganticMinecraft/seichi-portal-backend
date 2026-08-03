@@ -261,16 +261,6 @@ impl Allowed<ActiveForm, Read> {
         self.authorize_create(entry)
     }
 
-    /// `entries` のうち `actor` が閲覧可能な [`AnswerEntry`] だけを認可済みで返します。
-    /// 所属 (`form_id` 一致) と公開範囲はいずれも
-    /// [`GuardedBy`](crate::types::authorization_guard::GuardedBy) の判定で担保される。
-    pub fn readable_entries(&self, entries: Vec<AnswerEntry>) -> Vec<Allowed<AnswerEntry, Read>> {
-        entries
-            .into_iter()
-            .filter_map(|entry| self.authorize_read(entry).ok())
-            .collect()
-    }
-
     /// `entry` を、所属 (`form_id` 一致) と公開範囲を検証したうえで認可済みで返します。
     pub fn read_entry(
         &self,
