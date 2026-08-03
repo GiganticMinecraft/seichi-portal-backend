@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:lts
+    image: mariadb:11.8
     container_name: mariadb
     command: --log-bin --binlog-format=ROW --binlog_row_image=FULL
     environment:
@@ -69,7 +69,7 @@ services:
       - seichi_portal
     restart: "no"
   db-seed:
-    image: mariadb:lts
+    image: mariadb:11.8
     container_name: db-seed
     depends_on:
       migrate:
