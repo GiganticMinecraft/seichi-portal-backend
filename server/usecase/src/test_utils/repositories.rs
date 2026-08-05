@@ -341,19 +341,24 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .iter()
             .filter(|answer| answer.form_id() == form.id())
             .cloned()
+            .filter_map(|answer| form.read_entry(answer).ok())
             .collect::<Vec<_>>();
-        answers.sort_by_key(|answer| answer.id().into_inner());
+        answers.sort_by(|left, right| {
+            right
+                .timestamp()
+                .cmp(left.timestamp())
+                .then_with(|| right.id().into_inner().cmp(&left.id().into_inner()))
+        });
 
         if let Some(position) = request.after_position() {
-            answers.retain(|answer| *answer.id() > position.last_answer_id());
+            answers.retain(|answer| position.is_followed_by(*answer.timestamp(), *answer.id()));
         }
 
-        let page = Page::from_overfetched_items(answers, request.limit(), |answer| {
-            AnswerPagePosition::new(*answer.id())
-        });
-        let (answers, next) = page.into_parts();
-
-        Ok(Page::new(form.readable_entries(answers), next))
+        Ok(Page::from_overfetched_items(
+            answers,
+            request.limit(),
+            |answer| AnswerPagePosition::new(*answer.timestamp(), *answer.id()),
+        ))
     }
 
     async fn list_all(
@@ -361,31 +366,38 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
-        let mut answers = self.answers.lock().unwrap().clone();
-        answers.sort_by_key(|answer| answer.id().into_inner());
-
-        if let Some(position) = request.after_position() {
-            answers.retain(|answer| *answer.id() > position.last_answer_id());
-        }
-
-        let page = Page::from_overfetched_items(answers, request.limit(), |answer| {
-            AnswerPagePosition::new(*answer.id())
-        });
-        let (answers, next) = page.into_parts();
-        let readable_answers = forms
+        let forms_by_id = forms
             .iter()
-            .flat_map(|form| {
-                form.readable_entries(
-                    answers
-                        .iter()
-                        .filter(|answer| answer.form_id() == form.id())
-                        .cloned()
-                        .collect(),
-                )
+            .map(|form| (form.id().into_inner(), form))
+            .collect::<HashMap<_, _>>();
+        let mut answers = self
+            .answers
+            .lock()
+            .unwrap()
+            .iter()
+            .cloned()
+            .filter_map(|answer| {
+                forms_by_id
+                    .get(&answer.form_id().into_inner())
+                    .and_then(|form| form.read_entry(answer).ok())
             })
             .collect::<Vec<_>>();
+        answers.sort_by(|left, right| {
+            right
+                .timestamp()
+                .cmp(left.timestamp())
+                .then_with(|| right.id().into_inner().cmp(&left.id().into_inner()))
+        });
 
-        Ok(Page::new(readable_answers, next))
+        if let Some(position) = request.after_position() {
+            answers.retain(|answer| position.is_followed_by(*answer.timestamp(), *answer.id()));
+        }
+
+        Ok(Page::from_overfetched_items(
+            answers,
+            request.limit(),
+            |answer| AnswerPagePosition::new(*answer.timestamp(), *answer.id()),
+        ))
     }
 
     async fn post(
@@ -429,6 +441,233 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .iter()
             .map(|answer| answer.contents().len() as u32)
             .sum())
+    }
+}
+
+#[cfg(test)]
+mod answer_entry_repository_tests {
+    use chrono::{TimeZone, Utc};
+    use domain::{
+        account::models::Role,
+        auth::Actor,
+        form::{
+            answer::{AnswerAuthor, AnswerTitle},
+            models::{AnswerSettings, AnswerVisibility, FormDescription, FormTitle, QuestionSet},
+            question::Question,
+        },
+        pagination::PageLimit,
+        types::authorization_guard::AuthorizationGuard,
+    };
+    use types::non_empty_vec::NonEmptyVec;
+    use uuid::Uuid;
+
+    use super::*;
+
+    fn active_form(title: &str) -> ActiveForm {
+        let question = Question::new_text(
+            "body".to_string().try_into().unwrap(),
+            0,
+            "Body".to_string().try_into().unwrap(),
+            None,
+            true,
+        )
+        .unwrap();
+
+        ActiveForm::new(
+            FormTitle::new(title.to_string().try_into().unwrap()),
+            FormDescription::new("description".to_string()),
+            QuestionSet::try_new(NonEmptyVec::try_new(vec![question]).unwrap()).unwrap(),
+        )
+    }
+
+    fn answer(form: &ActiveForm, id: u128, timestamp: chrono::DateTime<Utc>) -> AnswerEntry {
+        unsafe {
+            AnswerEntry::from_raw_parts(
+                Uuid::from_u128(id).into(),
+                *form.id(),
+                AnswerAuthor::AuthenticatedUser(Uuid::from_u128(id + 100).into()),
+                timestamp,
+                AnswerTitle::default(),
+                AnswerPublication::PUBLIC,
+                Vec::new(),
+            )
+        }
+    }
+
+    fn ids(entries: Vec<Allowed<AnswerEntry, Read>>) -> Vec<Uuid> {
+        entries
+            .into_iter()
+            .map(|entry| entry.id().into_inner())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn list_all_preserves_global_order_across_pages() {
+        let first_form = active_form("first");
+        let second_form = active_form("second");
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let older_timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 11, 59, 59).unwrap();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer(&first_form, 1, timestamp),
+            answer(&second_form, 3, timestamp),
+            answer(&first_form, 4, older_timestamp),
+            answer(&second_form, 2, timestamp),
+        ]);
+        let forms = [first_form, second_form].map(|form| {
+            AuthorizationGuard::from(form)
+                .try_read(Actor::System)
+                .unwrap()
+        });
+        let limit = PageLimit::try_new(2).unwrap();
+
+        let first_page = repository
+            .list_all(&forms, PageRequest::first(limit))
+            .await
+            .unwrap();
+        let (first_entries, next) = first_page.into_parts();
+        let second_page = repository
+            .list_all(&forms, PageRequest::after(next.unwrap(), limit))
+            .await
+            .unwrap();
+        let (second_entries, next) = second_page.into_parts();
+
+        assert_eq!(next, None);
+        assert_eq!(
+            ids(first_entries.into_iter().chain(second_entries).collect()),
+            vec![
+                Uuid::from_u128(3),
+                Uuid::from_u128(2),
+                Uuid::from_u128(1),
+                Uuid::from_u128(4),
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn list_all_omits_private_answers_for_standard_user() {
+        let form = active_form("answers").change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let private_answer =
+            answer(&form, 2, timestamp).change_publication(AnswerPublication::PRIVATE);
+        let public_answer = answer(
+            &form,
+            1,
+            Utc.with_ymd_and_hms(2026, 8, 3, 11, 59, 59).unwrap(),
+        );
+        let repository = InMemoryAnswerEntryRepository::new(vec![private_answer, public_answer]);
+        let reader = AccountUser::new(
+            "reader".to_string(),
+            Uuid::from_u128(999).into(),
+            Role::StandardUser,
+        );
+        let form = AuthorizationGuard::from(form)
+            .try_read(Actor::from(reader))
+            .unwrap();
+
+        let page = repository
+            .list_all(&[form], PageRequest::first(PageLimit::try_new(10).unwrap()))
+            .await
+            .unwrap();
+
+        assert_eq!(ids(page.into_items()), vec![Uuid::from_u128(1)]);
+    }
+
+    #[tokio::test]
+    async fn list_all_scans_past_private_answers_to_fill_a_small_page() {
+        let form = active_form("answers").change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer(&form, 3, timestamp).change_publication(AnswerPublication::PRIVATE),
+            answer(&form, 2, timestamp - chrono::TimeDelta::seconds(1))
+                .change_publication(AnswerPublication::PRIVATE),
+            answer(&form, 1, timestamp - chrono::TimeDelta::seconds(2)),
+        ]);
+        let reader = AccountUser::new(
+            "reader".to_string(),
+            Uuid::from_u128(999).into(),
+            Role::StandardUser,
+        );
+        let form = AuthorizationGuard::from(form)
+            .try_read(Actor::from(reader))
+            .unwrap();
+
+        let page = repository
+            .list_all(&[form], PageRequest::first(PageLimit::try_new(2).unwrap()))
+            .await
+            .unwrap();
+
+        let (entries, next) = page.into_parts();
+        assert_eq!(ids(entries), vec![Uuid::from_u128(1)]);
+        assert_eq!(next, None);
+    }
+
+    #[tokio::test]
+    async fn list_by_form_scans_past_private_answers_to_fill_a_small_page() {
+        let form = active_form("answers").change_answer_settings(
+            AnswerSettings::default().change_visibility(AnswerVisibility::PUBLIC),
+        );
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer(&form, 3, timestamp).change_publication(AnswerPublication::PRIVATE),
+            answer(&form, 2, timestamp - chrono::TimeDelta::seconds(1))
+                .change_publication(AnswerPublication::PRIVATE),
+            answer(&form, 1, timestamp - chrono::TimeDelta::seconds(2)),
+        ]);
+        let reader = AccountUser::new(
+            "reader".to_string(),
+            Uuid::from_u128(999).into(),
+            Role::StandardUser,
+        );
+        let form = AuthorizationGuard::from(form)
+            .try_read(Actor::from(reader))
+            .unwrap();
+
+        let page = repository
+            .list_by_form(&form, PageRequest::first(PageLimit::try_new(2).unwrap()))
+            .await
+            .unwrap();
+
+        let (entries, next) = page.into_parts();
+        assert_eq!(ids(entries), vec![Uuid::from_u128(1)]);
+        assert_eq!(next, None);
+    }
+
+    #[tokio::test]
+    async fn list_by_form_preserves_order_across_same_timestamp_boundary() {
+        let form = active_form("target");
+        let other_form = active_form("other");
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer(&form, 1, timestamp),
+            answer(&other_form, 4, timestamp + chrono::TimeDelta::seconds(1)),
+            answer(&form, 3, timestamp),
+            answer(&form, 2, timestamp),
+        ]);
+        let form = AuthorizationGuard::from(form)
+            .try_read(Actor::System)
+            .unwrap();
+        let limit = PageLimit::try_new(2).unwrap();
+
+        let first_page = repository
+            .list_by_form(&form, PageRequest::first(limit))
+            .await
+            .unwrap();
+        let (first_entries, next) = first_page.into_parts();
+        let second_page = repository
+            .list_by_form(&form, PageRequest::after(next.unwrap(), limit))
+            .await
+            .unwrap();
+        let (second_entries, next) = second_page.into_parts();
+
+        assert_eq!(next, None);
+        assert_eq!(
+            ids(first_entries.into_iter().chain(second_entries).collect()),
+            vec![Uuid::from_u128(3), Uuid::from_u128(2), Uuid::from_u128(1)],
+        );
     }
 }
 

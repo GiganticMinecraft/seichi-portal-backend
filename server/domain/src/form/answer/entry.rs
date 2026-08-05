@@ -67,16 +67,30 @@ impl TryFrom<String> for AnswerPublication {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AnswerPagePosition {
+    last_timestamp: DateTime<Utc>,
     last_answer_id: AnswerId,
 }
 
 impl AnswerPagePosition {
-    pub fn new(last_answer_id: AnswerId) -> Self {
-        Self { last_answer_id }
+    pub fn new(last_timestamp: DateTime<Utc>, last_answer_id: AnswerId) -> Self {
+        Self {
+            last_timestamp,
+            last_answer_id,
+        }
+    }
+
+    pub fn last_timestamp(self) -> DateTime<Utc> {
+        self.last_timestamp
     }
 
     pub fn last_answer_id(self) -> AnswerId {
         self.last_answer_id
+    }
+
+    /// この位置の後に続く回答かを、回答一覧の降順で判定します。
+    pub fn is_followed_by(self, timestamp: DateTime<Utc>, answer_id: AnswerId) -> bool {
+        timestamp < self.last_timestamp
+            || (timestamp == self.last_timestamp && answer_id < self.last_answer_id)
     }
 }
 
@@ -238,5 +252,31 @@ impl GuardedBy<ArchivedForm, Read> for ArchivedAnswerEntry {
         matches!(self.publication, AnswerPublication::PUBLIC)
             || matches!(actor, Actor::System)
             || matches!(actor, Actor::AccountUser(user) if user.role() == &Role::Administrator)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[test]
+    fn page_position_follows_timestamp_desc_then_answer_id_desc() {
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let position = AnswerPagePosition::new(timestamp, Uuid::from_u128(3).into());
+
+        assert!(position.is_followed_by(timestamp, Uuid::from_u128(2).into()));
+        assert!(position.is_followed_by(
+            Utc.with_ymd_and_hms(2026, 8, 3, 11, 59, 59).unwrap(),
+            Uuid::from_u128(99).into(),
+        ));
+        assert!(!position.is_followed_by(timestamp, Uuid::from_u128(3).into()));
+        assert!(!position.is_followed_by(timestamp, Uuid::from_u128(4).into()));
+        assert!(!position.is_followed_by(
+            Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 1).unwrap(),
+            Uuid::from_u128(1).into(),
+        ));
     }
 }
