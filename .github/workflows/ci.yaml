@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       db:
-        image: mariadb:12.3
+        image: mariadb:11.8
         env:
           MYSQL_INITDB_SKIP_TZINFO: 1
           MARIADB_DATABASE: seichi_portal
