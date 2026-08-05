@@ -158,7 +158,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             .collect::<Result<Vec<_>, _>>()?;
         let questions = NonEmptyVec::try_new(questions).map_err(Error::from)?;
 
-        let answer_settings = AnswerSettings::new(
+        let answer_settings = AnswerSettings::try_new(
             DefaultAnswerTitle::new(
                 default_answer_title
                     .map(NonEmptyString::try_new)
@@ -167,11 +167,11 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             answer_visibility.try_into()?,
             AnswerAcceptancePeriod::try_new(acceptance_period_start_at, acceptance_period_end_at)?,
             allow_temporary_answers,
-        )
-        .change_author_publication_policy(AnswerAuthorPublicationPolicy::from_hide_author(
-            hide_author,
-        ))
-        .change_answer_groups(AllowedUserGroups::new(answer_group_ids));
+            AllowedUserGroups::new(answer_group_ids),
+        )?
+        .change_author_publication_policy(
+            AnswerAuthorPublicationPolicy::from_hide_author(hide_author),
+        );
 
         Ok(unsafe {
             ActiveForm::from_raw_parts(

@@ -527,13 +527,14 @@ async fn lock_comment_thread(
         }
         None => Vec::new(),
     };
+    let answer_settings = AnswerSettings::default()
+        .change_visibility(answer_visibility)
+        .try_change_audience(false, AllowedUserGroups::new(answer_group_ids))?;
     let thread = CommentThread::try_new(
         answer_id,
         answer_author,
         AnswerPublication::try_from(answer.publication)?,
-        AnswerSettings::default()
-            .change_visibility(answer_visibility)
-            .change_answer_groups(AllowedUserGroups::new(answer_group_ids)),
+        answer_settings,
         comments,
     )?;
     AuthorizationGuard::<_, Update>::from(thread)

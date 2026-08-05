@@ -3,9 +3,7 @@ use chrono::{DateTime, Utc};
 use domain::account::models::UserGroupId;
 use domain::form::{
     answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication},
-    models::{
-        AllowedUserGroups, ArchivedFormPagePosition, FormLabelId, FormPagePosition, FormSettings,
-    },
+    models::{ArchivedFormPagePosition, FormLabelId, FormPagePosition, FormSettings},
     question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
@@ -611,7 +609,7 @@ async fn insert_form_root(
     let answer_settings = form.answer_settings();
     let answer_visibility = answer_settings.visibility().to_string();
     let hide_author = answer_settings.author_publication_policy().hides_author();
-    let allow_temporary_answers = *answer_settings.allow_temporary_answers();
+    let allow_temporary_answers = answer_settings.allow_temporary_answers();
     let default_answer_title = answer_settings
         .default_answer_title()
         .to_owned()
@@ -677,7 +675,7 @@ async fn update_form_root(
     let answer_settings = form.answer_settings();
     let answer_visibility = answer_settings.visibility().to_string();
     let hide_author = answer_settings.author_publication_policy().hides_author();
-    let allow_temporary_answers = *answer_settings.allow_temporary_answers();
+    let allow_temporary_answers = answer_settings.allow_temporary_answers();
     let default_answer_title = answer_settings
         .default_answer_title()
         .to_owned()
@@ -1560,14 +1558,14 @@ async fn sync_form_group_restrictions(
         txn,
         "form_allowed_user_groups",
         *form.id(),
-        form.settings().allowed_user_groups(),
+        form.settings().allowed_user_groups().as_slice(),
     )
     .await?;
     sync_group_restriction_ids(
         txn,
         "form_answer_groups",
         *form.id(),
-        form.answer_settings().answer_groups(),
+        form.answer_settings().answer_group_ids(),
     )
     .await
 }
@@ -1576,7 +1574,7 @@ async fn sync_group_restriction_ids(
     txn: &mut DatabaseTransaction,
     table_name: &str,
     form_id: FormId,
-    group_ids: &AllowedUserGroups,
+    group_ids: &[UserGroupId],
 ) -> Result<(), InfraError> {
     let form_id = form_id.into_inner().to_string();
     let delete_sql = format!("DELETE FROM {table_name} WHERE form_id = ?");
@@ -1585,16 +1583,15 @@ async fn sync_group_restriction_ids(
         .execute(&mut **txn)
         .await?;
 
-    if group_ids.as_slice().is_empty() {
+    if group_ids.is_empty() {
         return Ok(());
     }
 
     let sql = format!(
         "INSERT INTO {table_name} (form_id, group_id) VALUES {}",
-        std::iter::repeat_n("(?, ?)", group_ids.as_slice().len()).join(", ")
+        std::iter::repeat_n("(?, ?)", group_ids.len()).join(", ")
     );
     group_ids
-        .as_slice()
         .iter()
         .flat_map(|group_id| [form_id.clone(), group_id.to_string()])
         .fold(query(AssertSqlSafe(&*sql)), |query, value| {

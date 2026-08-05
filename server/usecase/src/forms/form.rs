@@ -1,6 +1,6 @@
 use chrono::Utc;
 use domain::{
-    account::models::AccountUser,
+    account::models::{AccountUser, UserGroupId},
     auth::Actor,
     form::models::{
         ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerAuthorPublicationPolicy,
@@ -126,17 +126,12 @@ impl<
             None => form_settings,
         };
 
-        let answer_settings = AnswerSettings::default();
-        let answer_settings = match allow_temporary_answers {
-            Some(allow) => answer_settings.change_allow_temporary_answers(allow),
-            None => answer_settings,
-        };
+        let answer_settings = AnswerSettings::default().try_change_audience(
+            allow_temporary_answers.unwrap_or_default(),
+            answer_groups.unwrap_or_default(),
+        )?;
         let answer_settings = match answer_visibility {
             Some(visibility) => answer_settings.change_visibility(visibility),
-            None => answer_settings,
-        };
-        let answer_settings = match answer_groups {
-            Some(groups) => answer_settings.change_answer_groups(groups),
             None => answer_settings,
         };
         let answer_settings = match acceptance_period {
@@ -499,6 +494,15 @@ impl<
             .await?
             .ok_or(Error::from(FormNotFound))?;
 
+        let current_form_read = current_form.clone().try_read(actor_user.clone())?;
+        let current_answer_settings = current_form_read.answer_settings();
+        let updated_answer_settings = current_answer_settings.clone().try_change_audience(
+            allow_temporary_answers.unwrap_or(current_answer_settings.allow_temporary_answers()),
+            answer_groups.unwrap_or_else(|| {
+                AllowedUserGroups::new(current_answer_settings.answer_group_ids().to_vec())
+            }),
+        )?;
+
         let updated_form = current_form.into_update().map(|form| {
             let current_settings = form.settings().to_owned();
             let updated_settings = match visibility {
@@ -516,14 +520,10 @@ impl<
                 }
             };
 
-            let updated_answer_settings = form.answer_settings().to_owned();
+            let updated_answer_settings = updated_answer_settings;
             let updated_answer_settings = match answer_visibility {
                 None => updated_answer_settings,
                 Some(v) => updated_answer_settings.change_visibility(v),
-            };
-            let updated_answer_settings = match answer_groups {
-                None => updated_answer_settings,
-                Some(groups) => updated_answer_settings.change_answer_groups(groups),
             };
             let updated_answer_settings = match default_answer_title {
                 None => updated_answer_settings,
@@ -532,10 +532,6 @@ impl<
             let updated_answer_settings = match acceptance_period {
                 None => updated_answer_settings,
                 Some(p) => updated_answer_settings.change_acceptance_period(p),
-            };
-            let updated_answer_settings = match allow_temporary_answers {
-                None => updated_answer_settings,
-                Some(a) => updated_answer_settings.change_allow_temporary_answers(a),
             };
             let updated_answer_settings = match author_publication_policy {
                 None => updated_answer_settings,
@@ -641,7 +637,7 @@ fn form_creation_details(form: &ActiveForm) -> Vec<EventDetail> {
         EventDetail::new("フォーム公開範囲", form.settings().visibility().to_string()),
         EventDetail::new(
             "フォーム閲覧グループ",
-            format_groups(form.settings().allowed_user_groups()),
+            format_groups(form.settings().allowed_user_groups().as_slice()),
         ),
         EventDetail::new(
             "フォーム別 Discord 通知",
@@ -653,7 +649,7 @@ fn form_creation_details(form: &ActiveForm) -> Vec<EventDetail> {
         ),
         EventDetail::new(
             "回答可能グループ",
-            format_groups(form.answer_settings().answer_groups()),
+            format_groups(form.answer_settings().answer_group_ids()),
         ),
         EventDetail::new(
             "回答受付期間",
@@ -669,7 +665,7 @@ fn form_creation_details(form: &ActiveForm) -> Vec<EventDetail> {
         ),
         EventDetail::new(
             "匿名回答",
-            format_allowed(*form.answer_settings().allow_temporary_answers()),
+            format_allowed(form.answer_settings().allow_temporary_answers()),
         ),
     ]
     .into_iter()
@@ -693,7 +689,7 @@ fn form_update_details(before: &ActiveForm, after: &ActiveForm) -> Vec<EventDeta
             || {
                 EventDetail::new(
                     "フォーム閲覧グループ",
-                    format_groups(after.settings().allowed_user_groups()),
+                    format_groups(after.settings().allowed_user_groups().as_slice()),
                 )
             },
         ),
@@ -713,14 +709,13 @@ fn form_update_details(before: &ActiveForm, after: &ActiveForm) -> Vec<EventDeta
                 )
             },
         ),
-        (before.answer_settings().answer_groups() != after.answer_settings().answer_groups()).then(
-            || {
+        (before.answer_settings().answer_group_ids() != after.answer_settings().answer_group_ids())
+            .then(|| {
                 EventDetail::new(
                     "回答可能グループ",
-                    format_groups(after.answer_settings().answer_groups()),
+                    format_groups(after.answer_settings().answer_group_ids()),
                 )
-            },
-        ),
+            }),
         (before.answer_settings().acceptance_period()
             != after.answer_settings().acceptance_period())
         .then(|| {
@@ -742,7 +737,7 @@ fn form_update_details(before: &ActiveForm, after: &ActiveForm) -> Vec<EventDeta
         .then(|| {
             EventDetail::new(
                 "匿名回答",
-                format_allowed(*after.answer_settings().allow_temporary_answers()),
+                format_allowed(after.answer_settings().allow_temporary_answers()),
             )
         }),
         (before.answer_settings().author_publication_policy()
@@ -767,8 +762,8 @@ fn form_update_details(before: &ActiveForm, after: &ActiveForm) -> Vec<EventDeta
     .collect()
 }
 
-fn format_groups(groups: &AllowedUserGroups) -> String {
-    match groups.as_slice() {
+fn format_groups(groups: &[UserGroupId]) -> String {
+    match groups {
         [] => "制限なし".to_string(),
         groups => groups
             .iter()
