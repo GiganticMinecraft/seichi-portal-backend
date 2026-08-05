@@ -150,6 +150,49 @@ impl AnswerAcceptancePeriod {
     }
 }
 
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
+pub struct AnswerAudience {
+    allow_temporary_answers: bool,
+    #[serde(default)]
+    answer_groups: AllowedUserGroups,
+}
+
+impl AnswerAudience {
+    fn new(allow_temporary_answers: bool) -> Self {
+        Self {
+            allow_temporary_answers,
+            answer_groups: AllowedUserGroups::unrestricted(),
+        }
+    }
+
+    fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
+        Self {
+            allow_temporary_answers,
+            ..self
+        }
+    }
+
+    fn change_answer_groups(self, answer_groups: AllowedUserGroups) -> Self {
+        Self {
+            answer_groups,
+            ..self
+        }
+    }
+
+    fn allows(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
+        match (author, actor) {
+            (AnswerAuthor::AuthenticatedUser(_), Actor::AccountUser(_)) => {
+                self.answer_groups.allows(actor)
+            }
+            (AnswerAuthor::Temporary(_), Actor::TemporaryAnswerAuthor(_)) => {
+                self.allow_temporary_answers
+            }
+            _ => false,
+        }
+    }
+}
+
 /// フォームの回答にまつわる設定をまとめた値オブジェクトです。
 ///
 /// 回答の公開範囲・受付期間・仮回答可否・デフォルトタイトルといった「ポリシー」を保持し、
@@ -161,9 +204,9 @@ pub struct AnswerSettings {
     default_answer_title: DefaultAnswerTitle,
     visibility: AnswerVisibility,
     acceptance_period: AnswerAcceptancePeriod,
-    allow_temporary_answers: bool,
-    #[serde(default)]
-    answer_groups: AllowedUserGroups,
+    #[serde(flatten)]
+    #[getter(skip)]
+    audience: AnswerAudience,
     #[serde(default)]
     author_publication_policy: AnswerAuthorPublicationPolicy,
 }
@@ -179,8 +222,7 @@ impl AnswerSettings {
             default_answer_title,
             visibility,
             acceptance_period,
-            allow_temporary_answers,
-            answer_groups: AllowedUserGroups::unrestricted(),
+            audience: AnswerAudience::new(allow_temporary_answers),
             author_publication_policy: AnswerAuthorPublicationPolicy::default(),
         }
     }
@@ -205,16 +247,26 @@ impl AnswerSettings {
 
     pub fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
         Self {
-            allow_temporary_answers,
+            audience: self
+                .audience
+                .change_allow_temporary_answers(allow_temporary_answers),
             ..self
         }
     }
 
     pub fn change_answer_groups(self, answer_groups: AllowedUserGroups) -> Self {
         Self {
-            answer_groups,
+            audience: self.audience.change_answer_groups(answer_groups),
             ..self
         }
+    }
+
+    pub fn allow_temporary_answers(&self) -> &bool {
+        &self.audience.allow_temporary_answers
+    }
+
+    pub fn answer_groups(&self) -> &AllowedUserGroups {
+        &self.audience.answer_groups
     }
 
     pub fn change_author_publication_policy(
@@ -231,7 +283,7 @@ impl AnswerSettings {
         self.author_publication_policy.disclosure_for(actor)
     }
 
-    /// `actor` が `author` として回答を作成してよいかを、受付期間と一時回答の可否から判定します。
+    /// `actor` が `author` として回答を作成してよいかを、受付期間と回答対象から判定します。
     pub(crate) fn can_accept_answer(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
         let is_within_period = self.acceptance_period.is_within_period(Utc::now());
 
@@ -239,12 +291,10 @@ impl AnswerSettings {
             (AnswerAuthor::AuthenticatedUser(user_id), Actor::AccountUser(user)) => {
                 *user_id == *user.id()
                     && (is_within_period || user.role() == &Role::Administrator)
-                    && self.answer_groups.allows(actor)
+                    && self.audience.allows(author, actor)
             }
             (AnswerAuthor::Temporary(_), Actor::TemporaryAnswerAuthor(_)) => {
-                self.allow_temporary_answers
-                    && is_within_period
-                    && self.answer_groups.as_slice().is_empty()
+                is_within_period && self.audience.allows(author, actor)
             }
             (AnswerAuthor::ImportedFromRedmine(_), _) => false,
             _ => false,
@@ -261,7 +311,7 @@ impl AnswerSettings {
             Actor::AccountUser(user) => {
                 entry.author().authenticated_user_id() == Some(*user.id())
                     || (self.visibility == AnswerVisibility::PUBLIC
-                        && self.answer_groups.allows(actor))
+                        && self.answer_groups().allows(actor))
                     || user.role() == &Role::Administrator
             }
             Actor::System => true,
@@ -294,6 +344,20 @@ mod tests {
             acceptance_period,
             allow_temporary_answers,
         )
+    }
+
+    #[test]
+    fn answer_settings_serialization_preserves_audience_fields() {
+        let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap())
+            .change_answer_groups(AllowedUserGroups::new(vec![UserGroupId::from(
+                Uuid::from_u128(10),
+            )]));
+
+        let serialized = serde_json::to_value(settings).unwrap();
+
+        assert_eq!(serialized["allow_temporary_answers"], true);
+        assert_eq!(serialized["answer_groups"].as_array().unwrap().len(), 1);
+        assert!(serialized.get("audience").is_none());
     }
 
     fn active_user(role: Role) -> AccountUser {
@@ -426,16 +490,35 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_answer_creation_can_be_restricted_to_group_members() {
+    fn authenticated_answer_creation_allows_all_users_without_groups_and_uses_or_matching() {
+        let unrestricted_user = active_user(Role::StandardUser);
+        let unrestricted_settings =
+            answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap());
+
+        assert!(unrestricted_settings.can_accept_answer(
+            &AnswerAuthor::AuthenticatedUser(*unrestricted_user.id()),
+            &Actor::from(unrestricted_user)
+        ));
+
         let observer = user_group(10, "Observer");
-        let member = active_user_with_groups(Role::StandardUser, vec![observer.clone()]);
+        let respondent = user_group(20, "Respondent");
+        let observer_member = active_user_with_groups(Role::StandardUser, vec![observer.clone()]);
+        let respondent_member =
+            active_user_with_groups(Role::StandardUser, vec![respondent.clone()]);
         let outsider = active_user(Role::StandardUser);
         let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap())
-            .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
+            .change_answer_groups(AllowedUserGroups::new(vec![
+                *observer.id(),
+                *respondent.id(),
+            ]));
 
         assert!(settings.can_accept_answer(
-            &AnswerAuthor::AuthenticatedUser(*member.id()),
-            &Actor::from(member)
+            &AnswerAuthor::AuthenticatedUser(*observer_member.id()),
+            &Actor::from(observer_member)
+        ));
+        assert!(settings.can_accept_answer(
+            &AnswerAuthor::AuthenticatedUser(*respondent_member.id()),
+            &Actor::from(respondent_member)
         ));
         assert!(!settings.can_accept_answer(
             &AnswerAuthor::AuthenticatedUser(*outsider.id()),
@@ -444,7 +527,7 @@ mod tests {
     }
 
     #[test]
-    fn temporary_answer_creation_is_denied_when_answer_group_is_restricted() {
+    fn temporary_answer_creation_is_allowed_when_answer_group_is_restricted() {
         let observer = user_group(10, "Observer");
         let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap())
             .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
@@ -457,7 +540,7 @@ mod tests {
             "contact".to_string(),
         ));
 
-        assert!(!settings.can_accept_answer(&author, &actor));
+        assert!(settings.can_accept_answer(&author, &actor));
     }
 
     #[test]
