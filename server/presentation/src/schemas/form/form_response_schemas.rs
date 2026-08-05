@@ -83,7 +83,7 @@ impl AnswerSettingsSchema {
                 start_at: answer_settings.acceptance_period().start_at().to_owned(),
                 end_at: answer_settings.acceptance_period().end_at().to_owned(),
             },
-            answer_group_ids: answer_settings.answer_groups().as_slice().to_vec(),
+            answer_group_ids: answer_settings.answer_group_ids().to_vec(),
         }
     }
 }
@@ -108,7 +108,7 @@ impl FormSettingsResponseSchema {
             discord_webhook_enabled: settings.discord_webhook_enabled(),
             visibility: settings.visibility().to_owned(),
             allowed_group_ids: settings.allowed_user_groups().as_slice().to_vec(),
-            allow_temporary_answers: *answer_settings.allow_temporary_answers(),
+            allow_temporary_answers: answer_settings.allow_temporary_answers(),
             answer_settings: AnswerSettingsSchema::from_answer_settings(answer_settings),
         }
     }

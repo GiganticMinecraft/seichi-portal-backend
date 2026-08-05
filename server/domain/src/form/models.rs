@@ -495,8 +495,11 @@ mod tests {
 
         assert!(matches!(denied_result, Err(DomainError::Forbidden)));
 
-        let form = form
-            .change_answer_settings(AnswerSettings::default().change_allow_temporary_answers(true));
+        let form = form.change_answer_settings(
+            AnswerSettings::default()
+                .try_change_audience(true, AllowedUserGroups::unrestricted())
+                .unwrap(),
+        );
         let accepted_result = public_form_read_by(form.clone(), actor).try_accept_temporary_answer(
             temporary_user,
             AnswerTitle::new(None),

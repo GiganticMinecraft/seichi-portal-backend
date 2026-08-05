@@ -105,7 +105,7 @@ impl CommentThread {
                 if user.role() == &Administrator
                     || (self.answer_settings.visibility() == &AnswerVisibility::PUBLIC
                         && self.publication == AnswerPublication::PUBLIC
-                        && self.answer_settings.answer_groups().allows(actor))
+                        && self.answer_settings.allows_authenticated_user(actor))
         )
     }
 }
@@ -291,7 +291,8 @@ mod tests {
         let thread = thread(
             AnswerSettings::default()
                 .change_visibility(AnswerVisibility::PUBLIC)
-                .change_answer_groups(AllowedUserGroups::new(vec![*group.id()])),
+                .try_change_audience(false, AllowedUserGroups::new(vec![*group.id()]))
+                .unwrap(),
             AnswerPublication::PUBLIC,
         );
 

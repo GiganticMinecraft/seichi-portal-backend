@@ -5,13 +5,15 @@ use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use errors::domain::DomainError;
 #[cfg(test)]
+use proptest::prelude::*;
+#[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
-    account::models::Role,
+    account::models::{Role, UserGroupId},
     auth::Actor,
     form::answer::{AnswerAuthor, AnswerEntry},
     form::settings::AllowedUserGroups,
@@ -150,46 +152,111 @@ impl AnswerAcceptancePeriod {
     }
 }
 
-#[cfg_attr(test, derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
-pub struct AnswerAudience {
-    allow_temporary_answers: bool,
-    #[serde(default)]
-    answer_groups: AllowedUserGroups,
+#[derive(Clone, Debug, PartialEq, Default)]
+enum AnswerAudience {
+    Everyone,
+    #[default]
+    AuthenticatedUsers,
+    AuthenticatedUserGroups(AllowedUserGroups),
 }
 
 impl AnswerAudience {
-    fn new(allow_temporary_answers: bool) -> Self {
-        Self {
-            allow_temporary_answers,
-            answer_groups: AllowedUserGroups::unrestricted(),
+    fn try_new(
+        allow_temporary_answers: bool,
+        answer_groups: AllowedUserGroups,
+    ) -> Result<Self, DomainError> {
+        match (allow_temporary_answers, answer_groups.as_slice().is_empty()) {
+            (true, true) => Ok(Self::Everyone),
+            (false, true) => Ok(Self::AuthenticatedUsers),
+            (false, false) => Ok(Self::AuthenticatedUserGroups(answer_groups)),
+            (true, false) => Err(DomainError::InvalidEntity {
+                message: "temporary answers cannot be combined with answer groups".to_string(),
+            }),
         }
     }
 
-    fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
-        Self {
-            allow_temporary_answers,
-            ..self
+    fn allow_temporary_answers(&self) -> bool {
+        matches!(self, Self::Everyone)
+    }
+
+    fn answer_group_ids(&self) -> &[UserGroupId] {
+        match self {
+            Self::Everyone | Self::AuthenticatedUsers => &[],
+            Self::AuthenticatedUserGroups(answer_groups) => answer_groups.as_slice(),
         }
     }
 
-    fn change_answer_groups(self, answer_groups: AllowedUserGroups) -> Self {
-        Self {
-            answer_groups,
-            ..self
+    fn allows_authenticated_user(&self, actor: &Actor) -> bool {
+        match self {
+            Self::Everyone | Self::AuthenticatedUsers => true,
+            Self::AuthenticatedUserGroups(answer_groups) => answer_groups.allows(actor),
         }
     }
 
     fn allows(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
         match (author, actor) {
             (AnswerAuthor::AuthenticatedUser(_), Actor::AccountUser(_)) => {
-                self.answer_groups.allows(actor)
+                self.allows_authenticated_user(actor)
             }
             (AnswerAuthor::Temporary(_), Actor::TemporaryAnswerAuthor(_)) => {
-                self.allow_temporary_answers
+                self.allow_temporary_answers()
             }
             _ => false,
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct RawAnswerAudienceFields {
+    allow_temporary_answers: bool,
+    #[serde(default)]
+    answer_groups: AllowedUserGroups,
+}
+
+#[derive(Serialize)]
+struct AnswerAudienceFields<'a> {
+    allow_temporary_answers: bool,
+    answer_groups: &'a [UserGroupId],
+}
+
+impl Serialize for AnswerAudience {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        AnswerAudienceFields {
+            allow_temporary_answers: self.allow_temporary_answers(),
+            answer_groups: self.answer_group_ids(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for AnswerAudience {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let fields = RawAnswerAudienceFields::deserialize(deserializer)?;
+        Self::try_new(fields.allow_temporary_answers, fields.answer_groups)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for AnswerAudience {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        prop_oneof![
+            Just(Self::Everyone),
+            Just(Self::AuthenticatedUsers),
+            prop::collection::vec(any::<UserGroupId>(), 1..10).prop_map(|group_ids| {
+                Self::AuthenticatedUserGroups(AllowedUserGroups::new(group_ids))
+            }),
+        ]
+        .boxed()
     }
 }
 
@@ -198,7 +265,6 @@ impl AnswerAudience {
 /// 回答の公開範囲・受付期間・仮回答可否・デフォルトタイトルといった「ポリシー」を保持し、
 /// [`AnswerEntry`] の閲覧可否 ([`Self::can_read_entry`]) や新規受理 ([`Self::can_accept_answer`])
 /// を判断します。この値オブジェクトは [`crate::form::models::ActiveForm`] が所有します。
-#[cfg_attr(test, derive(Arbitrary))]
 #[derive(Serialize, Deserialize, Getters, Clone, Default, Debug, PartialEq)]
 pub struct AnswerSettings {
     default_answer_title: DefaultAnswerTitle,
@@ -209,6 +275,38 @@ pub struct AnswerSettings {
     audience: AnswerAudience,
     #[serde(default)]
     author_publication_policy: AnswerAuthorPublicationPolicy,
+}
+
+#[cfg(test)]
+impl Arbitrary for AnswerSettings {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        (
+            any::<DefaultAnswerTitle>(),
+            any::<AnswerVisibility>(),
+            any::<AnswerAcceptancePeriod>(),
+            any::<AnswerAudience>(),
+            any::<AnswerAuthorPublicationPolicy>(),
+        )
+            .prop_map(
+                |(
+                    default_answer_title,
+                    visibility,
+                    acceptance_period,
+                    audience,
+                    author_publication_policy,
+                )| Self {
+                    default_answer_title,
+                    visibility,
+                    acceptance_period,
+                    audience,
+                    author_publication_policy,
+                },
+            )
+            .boxed()
+    }
 }
 
 impl AnswerSettings {
@@ -222,9 +320,29 @@ impl AnswerSettings {
             default_answer_title,
             visibility,
             acceptance_period,
-            audience: AnswerAudience::new(allow_temporary_answers),
+            audience: AnswerAudience::try_new(
+                allow_temporary_answers,
+                AllowedUserGroups::unrestricted(),
+            )
+            .expect("an unrestricted answer audience must be valid"),
             author_publication_policy: AnswerAuthorPublicationPolicy::default(),
         }
+    }
+
+    pub fn try_new(
+        default_answer_title: DefaultAnswerTitle,
+        visibility: AnswerVisibility,
+        acceptance_period: AnswerAcceptancePeriod,
+        allow_temporary_answers: bool,
+        answer_groups: AllowedUserGroups,
+    ) -> Result<Self, DomainError> {
+        Ok(Self {
+            default_answer_title,
+            visibility,
+            acceptance_period,
+            audience: AnswerAudience::try_new(allow_temporary_answers, answer_groups)?,
+            author_publication_policy: AnswerAuthorPublicationPolicy::default(),
+        })
     }
 
     pub fn change_default_answer_title(self, default_answer_title: DefaultAnswerTitle) -> Self {
@@ -245,28 +363,27 @@ impl AnswerSettings {
         }
     }
 
-    pub fn change_allow_temporary_answers(self, allow_temporary_answers: bool) -> Self {
-        Self {
-            audience: self
-                .audience
-                .change_allow_temporary_answers(allow_temporary_answers),
+    pub fn try_change_audience(
+        self,
+        allow_temporary_answers: bool,
+        answer_groups: AllowedUserGroups,
+    ) -> Result<Self, DomainError> {
+        Ok(Self {
+            audience: AnswerAudience::try_new(allow_temporary_answers, answer_groups)?,
             ..self
-        }
+        })
     }
 
-    pub fn change_answer_groups(self, answer_groups: AllowedUserGroups) -> Self {
-        Self {
-            audience: self.audience.change_answer_groups(answer_groups),
-            ..self
-        }
+    pub fn allow_temporary_answers(&self) -> bool {
+        self.audience.allow_temporary_answers()
     }
 
-    pub fn allow_temporary_answers(&self) -> &bool {
-        &self.audience.allow_temporary_answers
+    pub fn answer_group_ids(&self) -> &[UserGroupId] {
+        self.audience.answer_group_ids()
     }
 
-    pub fn answer_groups(&self) -> &AllowedUserGroups {
-        &self.audience.answer_groups
+    pub(crate) fn allows_authenticated_user(&self, actor: &Actor) -> bool {
+        self.audience.allows_authenticated_user(actor)
     }
 
     pub fn change_author_publication_policy(
@@ -311,7 +428,7 @@ impl AnswerSettings {
             Actor::AccountUser(user) => {
                 entry.author().authenticated_user_id() == Some(*user.id())
                     || (self.visibility == AnswerVisibility::PUBLIC
-                        && self.answer_groups().allows(actor))
+                        && self.audience.allows_authenticated_user(actor))
                     || user.role() == &Role::Administrator
             }
             Actor::System => true,
@@ -348,16 +465,22 @@ mod tests {
 
     #[test]
     fn answer_settings_serialization_preserves_audience_fields() {
-        let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap())
-            .change_answer_groups(AllowedUserGroups::new(vec![UserGroupId::from(
-                Uuid::from_u128(10),
-            )]));
+        let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap())
+            .try_change_audience(
+                false,
+                AllowedUserGroups::new(vec![UserGroupId::from(Uuid::from_u128(10))]),
+            )
+            .unwrap();
 
         let serialized = serde_json::to_value(settings).unwrap();
 
-        assert_eq!(serialized["allow_temporary_answers"], true);
+        assert_eq!(serialized["allow_temporary_answers"], false);
         assert_eq!(serialized["answer_groups"].as_array().unwrap().len(), 1);
         assert!(serialized.get("audience").is_none());
+
+        let mut invalid_serialized = serialized;
+        invalid_serialized["allow_temporary_answers"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<AnswerSettings>(invalid_serialized).is_err());
     }
 
     fn active_user(role: Role) -> AccountUser {
@@ -507,10 +630,11 @@ mod tests {
             active_user_with_groups(Role::StandardUser, vec![respondent.clone()]);
         let outsider = active_user(Role::StandardUser);
         let settings = answer_settings(false, AnswerAcceptancePeriod::try_new(None, None).unwrap())
-            .change_answer_groups(AllowedUserGroups::new(vec![
-                *observer.id(),
-                *respondent.id(),
-            ]));
+            .try_change_audience(
+                false,
+                AllowedUserGroups::new(vec![*observer.id(), *respondent.id()]),
+            )
+            .unwrap();
 
         assert!(settings.can_accept_answer(
             &AnswerAuthor::AuthenticatedUser(*observer_member.id()),
@@ -527,20 +651,42 @@ mod tests {
     }
 
     #[test]
-    fn temporary_answer_creation_is_allowed_when_answer_group_is_restricted() {
+    fn answer_audience_rejects_temporary_answers_with_restricted_groups() {
         let observer = user_group(10, "Observer");
-        let settings = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap())
-            .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
-        let author = AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
-            "guest".to_string(),
-            "contact".to_string(),
-        ));
-        let actor = Actor::from(TemporaryAnswerAuthor::new(
-            "guest".to_string(),
-            "contact".to_string(),
-        ));
+        let result = answer_settings(true, AnswerAcceptancePeriod::try_new(None, None).unwrap())
+            .try_change_audience(true, AllowedUserGroups::new(vec![*observer.id()]));
 
-        assert!(settings.can_accept_answer(&author, &actor));
+        assert!(matches!(result, Err(DomainError::InvalidEntity { .. })));
+    }
+
+    #[test]
+    fn answer_audience_deserialization_accepts_three_valid_combinations_and_rejects_invalid_one() {
+        let group_id = Uuid::from_u128(10);
+        let cases = vec![
+            (
+                r#"{"allow_temporary_answers":true,"answer_groups":[]}"#.to_string(),
+                true,
+            ),
+            (
+                r#"{"allow_temporary_answers":false,"answer_groups":[]}"#.to_string(),
+                true,
+            ),
+            (
+                format!(r#"{{"allow_temporary_answers":false,"answer_groups":["{group_id}"]}}"#),
+                true,
+            ),
+            (
+                format!(r#"{{"allow_temporary_answers":true,"answer_groups":["{group_id}"]}}"#),
+                false,
+            ),
+        ];
+
+        for (input, is_valid) in cases {
+            assert_eq!(
+                serde_json::from_str::<AnswerAudience>(&input).is_ok(),
+                is_valid
+            );
+        }
     }
 
     #[test]
@@ -620,7 +766,8 @@ mod tests {
             AnswerAcceptancePeriod::try_new(None, None).unwrap(),
             false,
         )
-        .change_answer_groups(AllowedUserGroups::new(vec![*observer.id()]));
+        .try_change_audience(false, AllowedUserGroups::new(vec![*observer.id()]))
+        .unwrap();
 
         assert!(settings.can_read_entry(&entry, &Actor::from(member)));
         assert!(!settings.can_read_entry(&entry, &Actor::from(outsider)));

@@ -603,8 +603,8 @@ mod tests {
             FormSubmissionRestriction, FormSubmissionRestrictionReason,
             answer::{AnswerLabelId, FormAnswerContentId},
             models::{
-                AnswerAuthorPublicationPolicy, AnswerSettings, DefaultAnswerTitle,
-                DiscordWebhookUrl, FormDescription, FormTitle, QuestionSet,
+                AllowedUserGroups, AnswerAuthorPublicationPolicy, AnswerSettings,
+                DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormTitle, QuestionSet,
             },
             question::Question,
         },
@@ -744,7 +744,8 @@ mod tests {
                 .change_default_answer_title(DefaultAnswerTitle::new(Some(
                     "$form_name".to_string().try_into().unwrap(),
                 )))
-                .change_allow_temporary_answers(allow_temporary_answers),
+                .try_change_audience(allow_temporary_answers, AllowedUserGroups::unrestricted())
+                .unwrap(),
         )
     }
 
