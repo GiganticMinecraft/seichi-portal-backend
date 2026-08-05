@@ -12,6 +12,12 @@
         "cargo"
       ],
       "rangeStrategy": "bump"
+    },
+    {
+      "matchPackageNames": [
+        "mariadb"
+      ],
+      "enabled": false
     }
   ]
 }
