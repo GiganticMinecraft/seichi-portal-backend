@@ -8,7 +8,8 @@ use domain::{
         FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
-            AnswerRelation, ArchivedAnswerEntry, ReadableAnswerRelation,
+            AnswerRelation, AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition,
+            ArchivedAnswerEntry, ReadableAnswerRelation,
         },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
@@ -427,6 +428,15 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         } else {
             Err(not_found_error("AnswerEntry", answer_entry.id()))
         }
+    }
+
+    async fn history(
+        &self,
+        _answer: &Allowed<AnswerEntry, Read>,
+        _request: PageRequest<AnswerStatusHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerStatusHistoryEntry, Read>, AnswerStatusHistoryPagePosition>, Error>
+    {
+        Ok(Page::new(Vec::new(), None))
     }
 
     async fn size(&self) -> Result<u32, Error> {

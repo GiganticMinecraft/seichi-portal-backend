@@ -1,7 +1,7 @@
 use domain::account::models::UserGroupId;
 use domain::form::question::{ChoiceId, QuestionId, QuestionType, TemplateKey};
 use domain::form::{
-    answer::{AnswerId, AnswerLabelId, AnswerPublication, AnswerTitle},
+    answer::{AnswerId, AnswerLabelId, AnswerPublication, AnswerStatus, AnswerTitle},
     models::{
         AnswerAcceptancePeriod, AnswerVisibility, DefaultAnswerTitle, DiscordWebhookUrl, FormId,
         FormLabelId, FormTitle, Visibility,
@@ -340,6 +340,9 @@ pub struct AnswerUpdateSchema {
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub publication: Option<AnswerPublication>,
+    #[serde(default)]
+    #[schema(value_type = Option<String>)]
+    pub status: Option<AnswerStatus>,
 }
 
 #[derive(Deserialize, Debug, utoipa::ToSchema)]

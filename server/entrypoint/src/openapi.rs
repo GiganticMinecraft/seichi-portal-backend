@@ -28,6 +28,7 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::AnswerAuthor,
         presentation::schemas::form::form_response_schemas::AnswerLabelResponseSchema,
         presentation::schemas::form::form_response_schemas::AnswerListPageResponse,
+        presentation::schemas::form::form_response_schemas::AnswerStatusHistoryPageResponse,
         presentation::schemas::form::form_response_schemas::AnswerSettingsSchema,
         presentation::schemas::form::form_response_schemas::AnswerVisibility,
         presentation::schemas::form::form_response_schemas::ArchivedFormListPageResponse,
@@ -166,6 +167,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             answer_handler::get_answer_handler,
             answer_handler::update_answer_handler
         ))
+        .routes(routes!(answer_handler::get_answer_status_history_handler))
         .routes(routes!(answer_label_handler::replace_answer_labels))
         .routes(routes!(
             comment_handler::get_form_comment,

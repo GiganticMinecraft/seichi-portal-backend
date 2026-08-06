@@ -8,7 +8,7 @@ use domain::{
     form::answer::TemporaryAnswerAuthor,
     form::{
         answer::{
-            AnswerAuthor, AnswerEntry, AnswerLabel, AnswerPublication, AnswerTitle,
+            AnswerAuthor, AnswerEntry, AnswerLabel, AnswerPublication, AnswerStatus, AnswerTitle,
             FormAnswerContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
         },
         comment::{Comment, CommentContent},
@@ -379,6 +379,7 @@ pub struct FormAnswerRecord {
     pub form_id: String,
     pub title: Option<String>,
     pub publication: String,
+    pub status: String,
     pub contents: Vec<FormAnswerContentRecord>,
     pub messages: Vec<MessageRecord>,
     pub redmine_reference: Option<RedmineImportedAnswerReference>,
@@ -401,6 +402,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             form_id,
             title,
             publication,
+            status,
             contents,
             messages: _,
             redmine_reference,
@@ -435,19 +437,22 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             .into());
         }
         unsafe {
-            Ok(AnswerEntry::from_raw_parts_with_redmine_reference(
-                answer_id,
-                FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
-                author,
-                timestamp,
-                AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
-                AnswerPublication::try_from(publication)?,
-                contents
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<_, _>>()?,
-                redmine_reference,
-            ))
+            Ok(
+                AnswerEntry::from_raw_parts_with_status_and_redmine_reference(
+                    answer_id,
+                    FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
+                    author,
+                    timestamp,
+                    AnswerTitle::new(title.map(TryInto::try_into).transpose()?),
+                    AnswerPublication::try_from(publication)?,
+                    AnswerStatus::try_from(status)?,
+                    contents
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<_, _>>()?,
+                    redmine_reference,
+                ),
+            )
         }
     }
 }
@@ -516,6 +521,17 @@ pub struct MessageHistoryRecord {
     pub operated_by_name: String,
     pub operated_by_role: String,
     pub operated_at: DateTime<Utc>,
+}
+
+pub struct AnswerStatusHistoryRecord {
+    pub id: String,
+    pub answer_id: String,
+    pub from_status: String,
+    pub to_status: String,
+    pub changed_by_id: String,
+    pub changed_by_name: String,
+    pub changed_by_role: String,
+    pub changed_at: DateTime<Utc>,
 }
 
 impl TryFrom<MessageRecord> for Message {

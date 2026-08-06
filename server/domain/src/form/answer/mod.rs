@@ -4,6 +4,7 @@ mod entry;
 mod label;
 mod relation;
 mod settings;
+mod status;
 mod title;
 
 pub use author::{
@@ -21,5 +22,8 @@ pub use relation::{
 pub use settings::{
     AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy, AnswerSettings,
     AnswerVisibility, DefaultAnswerTitle,
+};
+pub use status::{
+    AnswerStatus, AnswerStatusHistoryEntry, AnswerStatusHistoryId, AnswerStatusHistoryPagePosition,
 };
 pub use title::AnswerTitle;

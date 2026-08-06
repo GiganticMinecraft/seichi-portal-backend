@@ -3,8 +3,9 @@ use domain::{
     account::models::{AccountUser, DiscordUser},
     form::{
         answer::{
-            AnswerEntry, AnswerId, AnswerLabel, AnswerPublication, AnswerTitle, FormAnswerContent,
-            RedmineImportedAnswerReference, RedmineUserSnapshot, TemporaryAnswerAuthor,
+            AnswerEntry, AnswerId, AnswerLabel, AnswerPublication, AnswerStatus, AnswerTitle,
+            FormAnswerContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
+            TemporaryAnswerAuthor,
         },
         comment::Comment,
         message::Message,
@@ -26,6 +27,7 @@ pub struct PublishedAnswerEntry {
     pub timestamp: DateTime<Utc>,
     pub title: AnswerTitle,
     pub publication: AnswerPublication,
+    pub status: AnswerStatus,
     pub contents: Vec<FormAnswerContent>,
     pub redmine_reference: Option<RedmineImportedAnswerReference>,
 }
@@ -38,6 +40,7 @@ impl PublishedAnswerEntry {
             timestamp: *answer.timestamp(),
             title: answer.title().to_owned(),
             publication: *answer.publication(),
+            status: *answer.status(),
             contents: answer.contents().to_vec(),
             redmine_reference: answer.redmine_reference().to_owned(),
         }

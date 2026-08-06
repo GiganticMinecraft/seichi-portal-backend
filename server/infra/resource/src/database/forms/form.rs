@@ -458,6 +458,7 @@ async fn fetch_answer_entries_page(
 
     let answers = sqlx::query!(
         r"SELECT answers.form_id, answers.id AS answer_id, answers.title, answers.publication,
+            answers.status,
             answers.author_type, answers.user, users.name AS user_name, users.role AS user_role,
             answers.temporary_user_id, temporary_users.name AS temporary_user_name,
             temporary_users.contact_text AS temporary_user_contact_text,
@@ -510,6 +511,7 @@ async fn fetch_answer_entries_page(
                 form_id: row.form_id,
                 title: row.title,
                 publication: row.publication,
+                status: row.status,
                 contents: Vec::new(),
                 messages: Vec::new(),
                 redmine_reference: row.redmine_issue_id.map(|issue_id| {
@@ -778,9 +780,9 @@ async fn copy_active_form_to_archive(
         txn,
         r"INSERT INTO archived_answers
         (id, form_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
-         title, publication, timestamp)
+         title, publication, status, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, redmine_user_id,
-            redmine_author_name, title, publication, timestamp FROM answers WHERE form_id = ?",
+            redmine_author_name, title, publication, status, timestamp FROM answers WHERE form_id = ?",
         &form_id,
     );
 
@@ -885,9 +887,9 @@ async fn restore_archived_form_to_active(
         txn,
         r"INSERT INTO answers
         (id, form_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
-         title, publication, timestamp)
+         title, publication, status, timestamp)
         SELECT id, form_id, author_type, user, temporary_user_id, redmine_user_id,
-            redmine_author_name, title, publication, timestamp FROM archived_answers WHERE form_id = ?",
+            redmine_author_name, title, publication, status, timestamp FROM archived_answers WHERE form_id = ?",
         &form_id,
     );
 

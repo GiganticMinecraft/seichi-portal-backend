@@ -4,7 +4,8 @@ use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
     answer::{
         AnswerLabel, AnswerPublication as DomainAnswerPublication, AnswerReference,
-        FormAnswerContent, RedmineUserSnapshot,
+        AnswerStatus as DomainAnswerStatus, AnswerStatusHistoryEntry, FormAnswerContent,
+        RedmineUserSnapshot,
     },
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
@@ -49,6 +50,26 @@ impl From<DomainAnswerPublication> for AnswerPublication {
         match val {
             DomainAnswerPublication::PUBLIC => AnswerPublication::Public,
             DomainAnswerPublication::PRIVATE => AnswerPublication::Private,
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema, Copy, Clone)]
+pub enum AnswerStatus {
+    #[serde(rename = "UNADDRESSED")]
+    Unaddressed,
+    #[serde(rename = "IN_PROGRESS")]
+    InProgress,
+    #[serde(rename = "COMPLETED")]
+    Completed,
+}
+
+impl From<DomainAnswerStatus> for AnswerStatus {
+    fn from(value: DomainAnswerStatus) -> Self {
+        match value {
+            DomainAnswerStatus::UNADDRESSED => Self::Unaddressed,
+            DomainAnswerStatus::IN_PROGRESS => Self::InProgress,
+            DomainAnswerStatus::COMPLETED => Self::Completed,
         }
     }
 }
@@ -570,6 +591,36 @@ pub struct MessageHistoryPageResponse {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerStatusHistoryResponseEntry {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    #[serde(rename = "from")]
+    from_status: AnswerStatus,
+    #[serde(rename = "to")]
+    to_status: AnswerStatus,
+    changed_by: HistoryUser,
+    changed_at: DateTime<Utc>,
+}
+
+impl From<AnswerStatusHistoryEntry> for AnswerStatusHistoryResponseEntry {
+    fn from(value: AnswerStatusHistoryEntry) -> Self {
+        Self {
+            id: value.id().to_string(),
+            from_status: (*value.from_status()).into(),
+            to_status: (*value.to_status()).into(),
+            changed_by: value.changed_by().into(),
+            changed_at: *value.changed_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerStatusHistoryPageResponse {
+    pub items: Vec<AnswerStatusHistoryResponseEntry>,
+    pub next_cursor: Option<String>,
+}
+
 impl From<CommentWithAuthor> for AnswerComment {
     fn from(val: CommentWithAuthor) -> Self {
         let (source, commented_by, redmine_journal_id, redmine_author_snapshot) =
@@ -619,6 +670,7 @@ pub struct FormAnswer {
     timestamp: DateTime<Utc>,
     title: Option<String>,
     publication: AnswerPublication,
+    status: AnswerStatus,
     answers: Vec<AnswerContent>,
     labels: Vec<AnswerLabels>,
     redmine_issue_id: Option<i64>,
@@ -654,6 +706,7 @@ impl FormAnswer {
             timestamp: answer.timestamp,
             title: answer.title.into_inner().map(|title| title.to_string()),
             publication: answer.publication.into(),
+            status: answer.status.into(),
             answers: answer
                 .contents
                 .iter()
@@ -782,6 +835,7 @@ mod tests {
             timestamp: Utc::now(),
             title: AnswerTitle::new(None),
             publication: DomainAnswerPublication::PUBLIC,
+            status: DomainAnswerStatus::UNADDRESSED,
             contents: vec![],
             redmine_reference: None,
         };
@@ -810,6 +864,7 @@ mod tests {
             timestamp: Utc::now(),
             title: AnswerTitle::new(None),
             publication: DomainAnswerPublication::PUBLIC,
+            status: DomainAnswerStatus::UNADDRESSED,
             contents: vec![],
             redmine_reference: Some(RedmineImportedAnswerReference::new(answer_id, 1234.into())),
         };

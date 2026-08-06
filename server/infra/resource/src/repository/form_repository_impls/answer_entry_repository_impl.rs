@@ -2,15 +2,21 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use domain::{
+    account::models::UserSnapshot,
+    auth::Actor,
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerPagePosition},
+        answer::{
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusHistoryEntry,
+            AnswerStatusHistoryPagePosition,
+        },
         models::ActiveForm,
     },
     pagination::{Page, PageRequest},
     repository::form::answer_entry_repository::AnswerEntryRepository,
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
-use errors::Error;
+use errors::{Error, infra::InfraError};
+use uuid::Uuid;
 
 use crate::{
     database::components::{DatabaseComponents, FormAnswerDatabase, FormDatabase},
@@ -188,9 +194,64 @@ where
     ) -> Result<(), Error> {
         self.client
             .form_answer()
-            .update_answer_entry(answer_entry.value(), *answer_entry.value().form_id())
+            .update_answer_entry(
+                answer_entry.value(),
+                *answer_entry.value().form_id(),
+                match answer_entry.actor() {
+                    Actor::AccountUser(user) => user,
+                    Actor::TemporaryAnswerAuthor(_) | Actor::Anonymous | Actor::System => {
+                        return Err(InfraError::Unexpected {
+                            cause: "answer update actor is not an account user".to_string(),
+                        }
+                        .into());
+                    }
+                },
+            )
             .await?;
         Ok(())
+    }
+
+    async fn history(
+        &self,
+        answer: &Allowed<AnswerEntry, Read>,
+        request: PageRequest<AnswerStatusHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerStatusHistoryEntry, Read>, AnswerStatusHistoryPagePosition>, Error>
+    {
+        let page = self
+            .client
+            .form_answer()
+            .fetch_status_history(*answer.id(), request)
+            .await?;
+        let (records, next) = page.into_parts();
+        let items = records
+            .into_iter()
+            .map(|record| {
+                let entry = unsafe {
+                    AnswerStatusHistoryEntry::from_raw_parts(
+                        Uuid::parse_str(&record.id)
+                            .map_err(InfraError::from)?
+                            .into(),
+                        Uuid::parse_str(&record.answer_id)
+                            .map_err(InfraError::from)?
+                            .into(),
+                        AnswerStatus::try_from(record.from_status).map_err(Error::from)?,
+                        AnswerStatus::try_from(record.to_status).map_err(Error::from)?,
+                        UserSnapshot::new(
+                            Uuid::parse_str(&record.changed_by_id)
+                                .map_err(InfraError::from)?
+                                .into(),
+                            record.changed_by_name,
+                            record.changed_by_role.parse().map_err(InfraError::from)?,
+                        ),
+                        record.changed_at,
+                    )
+                };
+                answer
+                    .authorize_status_history_entry(entry)
+                    .map_err(Error::from)
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        Ok(Page::new(items, next))
     }
 
     #[tracing::instrument(skip_all)]

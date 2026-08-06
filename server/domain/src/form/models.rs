@@ -288,6 +288,7 @@ impl Allowed<ActiveForm, Update> {
         entry: AnswerEntry,
         title: Option<AnswerTitle>,
         publication: Option<crate::form::answer::AnswerPublication>,
+        status: Option<crate::form::answer::AnswerStatus>,
     ) -> Result<Allowed<AnswerEntry, Update>, DomainError> {
         let entry = match title {
             Some(title) => entry.with_title(title),
@@ -295,6 +296,10 @@ impl Allowed<ActiveForm, Update> {
         };
         let entry = match publication {
             Some(publication) => entry.change_publication(publication),
+            None => entry,
+        };
+        let entry = match status {
+            Some(status) => entry.change_status(status),
             None => entry,
         };
         self.authorize_update(entry)
