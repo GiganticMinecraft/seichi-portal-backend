@@ -14,14 +14,14 @@ use domain::search::models::{
 };
 use domain::{
     account::models::{
-        AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserPagePosition,
+        AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserId, UserPagePosition,
         UserSnapshot,
     },
     form::{
         FormSubmissionRestriction,
         answer::{
-            AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerPublication, AnswerReference,
-            AnswerRelation,
+            AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerPagePosition,
+            AnswerPublication, AnswerReference, AnswerRelation, AnswerStatusHistoryPagePosition,
         },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
@@ -99,12 +99,12 @@ pub trait FormDatabase: Send + Sync {
     async fn list_answer_entries(
         &self,
         form_id: FormId,
-        request: PageRequest<domain::form::answer::AnswerPagePosition>,
-    ) -> Result<Page<AnswerEntry, domain::form::answer::AnswerPagePosition>, InfraError>;
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError>;
     async fn list_all_answer_entries(
         &self,
-        request: PageRequest<domain::form::answer::AnswerPagePosition>,
-    ) -> Result<Page<AnswerEntry, domain::form::answer::AnswerPagePosition>, InfraError>;
+        request: PageRequest<AnswerPagePosition>,
+    ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,11 +150,8 @@ pub trait FormAnswerDatabase: Send + Sync {
     async fn fetch_status_history(
         &self,
         answer_id: AnswerId,
-        request: PageRequest<domain::form::answer::AnswerStatusHistoryPagePosition>,
-    ) -> Result<
-        Page<AnswerStatusHistoryRecord, domain::form::answer::AnswerStatusHistoryPagePosition>,
-        InfraError,
-    >;
+        request: PageRequest<AnswerStatusHistoryPagePosition>,
+    ) -> Result<Page<AnswerStatusHistoryRecord, AnswerStatusHistoryPagePosition>, InfraError>;
     /// 回答 (`answers`) の件数を返す。
     async fn size(&self) -> Result<u32, InfraError>;
     /// 回答本文 (`real_answers`) の件数を返す。
@@ -351,10 +348,7 @@ pub trait FormSubmissionRestrictionDatabase: Send + Sync {
 
 #[async_trait]
 pub trait MinecraftBanDatabase: Send + Sync {
-    async fn list_by_user_id(
-        &self,
-        user_id: domain::account::models::UserId,
-    ) -> Result<Vec<MinecraftBan>, InfraError>;
+    async fn list_by_user_id(&self, user_id: UserId) -> Result<Vec<MinecraftBan>, InfraError>;
 }
 
 #[automock]

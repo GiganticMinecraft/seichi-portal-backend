@@ -2,15 +2,21 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use domain::{
+    account::models::UserSnapshot,
+    auth::Actor,
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerPagePosition},
+        answer::{
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusHistoryEntry,
+            AnswerStatusHistoryPagePosition,
+        },
         models::ActiveForm,
     },
     pagination::{Page, PageRequest},
     repository::form::answer_entry_repository::AnswerEntryRepository,
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
-use errors::Error;
+use errors::{Error, infra::InfraError};
+use uuid::Uuid;
 
 use crate::{
     database::components::{DatabaseComponents, FormAnswerDatabase, FormDatabase},
@@ -192,11 +198,9 @@ where
                 answer_entry.value(),
                 *answer_entry.value().form_id(),
                 match answer_entry.actor() {
-                    domain::auth::Actor::AccountUser(user) => user,
-                    domain::auth::Actor::TemporaryAnswerAuthor(_)
-                    | domain::auth::Actor::Anonymous
-                    | domain::auth::Actor::System => {
-                        return Err(errors::infra::InfraError::Unexpected {
+                    Actor::AccountUser(user) => user,
+                    Actor::TemporaryAnswerAuthor(_) | Actor::Anonymous | Actor::System => {
+                        return Err(InfraError::Unexpected {
                             cause: "answer update actor is not an account user".to_string(),
                         }
                         .into());
@@ -210,14 +214,9 @@ where
     async fn history(
         &self,
         answer: &Allowed<AnswerEntry, Read>,
-        request: PageRequest<domain::form::answer::AnswerStatusHistoryPagePosition>,
-    ) -> Result<
-        Page<
-            Allowed<domain::form::answer::AnswerStatusHistoryEntry, Read>,
-            domain::form::answer::AnswerStatusHistoryPagePosition,
-        >,
-        Error,
-    > {
+        request: PageRequest<AnswerStatusHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerStatusHistoryEntry, Read>, AnswerStatusHistoryPagePosition>, Error>
+    {
         let page = self
             .client
             .form_answer()
@@ -228,26 +227,21 @@ where
             .into_iter()
             .map(|record| {
                 let entry = unsafe {
-                    domain::form::answer::AnswerStatusHistoryEntry::from_raw_parts(
-                        uuid::Uuid::parse_str(&record.id)
-                            .map_err(errors::infra::InfraError::from)?
+                    AnswerStatusHistoryEntry::from_raw_parts(
+                        Uuid::parse_str(&record.id)
+                            .map_err(InfraError::from)?
                             .into(),
-                        uuid::Uuid::parse_str(&record.answer_id)
-                            .map_err(errors::infra::InfraError::from)?
+                        Uuid::parse_str(&record.answer_id)
+                            .map_err(InfraError::from)?
                             .into(),
-                        domain::form::answer::AnswerStatus::try_from(record.from_status)
-                            .map_err(errors::Error::from)?,
-                        domain::form::answer::AnswerStatus::try_from(record.to_status)
-                            .map_err(errors::Error::from)?,
-                        domain::account::models::UserSnapshot::new(
-                            uuid::Uuid::parse_str(&record.changed_by_id)
-                                .map_err(errors::infra::InfraError::from)?
+                        AnswerStatus::try_from(record.from_status).map_err(Error::from)?,
+                        AnswerStatus::try_from(record.to_status).map_err(Error::from)?,
+                        UserSnapshot::new(
+                            Uuid::parse_str(&record.changed_by_id)
+                                .map_err(InfraError::from)?
                                 .into(),
                             record.changed_by_name,
-                            record
-                                .changed_by_role
-                                .parse()
-                                .map_err(errors::infra::InfraError::from)?,
+                            record.changed_by_role.parse().map_err(InfraError::from)?,
                         ),
                         record.changed_at,
                     )

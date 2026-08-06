@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use domain_derive::UnsafeFromRawParts;
+use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
@@ -25,7 +26,7 @@ pub enum AnswerStatus {
 }
 
 impl TryFrom<String> for AnswerStatus {
-    type Error = errors::domain::DomainError;
+    type Error = DomainError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         use std::str::FromStr;

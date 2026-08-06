@@ -16,7 +16,7 @@ use crate::{
         models::{ActiveForm, ArchivedForm, FormId},
     },
     types::authorization_guard::{
-        AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
+        Allowed, AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
     },
 };
 
@@ -261,14 +261,11 @@ impl AnswerEntry {
     }
 }
 
-impl crate::types::authorization_guard::Allowed<AnswerEntry, Read> {
+impl Allowed<AnswerEntry, Read> {
     pub fn authorize_status_history_entry(
         &self,
         entry: AnswerStatusHistoryEntry,
-    ) -> Result<
-        crate::types::authorization_guard::Allowed<AnswerStatusHistoryEntry, Read>,
-        DomainError,
-    > {
+    ) -> Result<Allowed<AnswerStatusHistoryEntry, Read>, DomainError> {
         self.authorize_read(entry)
     }
 }

@@ -7,8 +7,8 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
-            AnswerPagePosition, AnswerPublication, AnswerStatus, AnswerTitle, FormAnswerContent,
-            PostedAnswerContents,
+            AnswerPagePosition, AnswerPublication, AnswerStatus, AnswerStatusHistoryEntry,
+            AnswerStatusHistoryPagePosition, AnswerTitle, FormAnswerContent, PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
@@ -23,12 +23,12 @@ use domain::{
         },
         form_submission_restriction_repository::FormSubmissionRestrictionRepository,
     },
-    types::authorization_guard::{Allowed, Read},
+    types::authorization_guard::{Allowed, Create, Read},
 };
 use errors::{
     Error,
     domain::DomainError,
-    usecase::UseCaseError::{AnswerNotFound, FormNotFound},
+    usecase::UseCaseError::{AnswerNotFound, FormNotFound, UserNotFound},
 };
 use futures::{StreamExt, stream};
 
@@ -107,7 +107,7 @@ impl<
                             users
                                 .get(user_id)
                                 .cloned()
-                                .ok_or(Error::from(errors::usecase::UseCaseError::UserNotFound))?,
+                                .ok_or(Error::from(UserNotFound))?,
                         )
                     }
                     AnswerAuthor::Temporary(temporary_user) => {
@@ -130,7 +130,7 @@ impl<
     async fn notify_discord_answer_webhook(
         &self,
         form: &Allowed<ActiveForm, Read>,
-        answer_entry: &Allowed<AnswerEntry, domain::types::authorization_guard::Create>,
+        answer_entry: &Allowed<AnswerEntry, Create>,
         author_disclosure: AnswerAuthorDisclosure,
         respondent: &str,
     ) {
@@ -573,14 +573,9 @@ impl<
         actor: &AccountUser,
         form_id: FormId,
         answer_id: AnswerId,
-        request: PageRequest<domain::form::answer::AnswerStatusHistoryPagePosition>,
-    ) -> Result<
-        Page<
-            Allowed<domain::form::answer::AnswerStatusHistoryEntry, Read>,
-            domain::form::answer::AnswerStatusHistoryPagePosition,
-        >,
-        Error,
-    > {
+        request: PageRequest<AnswerStatusHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerStatusHistoryEntry, Read>, AnswerStatusHistoryPagePosition>, Error>
+    {
         let actor = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor).await?;
         let answer = self
@@ -595,7 +590,7 @@ impl<
 fn answer_submitted_event(
     actor: AnswerSubmissionActor,
     form: &Allowed<ActiveForm, Read>,
-    answer: &Allowed<AnswerEntry, domain::types::authorization_guard::Create>,
+    answer: &Allowed<AnswerEntry, Create>,
 ) -> ApplicationEvent {
     let questions = form.questions().as_slice();
     let title = answer
