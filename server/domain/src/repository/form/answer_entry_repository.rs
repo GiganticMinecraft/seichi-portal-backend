@@ -4,7 +4,10 @@ use mockall::automock;
 
 use crate::{
     form::{
-        answer::{AnswerEntry, AnswerId, AnswerPagePosition},
+        answer::{
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatusHistoryEntry,
+            AnswerStatusHistoryPagePosition,
+        },
         models::ActiveForm,
     },
     pagination::{Page, PageRequest},
@@ -49,6 +52,11 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         form: &Allowed<ActiveForm, Update>,
         answer_entry: &Allowed<AnswerEntry, Update>,
     ) -> Result<(), Error>;
+    async fn history(
+        &self,
+        answer: &Allowed<AnswerEntry, Read>,
+        request: PageRequest<AnswerStatusHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerStatusHistoryEntry, Read>, AnswerStatusHistoryPagePosition>, Error>;
     /// 回答 (`answers`) の件数を返す。
     async fn size(&self) -> Result<u32, Error>;
     /// 回答本文 (`real_answers`) の件数を返す。

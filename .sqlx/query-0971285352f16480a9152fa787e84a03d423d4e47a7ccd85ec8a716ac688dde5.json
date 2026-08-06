@@ -1,0 +1,150 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT id, answer_id, from_status, to_status, changed_by_id,\n                        changed_by_name, changed_by_role,\n                        changed_at AS `changed_at!: chrono::DateTime<chrono::Utc>`\n                    FROM form_answer_status_history\n                    WHERE answer_id = ? AND id < ?\n                    ORDER BY id DESC LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "answer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "from_status",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 44
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "from_status"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "to_status",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 44
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "to_status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "changed_by_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "changed_by_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "changed_by_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "changed_by_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "changed_by_role",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 128
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "changed_by_role"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "changed_at!: chrono::DateTime<chrono::Utc>",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "NOT_NULL | UNSIGNED | BINARY | TIMESTAMP",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_status_history",
+            "name": "changed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0971285352f16480a9152fa787e84a03d423d4e47a7ccd85ec8a716ac688dde5"
+}

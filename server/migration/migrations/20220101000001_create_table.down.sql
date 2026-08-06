@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS
     redmine_imported_answer_references,
     global_discord_webhook_settings,
     message_history,
+    form_answer_status_history,
     form_answer_comment_history,
     message_threads,
     archived_label_settings_for_form_answers,

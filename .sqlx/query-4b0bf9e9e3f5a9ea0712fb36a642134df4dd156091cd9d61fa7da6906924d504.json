@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_answer_status_history\n                        (id, answer_id, from_status, to_status, changed_by_id, changed_by_name, changed_by_role)\n                        VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "4b0bf9e9e3f5a9ea0712fb36a642134df4dd156091cd9d61fa7da6906924d504"
+}

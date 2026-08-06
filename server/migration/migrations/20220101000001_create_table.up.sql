@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS answers(
     redmine_author_name TEXT,
     title TEXT,
     publication ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC',
+    status ENUM('UNADDRESSED', 'IN_PROGRESS', 'COMPLETED') NOT NULL DEFAULT 'UNADDRESSED',
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_answers_timestamp_id (timestamp DESC, id DESC),
     INDEX idx_answers_form_id_timestamp_id (form_id, timestamp DESC, id DESC),
@@ -177,6 +178,18 @@ CREATE TABLE IF NOT EXISTS form_answer_comment_history(
     operated_by_role VARCHAR(32) NOT NULL,
     operated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_form_answer_comment_history_answer_id_id(answer_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS form_answer_status_history(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL,
+    from_status ENUM('UNADDRESSED', 'IN_PROGRESS', 'COMPLETED') NOT NULL,
+    to_status ENUM('UNADDRESSED', 'IN_PROGRESS', 'COMPLETED') NOT NULL,
+    changed_by_id CHAR(36) NOT NULL,
+    changed_by_name TEXT NOT NULL,
+    changed_by_role VARCHAR(32) NOT NULL,
+    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_form_answer_status_history_answer_id_id(answer_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS label_for_form_answers(
@@ -295,6 +308,7 @@ CREATE TABLE IF NOT EXISTS archived_answers(
     redmine_author_name TEXT,
     title TEXT,
     publication ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC',
+    status ENUM('UNADDRESSED', 'IN_PROGRESS', 'COMPLETED') NOT NULL DEFAULT 'UNADDRESSED',
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY fk_archived_answers_form_id(form_id) REFERENCES archived_form_meta_data(id) ON DELETE CASCADE,
     FOREIGN KEY fk_archived_answers_user(user) REFERENCES users(id),

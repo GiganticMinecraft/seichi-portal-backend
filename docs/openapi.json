@@ -2679,6 +2679,121 @@
         ]
       }
     },
+    "/api/v1/forms/{form_id}/answers/{answer_id}/status/history": {
+      "get": {
+        "tags": [
+          "Answers"
+        ],
+        "summary": "回答の状態変更履歴を取得",
+        "operationId": "get_answer_status_history_handler",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "answer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of history entries to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor returned by the previous page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerStatusHistoryPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server could not understand the request due to invalid syntax.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access is unauthorized.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access is forbidden.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The server cannot find the requested resource.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/forms/{form_id}/archive": {
       "post": {
         "tags": [
@@ -6227,10 +6342,73 @@
           }
         }
       },
+      "AnswerStatus": {
+        "type": "string",
+        "enum": [
+          "UNADDRESSED",
+          "IN_PROGRESS",
+          "COMPLETED"
+        ]
+      },
+      "AnswerStatusHistoryPageResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnswerStatusHistoryResponseEntry"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AnswerStatusHistoryResponseEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "from",
+          "to",
+          "changed_by",
+          "changed_at"
+        ],
+        "properties": {
+          "changed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changed_by": {
+            "$ref": "#/components/schemas/HistoryUser"
+          },
+          "from": {
+            "$ref": "#/components/schemas/AnswerStatus"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to": {
+            "$ref": "#/components/schemas/AnswerStatus"
+          }
+        }
+      },
       "AnswerUpdateSchema": {
         "type": "object",
         "properties": {
           "publication": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
             "type": [
               "string",
               "null"
@@ -6582,6 +6760,7 @@
           "form_id",
           "timestamp",
           "publication",
+          "status",
           "answers",
           "labels"
         ],
@@ -6618,6 +6797,9 @@
               "null"
             ],
             "format": "int64"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnswerStatus"
           },
           "timestamp": {
             "type": "string",

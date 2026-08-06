@@ -10,8 +10,8 @@ use crate::{
     auth::Actor,
     form::{
         answer::{
-            AnswerAuthor, AnswerTitle, FormAnswerContent, PostedAnswerContents,
-            RedmineImportedAnswerReference,
+            AnswerAuthor, AnswerStatus, AnswerStatusHistoryEntry, AnswerTitle, FormAnswerContent,
+            PostedAnswerContents, RedmineImportedAnswerReference,
         },
         models::{ActiveForm, ArchivedForm, FormId},
     },
@@ -102,6 +102,7 @@ pub struct AnswerEntry {
     timestamp: DateTime<Utc>,
     title: AnswerTitle,
     publication: AnswerPublication,
+    status: AnswerStatus,
     contents: Vec<FormAnswerContent>,
     redmine_reference: Option<RedmineImportedAnswerReference>,
 }
@@ -122,15 +123,18 @@ impl AnswerEntry {
         publication: AnswerPublication,
         contents: Vec<FormAnswerContent>,
     ) -> Self {
-        Self {
-            id,
-            form_id,
-            author,
-            timestamp,
-            title,
-            publication,
-            contents,
-            redmine_reference: None,
+        unsafe {
+            Self::from_raw_parts_with_status_and_redmine_reference(
+                id,
+                form_id,
+                author,
+                timestamp,
+                title,
+                publication,
+                AnswerStatus::default(),
+                contents,
+                None,
+            )
         }
     }
 
@@ -150,6 +154,38 @@ impl AnswerEntry {
         contents: Vec<FormAnswerContent>,
         redmine_reference: Option<RedmineImportedAnswerReference>,
     ) -> Self {
+        unsafe {
+            Self::from_raw_parts_with_status_and_redmine_reference(
+                id,
+                form_id,
+                author,
+                timestamp,
+                title,
+                publication,
+                AnswerStatus::default(),
+                contents,
+                redmine_reference,
+            )
+        }
+    }
+
+    /// 永続層から回答を status 付きで復元します。
+    ///
+    /// # Safety
+    ///
+    /// 呼び出し元は、各値が回答のドメイン不変条件を満たすことを保証します。
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn from_raw_parts_with_status_and_redmine_reference(
+        id: AnswerId,
+        form_id: FormId,
+        author: AnswerAuthor,
+        timestamp: DateTime<Utc>,
+        title: AnswerTitle,
+        publication: AnswerPublication,
+        status: AnswerStatus,
+        contents: Vec<FormAnswerContent>,
+        redmine_reference: Option<RedmineImportedAnswerReference>,
+    ) -> Self {
         Self {
             id,
             form_id,
@@ -157,6 +193,7 @@ impl AnswerEntry {
             timestamp,
             title,
             publication,
+            status,
             contents,
             redmine_reference,
         }
@@ -176,6 +213,7 @@ impl AnswerEntry {
             timestamp: Utc::now(),
             title,
             publication: AnswerPublication::PUBLIC,
+            status: AnswerStatus::default(),
             contents: contents.into_inner(),
             redmine_reference: None,
         }
@@ -192,6 +230,22 @@ impl AnswerEntry {
         }
     }
 
+    pub fn change_status(self, status: AnswerStatus) -> Self {
+        Self { status, ..self }
+    }
+
+    pub fn transition_status(
+        self,
+        status: AnswerStatus,
+    ) -> Option<(Self, AnswerStatus, AnswerStatus)> {
+        if self.status == status {
+            None
+        } else {
+            let previous = self.status;
+            Some((self.change_status(status), previous, status))
+        }
+    }
+
     pub(crate) fn publication_allows_read(&self, actor: &Actor) -> bool {
         match self.publication {
             AnswerPublication::PUBLIC => true,
@@ -204,6 +258,18 @@ impl AnswerEntry {
                 ) || matches!(actor, Actor::System)
             }
         }
+    }
+}
+
+impl crate::types::authorization_guard::Allowed<AnswerEntry, Read> {
+    pub fn authorize_status_history_entry(
+        &self,
+        entry: AnswerStatusHistoryEntry,
+    ) -> Result<
+        crate::types::authorization_guard::Allowed<AnswerStatusHistoryEntry, Read>,
+        DomainError,
+    > {
+        self.authorize_read(entry)
     }
 }
 
@@ -260,7 +326,49 @@ mod tests {
     use chrono::TimeZone;
     use uuid::Uuid;
 
+    use crate::form::answer::TemporaryAnswerAuthor;
+
     use super::*;
+
+    fn empty_answer() -> AnswerEntry {
+        AnswerEntry::new(
+            FormId::new(),
+            AnswerAuthor::Temporary(TemporaryAnswerAuthor::new(
+                "name".to_string(),
+                "contact".to_string(),
+            )),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
+        )
+    }
+
+    #[test]
+    fn new_answer_is_unaddressed() {
+        assert_eq!(*empty_answer().status(), AnswerStatus::UNADDRESSED);
+    }
+
+    #[test]
+    fn status_transition_allows_every_different_pair_and_skips_noop() {
+        let statuses = [
+            AnswerStatus::UNADDRESSED,
+            AnswerStatus::IN_PROGRESS,
+            AnswerStatus::COMPLETED,
+        ];
+
+        for from in statuses {
+            for to in statuses {
+                let result = empty_answer().change_status(from).transition_status(to);
+                if from == to {
+                    assert!(result.is_none());
+                } else {
+                    let (answer, previous, next) = result.unwrap();
+                    assert_eq!(*answer.status(), to);
+                    assert_eq!(previous, from);
+                    assert_eq!(next, to);
+                }
+            }
+        }
+    }
 
     #[test]
     fn page_position_follows_timestamp_desc_then_answer_id_desc() {

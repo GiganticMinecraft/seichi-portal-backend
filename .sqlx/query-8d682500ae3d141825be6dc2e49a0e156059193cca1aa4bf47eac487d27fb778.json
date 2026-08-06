@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,\n                        users.name AS user_name, users.role AS user_role,\n                        temporary_user_id, temporary_users.name AS temporary_user_name,\n                        temporary_users.contact_text AS temporary_user_contact_text,\n                        answers.redmine_user_id, answers.redmine_author_name,\n                        redmine_reference.redmine_issue_id,\n                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers\n                        LEFT JOIN users ON answers.user = users.id\n                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n                        LEFT JOIN redmine_imported_answer_references redmine_reference\n                            ON redmine_reference.answer_id = answers.id\n                        WHERE answers.id = ?",
+  "query": "SELECT form_id, answers.id AS answer_id, title, publication, status, author_type, user,\n                        users.name AS user_name, users.role AS user_role,\n                        temporary_user_id, temporary_users.name AS temporary_user_name,\n                        temporary_users.contact_text AS temporary_user_contact_text,\n                        answers.redmine_user_id, answers.redmine_author_name,\n                        redmine_reference.redmine_issue_id,\n                        timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>` FROM answers\n                        LEFT JOIN users ON answers.user = users.id\n                        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n                        LEFT JOIN redmine_imported_answer_references redmine_reference\n                            ON redmine_reference.answer_id = answers.id\n                        WHERE answers.id = ?",
   "describe": {
     "columns": [
       {
@@ -69,6 +69,22 @@
       },
       {
         "ordinal": 4,
+        "name": "status",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 44
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "author_type",
         "type_info": {
           "type": "String",
@@ -84,7 +100,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "user",
         "type_info": {
           "type": "String",
@@ -100,7 +116,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "user_name",
         "type_info": {
           "type": "VarString",
@@ -116,7 +132,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "user_role",
         "type_info": {
           "type": "String",
@@ -132,7 +148,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "temporary_user_id",
         "type_info": {
           "type": "String",
@@ -148,7 +164,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "temporary_user_name",
         "type_info": {
           "type": "Blob",
@@ -164,7 +180,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "temporary_user_contact_text",
         "type_info": {
           "type": "Blob",
@@ -180,7 +196,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "redmine_user_id",
         "type_info": {
           "type": "LongLong",
@@ -196,7 +212,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "redmine_author_name",
         "type_info": {
           "type": "Blob",
@@ -212,7 +228,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "redmine_issue_id",
         "type_info": {
           "type": "LongLong",
@@ -228,7 +244,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "timestamp!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -253,6 +269,7 @@
       true,
       false,
       false,
+      false,
       true,
       true,
       true,
@@ -265,5 +282,5 @@
       false
     ]
   },
-  "hash": "dd833fe8bc9ab000f335ff6f120851b5b0bd5b50ac55c8b0939a3b09d8fa1cbf"
+  "hash": "8d682500ae3d141825be6dc2e49a0e156059193cca1aa4bf47eac487d27fb778"
 }

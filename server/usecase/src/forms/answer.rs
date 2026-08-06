@@ -7,7 +7,7 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
-            AnswerPagePosition, AnswerPublication, AnswerTitle, FormAnswerContent,
+            AnswerPagePosition, AnswerPublication, AnswerStatus, AnswerTitle, FormAnswerContent,
             PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
@@ -509,17 +509,18 @@ impl<
         actor: &AccountUser,
         title: Option<AnswerTitle>,
         publication: Option<AnswerPublication>,
+        status: Option<AnswerStatus>,
     ) -> Result<AnswerDetails, Error> {
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
 
-        let form_answer = match (title, publication) {
-            (None, None) => self
+        let form_answer = match (title, publication, status) {
+            (None, None, None) => self
                 .answer_entry_repository
                 .get(&form, answer_id)
                 .await?
                 .ok_or(AnswerNotFound)?,
-            (title, publication) => {
+            (title, publication, status) => {
                 let form_update = self
                     .active_form_repository
                     .get(form_id)
@@ -532,8 +533,12 @@ impl<
                     .get(&form, answer_id)
                     .await?
                     .ok_or(AnswerNotFound)?;
-                let updated_entry =
-                    form_update.change_entry_meta(entry.into_inner(), title, publication)?;
+                let updated_entry = form_update.change_entry_meta(
+                    entry.into_inner(),
+                    title,
+                    publication,
+                    status,
+                )?;
 
                 self.answer_entry_repository
                     .update(&form_update, &updated_entry)
@@ -561,6 +566,29 @@ impl<
         let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
         self.build_answer_details(actor, form_id, form_answer, author_disclosure, labels)
             .await
+    }
+
+    pub async fn get_status_history(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        request: PageRequest<domain::form::answer::AnswerStatusHistoryPagePosition>,
+    ) -> Result<
+        Page<
+            Allowed<domain::form::answer::AnswerStatusHistoryEntry, Read>,
+            domain::form::answer::AnswerStatusHistoryPagePosition,
+        >,
+        Error,
+    > {
+        let actor = Actor::from(actor.clone());
+        let form = self.read_form(form_id, &actor).await?;
+        let answer = self
+            .answer_entry_repository
+            .get(&form, answer_id)
+            .await?
+            .ok_or(AnswerNotFound)?;
+        self.answer_entry_repository.history(&answer, request).await
     }
 }
 
@@ -1046,11 +1074,13 @@ mod tests {
                 &administrator,
                 None,
                 Some(AnswerPublication::PRIVATE),
+                Some(AnswerStatus::COMPLETED),
             )
             .await
             .unwrap();
 
         assert_eq!(updated.answer.publication, AnswerPublication::PRIVATE);
+        assert_eq!(updated.answer.status, AnswerStatus::COMPLETED);
         assert!(matches!(
             usecase.get_answers(form_id, answer_id, &third_party).await,
             Err(Error::Domain {

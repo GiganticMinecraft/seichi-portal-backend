@@ -5,11 +5,12 @@ use domain::{
     account::models::{AccountUser, Role},
     form::{
         answer::{
-            AnswerAuthor, AnswerEntry, AnswerId, RedmineImportedAnswerReference,
-            RedmineUserSnapshot, TemporaryAnswerAuthor,
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerStatusHistoryPagePosition,
+            RedmineImportedAnswerReference, RedmineUserSnapshot, TemporaryAnswerAuthor,
         },
         models::FormId,
     },
+    pagination::{Page, PageRequest},
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
@@ -23,7 +24,10 @@ use crate::{
         connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
-    records::{AnswerAuthorRecord, FormAnswerContentRecord, FormAnswerRecord, MessageRecord},
+    records::{
+        AnswerAuthorRecord, AnswerStatusHistoryRecord, FormAnswerContentRecord, FormAnswerRecord,
+        MessageRecord,
+    },
 };
 
 fn answer_author_columns(
@@ -384,7 +388,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answer_query_result_opt = sqlx::query!(
-                    r"SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,
+                    r"SELECT form_id, answers.id AS answer_id, title, publication, status, author_type, user,
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
@@ -438,6 +442,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             form_id: rs.form_id,
                             title: rs.title,
                             publication: rs.publication,
+                            status: rs.status,
                             contents,
                             messages: Vec::new(),
                             redmine_reference: rs
@@ -473,7 +478,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let sql = format!(
-                    "SELECT form_id, answers.id AS answer_id, title, publication, author_type, user,
+                    "SELECT form_id, answers.id AS answer_id, title, publication, status, author_type, user,
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
@@ -506,6 +511,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             form_id: rs.try_get("form_id")?,
                             title: rs.try_get("title")?,
                             publication: rs.try_get("publication")?,
+                            status: rs.try_get("status")?,
                             contents: Vec::new(),
                             messages: Vec::new(),
                             redmine_reference: rs
@@ -537,16 +543,17 @@ impl FormAnswerDatabase for ConnectionPool {
         &self,
         answer_entry: &AnswerEntry,
         form_id: FormId,
+        updated_by: &AccountUser,
     ) -> Result<(), InfraError> {
         let answer_id = answer_entry.id().to_owned().into_inner().to_string();
         let form_id = form_id.into_inner().to_string();
-        let (author_type, user, temporary_user_id, redmine_user_id, redmine_author_name) =
-            answer_author_columns(answer_entry);
         let redmine_issue_id = validated_redmine_issue_id(answer_entry)?;
         let temporary_user = answer_entry.author().temporary_user().cloned();
         let title = <Option<NonEmptyString> as Clone>::clone(&answer_entry.title().to_owned())
             .map(|title| title.into_inner());
         let publication = answer_entry.publication().to_string();
+        let status = answer_entry.status().to_string();
+        let updated_by = updated_by.clone();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
@@ -563,22 +570,43 @@ impl FormAnswerDatabase for ConnectionPool {
                     .await?;
                 }
 
-                sqlx::query!(
-                    r#"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id,
-                    redmine_user_id, redmine_author_name, title, publication)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                    title = VALUES(title),
-                    publication = VALUES(publication)"#,
+                let current = sqlx::query!(
+                    "SELECT status FROM answers WHERE id = ? AND form_id = ? FOR UPDATE",
                     answer_id,
                     form_id,
-                    author_type,
-                    user,
-                    temporary_user_id,
-                    redmine_user_id,
-                    redmine_author_name,
+                )
+                .fetch_optional(&mut **txn)
+                .await?
+                .ok_or_else(|| InfraError::Unexpected {
+                    cause: "answer to update was not found".to_string(),
+                })?;
+
+                if current.status != status {
+                    sqlx::query!(
+                        r"INSERT INTO form_answer_status_history
+                        (id, answer_id, from_status, to_status, changed_by_id, changed_by_name, changed_by_role)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        Uuid::now_v7().to_string(),
+                        answer_id,
+                        current.status,
+                        status,
+                        updated_by.id().to_string(),
+                        updated_by.name(),
+                        updated_by.role().to_string(),
+                    )
+                    .execute(&mut **txn)
+                    .await?;
+                }
+
+                sqlx::query!(
+                    r"UPDATE answers
+                    SET title = ?, publication = ?, status = ?
+                    WHERE id = ? AND form_id = ?",
                     title,
                     publication,
+                    status,
+                    answer_id,
+                    form_id,
                 )
                 .execute(&mut **txn)
                 .await?;
@@ -597,6 +625,60 @@ impl FormAnswerDatabase for ConnectionPool {
             })
         })
         .await
+    }
+
+    async fn fetch_status_history(
+        &self,
+        answer_id: AnswerId,
+        request: PageRequest<AnswerStatusHistoryPagePosition>,
+    ) -> Result<Page<AnswerStatusHistoryRecord, AnswerStatusHistoryPagePosition>, InfraError> {
+        let answer_id = answer_id.to_string();
+        let after = request
+            .after_position()
+            .map(|position| position.id().to_string());
+        let limit = request.limit();
+        let overfetch = limit.overfetch_value();
+        let rows = match after {
+            Some(after) => {
+                sqlx::query_as!(
+                    AnswerStatusHistoryRecord,
+                    r"SELECT id, answer_id, from_status, to_status, changed_by_id,
+                        changed_by_name, changed_by_role,
+                        changed_at AS `changed_at!: chrono::DateTime<chrono::Utc>`
+                    FROM form_answer_status_history
+                    WHERE answer_id = ? AND id < ?
+                    ORDER BY id DESC LIMIT ?",
+                    answer_id,
+                    after,
+                    overfetch,
+                )
+                .fetch_all(&self.rdb_pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as!(
+                    AnswerStatusHistoryRecord,
+                    r"SELECT id, answer_id, from_status, to_status, changed_by_id,
+                        changed_by_name, changed_by_role,
+                        changed_at AS `changed_at!: chrono::DateTime<chrono::Utc>`
+                    FROM form_answer_status_history
+                    WHERE answer_id = ?
+                    ORDER BY id DESC LIMIT ?",
+                    answer_id,
+                    overfetch,
+                )
+                .fetch_all(&self.rdb_pool)
+                .await?
+            }
+        };
+
+        Ok(Page::from_overfetched_items(rows, limit, |row| {
+            AnswerStatusHistoryPagePosition::new(
+                Uuid::parse_str(&row.id)
+                    .expect("history IDs stored by this service are valid UUIDs")
+                    .into(),
+            )
+        }))
     }
 
     #[tracing::instrument(skip_all)]

@@ -9,7 +9,9 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use domain::form::answer::{AnswerPagePosition, FormAnswerContent, FormAnswerContentId};
+use domain::form::answer::{
+    AnswerPagePosition, AnswerStatusHistoryPagePosition, FormAnswerContent, FormAnswerContentId,
+};
 use domain::{
     account::models::AccountUser,
     form::answer::TemporaryAnswerAuthor,
@@ -39,9 +41,12 @@ use crate::{
     handlers::error_handler::handle_error,
     schemas::form::{
         form_request_schemas::{
-            AnswerCreateSchema, AnswerListQuery, AnswerUpdateSchema, TemporaryAnswerCreateSchema,
+            AnswerCreateSchema, AnswerListQuery, AnswerUpdateSchema, HistoryListQuery,
+            TemporaryAnswerCreateSchema,
         },
-        form_response_schemas::{AnswerListPageResponse, FormAnswer},
+        form_response_schemas::{
+            AnswerListPageResponse, AnswerStatusHistoryPageResponse, FormAnswer,
+        },
     },
 };
 
@@ -172,6 +177,47 @@ impl IntoResponse for UpdateAnswerResponse {
 struct AnswerListCursor {
     after_timestamp: DateTime<Utc>,
     after_answer_id: uuid::Uuid,
+}
+
+#[derive(Deserialize, Serialize)]
+struct AnswerStatusHistoryCursor {
+    after_history_id: uuid::Uuid,
+}
+
+fn status_history_page_request(
+    query: HistoryListQuery,
+) -> Result<PageRequest<AnswerStatusHistoryPagePosition>, Error> {
+    let limit = match query.limit {
+        Some(limit) => PageLimit::try_new(limit)
+            .map_err(|error| bad_query(format!("Invalid limit: {}.", error.value())))?,
+        None => PageLimit::default_limit(),
+    };
+    let after = query
+        .cursor
+        .as_deref()
+        .map(|cursor| {
+            let decoded = URL_SAFE_NO_PAD
+                .decode(cursor)
+                .map_err(|_| bad_query("Invalid cursor."))?;
+            let cursor = serde_json::from_slice::<AnswerStatusHistoryCursor>(&decoded)
+                .map_err(|_| bad_query("Invalid cursor."))?;
+            Ok::<_, Error>(AnswerStatusHistoryPagePosition::new(
+                cursor.after_history_id.into(),
+            ))
+        })
+        .transpose()?;
+
+    Ok(PageRequest::new(after, limit))
+}
+
+fn encode_status_history_cursor(
+    position: AnswerStatusHistoryPagePosition,
+) -> Result<String, Error> {
+    let bytes = serde_json::to_vec(&AnswerStatusHistoryCursor {
+        after_history_id: position.id().into_inner(),
+    })
+    .map_err(|_| bad_query("Invalid cursor."))?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
 fn bad_query(message: impl Into<String>) -> Error {
@@ -310,6 +356,42 @@ pub async fn get_answer_handler(
         answer_details.form_id,
         answer_details.labels,
     )))
+}
+
+#[utoipa::path(
+    get,
+    path = "/forms/{form_id}/answers/{answer_id}/status/history",
+    summary = "回答の状態変更履歴を取得",
+    params(("form_id" = String, Path), ("answer_id" = String, Path), HistoryListQuery),
+    responses((status = 200, body = AnswerStatusHistoryPageResponse), BadRequest, Unauthorized, Forbidden, NotFound, InternalServerError),
+    security(("bearer" = [])),
+    tag = "Answers"
+)]
+pub async fn get_answer_status_history_handler(
+    Extension(user): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
+    query: Result<Query<HistoryListQuery>, axum::extract::rejection::QueryRejection>,
+) -> Result<Json<AnswerStatusHistoryPageResponse>, Response> {
+    let use_case = build_answer_use_case(&repository, None);
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
+    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
+    let request = status_history_page_request(query).map_err(handle_error)?;
+    let page = use_case
+        .get_status_history(&user, form_id, answer_id, request)
+        .await
+        .map_err(handle_error)?;
+    let (items, next) = page.into_parts();
+    Ok(Json(AnswerStatusHistoryPageResponse {
+        items: items
+            .into_iter()
+            .map(|entry| entry.into_inner().into())
+            .collect(),
+        next_cursor: next
+            .map(encode_status_history_cursor)
+            .transpose()
+            .map_err(handle_error)?,
+    }))
 }
 
 #[utoipa::path(
@@ -507,7 +589,14 @@ pub async fn update_answer_handler(
     let Json(schema) = json.map_err_to_error().map_err(handle_error)?;
 
     let answer_details = form_answer_use_case
-        .update_answer_meta(form_id, answer_id, &user, schema.title, schema.publication)
+        .update_answer_meta(
+            form_id,
+            answer_id,
+            &user,
+            schema.title,
+            schema.publication,
+            schema.status,
+        )
         .await
         .map_err(handle_error)?;
 

@@ -1,9 +1,9 @@
 use crate::{
     external::discord_api::DiscordAPI,
     records::{
-        ActiveFormRecord, AnswerLabelRecord, ArchivedFormRecord, CommentHistoryRecord,
-        CommentRecord, DiscordUserRecord, FormAnswerRecord, FormLabelRecord, MessageHistoryRecord,
-        MessageRecord, NotificationSettingsRecord,
+        ActiveFormRecord, AnswerLabelRecord, AnswerStatusHistoryRecord, ArchivedFormRecord,
+        CommentHistoryRecord, CommentRecord, DiscordUserRecord, FormAnswerRecord, FormLabelRecord,
+        MessageHistoryRecord, MessageRecord, NotificationSettingsRecord,
     },
 };
 use async_trait::async_trait;
@@ -145,7 +145,16 @@ pub trait FormAnswerDatabase: Send + Sync {
         &self,
         answer_entry: &AnswerEntry,
         form_id: FormId,
+        updated_by: &AccountUser,
     ) -> Result<(), InfraError>;
+    async fn fetch_status_history(
+        &self,
+        answer_id: AnswerId,
+        request: PageRequest<domain::form::answer::AnswerStatusHistoryPagePosition>,
+    ) -> Result<
+        Page<AnswerStatusHistoryRecord, domain::form::answer::AnswerStatusHistoryPagePosition>,
+        InfraError,
+    >;
     /// 回答 (`answers`) の件数を返す。
     async fn size(&self) -> Result<u32, InfraError>;
     /// 回答本文 (`real_answers`) の件数を返す。
