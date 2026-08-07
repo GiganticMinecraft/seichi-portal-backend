@@ -132,7 +132,7 @@ services:
       - seichi_portal
     restart: always
   debezium:
-    image: quay.io/debezium/server:3.6
+    image: quay.io/debezium/server:3.7
     ports:
       - "8080:8080"
     volumes:
