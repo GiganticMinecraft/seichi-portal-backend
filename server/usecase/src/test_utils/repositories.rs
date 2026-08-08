@@ -8,8 +8,8 @@ use domain::{
         FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
-            AnswerRelation, AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition,
-            ArchivedAnswerEntry, ReadableAnswerRelation,
+            AnswerRelation, AnswerStatus, AnswerStatusHistoryEntry,
+            AnswerStatusHistoryPagePosition, ArchivedAnswerEntry, ReadableAnswerRelation,
         },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
@@ -334,6 +334,7 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         &self,
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         let mut answers = self
             .answers
@@ -341,6 +342,7 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .unwrap()
             .iter()
             .filter(|answer| answer.form_id() == form.id())
+            .filter(|answer| status.is_none_or(|status| *answer.status() == status))
             .cloned()
             .filter_map(|answer| form.read_entry(answer).ok())
             .collect::<Vec<_>>();
@@ -366,6 +368,7 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         &self,
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         let forms_by_id = forms
             .iter()
@@ -377,6 +380,7 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .unwrap()
             .iter()
             .cloned()
+            .filter(|answer| status.is_none_or(|status| *answer.status() == status))
             .filter_map(|answer| {
                 forms_by_id
                     .get(&answer.form_id().into_inner())
@@ -461,7 +465,7 @@ mod answer_entry_repository_tests {
         account::models::Role,
         auth::Actor,
         form::{
-            answer::{AnswerAuthor, AnswerTitle},
+            answer::{AnswerAuthor, AnswerStatus, AnswerTitle},
             models::{AnswerSettings, AnswerVisibility, FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
@@ -504,11 +508,68 @@ mod answer_entry_repository_tests {
         }
     }
 
+    fn answer_with_status(
+        form: &ActiveForm,
+        id: u128,
+        timestamp: chrono::DateTime<Utc>,
+        status: AnswerStatus,
+    ) -> AnswerEntry {
+        unsafe {
+            AnswerEntry::from_raw_parts_with_status_and_redmine_reference(
+                Uuid::from_u128(id).into(),
+                *form.id(),
+                AnswerAuthor::AuthenticatedUser(Uuid::from_u128(id + 100).into()),
+                timestamp,
+                AnswerTitle::default(),
+                AnswerPublication::PUBLIC,
+                status,
+                Vec::new(),
+                None,
+            )
+        }
+    }
+
     fn ids(entries: Vec<Allowed<AnswerEntry, Read>>) -> Vec<Uuid> {
         entries
             .into_iter()
             .map(|entry| entry.id().into_inner())
             .collect()
+    }
+
+    #[tokio::test]
+    async fn list_filters_answers_by_status_before_paginating() {
+        let form = active_form("answers");
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer_with_status(&form, 1, timestamp, AnswerStatus::COMPLETED),
+            answer_with_status(
+                &form,
+                2,
+                timestamp - chrono::TimeDelta::seconds(1),
+                AnswerStatus::IN_PROGRESS,
+            ),
+            answer_with_status(
+                &form,
+                3,
+                timestamp - chrono::TimeDelta::seconds(2),
+                AnswerStatus::IN_PROGRESS,
+            ),
+        ]);
+        let form = AuthorizationGuard::from(form)
+            .try_read(Actor::System)
+            .unwrap();
+
+        let page = repository
+            .list_by_form(
+                &form,
+                PageRequest::first(PageLimit::try_new(1).unwrap()),
+                Some(AnswerStatus::IN_PROGRESS),
+            )
+            .await
+            .unwrap();
+        let (entries, next) = page.into_parts();
+        assert_eq!(ids(entries), vec![Uuid::from_u128(2)]);
+        assert!(next.is_some());
     }
 
     #[tokio::test]
@@ -531,12 +592,12 @@ mod answer_entry_repository_tests {
         let limit = PageLimit::try_new(2).unwrap();
 
         let first_page = repository
-            .list_all(&forms, PageRequest::first(limit))
+            .list_all(&forms, PageRequest::first(limit), None)
             .await
             .unwrap();
         let (first_entries, next) = first_page.into_parts();
         let second_page = repository
-            .list_all(&forms, PageRequest::after(next.unwrap(), limit))
+            .list_all(&forms, PageRequest::after(next.unwrap(), limit), None)
             .await
             .unwrap();
         let (second_entries, next) = second_page.into_parts();
@@ -577,7 +638,11 @@ mod answer_entry_repository_tests {
             .unwrap();
 
         let page = repository
-            .list_all(&[form], PageRequest::first(PageLimit::try_new(10).unwrap()))
+            .list_all(
+                &[form],
+                PageRequest::first(PageLimit::try_new(10).unwrap()),
+                None,
+            )
             .await
             .unwrap();
 
@@ -606,7 +671,11 @@ mod answer_entry_repository_tests {
             .unwrap();
 
         let page = repository
-            .list_all(&[form], PageRequest::first(PageLimit::try_new(2).unwrap()))
+            .list_all(
+                &[form],
+                PageRequest::first(PageLimit::try_new(2).unwrap()),
+                None,
+            )
             .await
             .unwrap();
 
@@ -637,7 +706,11 @@ mod answer_entry_repository_tests {
             .unwrap();
 
         let page = repository
-            .list_by_form(&form, PageRequest::first(PageLimit::try_new(2).unwrap()))
+            .list_by_form(
+                &form,
+                PageRequest::first(PageLimit::try_new(2).unwrap()),
+                None,
+            )
             .await
             .unwrap();
 
@@ -663,12 +736,12 @@ mod answer_entry_repository_tests {
         let limit = PageLimit::try_new(2).unwrap();
 
         let first_page = repository
-            .list_by_form(&form, PageRequest::first(limit))
+            .list_by_form(&form, PageRequest::first(limit), None)
             .await
             .unwrap();
         let (first_entries, next) = first_page.into_parts();
         let second_page = repository
-            .list_by_form(&form, PageRequest::after(next.unwrap(), limit))
+            .list_by_form(&form, PageRequest::after(next.unwrap(), limit), None)
             .await
             .unwrap();
         let (second_entries, next) = second_page.into_parts();

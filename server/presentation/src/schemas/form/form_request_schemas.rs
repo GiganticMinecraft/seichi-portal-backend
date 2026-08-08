@@ -66,6 +66,9 @@ pub struct AnswerListQuery {
     pub limit: Option<u32>,
     /// Cursor returned by the previous page
     pub cursor: Option<String>,
+    /// Limit results to the specified answer status
+    #[param(value_type = Option<String>)]
+    pub status: Option<AnswerStatus>,
 }
 
 #[derive(Deserialize, Debug, utoipa::IntoParams)]
