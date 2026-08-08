@@ -9,7 +9,11 @@ use utoipa_axum::routes;
 
 #[derive(OpenApi)]
 #[openapi(
-    info(title = "Seichi Portal API", version = "1.0.0"),
+    info(
+        title = "Seichi Portal API",
+        version = "1.0.0",
+        description = "## レートリミット\n\nAPI には、クライアント単位またはアカウント単位のレートリミットがあります。制限を超えた場合は `429 Too Many Requests` を返し、`Retry-After`、`RateLimit-Limit`、`RateLimit-Remaining`、`RateLimit-Reset` ヘッダーで再試行できる時刻を示します。\n\n- 未認証の GET: クライアント IP ごとに 1 分あたり 60 回\n- 一時回答の POST: クライアント IP ごとに 1 時間あたり 30 回、フォームごとに 1 時間あたり 10 回、クライアント IP ごとに 10 分あたり 5 回\n- セッション作成の POST: クライアント IP ごとに 1 時間あたり 10 回\n- 認証済みの GET: アカウントごとに 1 分あたり 600 回\n- 認証済みの書き込み: アカウントごとに 1 分あたり 120 回\n\n認証済みのリクエストはアカウント ID、未認証のリクエストはクライアント IP を基準に制限します。フロントエンドのプロキシがクライアント IP を転送する場合は、`X-Seichi-Proxy-Secret` が一致したときだけ `X-Seichi-Client-IP` を信頼します。"
+    ),
     components(schemas(
         presentation::schemas::error_response::ErrorResponse,
         presentation::schemas::error_response::ErrorRestriction,
