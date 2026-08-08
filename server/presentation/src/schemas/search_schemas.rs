@@ -1,4 +1,7 @@
-use domain::form::{answer::AnswerId, models::FormId};
+use domain::form::{
+    answer::{AnswerId, AnswerStatus},
+    models::FormId,
+};
 use serde::{Deserialize, Serialize};
 use types::non_empty_string::NonEmptyString;
 use usecase::models::{AnswerDetails, CrossSearchComment, CrossSearchOutput};
@@ -29,6 +32,9 @@ pub struct AnswerSearchQuery {
     #[serde(default)]
     #[schema(value_type = Option<String>, format = "uuid")]
     pub form_id: Option<FormId>,
+    #[serde(default)]
+    #[schema(value_type = Option<String>)]
+    pub status: Option<AnswerStatus>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -136,10 +142,28 @@ mod tests {
         .unwrap();
 
         assert_eq!(query.form_id, Some(form_id.into()));
+        assert_eq!(query.status, None);
 
         let query_without_form: AnswerSearchQuery =
             serde_json::from_value(serde_json::json!({ "query": "keyword" })).unwrap();
         assert_eq!(query_without_form.form_id, None);
+    }
+
+    #[test]
+    fn answer_search_query_accepts_and_rejects_status() {
+        let query: AnswerSearchQuery = serde_json::from_value(serde_json::json!({
+            "query": "keyword",
+            "status": "IN_PROGRESS",
+        }))
+        .unwrap();
+        assert_eq!(query.status, Some(AnswerStatus::IN_PROGRESS));
+        assert!(
+            serde_json::from_value::<AnswerSearchQuery>(serde_json::json!({
+                "query": "keyword",
+                "status": "INVALID",
+            }))
+            .is_err()
+        );
     }
 
     #[test]

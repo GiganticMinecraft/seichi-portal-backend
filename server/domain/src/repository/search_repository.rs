@@ -3,7 +3,7 @@ use errors::Error;
 use mockall::automock;
 
 use crate::{
-    form::models::FormId,
+    form::{answer::AnswerStatus, models::FormId},
     search::models::{
         AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
         NumberOfRecordsPerAggregate, SearchableFieldsWithOperation, UserSearchHit,
@@ -29,6 +29,7 @@ pub trait SearchRepository: Send + Sync + 'static {
         &self,
         query: &str,
         form_id: Option<FormId>,
+        status: Option<AnswerStatus>,
     ) -> Result<Vec<AnswerSearchHit>, Error>;
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, Error>;
     async fn sync_search_engine(&self, data: &[SearchableFieldsWithOperation])

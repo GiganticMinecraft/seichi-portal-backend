@@ -14,7 +14,7 @@ use domain::{
     account::models::AccountUser,
     auth::Actor,
     form::{
-        answer::{AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId},
+        answer::{AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerStatus},
         comment::Comment,
         comment_thread::CommentThread,
         models::{ActiveForm, FormId},
@@ -390,6 +390,7 @@ impl<
         account_user: &AccountUser,
         query: String,
         form_id: Option<FormId>,
+        status: Option<AnswerStatus>,
     ) -> Result<Vec<AnswerDetails>, Error> {
         let actor = Actor::from(account_user.clone());
         if let Some(form_id) = form_id {
@@ -403,7 +404,7 @@ impl<
 
         let hits = self
             .search_repository
-            .search_answers(&query, form_id)
+            .search_answers(&query, form_id, status)
             .await?;
         let answer_ids = unique_answer_ids(hits.iter().map(|hit| hit.answer_id));
         let visible_answers_by_id = self
@@ -425,7 +426,7 @@ impl<
             self.search_repository.search_users(&query),
             self.search_repository.search_labels_for_forms(&query),
             self.search_repository.search_labels_for_answers(&query),
-            self.search_repository.search_answers(&query, None),
+            self.search_repository.search_answers(&query, None, None),
             self.search_repository.search_comments(&query)
         )?;
 
@@ -743,6 +744,7 @@ fn answer_search_documents(
                     id: *entry.id(),
                     form_id: *entry.form_id(),
                     title: entry.title().clone(),
+                    status: *entry.status(),
                 }),
                 Operation::Update,
             ))
@@ -753,6 +755,7 @@ fn answer_search_documents(
                         answer_id: *entry.id(),
                         question_id: content.question_id,
                         answer: content.answer.to_owned(),
+                        status: *entry.status(),
                     }),
                     Operation::Update,
                 )
@@ -866,7 +869,7 @@ mod tests {
             .returning(|_| Ok(vec![]));
         search_repository
             .expect_search_answers()
-            .returning(|_, _| Ok(vec![]));
+            .returning(|_, _, _| Ok(vec![]));
         search_repository
             .expect_search_comments()
             .returning(|_| Ok(vec![]));
@@ -957,8 +960,8 @@ mod tests {
         let mut search_repository = MockSearchRepository::new();
         search_repository
             .expect_search_answers()
-            .withf(move |_, form_id| *form_id == Some(readable_form_id))
-            .returning(move |_, _| {
+            .withf(move |_, form_id, _| *form_id == Some(readable_form_id))
+            .returning(move |_, _, _| {
                 Ok(vec![
                     AnswerSearchHit {
                         answer_id: visible_answer_b_id,
@@ -1023,7 +1026,7 @@ mod tests {
         };
 
         let answers = use_case
-            .search_answers(&actor, "answer".to_string(), Some(readable_form_id))
+            .search_answers(&actor, "answer".to_string(), Some(readable_form_id), None)
             .await
             .unwrap();
 
@@ -1078,7 +1081,7 @@ mod tests {
         let mut search_repository = MockSearchRepository::new();
         search_repository
             .expect_search_answers()
-            .return_once(move |_, _| Ok(vec![AnswerSearchHit { answer_id }]));
+            .return_once(move |_, _, _| Ok(vec![AnswerSearchHit { answer_id }]));
         let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
         let mut answer_label_repository = MockAnswerLabelRepository::new();
         answer_label_repository
@@ -1099,7 +1102,7 @@ mod tests {
         };
 
         let answers = use_case
-            .search_answers(&actor, "answer".to_string(), Some(form_id))
+            .search_answers(&actor, "answer".to_string(), Some(form_id), None)
             .await
             .unwrap();
 
@@ -1137,7 +1140,7 @@ mod tests {
         };
 
         let answers = use_case
-            .search_answers(&actor, "answer".to_string(), Some(missing_form_id))
+            .search_answers(&actor, "answer".to_string(), Some(missing_form_id), None)
             .await
             .unwrap();
 
@@ -1174,7 +1177,7 @@ mod tests {
         };
 
         let answers = use_case
-            .search_answers(&actor, "answer".to_string(), Some(unreadable_form_id))
+            .search_answers(&actor, "answer".to_string(), Some(unreadable_form_id), None)
             .await
             .unwrap();
 
@@ -1238,7 +1241,7 @@ mod tests {
             .returning(|_| Ok(vec![]));
         search_repository
             .expect_search_answers()
-            .returning(move |_, _| {
+            .returning(move |_, _, _| {
                 Ok(vec![
                     AnswerSearchHit {
                         answer_id: missing_author_answer_id,
@@ -1348,7 +1351,7 @@ mod tests {
             .returning(|_| Ok(vec![]));
         search_repository
             .expect_search_answers()
-            .returning(move |_, _| {
+            .returning(move |_, _, _| {
                 Ok(vec![
                     AnswerSearchHit { answer_id },
                     AnswerSearchHit { answer_id },
@@ -1538,7 +1541,7 @@ mod tests {
             .returning(|_| Ok(vec![]));
         search_repository
             .expect_search_answers()
-            .returning(|_, _| Ok(vec![]));
+            .returning(|_, _, _| Ok(vec![]));
         search_repository
             .expect_search_comments()
             .returning(move |_| {
@@ -1675,7 +1678,7 @@ mod tests {
             .returning(|_| Ok(vec![]));
         search_repository
             .expect_search_answers()
-            .returning(move |_, _| Ok(vec![AnswerSearchHit { answer_id }]));
+            .returning(move |_, _, _| Ok(vec![AnswerSearchHit { answer_id }]));
         search_repository
             .expect_search_comments()
             .returning(move |_| {

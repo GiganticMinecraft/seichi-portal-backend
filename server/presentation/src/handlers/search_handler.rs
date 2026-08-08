@@ -174,6 +174,7 @@ pub async fn search_users(
     params(
         ("query" = String, Query, description = "Search query"),
         ("form_id" = Option<String>, Query, format = "uuid", description = "Limit results to the specified form"),
+        ("status" = Option<String>, Query, description = "Limit results to the specified answer status"),
     ),
     responses(
         AnswerSearchResponse,
@@ -211,7 +212,7 @@ pub async fn search_answers(
         })?;
 
     let answers = search_use_case
-        .search_answers(&user, query, search_query.form_id)
+        .search_answers(&user, query, search_query.form_id, search_query.status)
         .await
         .map_err(handle_error)?;
 

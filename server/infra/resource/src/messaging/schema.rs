@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use domain::search::models::SearchableFields;
+use domain::{form::answer::AnswerStatus, search::models::SearchableFields};
 use errors::infra::InfraError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -141,6 +141,8 @@ pub struct AnswerTitleSearchDocument {
     pub id: String,
     pub form_id: String,
     pub title: Option<NonEmptyString>,
+    #[serde(default)]
+    pub status: AnswerStatus,
 }
 
 impl From<domain::search::models::AnswerTitleSearchDocument> for AnswerTitleSearchDocument {
@@ -149,6 +151,7 @@ impl From<domain::search::models::AnswerTitleSearchDocument> for AnswerTitleSear
             id: answer.id.to_string(),
             form_id: answer.form_id.to_string(),
             title: answer.title.into_inner(),
+            status: answer.status,
         }
     }
 }
@@ -161,6 +164,7 @@ impl TryFrom<AnswerTitleSearchDocument> for domain::search::models::AnswerTitleS
             id: Uuid::from_str(&answer.id)?.into(),
             form_id: Uuid::from_str(&answer.form_id)?.into(),
             title: domain::form::answer::AnswerTitle::new(answer.title),
+            status: answer.status,
         })
     }
 }
@@ -171,6 +175,8 @@ pub struct RealAnswers {
     pub answer_id: String,
     pub question_id: String,
     pub answer: String,
+    #[serde(default)]
+    pub status: AnswerStatus,
 }
 
 impl From<domain::search::models::RealAnswers> for RealAnswers {
@@ -180,6 +186,7 @@ impl From<domain::search::models::RealAnswers> for RealAnswers {
             answer_id: real_answers.answer_id.to_string(),
             question_id: real_answers.question_id.into_inner().to_string(),
             answer: real_answers.answer,
+            status: real_answers.status,
         }
     }
 }
@@ -193,6 +200,7 @@ impl TryFrom<RealAnswers> for domain::search::models::RealAnswers {
             answer_id: Uuid::from_str(&real_answers.answer_id)?.into(),
             question_id: Uuid::from_str(&real_answers.question_id)?.into(),
             answer: real_answers.answer,
+            status: real_answers.status,
         })
     }
 }
@@ -395,8 +403,64 @@ mod tests {
         assert_eq!(document.id.into_inner(), answer_id);
         assert_eq!(document.form_id.into_inner(), form_id);
         assert_eq!(
+            document.status,
+            domain::form::answer::AnswerStatus::UNADDRESSED
+        );
+        assert_eq!(
             serde_json::to_value(document.title).unwrap(),
             json!("検索できるタイトル")
+        );
+    }
+
+    #[test]
+    fn answers_payload_preserves_status_and_old_payload_defaults_to_unaddressed() {
+        let answer_id = Uuid::from_u128(1);
+        let form_id = Uuid::from_u128(2);
+        let schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": "u",
+                "source": { "table": "answers" },
+                "before": null,
+                "after": {
+                    "id": answer_id.to_string(),
+                    "form_id": form_id.to_string(),
+                    "title": "検索できるタイトル",
+                    "status": "COMPLETED"
+                }
+            }
+        }))
+        .unwrap();
+        let actual = schema.payload.try_into_after().unwrap().unwrap();
+        let SearchableFields::AnswerTitle(document) = SearchableFields::try_from(actual).unwrap()
+        else {
+            panic!("answers payload must become a title document");
+        };
+        assert_eq!(
+            document.status,
+            domain::form::answer::AnswerStatus::COMPLETED
+        );
+
+        let old_schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": "u",
+                "source": { "table": "answers" },
+                "before": null,
+                "after": {
+                    "id": answer_id.to_string(),
+                    "form_id": form_id.to_string(),
+                    "title": "旧ペイロード"
+                }
+            }
+        }))
+        .unwrap();
+        let actual = old_schema.payload.try_into_after().unwrap().unwrap();
+        let SearchableFields::AnswerTitle(document) = SearchableFields::try_from(actual).unwrap()
+        else {
+            panic!("answers payload must become a title document");
+        };
+        assert_eq!(
+            document.status,
+            domain::form::answer::AnswerStatus::UNADDRESSED
         );
     }
 
