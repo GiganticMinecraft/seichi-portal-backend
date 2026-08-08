@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::account::models::UserGroupId;
 use domain::form::{
-    answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication},
+    answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerStatus},
     models::{ArchivedFormPagePosition, FormLabelId, FormPagePosition, FormSettings},
     question::{Choice, Question, QuestionId, QuestionType},
 };
@@ -444,8 +444,10 @@ async fn fetch_answer_entries_page(
     txn: &mut DatabaseTransaction,
     form_id: Option<FormId>,
     request: PageRequest<AnswerPagePosition>,
+    status: Option<AnswerStatus>,
 ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
     let form_id = form_id.map(|form_id| form_id.into_inner().to_string());
+    let status = status.map(|status| status.to_string());
     let (after_timestamp, after_answer_id) = request
         .after_position()
         .map(|position| {
@@ -471,6 +473,7 @@ async fn fetch_answer_entries_page(
         LEFT JOIN redmine_imported_answer_references redmine_reference
             ON redmine_reference.answer_id = answers.id
         WHERE (? IS NULL OR answers.form_id = ?)
+            AND (? IS NULL OR answers.status = ?)
             AND (
                 ? IS NULL
                 OR answers.timestamp < ?
@@ -480,6 +483,8 @@ async fn fetch_answer_entries_page(
         LIMIT ?",
         form_id.as_deref(),
         form_id.as_deref(),
+        status.as_deref(),
+        status.as_deref(),
         after_timestamp,
         after_timestamp,
         after_timestamp,
@@ -1494,9 +1499,12 @@ impl FormDatabase for ConnectionPool {
         &self,
         form_id: FormId,
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(async move { fetch_answer_entries_page(txn, Some(form_id), request).await })
+            Box::pin(
+                async move { fetch_answer_entries_page(txn, Some(form_id), request, status).await },
+            )
         })
         .await
     }
@@ -1505,9 +1513,10 @@ impl FormDatabase for ConnectionPool {
     async fn list_all_answer_entries(
         &self,
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(async move { fetch_answer_entries_page(txn, None, request).await })
+            Box::pin(async move { fetch_answer_entries_page(txn, None, request, status).await })
         })
         .await
     }

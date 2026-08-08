@@ -5,7 +5,7 @@ use mockall::automock;
 use crate::{
     form::{
         answer::{
-            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatusHistoryEntry,
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusHistoryEntry,
             AnswerStatusHistoryPagePosition,
         },
         models::ActiveForm,
@@ -36,11 +36,13 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         &self,
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error>;
     async fn list_all(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error>;
     async fn post(
         &self,

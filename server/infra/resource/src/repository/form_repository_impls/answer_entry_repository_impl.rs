@@ -84,6 +84,7 @@ where
         &self,
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         let mut scan_cursor = request.after_position().copied();
         let mut authorized_entries = Vec::new();
@@ -92,7 +93,11 @@ where
             let page = self
                 .client
                 .form()
-                .list_answer_entries(*form.id(), PageRequest::new(scan_cursor, request.limit()))
+                .list_answer_entries(
+                    *form.id(),
+                    PageRequest::new(scan_cursor, request.limit()),
+                    status,
+                )
                 .await?;
             let (entries, next_raw) = page.into_parts();
             authorized_entries.extend(
@@ -127,6 +132,7 @@ where
         &self,
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         if forms.is_empty() {
             return Ok(Page::new(Vec::new(), None));
@@ -143,7 +149,7 @@ where
             let page = self
                 .client
                 .form()
-                .list_all_answer_entries(PageRequest::new(scan_cursor, request.limit()))
+                .list_all_answer_entries(PageRequest::new(scan_cursor, request.limit()), status)
                 .await?;
             let (entries, next_raw) = page.into_parts();
             authorized_entries.extend(entries.into_iter().filter_map(|entry| {

@@ -101,10 +101,12 @@ pub trait FormDatabase: Send + Sync {
         &self,
         form_id: FormId,
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError>;
     async fn list_all_answer_entries(
         &self,
         request: PageRequest<AnswerPagePosition>,
+        status: Option<AnswerStatus>,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError>;
 }
 

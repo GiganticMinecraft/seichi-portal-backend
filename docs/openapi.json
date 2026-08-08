@@ -475,6 +475,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Limit results to the specified answer status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -852,6 +861,15 @@
             "name": "cursor",
             "in": "query",
             "description": "Cursor returned by the previous page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Limit results to the specified answer status",
             "required": false,
             "schema": {
               "type": "string"
