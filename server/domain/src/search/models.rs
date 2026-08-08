@@ -1,7 +1,7 @@
 use crate::account::models::UserId;
 use crate::form::answer::FormAnswerContentId;
 use crate::form::{
-    answer::{AnswerId, AnswerLabelId, AnswerTitle},
+    answer::{AnswerId, AnswerLabelId, AnswerStatus, AnswerTitle},
     comment::CommentId,
     models::{FormDescription, FormId, FormLabelId, FormTitle},
     question::QuestionId,
@@ -45,6 +45,8 @@ pub struct AnswerTitleSearchDocument {
     pub id: AnswerId,
     pub form_id: FormId,
     pub title: AnswerTitle,
+    #[serde(default)]
+    pub status: AnswerStatus,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -53,6 +55,8 @@ pub struct RealAnswers {
     pub answer_id: AnswerId,
     pub question_id: QuestionId,
     pub answer: String,
+    #[serde(default)]
+    pub status: AnswerStatus,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

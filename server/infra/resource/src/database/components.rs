@@ -21,7 +21,8 @@ use domain::{
         FormSubmissionRestriction,
         answer::{
             AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerPagePosition,
-            AnswerPublication, AnswerReference, AnswerRelation, AnswerStatusHistoryPagePosition,
+            AnswerPublication, AnswerReference, AnswerRelation, AnswerStatus,
+            AnswerStatusHistoryPagePosition,
         },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
@@ -368,6 +369,7 @@ pub trait SearchDatabase: Send + Sync {
         &self,
         query: &str,
         form_id: Option<FormId>,
+        status: Option<AnswerStatus>,
     ) -> Result<Vec<AnswerSearchHit>, InfraError>;
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError>;
     async fn sync_search_engine(
