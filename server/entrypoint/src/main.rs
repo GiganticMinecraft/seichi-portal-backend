@@ -3,7 +3,7 @@ use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
 use axum::{
     Json, Router,
     http::{
-        Method, StatusCode,
+        HeaderName, Method, StatusCode,
         header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
     },
     middleware,
@@ -26,6 +26,8 @@ use presentation::handlers::form::message_handler::{
 use presentation::handlers::search_handler::{
     initialize_search_engine, start_sync, start_watch_out_of_sync,
 };
+use presentation::rate_limit::{RateLimitState, middleware as rate_limit_middleware};
+use resource::rate_limit::ValkeyRateLimitStore;
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use serde_json::json;
 use serenity::all::ShardManager;
@@ -103,6 +105,13 @@ async fn main() -> anyhow::Result<()> {
     ));
     let shared_repository = Repository::new(conn).into_shared(health_check_repo);
 
+    let rate_limit_store =
+        Arc::new(ValkeyRateLimitStore::from_environment().map_err(|error| {
+            anyhow::anyhow!("invalid Valkey rate-limit configuration: {error:?}")
+        })?);
+    let proxy_secret = std::env::var("SEICHI_PROXY_SECRET").ok();
+    let rate_limit_state = RateLimitState::new(rate_limit_store, proxy_secret);
+
     let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;
     let notificator = DiscordNotificator::new(discord_sender, shared_repository.to_owned());
     let _global_discord_webhook_worker =
@@ -112,25 +121,44 @@ async fn main() -> anyhow::Result<()> {
 
     let openapi = openapi::versioned_api_router().into_openapi();
 
-    let (public_api, _) = openapi::public_api_router()
-        .with_state(shared_repository.to_owned())
-        .split_for_parts();
-
     let (optional_auth_api, _) = openapi::optional_auth_api_router()
         .with_state(shared_repository.to_owned())
         .split_for_parts();
-    let optional_auth_api = optional_auth_api.route_layer(middleware::from_fn_with_state(
-        shared_repository.to_owned(),
-        optional_auth,
-    ));
+    let optional_auth_api = optional_auth_api
+        .route_layer(middleware::from_fn_with_state(
+            rate_limit_state.clone(),
+            rate_limit_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            shared_repository.to_owned(),
+            optional_auth,
+        ));
 
     let (authenticated_api, _) = openapi::authenticated_api_router()
         .with_state(shared_repository.to_owned())
         .split_for_parts();
-    let authenticated_api = authenticated_api.route_layer(middleware::from_fn_with_state(
-        shared_repository.to_owned(),
-        auth,
-    ));
+    let authenticated_api = authenticated_api
+        .route_layer(middleware::from_fn_with_state(
+            rate_limit_state.clone(),
+            rate_limit_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            shared_repository.to_owned(),
+            auth,
+        ));
+
+    let (authenticated_session_api, _) = openapi::authenticated_session_api_router()
+        .with_state(shared_repository.to_owned())
+        .split_for_parts();
+    let authenticated_session_api = authenticated_session_api
+        .route_layer(middleware::from_fn_with_state(
+            rate_limit_state.clone(),
+            rate_limit_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            shared_repository.to_owned(),
+            auth,
+        ));
 
     // post_message_handler uses a different State type, so register it separately
     let message_post_router = Router::new()
@@ -138,6 +166,10 @@ async fn main() -> anyhow::Result<()> {
             "/forms/{form_id}/answers/{answer_id}/messages",
             post(post_message_handler),
         )
+        .route_layer(middleware::from_fn_with_state(
+            rate_limit_state.clone(),
+            rate_limit_middleware,
+        ))
         .route_layer(middleware::from_fn_with_state(
             shared_repository.to_owned(),
             auth,
@@ -147,6 +179,14 @@ async fn main() -> anyhow::Result<()> {
             notificator,
         )));
 
+    let (public_api, _) = openapi::public_api_router()
+        .with_state(shared_repository.to_owned())
+        .split_for_parts();
+    let public_api = public_api.route_layer(middleware::from_fn_with_state(
+        rate_limit_state,
+        rate_limit_middleware,
+    ));
+
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .route("/health", get(health_check_handler::health_check))
@@ -155,6 +195,7 @@ async fn main() -> anyhow::Result<()> {
             public_api
                 .merge(optional_auth_api)
                 .merge(authenticated_api)
+                .merge(authenticated_session_api)
                 .merge(message_post_router),
         )
         .fallback(not_found_handler)
@@ -174,8 +215,20 @@ async fn main() -> anyhow::Result<()> {
                     Method::PUT,
                 ])
                 .allow_origin(Any) // todo: allow_originを制限する
-                .allow_headers([CONTENT_TYPE, AUTHORIZATION])
-                .expose_headers([LOCATION, SET_COOKIE]),
+                .allow_headers([
+                    CONTENT_TYPE,
+                    AUTHORIZATION,
+                    HeaderName::from_static("x-seichi-proxy-secret"),
+                    HeaderName::from_static("x-seichi-client-ip"),
+                ])
+                .expose_headers([
+                    LOCATION,
+                    SET_COOKIE,
+                    HeaderName::from_static("retry-after"),
+                    HeaderName::from_static("ratelimit-limit"),
+                    HeaderName::from_static("ratelimit-remaining"),
+                    HeaderName::from_static("ratelimit-reset"),
+                ]),
         )
         .with_state(shared_repository.to_owned());
 
@@ -191,13 +244,16 @@ async fn main() -> anyhow::Result<()> {
 
     let (_discord, _axum, _syncer, _messaging, _auto_of_sync_watcher) = join!(
         discord_connection.pool.start(),
-        axum::serve(listener, app)
-            .with_graceful_shutdown(graceful_handler(
-                shared_manager,
-                messaging_conn.clone(),
-                shutdown_notifier.clone(),
-            ))
-            .into_future(),
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(graceful_handler(
+            shared_manager,
+            messaging_conn.clone(),
+            shutdown_notifier.clone(),
+        ))
+        .into_future(),
         start_sync(
             shared_repository.to_owned(),
             receiver,

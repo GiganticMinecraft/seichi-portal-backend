@@ -106,10 +106,13 @@ pub fn public_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
 
     OpenApiRouter::new()
         .routes(routes!(answer_handler::post_temporary_answer_handler))
-        .routes(routes!(
-            user_handler::start_session,
-            user_handler::end_session
-        ))
+        .routes(routes!(user_handler::start_session))
+}
+
+pub fn authenticated_session_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
+    use presentation::handlers::user_handler;
+
+    OpenApiRouter::new().routes(routes!(user_handler::end_session))
 }
 
 pub fn optional_auth_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
@@ -229,6 +232,7 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
 pub fn versioned_api_router() -> OpenApiRouter<RealInfrastructureRepository> {
     let combined = OpenApiRouter::with_openapi(ManuallyRegisteredApiDoc::openapi())
         .merge(public_api_router())
+        .merge(authenticated_session_api_router())
         .merge(optional_auth_api_router())
         .merge(authenticated_api_router());
     OpenApiRouter::with_openapi(ApiMetadata::openapi()).nest("/api/v1", combined)

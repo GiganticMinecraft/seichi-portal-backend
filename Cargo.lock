@@ -719,6 +719,7 @@ dependencies = [
 name = "common"
 version = "0.2.3"
 dependencies = [
+ "async-trait",
  "chrono",
  "envy",
  "proptest",
