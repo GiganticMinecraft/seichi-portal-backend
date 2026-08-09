@@ -13,7 +13,7 @@ use axum::{
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
-use entrypoint::{logging, openapi, panic_hook, profiling, telemetry};
+use entrypoint::{logging, openapi, panic_hook, profiling, telemetry, turnstile::TurnstileConfig};
 use futures::join;
 use hyper::header::SET_COOKIE;
 use opentelemetry::trace::TracerProvider as _;
@@ -27,7 +27,9 @@ use presentation::handlers::search_handler::{
     initialize_search_engine, start_sync, start_watch_out_of_sync,
 };
 use presentation::rate_limit::{RateLimitState, middleware as rate_limit_middleware};
+use presentation::turnstile::{TurnstileState, middleware as turnstile_middleware};
 use resource::rate_limit::ValkeyRateLimitStore;
+use resource::turnstile::TurnstileSiteverifyClient;
 use resource::{database::connection::ConnectionPool, repository::Repository};
 use serde_json::json;
 use serenity::all::ShardManager;
@@ -46,6 +48,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let turnstile_config = TurnstileConfig::from_environment()?;
     let tracer_provider = telemetry::init_tracer_provider();
 
     // SQL 文の出力 (bind 値を含みうる) はログへ出さない
@@ -111,6 +114,16 @@ async fn main() -> anyhow::Result<()> {
         })?);
     let proxy_secret = std::env::var("SEICHI_PROXY_SECRET").ok();
     let rate_limit_state = RateLimitState::new(rate_limit_store, proxy_secret);
+    let turnstile_state = match turnstile_config {
+        TurnstileConfig::Disabled => TurnstileState::disabled(),
+        TurnstileConfig::Enabled {
+            secret_key,
+            allowed_hostnames,
+        } => TurnstileState::enabled(
+            Arc::new(TurnstileSiteverifyClient::new(secret_key)),
+            allowed_hostnames,
+        ),
+    };
 
     let discord_sender = resource::outgoing::connection::ConnectionPool::new().await;
     let notificator = DiscordNotificator::new(discord_sender, shared_repository.to_owned());
@@ -182,10 +195,16 @@ async fn main() -> anyhow::Result<()> {
     let (public_api, _) = openapi::public_api_router()
         .with_state(shared_repository.to_owned())
         .split_for_parts();
-    let public_api = public_api.route_layer(middleware::from_fn_with_state(
-        rate_limit_state,
-        rate_limit_middleware,
-    ));
+    let public_api = public_api
+        // route_layer は後から追加した layer が外側になるため、rate limit -> Turnstile -> handler の順にする。
+        .route_layer(middleware::from_fn_with_state(
+            turnstile_state,
+            turnstile_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            rate_limit_state,
+            rate_limit_middleware,
+        ));
 
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
@@ -220,6 +239,7 @@ async fn main() -> anyhow::Result<()> {
                     AUTHORIZATION,
                     HeaderName::from_static("x-seichi-proxy-secret"),
                     HeaderName::from_static("x-seichi-client-ip"),
+                    HeaderName::from_static("x-seichi-turnstile-token"),
                 ])
                 .expose_headers([
                     LOCATION,

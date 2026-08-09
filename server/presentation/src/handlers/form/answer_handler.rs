@@ -511,6 +511,7 @@ pub async fn post_answer_handler(
     summary = "未ログイン回答の作成",
     params(
         ("form_id" = String, Path, description = "Form ID"),
+        ("X-Seichi-Turnstile-Token" = String, Header, description = "Cloudflare Turnstile token"),
     ),
     request_body = TemporaryAnswerCreateSchema,
     responses(
@@ -520,6 +521,7 @@ pub async fn post_answer_handler(
         NotFound,
         UnprocessableEntity,
         InternalServerError,
+        ServiceUnavailable,
     ),
     tag = "Answers"
 )]
