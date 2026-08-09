@@ -2908,6 +2908,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-Seichi-Turnstile-Token",
+            "in": "header",
+            "description": "Cloudflare Turnstile token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -2966,6 +2975,16 @@
           },
           "500": {
             "description": "Server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is temporarily unable to handle the request.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4339,6 +4358,17 @@
         ],
         "summary": "セッションを作成する",
         "operationId": "start_session",
+        "parameters": [
+          {
+            "name": "X-Seichi-Turnstile-Token",
+            "in": "header",
+            "description": "Cloudflare Turnstile token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4373,6 +4403,16 @@
               }
             }
           },
+          "403": {
+            "description": "Access is forbidden.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "The server cannot find the requested resource.",
             "content": {
@@ -4395,6 +4435,16 @@
           },
           "500": {
             "description": "Server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is temporarily unable to handle the request.",
             "content": {
               "application/problem+json": {
                 "schema": {

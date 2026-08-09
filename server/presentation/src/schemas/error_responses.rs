@@ -59,3 +59,13 @@ pub enum InternalServerError {
     )]
     InternalServerError(ErrorResponse),
 }
+
+#[derive(utoipa::IntoResponses)]
+pub enum ServiceUnavailable {
+    #[response(
+        status = 503,
+        description = "The server is temporarily unable to handle the request.",
+        content_type = "application/problem+json"
+    )]
+    ServiceUnavailable(ErrorResponse),
+}

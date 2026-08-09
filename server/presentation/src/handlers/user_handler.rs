@@ -895,14 +895,19 @@ pub async fn delete_form_submission_restriction(
     post,
     path = "/session",
     summary = "セッションを作成する",
+    params(
+        ("X-Seichi-Turnstile-Token" = String, Header, description = "Cloudflare Turnstile token"),
+    ),
     request_body = super::super::schemas::session::SessionCreateSchema,
     responses(
         (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
         BadRequest,
         Unauthorized,
+        Forbidden,
         NotFound,
         UnprocessableEntity,
         InternalServerError,
+        ServiceUnavailable,
     ),
     security(("bearer" = [])),
     tag = "Session"
