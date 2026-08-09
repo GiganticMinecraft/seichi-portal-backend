@@ -1,6 +1,6 @@
 use chrono::Utc;
 use common::config::FRONTEND;
-use domain::form::models::FormId;
+use domain::form::models::{ActiveForm, FormId};
 use domain::notification::models::{NotificationContent, NotificationType};
 use domain::notification::notificator::Notificator;
 use domain::{
@@ -84,12 +84,12 @@ impl<
     R5: MessageThreadRepository,
 > MessageUseCase<'_, R1, R2, R3, R4, R5>
 {
-    async fn read_answer_entry(
+    async fn read_form_and_answer_entry(
         &self,
         actor: &Actor,
         form_id: FormId,
         answer_id: AnswerId,
-    ) -> Result<Allowed<AnswerEntry, Read>, Error> {
+    ) -> Result<(Allowed<ActiveForm, Read>, Allowed<AnswerEntry, Read>), Error> {
         let form = self
             .active_form_repository
             .get(form_id)
@@ -97,11 +97,13 @@ impl<
             .ok_or(FormNotFound)?
             .try_read(actor.clone())?;
 
-        self.answer_entry_repository
+        let answer = self
+            .answer_entry_repository
             .get(&form, answer_id)
             .await?
-            .ok_or(AnswerNotFound)
-            .map_err(Into::into)
+            .ok_or(AnswerNotFound)?;
+
+        Ok((form, answer))
     }
 
     pub async fn post_message<N: Notificator>(
@@ -115,9 +117,10 @@ impl<
     ) -> Result<(), Error> {
         super::submission::authorize_form_submission(actor.clone(), restriction_repository).await?;
         let actor_user = Actor::from(actor.clone());
-        let form_answer = self
-            .read_answer_entry(&actor_user, form_id, answer_id)
+        let (form, form_answer) = self
+            .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
+        let form_title = form.title().to_owned().into_inner().into_inner();
 
         let message = Message::new(*actor.id(), message_body);
         let message_id = message.id().to_string();
@@ -145,6 +148,7 @@ impl<
             publisher.publish(ApplicationEvent::MessageCreated {
                 actor: ApplicationActor::from(actor),
                 form_id: form_id.to_string(),
+                form_title,
                 answer_id: answer_id.to_string(),
                 message_id,
                 body: message_body,
@@ -203,8 +207,8 @@ impl<
         answer_id: AnswerId,
     ) -> Result<Vec<MessageWithSender>, Error> {
         let actor_user = Actor::from(actor.clone());
-        let form_answer = self
-            .read_answer_entry(&actor_user, form_id, answer_id)
+        let (_, form_answer) = self
+            .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         let messages = self
@@ -238,8 +242,8 @@ impl<
         body: Option<MessageBody>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let form_answer = self
-            .read_answer_entry(&actor_user, form_id, answer_id)
+        let (form, form_answer) = self
+            .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         if let Some(body) = body {
@@ -265,6 +269,7 @@ impl<
                 publisher.publish(ApplicationEvent::MessageUpdated {
                     actor: ApplicationActor::from(actor),
                     form_id: form_id.to_string(),
+                    form_title: form.title().to_owned().into_inner().into_inner(),
                     answer_id: answer_id.to_string(),
                     message_id: message_id.to_string(),
                     body: body_for_event,
@@ -283,8 +288,8 @@ impl<
         message_id: &MessageId,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let form_answer = self
-            .read_answer_entry(&actor_user, form_id, answer_id)
+        let (form, form_answer) = self
+            .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
 
         let thread = self
@@ -308,6 +313,7 @@ impl<
             publisher.publish(ApplicationEvent::MessageDeleted {
                 actor: ApplicationActor::from(actor),
                 form_id: form_id.to_string(),
+                form_title: form.title().to_owned().into_inner().into_inner(),
                 answer_id: answer_id.to_string(),
                 message_id: message_id.to_string(),
                 body: message_body,
@@ -325,8 +331,8 @@ impl<
         request: PageRequest<MessageHistoryPagePosition>,
     ) -> Result<Page<Allowed<MessageHistoryEntry, Read>, MessageHistoryPagePosition>, Error> {
         let actor_user = Actor::from(actor.clone());
-        let form_answer = self
-            .read_answer_entry(&actor_user, form_id, answer_id)
+        let (_, form_answer) = self
+            .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
         let thread = self
             .message_thread_repository
