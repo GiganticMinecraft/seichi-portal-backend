@@ -80,6 +80,7 @@ pub enum ApplicationEvent {
     CommentCreated {
         actor: ApplicationActor,
         form_id: String,
+        form_title: String,
         answer_id: String,
         comment_id: String,
         content: String,
@@ -87,6 +88,7 @@ pub enum ApplicationEvent {
     CommentUpdated {
         actor: ApplicationActor,
         form_id: String,
+        form_title: String,
         answer_id: String,
         comment_id: String,
         content: String,
@@ -94,6 +96,7 @@ pub enum ApplicationEvent {
     CommentDeleted {
         actor: ApplicationActor,
         form_id: String,
+        form_title: String,
         answer_id: String,
         comment_id: String,
         content: String,
@@ -101,6 +104,7 @@ pub enum ApplicationEvent {
     MessageCreated {
         actor: ApplicationActor,
         form_id: String,
+        form_title: String,
         answer_id: String,
         message_id: String,
         body: String,
@@ -108,6 +112,7 @@ pub enum ApplicationEvent {
     MessageUpdated {
         actor: ApplicationActor,
         form_id: String,
+        form_title: String,
         answer_id: String,
         message_id: String,
         body: String,
@@ -115,6 +120,7 @@ pub enum ApplicationEvent {
     MessageDeleted {
         actor: ApplicationActor,
         form_id: String,
+        form_title: String,
         answer_id: String,
         message_id: String,
         body: String,

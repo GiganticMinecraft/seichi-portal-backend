@@ -151,12 +151,13 @@ impl<
         let form_id = form.id().into_inner().to_string();
         let answer_id = answer_entry.id().into_inner().to_string();
         let answer_url = format!("{}/forms/{form_id}/answers/{answer_id}", FRONTEND.url);
+        let form_title = form.title().to_owned().into_inner().into_inner();
         let title = answer_entry
             .title()
             .to_owned()
             .into_inner()
             .map(|title| title.into_inner())
-            .unwrap_or_else(|| "回答が送信されました".to_string());
+            .unwrap_or_else(|| format!("「{form_title}」への回答"));
         let questions = form.questions().as_slice();
         let answer_fields = answer_entry
             .contents()
@@ -173,10 +174,7 @@ impl<
             .collect::<Vec<_>>();
         let fields = [
             vec![
-                DiscordAnswerWebhookField::new(
-                    "フォーム名".to_string(),
-                    form.title().to_owned().into_inner().into_inner(),
-                ),
+                DiscordAnswerWebhookField::new("フォーム名".to_string(), form_title),
                 DiscordAnswerWebhookField::new(
                     "回答者".to_string(),
                     match author_disclosure {

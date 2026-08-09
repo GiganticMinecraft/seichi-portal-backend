@@ -105,19 +105,11 @@ async fn handle_event(
 }
 
 fn actor_fields(actor: ApplicationActor) -> Vec<DiscordWebhookField> {
-    [
-        Some(DiscordWebhookField::new(
-            "実行者".to_string(),
-            actor.display_name,
-            true,
-        )),
-        actor
-            .account_id
-            .map(|id| DiscordWebhookField::new("実行者ID".to_string(), id, true)),
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
+    vec![DiscordWebhookField::new(
+        "実行者".to_string(),
+        actor.display_name,
+        true,
+    )]
 }
 
 fn answer_submission_actor_fields(actor: AnswerSubmissionActor) -> Vec<DiscordWebhookField> {
@@ -138,60 +130,16 @@ fn detail_fields(details: Vec<EventDetail>) -> Vec<DiscordWebhookField> {
         .collect()
 }
 
-fn form_fields(
-    actor: ApplicationActor,
-    form_id: String,
-    form_title: String,
-) -> Vec<DiscordWebhookField> {
-    [
-        actor_fields(actor),
-        vec![
-            DiscordWebhookField::new("フォーム".to_string(), form_title, false),
-            DiscordWebhookField::new("フォームID".to_string(), form_id, true),
-        ],
-    ]
-    .concat()
-}
-
-fn answer_submission_form_fields(
-    actor: AnswerSubmissionActor,
-    form_id: String,
-    form_title: String,
-) -> Vec<DiscordWebhookField> {
-    [
-        answer_submission_actor_fields(actor),
-        vec![
-            DiscordWebhookField::new("フォーム".to_string(), form_title, false),
-            DiscordWebhookField::new("フォームID".to_string(), form_id, true),
-        ],
-    ]
-    .concat()
-}
-
-fn answer_target_fields(
-    actor: ApplicationActor,
-    form_id: String,
-    answer_id: String,
-) -> Vec<DiscordWebhookField> {
-    [
-        actor_fields(actor),
-        vec![
-            DiscordWebhookField::new("フォームID".to_string(), form_id, true),
-            DiscordWebhookField::new("回答ID".to_string(), answer_id, true),
-        ],
-    ]
-    .concat()
-}
-
+/// ID はポータル API 等で使う内部情報のため通知本文には含めず、`link_url` に集約する。
 pub(crate) fn message_from_event(
     event: ApplicationEvent,
     discord_webhook_url: String,
     frontend_url: &str,
 ) -> DiscordWebhookMessage {
     let frontend = frontend_url.trim_end_matches('/');
-    let event_title = operation_display_name(&event);
+    let event_suffix = operation_display_name(&event);
 
-    let (title, link_url, fields) = match event {
+    let (form_title, link_url, fields) = match event {
         ApplicationEvent::FormCreated {
             actor,
             form_id,
@@ -199,12 +147,8 @@ pub(crate) fn message_from_event(
             details,
         } => {
             let link_url = format!("{frontend}/forms/{form_id}");
-            let fields = [
-                form_fields(actor, form_id, form_title),
-                detail_fields(details),
-            ]
-            .concat();
-            ("フォームが作成されました", link_url, fields)
+            let fields = [actor_fields(actor), detail_fields(details)].concat();
+            (form_title, link_url, fields)
         }
         ApplicationEvent::FormUpdated {
             actor,
@@ -213,12 +157,8 @@ pub(crate) fn message_from_event(
             changes,
         } => {
             let link_url = format!("{frontend}/forms/{form_id}");
-            let fields = [
-                form_fields(actor, form_id, form_title),
-                detail_fields(changes),
-            ]
-            .concat();
-            ("フォームが更新されました", link_url, fields)
+            let fields = [actor_fields(actor), detail_fields(changes)].concat();
+            (form_title, link_url, fields)
         }
         ApplicationEvent::FormArchived {
             actor,
@@ -226,8 +166,7 @@ pub(crate) fn message_from_event(
             form_title,
         } => {
             let link_url = format!("{frontend}/forms/{form_id}");
-            let fields = form_fields(actor, form_id, form_title);
-            ("フォームがアーカイブされました", link_url, fields)
+            (form_title, link_url, actor_fields(actor))
         }
         ApplicationEvent::FormRestored {
             actor,
@@ -235,8 +174,7 @@ pub(crate) fn message_from_event(
             form_title,
         } => {
             let link_url = format!("{frontend}/forms/{form_id}");
-            let fields = form_fields(actor, form_id, form_title);
-            ("フォームが復元されました", link_url, fields)
+            (form_title, link_url, actor_fields(actor))
         }
         ApplicationEvent::AnswerSubmitted {
             actor,
@@ -247,86 +185,81 @@ pub(crate) fn message_from_event(
         } => {
             let link_url = format!("{frontend}/forms/{form_id}/answers/{answer_id}");
             let fields = [
-                answer_submission_form_fields(actor, form_id, form_title),
-                vec![DiscordWebhookField::new(
-                    "回答ID".to_string(),
-                    answer_id,
-                    true,
-                )],
+                answer_submission_actor_fields(actor),
                 detail_fields(details),
             ]
             .concat();
-            ("回答が投稿されました", link_url, fields)
+            (form_title, link_url, fields)
         }
         ApplicationEvent::CommentCreated {
             actor,
             form_id,
+            form_title,
             answer_id,
-            comment_id,
+            comment_id: _,
             content,
         }
         | ApplicationEvent::CommentUpdated {
             actor,
             form_id,
+            form_title,
             answer_id,
-            comment_id,
+            comment_id: _,
             content,
         }
         | ApplicationEvent::CommentDeleted {
             actor,
             form_id,
+            form_title,
             answer_id,
-            comment_id,
+            comment_id: _,
             content,
         } => {
             let link_url = format!("{frontend}/forms/{form_id}/answers/{answer_id}");
             let fields = [
-                answer_target_fields(actor, form_id, answer_id),
-                vec![
-                    DiscordWebhookField::new("コメントID".to_string(), comment_id, true),
-                    DiscordWebhookField::new("内容".to_string(), content, false),
-                ],
+                actor_fields(actor),
+                vec![DiscordWebhookField::new("内容".to_string(), content, false)],
             ]
             .concat();
-            (event_title, link_url, fields)
+            (form_title, link_url, fields)
         }
         ApplicationEvent::MessageCreated {
             actor,
             form_id,
+            form_title,
             answer_id,
-            message_id,
+            message_id: _,
             body,
         }
         | ApplicationEvent::MessageUpdated {
             actor,
             form_id,
+            form_title,
             answer_id,
-            message_id,
+            message_id: _,
             body,
         }
         | ApplicationEvent::MessageDeleted {
             actor,
             form_id,
+            form_title,
             answer_id,
-            message_id,
+            message_id: _,
             body,
         } => {
             let link_url = format!("{frontend}/forms/{form_id}/answers/{answer_id}/messages");
             let fields = [
-                answer_target_fields(actor, form_id, answer_id),
-                vec![
-                    DiscordWebhookField::new("メッセージID".to_string(), message_id, true),
-                    DiscordWebhookField::new("内容".to_string(), body, false),
-                ],
+                actor_fields(actor),
+                vec![DiscordWebhookField::new("内容".to_string(), body, false)],
             ]
             .concat();
-            (event_title, link_url, fields)
+            (form_title, link_url, fields)
         }
     };
 
     DiscordWebhookMessage {
         discord_webhook_url,
-        title: title.to_string(),
+        title: format!("「{form_title}」{event_suffix}"),
         link_url,
         fields,
     }
@@ -348,19 +281,20 @@ fn operation_name(event: &ApplicationEvent) -> &'static str {
     }
 }
 
+/// メッセージタイトルは `「フォーム名」{接尾辞}` の形で組み立てる。
 fn operation_display_name(event: &ApplicationEvent) -> &'static str {
     match event {
-        ApplicationEvent::FormCreated { .. } => "フォームが作成されました",
-        ApplicationEvent::FormUpdated { .. } => "フォームが更新されました",
-        ApplicationEvent::FormArchived { .. } => "フォームがアーカイブされました",
-        ApplicationEvent::FormRestored { .. } => "フォームが復元されました",
-        ApplicationEvent::AnswerSubmitted { .. } => "回答が投稿されました",
-        ApplicationEvent::CommentCreated { .. } => "コメントが投稿されました",
-        ApplicationEvent::CommentUpdated { .. } => "コメントが更新されました",
-        ApplicationEvent::CommentDeleted { .. } => "コメントが削除されました",
-        ApplicationEvent::MessageCreated { .. } => "メッセージが投稿されました",
-        ApplicationEvent::MessageUpdated { .. } => "メッセージが更新されました",
-        ApplicationEvent::MessageDeleted { .. } => "メッセージが削除されました",
+        ApplicationEvent::FormCreated { .. } => "が作成されました",
+        ApplicationEvent::FormUpdated { .. } => "が更新されました",
+        ApplicationEvent::FormArchived { .. } => "がアーカイブされました",
+        ApplicationEvent::FormRestored { .. } => "が復元されました",
+        ApplicationEvent::AnswerSubmitted { .. } => "に回答が投稿されました",
+        ApplicationEvent::CommentCreated { .. } => "にコメントが投稿されました",
+        ApplicationEvent::CommentUpdated { .. } => "のコメントが更新されました",
+        ApplicationEvent::CommentDeleted { .. } => "のコメントが削除されました",
+        ApplicationEvent::MessageCreated { .. } => "にメッセージが投稿されました",
+        ApplicationEvent::MessageUpdated { .. } => "のメッセージが更新されました",
+        ApplicationEvent::MessageDeleted { .. } => "のメッセージが削除されました",
     }
 }
 
@@ -386,6 +320,38 @@ mod tests {
         );
 
         assert_eq!(message.link_url, "https://portal.example.com/forms/form-id");
+        assert_eq!(message.title, "「Form」が復元されました");
+    }
+
+    #[test]
+    fn message_from_event_omits_internal_ids_from_fields() {
+        let message = message_from_event(
+            ApplicationEvent::CommentCreated {
+                actor: ApplicationActor {
+                    display_name: "administrator".to_string(),
+                    account_id: Some("account-id".to_string()),
+                },
+                form_id: "form-id".to_string(),
+                form_title: "Form".to_string(),
+                answer_id: "answer-id".to_string(),
+                comment_id: "comment-id".to_string(),
+                content: "content".to_string(),
+            },
+            "https://discord.com/api/webhooks/123/token".to_string(),
+            "https://portal.example.com/",
+        );
+
+        assert_eq!(message.title, "「Form」にコメントが投稿されました");
+        assert!(message.fields.iter().all(|field| {
+            ![
+                "フォームID",
+                "実行者ID",
+                "回答ID",
+                "コメントID",
+                "メッセージID",
+            ]
+            .contains(&field.name.as_str())
+        }));
     }
 
     #[test]
