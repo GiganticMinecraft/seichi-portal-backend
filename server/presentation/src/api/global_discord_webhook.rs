@@ -130,7 +130,7 @@ fn detail_fields(details: Vec<EventDetail>) -> Vec<DiscordWebhookField> {
         .collect()
 }
 
-/// ID はポータル API 等で使う内部情報のため通知本文には含めず、`link_url` に集約する。
+/// ID はポータル API などで使う内部情報のため通知本文には含めず、`link_url` のクエリパラメーターに設定する。
 pub(crate) fn message_from_event(
     event: ApplicationEvent,
     discord_webhook_url: String,
@@ -196,7 +196,7 @@ pub(crate) fn message_from_event(
             form_id,
             form_title,
             answer_id,
-            comment_id: _,
+            comment_id,
             content,
         }
         | ApplicationEvent::CommentUpdated {
@@ -204,7 +204,7 @@ pub(crate) fn message_from_event(
             form_id,
             form_title,
             answer_id,
-            comment_id: _,
+            comment_id,
             content,
         }
         | ApplicationEvent::CommentDeleted {
@@ -212,10 +212,11 @@ pub(crate) fn message_from_event(
             form_id,
             form_title,
             answer_id,
-            comment_id: _,
+            comment_id,
             content,
         } => {
-            let link_url = format!("{frontend}/forms/{form_id}/answers/{answer_id}");
+            let link_url =
+                format!("{frontend}/forms/{form_id}/answers/{answer_id}?commentId={comment_id}");
             let fields = [
                 actor_fields(actor),
                 vec![DiscordWebhookField::new("内容".to_string(), content, false)],
@@ -228,7 +229,7 @@ pub(crate) fn message_from_event(
             form_id,
             form_title,
             answer_id,
-            message_id: _,
+            message_id,
             body,
         }
         | ApplicationEvent::MessageUpdated {
@@ -236,7 +237,7 @@ pub(crate) fn message_from_event(
             form_id,
             form_title,
             answer_id,
-            message_id: _,
+            message_id,
             body,
         }
         | ApplicationEvent::MessageDeleted {
@@ -244,10 +245,11 @@ pub(crate) fn message_from_event(
             form_id,
             form_title,
             answer_id,
-            message_id: _,
+            message_id,
             body,
         } => {
-            let link_url = format!("{frontend}/forms/{form_id}/answers/{answer_id}/messages");
+            let link_url =
+                format!("{frontend}/forms/{form_id}/answers/{answer_id}?messageId={message_id}");
             let fields = [
                 actor_fields(actor),
                 vec![DiscordWebhookField::new("内容".to_string(), body, false)],
@@ -352,6 +354,35 @@ mod tests {
             ]
             .contains(&field.name.as_str())
         }));
+
+        assert_eq!(
+            message.link_url,
+            "https://portal.example.com/forms/form-id/answers/answer-id?commentId=comment-id"
+        );
+    }
+
+    #[test]
+    fn message_from_event_uses_message_deeplink() {
+        let message = message_from_event(
+            ApplicationEvent::MessageCreated {
+                actor: ApplicationActor {
+                    display_name: "administrator".to_string(),
+                    account_id: Some("account-id".to_string()),
+                },
+                form_id: "form-id".to_string(),
+                form_title: "Form".to_string(),
+                answer_id: "answer-id".to_string(),
+                message_id: "message-id".to_string(),
+                body: "body".to_string(),
+            },
+            "https://discord.com/api/webhooks/123/token".to_string(),
+            "https://portal.example.com/",
+        );
+
+        assert_eq!(
+            message.link_url,
+            "https://portal.example.com/forms/form-id/answers/answer-id?messageId=message-id"
+        );
     }
 
     #[test]
