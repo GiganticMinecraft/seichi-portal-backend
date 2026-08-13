@@ -139,7 +139,7 @@ pub(crate) fn message_from_event(
     let frontend = frontend_url.trim_end_matches('/');
     let event_suffix = operation_display_name(&event);
 
-    let (form_title, link_url, fields) = match event {
+    let (title, link_url, fields) = match event {
         ApplicationEvent::FormCreated {
             actor,
             form_id,
@@ -194,7 +194,7 @@ pub(crate) fn message_from_event(
         ApplicationEvent::CommentCreated {
             actor,
             form_id,
-            form_title,
+            answer_title,
             answer_id,
             comment_id,
             content,
@@ -202,7 +202,7 @@ pub(crate) fn message_from_event(
         | ApplicationEvent::CommentUpdated {
             actor,
             form_id,
-            form_title,
+            answer_title,
             answer_id,
             comment_id,
             content,
@@ -210,7 +210,7 @@ pub(crate) fn message_from_event(
         | ApplicationEvent::CommentDeleted {
             actor,
             form_id,
-            form_title,
+            answer_title,
             answer_id,
             comment_id,
             content,
@@ -222,12 +222,16 @@ pub(crate) fn message_from_event(
                 vec![DiscordWebhookField::new("内容".to_string(), content, false)],
             ]
             .concat();
-            (form_title, link_url, fields)
+            (
+                answer_title.unwrap_or_else(|| "（タイトルなし）".to_string()),
+                link_url,
+                fields,
+            )
         }
         ApplicationEvent::MessageCreated {
             actor,
             form_id,
-            form_title,
+            answer_title,
             answer_id,
             message_id,
             body,
@@ -235,7 +239,7 @@ pub(crate) fn message_from_event(
         | ApplicationEvent::MessageUpdated {
             actor,
             form_id,
-            form_title,
+            answer_title,
             answer_id,
             message_id,
             body,
@@ -243,7 +247,7 @@ pub(crate) fn message_from_event(
         | ApplicationEvent::MessageDeleted {
             actor,
             form_id,
-            form_title,
+            answer_title,
             answer_id,
             message_id,
             body,
@@ -255,13 +259,17 @@ pub(crate) fn message_from_event(
                 vec![DiscordWebhookField::new("内容".to_string(), body, false)],
             ]
             .concat();
-            (form_title, link_url, fields)
+            (
+                answer_title.unwrap_or_else(|| "（タイトルなし）".to_string()),
+                link_url,
+                fields,
+            )
         }
     };
 
     DiscordWebhookMessage {
         discord_webhook_url,
-        title: format!("「{form_title}」{event_suffix}"),
+        title: format!("「{title}」{event_suffix}"),
         link_url,
         fields,
     }
@@ -283,7 +291,7 @@ fn operation_name(event: &ApplicationEvent) -> &'static str {
     }
 }
 
-/// メッセージタイトルは `「フォーム名」{接尾辞}` の形で組み立てる。
+/// メッセージタイトルは `「対象名」{接尾辞}` の形で組み立てる。
 fn operation_display_name(event: &ApplicationEvent) -> &'static str {
     match event {
         ApplicationEvent::FormCreated { .. } => "が作成されました",
@@ -334,7 +342,7 @@ mod tests {
                     account_id: Some("account-id".to_string()),
                 },
                 form_id: "form-id".to_string(),
-                form_title: "Form".to_string(),
+                answer_title: Some("Answer".to_string()),
                 answer_id: "answer-id".to_string(),
                 comment_id: "comment-id".to_string(),
                 content: "content".to_string(),
@@ -343,7 +351,7 @@ mod tests {
             "https://portal.example.com/",
         );
 
-        assert_eq!(message.title, "「Form」にコメントが投稿されました");
+        assert_eq!(message.title, "「Answer」にコメントが投稿されました");
         assert!(message.fields.iter().all(|field| {
             ![
                 "フォームID",
@@ -370,7 +378,7 @@ mod tests {
                     account_id: Some("account-id".to_string()),
                 },
                 form_id: "form-id".to_string(),
-                form_title: "Form".to_string(),
+                answer_title: None,
                 answer_id: "answer-id".to_string(),
                 message_id: "message-id".to_string(),
                 body: "body".to_string(),
@@ -382,6 +390,10 @@ mod tests {
         assert_eq!(
             message.link_url,
             "https://portal.example.com/forms/form-id/answers/answer-id?messageId=message-id"
+        );
+        assert_eq!(
+            message.title,
+            "「（タイトルなし）」にメッセージが投稿されました"
         );
     }
 

@@ -117,10 +117,14 @@ impl<
     ) -> Result<(), Error> {
         super::submission::authorize_form_submission(actor.clone(), restriction_repository).await?;
         let actor_user = Actor::from(actor.clone());
-        let (form, form_answer) = self
+        let (_, form_answer) = self
             .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
-        let form_title = form.title().to_owned().into_inner().into_inner();
+        let answer_title = form_answer
+            .title()
+            .clone()
+            .into_inner()
+            .map(|title| title.into_inner());
 
         let message = Message::new(*actor.id(), message_body);
         let message_id = message.id().to_string();
@@ -148,7 +152,7 @@ impl<
             publisher.publish(ApplicationEvent::MessageCreated {
                 actor: ApplicationActor::from(actor),
                 form_id: form_id.to_string(),
-                form_title,
+                answer_title,
                 answer_id: answer_id.to_string(),
                 message_id,
                 body: message_body,
@@ -242,9 +246,14 @@ impl<
         body: Option<MessageBody>,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (form, form_answer) = self
+        let (_, form_answer) = self
             .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
+        let answer_title = form_answer
+            .title()
+            .clone()
+            .into_inner()
+            .map(|title| title.into_inner());
 
         if let Some(body) = body {
             let thread = self
@@ -269,7 +278,7 @@ impl<
                 publisher.publish(ApplicationEvent::MessageUpdated {
                     actor: ApplicationActor::from(actor),
                     form_id: form_id.to_string(),
-                    form_title: form.title().to_owned().into_inner().into_inner(),
+                    answer_title,
                     answer_id: answer_id.to_string(),
                     message_id: message_id.to_string(),
                     body: body_for_event,
@@ -288,9 +297,14 @@ impl<
         message_id: &MessageId,
     ) -> Result<(), Error> {
         let actor_user = Actor::from(actor.clone());
-        let (form, form_answer) = self
+        let (_, form_answer) = self
             .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
+        let answer_title = form_answer
+            .title()
+            .clone()
+            .into_inner()
+            .map(|title| title.into_inner());
 
         let thread = self
             .message_thread_repository
@@ -313,7 +327,7 @@ impl<
             publisher.publish(ApplicationEvent::MessageDeleted {
                 actor: ApplicationActor::from(actor),
                 form_id: form_id.to_string(),
-                form_title: form.title().to_owned().into_inner().into_inner(),
+                answer_title,
                 answer_id: answer_id.to_string(),
                 message_id: message_id.to_string(),
                 body: message_body,
@@ -797,9 +811,12 @@ https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
     }
 
     #[tokio::test]
-    async fn message_cud_publishes_saved_body_and_skips_empty_or_equal_updates() {
+    async fn message_cud_publishes_answer_title_and_saved_body_and_skips_empty_or_equal_updates() {
         let user = user();
         let (form, answer) = form_and_answer(&user);
+        let answer = answer.with_title(AnswerTitle::new(Some(
+            "回答タイトル".to_string().try_into().unwrap(),
+        )));
         let form_id = *form.id();
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
@@ -855,10 +872,27 @@ https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
         assert!(matches!(
             events.as_slice(),
             [
-                ApplicationEvent::MessageCreated { body: created, .. },
-                ApplicationEvent::MessageUpdated { body: updated, .. },
-                ApplicationEvent::MessageDeleted { body: deleted, .. }
-            ] if created == "original" && updated == "updated" && deleted == "updated"
+                ApplicationEvent::MessageCreated {
+                    answer_title: created_title,
+                    body: created,
+                    ..
+                },
+                ApplicationEvent::MessageUpdated {
+                    answer_title: updated_title,
+                    body: updated,
+                    ..
+                },
+                ApplicationEvent::MessageDeleted {
+                    answer_title: deleted_title,
+                    body: deleted,
+                    ..
+                }
+            ] if created_title.as_deref() == Some("回答タイトル")
+                && updated_title.as_deref() == Some("回答タイトル")
+                && deleted_title.as_deref() == Some("回答タイトル")
+                && created == "original"
+                && updated == "updated"
+                && deleted == "updated"
         ));
     }
 
