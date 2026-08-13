@@ -168,6 +168,11 @@ impl<
         let (form, answer) = self
             .readable_form_and_answer(&Actor::from(actor.clone()), form_id, answer_id)
             .await?;
+        let answer_title = answer
+            .title()
+            .clone()
+            .into_inner()
+            .map(|title| title.into_inner());
         let thread = self
             .comment_thread_repository
             .get_for_answer(&form, answer)
@@ -177,7 +182,6 @@ impl<
             .create_comment(content)?;
         let comment_id = comment.comment_id().to_string();
         let content = comment.content().to_owned().into_inner().into_inner();
-        let form_title = form.title().to_owned().into_inner().into_inner();
         self.comment_thread_repository
             .create(&form, comment)
             .await?;
@@ -185,7 +189,7 @@ impl<
             publisher.publish(ApplicationEvent::CommentCreated {
                 actor: ApplicationActor::from(actor),
                 form_id: form_id.to_string(),
-                form_title,
+                answer_title,
                 answer_id: answer_id.to_string(),
                 comment_id,
                 content,
@@ -221,6 +225,11 @@ impl<
             let (form, answer) = self
                 .readable_form_and_answer(&Actor::from(actor.clone()), form_id, answer_id)
                 .await?;
+            let answer_title = answer
+                .title()
+                .clone()
+                .into_inner()
+                .map(|title| title.into_inner());
             let thread = self
                 .comment_thread_repository
                 .get_with_comments_for_answer(&form, answer)
@@ -238,7 +247,6 @@ impl<
             }
             let content = updated.content().to_owned().into_inner().into_inner();
             let comment_id = updated.comment_id().to_string();
-            let form_title = form.title().to_owned().into_inner().into_inner();
             self.comment_thread_repository
                 .update(&form, updated, Utc::now())
                 .await?;
@@ -246,7 +254,7 @@ impl<
                 publisher.publish(ApplicationEvent::CommentUpdated {
                     actor: ApplicationActor::from(actor),
                     form_id: form_id.to_string(),
-                    form_title,
+                    answer_title,
                     answer_id: answer_id.to_string(),
                     comment_id,
                     content,
@@ -266,6 +274,11 @@ impl<
         let (form, answer) = self
             .readable_form_and_answer(&Actor::from(actor.clone()), form_id, answer_id)
             .await?;
+        let answer_title = answer
+            .title()
+            .clone()
+            .into_inner()
+            .map(|title| title.into_inner());
         let thread = self
             .comment_thread_repository
             .get_with_comments_for_answer(&form, answer)
@@ -279,7 +292,6 @@ impl<
             .to_owned()
             .into_inner()
             .into_inner();
-        let form_title = form.title().to_owned().into_inner().into_inner();
         self.comment_thread_repository
             .delete(&form, comment)
             .await?;
@@ -287,7 +299,7 @@ impl<
             publisher.publish(ApplicationEvent::CommentDeleted {
                 actor: ApplicationActor::from(actor),
                 form_id: form_id.to_string(),
-                form_title,
+                answer_title,
                 answer_id: answer_id.to_string(),
                 comment_id: comment_id.to_string(),
                 content,
