@@ -26,4 +26,6 @@ pub use settings::{
 pub use status::{
     AnswerStatus, AnswerStatusHistoryEntry, AnswerStatusHistoryId, AnswerStatusHistoryPagePosition,
 };
-pub use title::AnswerTitle;
+pub use title::{
+    AnswerTitle, AnswerTitleHistoryEntry, AnswerTitleHistoryId, AnswerTitleHistoryPagePosition,
+};

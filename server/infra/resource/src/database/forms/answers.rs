@@ -6,7 +6,8 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerEntry, AnswerId, AnswerStatusHistoryPagePosition,
-            RedmineImportedAnswerReference, RedmineUserSnapshot, TemporaryAnswerAuthor,
+            AnswerTitleHistoryPagePosition, RedmineImportedAnswerReference, RedmineUserSnapshot,
+            TemporaryAnswerAuthor,
         },
         models::FormId,
     },
@@ -25,8 +26,8 @@ use crate::{
         count::count_as_u32,
     },
     records::{
-        AnswerAuthorRecord, AnswerStatusHistoryRecord, FormAnswerContentRecord, FormAnswerRecord,
-        MessageRecord,
+        AnswerAuthorRecord, AnswerStatusHistoryRecord, AnswerTitleHistoryRecord,
+        FormAnswerContentRecord, FormAnswerRecord, MessageRecord,
     },
 };
 
@@ -571,7 +572,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 }
 
                 let current = sqlx::query!(
-                    "SELECT status FROM answers WHERE id = ? AND form_id = ? FOR UPDATE",
+                    "SELECT title, status FROM answers WHERE id = ? AND form_id = ? FOR UPDATE",
                     answer_id,
                     form_id,
                 )
@@ -590,6 +591,23 @@ impl FormAnswerDatabase for ConnectionPool {
                         answer_id,
                         current.status,
                         status,
+                        updated_by.id().to_string(),
+                        updated_by.name(),
+                        updated_by.role().to_string(),
+                    )
+                    .execute(&mut **txn)
+                    .await?;
+                }
+
+                if current.title != title {
+                    sqlx::query!(
+                        r"INSERT INTO form_answer_title_history
+                        (id, answer_id, from_title, to_title, changed_by_id, changed_by_name, changed_by_role)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        Uuid::now_v7().to_string(),
+                        answer_id,
+                        current.title.clone(),
+                        title.clone(),
                         updated_by.id().to_string(),
                         updated_by.name(),
                         updated_by.role().to_string(),
@@ -674,6 +692,60 @@ impl FormAnswerDatabase for ConnectionPool {
 
         Ok(Page::from_overfetched_items(rows, limit, |row| {
             AnswerStatusHistoryPagePosition::new(
+                Uuid::parse_str(&row.id)
+                    .expect("history IDs stored by this service are valid UUIDs")
+                    .into(),
+            )
+        }))
+    }
+
+    async fn fetch_title_history(
+        &self,
+        answer_id: AnswerId,
+        request: PageRequest<AnswerTitleHistoryPagePosition>,
+    ) -> Result<Page<AnswerTitleHistoryRecord, AnswerTitleHistoryPagePosition>, InfraError> {
+        let answer_id = answer_id.to_string();
+        let after = request
+            .after_position()
+            .map(|position| position.id().to_string());
+        let limit = request.limit();
+        let overfetch = limit.overfetch_value();
+        let rows = match after {
+            Some(after) => {
+                sqlx::query_as!(
+                    AnswerTitleHistoryRecord,
+                    r"SELECT id, answer_id, from_title, to_title, changed_by_id,
+                        changed_by_name, changed_by_role,
+                        changed_at AS `changed_at!: chrono::DateTime<chrono::Utc>`
+                    FROM form_answer_title_history
+                    WHERE answer_id = ? AND id < ?
+                    ORDER BY id DESC LIMIT ?",
+                    answer_id,
+                    after,
+                    overfetch,
+                )
+                .fetch_all(&self.rdb_pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as!(
+                    AnswerTitleHistoryRecord,
+                    r"SELECT id, answer_id, from_title, to_title, changed_by_id,
+                        changed_by_name, changed_by_role,
+                        changed_at AS `changed_at!: chrono::DateTime<chrono::Utc>`
+                    FROM form_answer_title_history
+                    WHERE answer_id = ?
+                    ORDER BY id DESC LIMIT ?",
+                    answer_id,
+                    overfetch,
+                )
+                .fetch_all(&self.rdb_pool)
+                .await?
+            }
+        };
+
+        Ok(Page::from_overfetched_items(rows, limit, |row| {
+            AnswerTitleHistoryPagePosition::new(
                 Uuid::parse_str(&row.id)
                     .expect("history IDs stored by this service are valid UUIDs")
                     .into(),

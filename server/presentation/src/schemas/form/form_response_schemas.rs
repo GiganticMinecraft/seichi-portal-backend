@@ -4,8 +4,8 @@ use domain::account::models::{UserGroupId, UserSnapshot};
 use domain::form::{
     answer::{
         AnswerLabel, AnswerPublication as DomainAnswerPublication, AnswerReference,
-        AnswerStatus as DomainAnswerStatus, AnswerStatusHistoryEntry, FormAnswerContent,
-        RedmineUserSnapshot,
+        AnswerStatus as DomainAnswerStatus, AnswerStatusHistoryEntry, AnswerTitleHistoryEntry,
+        FormAnswerContent, RedmineUserSnapshot,
     },
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
@@ -618,6 +618,44 @@ impl From<AnswerStatusHistoryEntry> for AnswerStatusHistoryResponseEntry {
 #[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct AnswerStatusHistoryPageResponse {
     pub items: Vec<AnswerStatusHistoryResponseEntry>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerTitleHistoryResponseEntry {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    #[serde(rename = "from")]
+    from_title: Option<String>,
+    #[serde(rename = "to")]
+    to_title: Option<String>,
+    changed_by: HistoryUser,
+    changed_at: DateTime<Utc>,
+}
+
+impl From<AnswerTitleHistoryEntry> for AnswerTitleHistoryResponseEntry {
+    fn from(value: AnswerTitleHistoryEntry) -> Self {
+        Self {
+            id: value.id().to_string(),
+            from_title: value
+                .from_title()
+                .clone()
+                .into_inner()
+                .map(|title| title.into_inner()),
+            to_title: value
+                .to_title()
+                .clone()
+                .into_inner()
+                .map(|title| title.into_inner()),
+            changed_by: value.changed_by().into(),
+            changed_at: *value.changed_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct AnswerTitleHistoryPageResponse {
+    pub items: Vec<AnswerTitleHistoryResponseEntry>,
     pub next_cursor: Option<String>,
 }
 

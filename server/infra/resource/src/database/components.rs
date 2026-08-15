@@ -1,9 +1,10 @@
 use crate::{
     external::discord_api::DiscordAPI,
     records::{
-        ActiveFormRecord, AnswerLabelRecord, AnswerStatusHistoryRecord, ArchivedFormRecord,
-        CommentHistoryRecord, CommentRecord, DiscordUserRecord, FormAnswerRecord, FormLabelRecord,
-        MessageHistoryRecord, MessageRecord, NotificationSettingsRecord,
+        ActiveFormRecord, AnswerLabelRecord, AnswerStatusHistoryRecord, AnswerTitleHistoryRecord,
+        ArchivedFormRecord, CommentHistoryRecord, CommentRecord, DiscordUserRecord,
+        FormAnswerRecord, FormLabelRecord, MessageHistoryRecord, MessageRecord,
+        NotificationSettingsRecord,
     },
 };
 use async_trait::async_trait;
@@ -22,7 +23,7 @@ use domain::{
         answer::{
             AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerPagePosition,
             AnswerPublication, AnswerReference, AnswerRelation, AnswerStatus,
-            AnswerStatusHistoryPagePosition,
+            AnswerStatusHistoryPagePosition, AnswerTitleHistoryPagePosition,
         },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
@@ -155,6 +156,11 @@ pub trait FormAnswerDatabase: Send + Sync {
         answer_id: AnswerId,
         request: PageRequest<AnswerStatusHistoryPagePosition>,
     ) -> Result<Page<AnswerStatusHistoryRecord, AnswerStatusHistoryPagePosition>, InfraError>;
+    async fn fetch_title_history(
+        &self,
+        answer_id: AnswerId,
+        request: PageRequest<AnswerTitleHistoryPagePosition>,
+    ) -> Result<Page<AnswerTitleHistoryRecord, AnswerTitleHistoryPagePosition>, InfraError>;
     /// 回答 (`answers`) の件数を返す。
     async fn size(&self) -> Result<u32, InfraError>;
     /// 回答本文 (`real_answers`) の件数を返す。

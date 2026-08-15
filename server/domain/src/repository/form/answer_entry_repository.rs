@@ -6,7 +6,8 @@ use crate::{
     form::{
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusHistoryEntry,
-            AnswerStatusHistoryPagePosition,
+            AnswerStatusHistoryPagePosition, AnswerTitleHistoryEntry,
+            AnswerTitleHistoryPagePosition,
         },
         models::ActiveForm,
     },
@@ -59,6 +60,11 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         answer: &Allowed<AnswerEntry, Read>,
         request: PageRequest<AnswerStatusHistoryPagePosition>,
     ) -> Result<Page<Allowed<AnswerStatusHistoryEntry, Read>, AnswerStatusHistoryPagePosition>, Error>;
+    async fn title_history(
+        &self,
+        answer: &Allowed<AnswerEntry, Read>,
+        request: PageRequest<AnswerTitleHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerTitleHistoryEntry, Read>, AnswerTitleHistoryPagePosition>, Error>;
     /// 回答 (`answers`) の件数を返す。
     async fn size(&self) -> Result<u32, Error>;
     /// 回答本文 (`real_answers`) の件数を返す。

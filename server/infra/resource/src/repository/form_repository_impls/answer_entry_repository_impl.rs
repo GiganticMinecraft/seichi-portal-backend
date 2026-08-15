@@ -7,7 +7,8 @@ use domain::{
     form::{
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusHistoryEntry,
-            AnswerStatusHistoryPagePosition,
+            AnswerStatusHistoryPagePosition, AnswerTitle, AnswerTitleHistoryEntry,
+            AnswerTitleHistoryPagePosition,
         },
         models::ActiveForm,
     },
@@ -254,6 +255,62 @@ where
                 };
                 answer
                     .authorize_status_history_entry(entry)
+                    .map_err(Error::from)
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        Ok(Page::new(items, next))
+    }
+
+    #[tracing::instrument(skip_all)]
+    async fn title_history(
+        &self,
+        answer: &Allowed<AnswerEntry, Read>,
+        request: PageRequest<AnswerTitleHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerTitleHistoryEntry, Read>, AnswerTitleHistoryPagePosition>, Error>
+    {
+        let page = self
+            .client
+            .form_answer()
+            .fetch_title_history(*answer.id(), request)
+            .await?;
+        let (records, next) = page.into_parts();
+        let items = records
+            .into_iter()
+            .map(|record| {
+                let entry = unsafe {
+                    AnswerTitleHistoryEntry::from_raw_parts(
+                        Uuid::parse_str(&record.id)
+                            .map_err(InfraError::from)?
+                            .into(),
+                        Uuid::parse_str(&record.answer_id)
+                            .map_err(InfraError::from)?
+                            .into(),
+                        AnswerTitle::new(
+                            record
+                                .from_title
+                                .map(TryInto::try_into)
+                                .transpose()
+                                .map_err(Error::from)?,
+                        ),
+                        AnswerTitle::new(
+                            record
+                                .to_title
+                                .map(TryInto::try_into)
+                                .transpose()
+                                .map_err(Error::from)?,
+                        ),
+                        UserSnapshot::new(
+                            Uuid::parse_str(&record.changed_by_id)
+                                .map_err(InfraError::from)?
+                                .into(),
+                            record.changed_by_name,
+                            record.changed_by_role.parse().map_err(InfraError::from)?,
+                        ),
+                        record.changed_at,
+                    )
+                };
+                answer
+                    .authorize_title_history_entry(entry)
                     .map_err(Error::from)
             })
             .collect::<Result<Vec<_>, Error>>()?;

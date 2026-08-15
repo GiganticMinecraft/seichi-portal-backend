@@ -8,7 +8,8 @@ use domain::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
             AnswerPagePosition, AnswerPublication, AnswerStatus, AnswerStatusHistoryEntry,
-            AnswerStatusHistoryPagePosition, AnswerTitle, FormAnswerContent, PostedAnswerContents,
+            AnswerStatusHistoryPagePosition, AnswerTitle, AnswerTitleHistoryEntry,
+            AnswerTitleHistoryPagePosition, FormAnswerContent, PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
@@ -584,6 +585,26 @@ impl<
             .await?
             .ok_or(AnswerNotFound)?;
         self.answer_entry_repository.history(&answer, request).await
+    }
+
+    pub async fn get_title_history(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        request: PageRequest<AnswerTitleHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerTitleHistoryEntry, Read>, AnswerTitleHistoryPagePosition>, Error>
+    {
+        let actor = Actor::from(actor.clone());
+        let form = self.read_form(form_id, &actor).await?;
+        let answer = self
+            .answer_entry_repository
+            .get(&form, answer_id)
+            .await?
+            .ok_or(AnswerNotFound)?;
+        self.answer_entry_repository
+            .title_history(&answer, request)
+            .await
     }
 }
 

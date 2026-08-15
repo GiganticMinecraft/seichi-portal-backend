@@ -534,6 +534,17 @@ pub struct AnswerStatusHistoryRecord {
     pub changed_at: DateTime<Utc>,
 }
 
+pub struct AnswerTitleHistoryRecord {
+    pub id: String,
+    pub answer_id: String,
+    pub from_title: Option<String>,
+    pub to_title: Option<String>,
+    pub changed_by_id: String,
+    pub changed_by_name: String,
+    pub changed_by_role: String,
+    pub changed_at: DateTime<Utc>,
+}
+
 impl TryFrom<MessageRecord> for Message {
     type Error = Error;
 
