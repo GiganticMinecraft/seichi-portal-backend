@@ -10,7 +10,8 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use domain::form::answer::{
-    AnswerPagePosition, AnswerStatusHistoryPagePosition, FormAnswerContent, FormAnswerContentId,
+    AnswerPagePosition, AnswerStatusHistoryPagePosition, AnswerTitleHistoryPagePosition,
+    FormAnswerContent, FormAnswerContentId,
 };
 use domain::{
     account::models::AccountUser,
@@ -45,7 +46,8 @@ use crate::{
             TemporaryAnswerCreateSchema,
         },
         form_response_schemas::{
-            AnswerListPageResponse, AnswerStatusHistoryPageResponse, FormAnswer,
+            AnswerListPageResponse, AnswerStatusHistoryPageResponse,
+            AnswerTitleHistoryPageResponse, FormAnswer,
         },
     },
 };
@@ -184,6 +186,11 @@ struct AnswerStatusHistoryCursor {
     after_history_id: uuid::Uuid,
 }
 
+#[derive(Deserialize, Serialize)]
+struct AnswerTitleHistoryCursor {
+    after_history_id: uuid::Uuid,
+}
+
 fn status_history_page_request(
     query: HistoryListQuery,
 ) -> Result<PageRequest<AnswerStatusHistoryPagePosition>, Error> {
@@ -214,6 +221,40 @@ fn encode_status_history_cursor(
     position: AnswerStatusHistoryPagePosition,
 ) -> Result<String, Error> {
     let bytes = serde_json::to_vec(&AnswerStatusHistoryCursor {
+        after_history_id: position.id().into_inner(),
+    })
+    .map_err(|_| bad_query("Invalid cursor."))?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn title_history_page_request(
+    query: HistoryListQuery,
+) -> Result<PageRequest<AnswerTitleHistoryPagePosition>, Error> {
+    let limit = match query.limit {
+        Some(limit) => PageLimit::try_new(limit)
+            .map_err(|error| bad_query(format!("Invalid limit: {}.", error.value())))?,
+        None => PageLimit::default_limit(),
+    };
+    let after = query
+        .cursor
+        .as_deref()
+        .map(|cursor| {
+            let decoded = URL_SAFE_NO_PAD
+                .decode(cursor)
+                .map_err(|_| bad_query("Invalid cursor."))?;
+            let cursor = serde_json::from_slice::<AnswerTitleHistoryCursor>(&decoded)
+                .map_err(|_| bad_query("Invalid cursor."))?;
+            Ok::<_, Error>(AnswerTitleHistoryPagePosition::new(
+                cursor.after_history_id.into(),
+            ))
+        })
+        .transpose()?;
+
+    Ok(PageRequest::new(after, limit))
+}
+
+fn encode_title_history_cursor(position: AnswerTitleHistoryPagePosition) -> Result<String, Error> {
+    let bytes = serde_json::to_vec(&AnswerTitleHistoryCursor {
         after_history_id: position.id().into_inner(),
     })
     .map_err(|_| bad_query("Invalid cursor."))?;
@@ -390,6 +431,42 @@ pub async fn get_answer_status_history_handler(
             .collect(),
         next_cursor: next
             .map(encode_status_history_cursor)
+            .transpose()
+            .map_err(handle_error)?,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/forms/{form_id}/answers/{answer_id}/title/history",
+    summary = "回答タイトルの変更履歴を取得",
+    params(("form_id" = String, Path), ("answer_id" = String, Path), HistoryListQuery),
+    responses((status = 200, body = AnswerTitleHistoryPageResponse), BadRequest, Unauthorized, Forbidden, NotFound, InternalServerError),
+    security(("bearer" = [])),
+    tag = "Answers"
+)]
+pub async fn get_answer_title_history_handler(
+    Extension(user): Extension<AccountUser>,
+    State(repository): State<RealInfrastructureRepository>,
+    path: Result<Path<(FormId, AnswerId)>, PathRejection>,
+    query: Result<Query<HistoryListQuery>, axum::extract::rejection::QueryRejection>,
+) -> Result<Json<AnswerTitleHistoryPageResponse>, Response> {
+    let use_case = build_answer_use_case(&repository, None);
+    let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
+    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
+    let request = title_history_page_request(query).map_err(handle_error)?;
+    let page = use_case
+        .get_title_history(&user, form_id, answer_id, request)
+        .await
+        .map_err(handle_error)?;
+    let (items, next) = page.into_parts();
+    Ok(Json(AnswerTitleHistoryPageResponse {
+        items: items
+            .into_iter()
+            .map(|entry| entry.into_inner().into())
+            .collect(),
+        next_cursor: next
+            .map(encode_title_history_cursor)
             .transpose()
             .map_err(handle_error)?,
     }))

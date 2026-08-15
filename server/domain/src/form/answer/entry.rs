@@ -10,8 +10,9 @@ use crate::{
     auth::Actor,
     form::{
         answer::{
-            AnswerAuthor, AnswerStatus, AnswerStatusHistoryEntry, AnswerTitle, FormAnswerContent,
-            PostedAnswerContents, RedmineImportedAnswerReference,
+            AnswerAuthor, AnswerStatus, AnswerStatusHistoryEntry, AnswerTitle,
+            AnswerTitleHistoryEntry, FormAnswerContent, PostedAnswerContents,
+            RedmineImportedAnswerReference,
         },
         models::{ActiveForm, ArchivedForm, FormId},
     },
@@ -266,6 +267,13 @@ impl Allowed<AnswerEntry, Read> {
         &self,
         entry: AnswerStatusHistoryEntry,
     ) -> Result<Allowed<AnswerStatusHistoryEntry, Read>, DomainError> {
+        self.authorize_read(entry)
+    }
+
+    pub fn authorize_title_history_entry(
+        &self,
+        entry: AnswerTitleHistoryEntry,
+    ) -> Result<Allowed<AnswerTitleHistoryEntry, Read>, DomainError> {
         self.authorize_read(entry)
     }
 }

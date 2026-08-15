@@ -192,6 +192,18 @@ CREATE TABLE IF NOT EXISTS form_answer_status_history(
     INDEX idx_form_answer_status_history_answer_id_id(answer_id, id)
 );
 
+CREATE TABLE IF NOT EXISTS form_answer_title_history(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    answer_id CHAR(36) NOT NULL,
+    from_title TEXT,
+    to_title TEXT,
+    changed_by_id CHAR(36) NOT NULL,
+    changed_by_name TEXT NOT NULL,
+    changed_by_role VARCHAR(32) NOT NULL,
+    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_form_answer_title_history_answer_id_id(answer_id, id)
+);
+
 CREATE TABLE IF NOT EXISTS label_for_form_answers(
     id CHAR(36) NOT NULL PRIMARY KEY,
     name TEXT NOT NULL

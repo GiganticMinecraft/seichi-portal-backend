@@ -9,7 +9,8 @@ use domain::{
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
             AnswerRelation, AnswerStatus, AnswerStatusHistoryEntry,
-            AnswerStatusHistoryPagePosition, ArchivedAnswerEntry, ReadableAnswerRelation,
+            AnswerStatusHistoryPagePosition, AnswerTitleHistoryEntry,
+            AnswerTitleHistoryPagePosition, ArchivedAnswerEntry, ReadableAnswerRelation,
         },
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
@@ -439,6 +440,15 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         _answer: &Allowed<AnswerEntry, Read>,
         _request: PageRequest<AnswerStatusHistoryPagePosition>,
     ) -> Result<Page<Allowed<AnswerStatusHistoryEntry, Read>, AnswerStatusHistoryPagePosition>, Error>
+    {
+        Ok(Page::new(Vec::new(), None))
+    }
+
+    async fn title_history(
+        &self,
+        _answer: &Allowed<AnswerEntry, Read>,
+        _request: PageRequest<AnswerTitleHistoryPagePosition>,
+    ) -> Result<Page<Allowed<AnswerTitleHistoryEntry, Read>, AnswerTitleHistoryPagePosition>, Error>
     {
         Ok(Page::new(Vec::new(), None))
     }

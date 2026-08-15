@@ -1,0 +1,48 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT title, status FROM answers WHERE id = ? AND form_id = ? FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 44
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "7b586527df5e2c953908feb8d8c4c9e90e4afc1e9992ba9cf1800405b4837e16"
+}
