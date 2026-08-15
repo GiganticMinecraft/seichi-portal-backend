@@ -1,4 +1,7 @@
-use domain::{account::models::AccountUser, form::answer::TemporaryAnswerAuthor};
+use domain::{
+    account::models::AccountUser,
+    form::answer::{AnswerStatusChange, TemporaryAnswerAuthor},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApplicationActor {
@@ -76,6 +79,13 @@ pub enum ApplicationEvent {
         form_title: String,
         answer_id: String,
         details: Vec<EventDetail>,
+    },
+    AnswerStatusChanged {
+        actor: ApplicationActor,
+        form_id: String,
+        answer_title: Option<String>,
+        answer_id: String,
+        status_change: AnswerStatusChange,
     },
     CommentCreated {
         actor: ApplicationActor,

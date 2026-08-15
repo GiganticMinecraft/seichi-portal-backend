@@ -25,6 +25,26 @@ pub enum AnswerStatus {
     COMPLETED,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AnswerStatusChange {
+    from: AnswerStatus,
+    to: AnswerStatus,
+}
+
+impl AnswerStatusChange {
+    pub fn new(from: AnswerStatus, to: AnswerStatus) -> Option<Self> {
+        (from != to).then_some(Self { from, to })
+    }
+
+    pub fn from(self) -> AnswerStatus {
+        self.from
+    }
+
+    pub fn to(self) -> AnswerStatus {
+        self.to
+    }
+}
+
 impl TryFrom<String> for AnswerStatus {
     type Error = DomainError;
 

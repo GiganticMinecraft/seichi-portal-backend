@@ -24,7 +24,8 @@ pub use settings::{
     AnswerVisibility, DefaultAnswerTitle,
 };
 pub use status::{
-    AnswerStatus, AnswerStatusHistoryEntry, AnswerStatusHistoryId, AnswerStatusHistoryPagePosition,
+    AnswerStatus, AnswerStatusChange, AnswerStatusHistoryEntry, AnswerStatusHistoryId,
+    AnswerStatusHistoryPagePosition,
 };
 pub use title::{
     AnswerTitle, AnswerTitleHistoryEntry, AnswerTitleHistoryId, AnswerTitleHistoryPagePosition,
