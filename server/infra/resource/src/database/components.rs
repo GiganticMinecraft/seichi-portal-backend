@@ -22,7 +22,7 @@ use domain::{
         FormSubmissionRestriction,
         answer::{
             AnswerEntry, AnswerId, AnswerLabel, AnswerLabelId, AnswerPagePosition,
-            AnswerPublication, AnswerReference, AnswerRelation, AnswerStatus,
+            AnswerPublication, AnswerReference, AnswerRelation, AnswerStatus, AnswerStatusChange,
             AnswerStatusHistoryPagePosition, AnswerTitleHistoryPagePosition,
         },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
@@ -150,7 +150,7 @@ pub trait FormAnswerDatabase: Send + Sync {
         answer_entry: &AnswerEntry,
         form_id: FormId,
         updated_by: &AccountUser,
-    ) -> Result<(), InfraError>;
+    ) -> Result<Option<AnswerStatusChange>, InfraError>;
     async fn fetch_status_history(
         &self,
         answer_id: AnswerId,

@@ -8,7 +8,7 @@ use domain::{
         FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
         answer::{
             AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
-            AnswerRelation, AnswerStatus, AnswerStatusHistoryEntry,
+            AnswerRelation, AnswerStatus, AnswerStatusChange, AnswerStatusHistoryEntry,
             AnswerStatusHistoryPagePosition, AnswerTitleHistoryEntry,
             AnswerTitleHistoryPagePosition, ArchivedAnswerEntry, ReadableAnswerRelation,
         },
@@ -422,14 +422,16 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         &self,
         _form: &Allowed<ActiveForm, Update>,
         answer_entry: &Allowed<AnswerEntry, Update>,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<AnswerStatusChange>, Error> {
         let mut answers = self.answers.lock().unwrap();
         if let Some(stored_answer) = answers
             .iter_mut()
             .find(|stored| *stored.id() == *answer_entry.id())
         {
+            let status_change =
+                AnswerStatusChange::new(*stored_answer.status(), *answer_entry.status());
             *stored_answer = answer_entry.value().clone();
-            Ok(())
+            Ok(status_change)
         } else {
             Err(not_found_error("AnswerEntry", answer_entry.id()))
         }

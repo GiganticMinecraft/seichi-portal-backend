@@ -6,9 +6,9 @@ use domain::{
     auth::Actor,
     form::{
         answer::{
-            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusHistoryEntry,
-            AnswerStatusHistoryPagePosition, AnswerTitle, AnswerTitleHistoryEntry,
-            AnswerTitleHistoryPagePosition,
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusChange,
+            AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition, AnswerTitle,
+            AnswerTitleHistoryEntry, AnswerTitleHistoryPagePosition,
         },
         models::ActiveForm,
     },
@@ -198,8 +198,9 @@ where
         &self,
         _form: &Allowed<ActiveForm, Update>,
         answer_entry: &Allowed<AnswerEntry, Update>,
-    ) -> Result<(), Error> {
-        self.client
+    ) -> Result<Option<AnswerStatusChange>, Error> {
+        let status_change = self
+            .client
             .form_answer()
             .update_answer_entry(
                 answer_entry.value(),
@@ -215,7 +216,7 @@ where
                 },
             )
             .await?;
-        Ok(())
+        Ok(status_change)
     }
 
     async fn history(

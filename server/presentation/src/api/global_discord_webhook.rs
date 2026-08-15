@@ -191,6 +191,36 @@ pub(crate) fn message_from_event(
             .concat();
             (form_title, link_url, fields)
         }
+        ApplicationEvent::AnswerStatusChanged {
+            actor,
+            form_id,
+            answer_title,
+            answer_id,
+            status_change,
+        } => {
+            let link_url = format!("{frontend}/forms/{form_id}/answers/{answer_id}");
+            let fields = [
+                actor_fields(actor),
+                vec![
+                    DiscordWebhookField::new(
+                        "変更前のステータス".to_string(),
+                        status_change.from().to_string(),
+                        true,
+                    ),
+                    DiscordWebhookField::new(
+                        "変更後のステータス".to_string(),
+                        status_change.to().to_string(),
+                        true,
+                    ),
+                ],
+            ]
+            .concat();
+            (
+                answer_title.unwrap_or_else(|| "（タイトルなし）".to_string()),
+                link_url,
+                fields,
+            )
+        }
         ApplicationEvent::CommentCreated {
             actor,
             form_id,
@@ -282,6 +312,7 @@ fn operation_name(event: &ApplicationEvent) -> &'static str {
         ApplicationEvent::FormArchived { .. } => "form_archived",
         ApplicationEvent::FormRestored { .. } => "form_restored",
         ApplicationEvent::AnswerSubmitted { .. } => "answer_submitted",
+        ApplicationEvent::AnswerStatusChanged { .. } => "answer_status_changed",
         ApplicationEvent::CommentCreated { .. } => "comment_created",
         ApplicationEvent::CommentUpdated { .. } => "comment_updated",
         ApplicationEvent::CommentDeleted { .. } => "comment_deleted",
@@ -299,6 +330,7 @@ fn operation_display_name(event: &ApplicationEvent) -> &'static str {
         ApplicationEvent::FormArchived { .. } => "がアーカイブされました",
         ApplicationEvent::FormRestored { .. } => "が復元されました",
         ApplicationEvent::AnswerSubmitted { .. } => "に回答が投稿されました",
+        ApplicationEvent::AnswerStatusChanged { .. } => "の対応ステータスが変更されました",
         ApplicationEvent::CommentCreated { .. } => "にコメントが投稿されました",
         ApplicationEvent::CommentUpdated { .. } => "のコメントが更新されました",
         ApplicationEvent::CommentDeleted { .. } => "のコメントが削除されました",
@@ -311,6 +343,7 @@ fn operation_display_name(event: &ApplicationEvent) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::form::answer::{AnswerStatus, AnswerStatusChange};
 
     #[test]
     fn message_from_event_uses_the_explicit_frontend_url() {
@@ -419,6 +452,73 @@ mod tests {
                 .fields
                 .iter()
                 .all(|field| field.name != "実行者" && field.name != "実行者ID")
+        );
+    }
+
+    #[test]
+    fn answer_status_changed_event_uses_the_answer_title_and_transition_fields() {
+        let message = message_from_event(
+            ApplicationEvent::AnswerStatusChanged {
+                actor: ApplicationActor {
+                    display_name: "administrator".to_string(),
+                    account_id: Some("account-id".to_string()),
+                },
+                form_id: "form-id".to_string(),
+                answer_title: Some("Answer".to_string()),
+                answer_id: "answer-id".to_string(),
+                status_change: AnswerStatusChange::new(
+                    AnswerStatus::UNADDRESSED,
+                    AnswerStatus::IN_PROGRESS,
+                )
+                .unwrap(),
+            },
+            "https://discord.com/api/webhooks/123/token".to_string(),
+            "https://portal.example.com/",
+        );
+
+        assert_eq!(message.title, "「Answer」の対応ステータスが変更されました");
+        assert_eq!(
+            message.link_url,
+            "https://portal.example.com/forms/form-id/answers/answer-id"
+        );
+        assert!(
+            message
+                .fields
+                .iter()
+                .any(|field| { field.name == "実行者" && field.value == "administrator" })
+        );
+        assert!(message.fields.iter().any(|field| {
+            field.name == "変更前のステータス" && field.value == "UNADDRESSED"
+        }));
+        assert!(message.fields.iter().any(|field| {
+            field.name == "変更後のステータス" && field.value == "IN_PROGRESS"
+        }));
+    }
+
+    #[test]
+    fn answer_status_changed_event_uses_the_missing_title_placeholder() {
+        let message = message_from_event(
+            ApplicationEvent::AnswerStatusChanged {
+                actor: ApplicationActor {
+                    display_name: "administrator".to_string(),
+                    account_id: Some("account-id".to_string()),
+                },
+                form_id: "form-id".to_string(),
+                answer_title: None,
+                answer_id: "answer-id".to_string(),
+                status_change: AnswerStatusChange::new(
+                    AnswerStatus::IN_PROGRESS,
+                    AnswerStatus::COMPLETED,
+                )
+                .unwrap(),
+            },
+            "https://discord.com/api/webhooks/123/token".to_string(),
+            "https://portal.example.com/",
+        );
+
+        assert_eq!(
+            message.title,
+            "「（タイトルなし）」の対応ステータスが変更されました"
         );
     }
 }

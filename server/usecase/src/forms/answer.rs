@@ -7,9 +7,10 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
-            AnswerPagePosition, AnswerPublication, AnswerStatus, AnswerStatusHistoryEntry,
-            AnswerStatusHistoryPagePosition, AnswerTitle, AnswerTitleHistoryEntry,
-            AnswerTitleHistoryPagePosition, FormAnswerContent, PostedAnswerContents,
+            AnswerPagePosition, AnswerPublication, AnswerStatus, AnswerStatusChange,
+            AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition, AnswerTitle,
+            AnswerTitleHistoryEntry, AnswerTitleHistoryPagePosition, FormAnswerContent,
+            PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
@@ -515,12 +516,14 @@ impl<
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
 
-        let form_answer = match (title, publication, status) {
-            (None, None, None) => self
-                .answer_entry_repository
-                .get(&form, answer_id)
-                .await?
-                .ok_or(AnswerNotFound)?,
+        let (form_answer, status_change) = match (title, publication, status) {
+            (None, None, None) => (
+                self.answer_entry_repository
+                    .get(&form, answer_id)
+                    .await?
+                    .ok_or(AnswerNotFound)?,
+                None,
+            ),
             (title, publication, status) => {
                 let form_update = self
                     .active_form_repository
@@ -541,16 +544,31 @@ impl<
                     status,
                 )?;
 
-                self.answer_entry_repository
+                let status_change = self
+                    .answer_entry_repository
                     .update(&form_update, &updated_entry)
                     .await?;
 
-                self.answer_entry_repository
-                    .get(&form, answer_id)
-                    .await?
-                    .ok_or(AnswerNotFound)?
+                (
+                    self.answer_entry_repository
+                        .get(&form, answer_id)
+                        .await?
+                        .ok_or(AnswerNotFound)?,
+                    status_change,
+                )
             }
         };
+
+        if let (Some(publisher), Some(status_change)) =
+            (self.application_event_publisher, status_change)
+        {
+            publisher.publish(answer_status_changed_event(
+                actor,
+                form_id,
+                &form_answer,
+                status_change,
+            ));
+        }
 
         let labels = self
             .answer_label_repository
@@ -634,6 +652,25 @@ fn answer_submitted_event(
         form_title: form.title().as_str().to_owned(),
         answer_id: answer.id().to_string(),
         details: title.into_iter().chain(contents).collect(),
+    }
+}
+
+fn answer_status_changed_event(
+    actor: &AccountUser,
+    form_id: FormId,
+    answer: &Allowed<AnswerEntry, Read>,
+    status_change: AnswerStatusChange,
+) -> ApplicationEvent {
+    ApplicationEvent::AnswerStatusChanged {
+        actor: ApplicationActor::from(actor),
+        form_id: form_id.to_string(),
+        answer_title: answer
+            .title()
+            .to_owned()
+            .into_inner()
+            .map(|title| title.into_inner()),
+        answer_id: answer.id().to_string(),
+        status_change,
     }
 }
 
@@ -1103,6 +1140,138 @@ mod tests {
                 source: DomainError::Forbidden
             })
         ));
+    }
+
+    #[tokio::test]
+    async fn status_change_publishes_the_persisted_transition_with_the_updated_title() {
+        let form = sample_form();
+        let form_id = *form.id();
+        let author = active_user("answer author", Role::StandardUser);
+        let administrator = active_user("administrator", Role::Administrator);
+        let answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::AuthenticatedUser(*author.id()),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository =
+            crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories.user_repository.save_user(author);
+        let labels = EmptyAnswerLabelRepository;
+        let publisher = RecordingPublisher::default();
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: None,
+            application_event_publisher: Some(&publisher),
+        };
+
+        usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                Some(AnswerTitle::new(Some(
+                    NonEmptyString::try_new("Updated answer".to_string()).unwrap(),
+                ))),
+                None,
+                Some(AnswerStatus::IN_PROGRESS),
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            publisher.events().as_slice(),
+            [ApplicationEvent::AnswerStatusChanged {
+                actor: ApplicationActor { display_name, .. },
+                form_id: event_form_id,
+                answer_title: Some(answer_title),
+                answer_id: event_answer_id,
+                status_change,
+            }] if display_name == "administrator"
+                && event_form_id == &form_id.to_string()
+                && answer_title == "Updated answer"
+                && event_answer_id == &answer_id.to_string()
+                && status_change.from() == AnswerStatus::UNADDRESSED
+                && status_change.to() == AnswerStatus::IN_PROGRESS
+        ));
+    }
+
+    #[tokio::test]
+    async fn updates_without_a_status_transition_do_not_publish_a_status_event() {
+        let form = sample_form();
+        let form_id = *form.id();
+        let author = active_user("answer author", Role::StandardUser);
+        let administrator = active_user("administrator", Role::Administrator);
+        let answer = AnswerEntry::new(
+            form_id,
+            AnswerAuthor::AuthenticatedUser(*author.id()),
+            AnswerTitle::default(),
+            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
+                .unwrap(),
+        );
+        let answer_id = *answer.id();
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository =
+            crate::test_utils::repositories::InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories.user_repository.save_user(author);
+        let labels = EmptyAnswerLabelRepository;
+        let publisher = RecordingPublisher::default();
+        let usecase = AnswerUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            answer_label_repository: &labels,
+            user_repository: &repositories.user_repository,
+            form_submission_restriction_repository: &repositories
+                .form_submission_restriction_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            discord_answer_webhook_notifier: None,
+            application_event_publisher: Some(&publisher),
+        };
+
+        usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                Some(AnswerTitle::new(Some(
+                    NonEmptyString::try_new("Title only".to_string()).unwrap(),
+                ))),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                None,
+                Some(AnswerPublication::PRIVATE),
+                None,
+            )
+            .await
+            .unwrap();
+        usecase
+            .update_answer_meta(
+                form_id,
+                answer_id,
+                &administrator,
+                None,
+                None,
+                Some(AnswerStatus::UNADDRESSED),
+            )
+            .await
+            .unwrap();
+
+        assert!(publisher.events().is_empty());
     }
 
     #[tokio::test]

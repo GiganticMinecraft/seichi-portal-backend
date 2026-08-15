@@ -5,9 +5,9 @@ use domain::{
     account::models::{AccountUser, Role},
     form::{
         answer::{
-            AnswerAuthor, AnswerEntry, AnswerId, AnswerStatusHistoryPagePosition,
-            AnswerTitleHistoryPagePosition, RedmineImportedAnswerReference, RedmineUserSnapshot,
-            TemporaryAnswerAuthor,
+            AnswerAuthor, AnswerEntry, AnswerId, AnswerStatus, AnswerStatusChange,
+            AnswerStatusHistoryPagePosition, AnswerTitleHistoryPagePosition,
+            RedmineImportedAnswerReference, RedmineUserSnapshot, TemporaryAnswerAuthor,
         },
         models::FormId,
     },
@@ -545,7 +545,7 @@ impl FormAnswerDatabase for ConnectionPool {
         answer_entry: &AnswerEntry,
         form_id: FormId,
         updated_by: &AccountUser,
-    ) -> Result<(), InfraError> {
+    ) -> Result<Option<AnswerStatusChange>, InfraError> {
         let answer_id = answer_entry.id().to_owned().into_inner().to_string();
         let form_id = form_id.into_inner().to_string();
         let redmine_issue_id = validated_redmine_issue_id(answer_entry)?;
@@ -553,7 +553,8 @@ impl FormAnswerDatabase for ConnectionPool {
         let title = <Option<NonEmptyString> as Clone>::clone(&answer_entry.title().to_owned())
             .map(|title| title.into_inner());
         let publication = answer_entry.publication().to_string();
-        let status = answer_entry.status().to_string();
+        let status = *answer_entry.status();
+        let persisted_status = status.to_string();
         let updated_by = updated_by.clone();
 
         self.read_write_transaction(|txn| {
@@ -582,15 +583,22 @@ impl FormAnswerDatabase for ConnectionPool {
                     cause: "answer to update was not found".to_string(),
                 })?;
 
-                if current.status != status {
+                let current_status = AnswerStatus::try_from(current.status.clone()).map_err(
+                    |error| InfraError::Unexpected {
+                        cause: error.to_string(),
+                    },
+                )?;
+                let status_change = AnswerStatusChange::new(current_status, status);
+
+                if let Some(status_change) = status_change {
                     sqlx::query!(
                         r"INSERT INTO form_answer_status_history
                         (id, answer_id, from_status, to_status, changed_by_id, changed_by_name, changed_by_role)
                         VALUES (?, ?, ?, ?, ?, ?, ?)",
                         Uuid::now_v7().to_string(),
                         answer_id,
-                        current.status,
-                        status,
+                        status_change.from().to_string(),
+                        status_change.to().to_string(),
                         updated_by.id().to_string(),
                         updated_by.name(),
                         updated_by.role().to_string(),
@@ -622,7 +630,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     WHERE id = ? AND form_id = ?",
                     title,
                     publication,
-                    status,
+                    persisted_status,
                     answer_id,
                     form_id,
                 )
@@ -639,7 +647,7 @@ impl FormAnswerDatabase for ConnectionPool {
                     .execute(&mut **txn)
                     .await?;
                 }
-                Ok::<_, InfraError>(())
+                Ok::<_, InfraError>(status_change)
             })
         })
         .await

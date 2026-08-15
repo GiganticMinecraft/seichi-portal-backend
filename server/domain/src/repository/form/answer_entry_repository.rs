@@ -5,8 +5,8 @@ use mockall::automock;
 use crate::{
     form::{
         answer::{
-            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusHistoryEntry,
-            AnswerStatusHistoryPagePosition, AnswerTitleHistoryEntry,
+            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusChange,
+            AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition, AnswerTitleHistoryEntry,
             AnswerTitleHistoryPagePosition,
         },
         models::ActiveForm,
@@ -54,7 +54,7 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         &self,
         form: &Allowed<ActiveForm, Update>,
         answer_entry: &Allowed<AnswerEntry, Update>,
-    ) -> Result<(), Error>;
+    ) -> Result<Option<AnswerStatusChange>, Error>;
     async fn history(
         &self,
         answer: &Allowed<AnswerEntry, Read>,
