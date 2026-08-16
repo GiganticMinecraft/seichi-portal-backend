@@ -46,7 +46,7 @@ reqwest-middleware = { version = "0.5.2", features = ["json"] }
 # opentelemetry_0_32 feature は opentelemetry 0.32 + tracing-opentelemetry 0.33 の組 (entrypoint と揃える)
 reqwest-tracing = { version = "0.7.1", features = ["opentelemetry_0_32"] }
 regex = "1.13.1"
-redis = { version = "1.5.0", features = ["tokio-comp"] }
+redis = { version = "1.6.0", features = ["tokio-comp"] }
 meilisearch-sdk = "0.33.0"
 serenity = "0.12.5"
 lapin = "4.10.0"
