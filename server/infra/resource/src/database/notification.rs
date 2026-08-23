@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use domain::{
     account::models::{Role, UserId},
     notification::models::{
@@ -153,7 +152,7 @@ impl NotificationDatabase for ConnectionPool {
         self.read_write_transaction(|txn| {
             Box::pin(async move {
                 sqlx::query!(
-                    "UPDATE notifications SET read_at = ? WHERE id = ? AND recipient_id = ?",
+                    "UPDATE notifications SET read_at = ? WHERE id = ? AND recipient_id = ? AND read_at IS NULL",
                     read_at,
                     id,
                     recipient_id,
@@ -167,23 +166,35 @@ impl NotificationDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip_all, fields(recipient_id = %recipient_id))]
-    async fn update_read_at_for_recipient(
-        &self,
-        recipient_id: UserId,
-        read_at: DateTime<Utc>,
-    ) -> Result<(), InfraError> {
-        let recipient_id = recipient_id.to_string();
+    #[tracing::instrument(skip_all)]
+    async fn update_notifications(&self, notifications: &[Notification]) -> Result<(), InfraError> {
+        if notifications.is_empty() {
+            return Ok(());
+        }
+
+        let notifications = notifications
+            .iter()
+            .map(|notification| {
+                (
+                    notification.id().to_string(),
+                    notification.recipient_id().to_string(),
+                    *notification.read_at(),
+                )
+            })
+            .collect::<Vec<_>>();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                sqlx::query!(
-                    "UPDATE notifications SET read_at = ? WHERE recipient_id = ? AND read_at IS NULL",
-                    read_at,
-                    recipient_id,
-                )
-                .execute(&mut **txn)
-                .await?;
+                for (id, recipient_id, read_at) in notifications {
+                    sqlx::query!(
+                        "UPDATE notifications SET read_at = ? WHERE id = ? AND recipient_id = ? AND read_at IS NULL",
+                        read_at,
+                        id,
+                        recipient_id,
+                    )
+                    .execute(&mut **txn)
+                    .await?;
+                }
 
                 Ok::<_, InfraError>(())
             })

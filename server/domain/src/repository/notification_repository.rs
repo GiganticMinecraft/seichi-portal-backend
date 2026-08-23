@@ -1,12 +1,10 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use errors::Error;
 use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
     account::models::UserId,
-    auth::Actor,
     notification::models::{
         Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
@@ -34,10 +32,9 @@ pub trait NotificationRepository: Send + Sync + 'static {
         &self,
         notification: Allowed<Notification, Update>,
     ) -> Result<(), Error>;
-    async fn update_read_at_for_actor(
+    async fn update_notifications(
         &self,
-        actor: &Actor,
-        read_at: DateTime<Utc>,
+        notifications: Vec<Allowed<Notification, Update>>,
     ) -> Result<(), Error>;
     async fn create_notification_settings(
         &self,

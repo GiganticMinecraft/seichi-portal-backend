@@ -404,11 +404,7 @@ pub trait NotificationDatabase: Send + Sync {
         request: PageRequest<NotificationPagePosition>,
     ) -> Result<Page<NotificationRecord, NotificationPagePosition>, InfraError>;
     async fn update_notification(&self, notification: &Notification) -> Result<(), InfraError>;
-    async fn update_read_at_for_recipient(
-        &self,
-        recipient_id: UserId,
-        read_at: DateTime<Utc>,
-    ) -> Result<(), InfraError>;
+    async fn update_notifications(&self, notifications: &[Notification]) -> Result<(), InfraError>;
     async fn upsert_notification_settings(
         &self,
         notification_settings: &NotificationPreference,

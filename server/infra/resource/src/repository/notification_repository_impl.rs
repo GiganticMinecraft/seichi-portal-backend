@@ -1,8 +1,6 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use domain::{
     account::models::UserId,
-    auth::Actor,
     notification::models::{
         Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
@@ -75,19 +73,18 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
             .map_err(Into::into)
     }
 
-    async fn update_read_at_for_actor(
+    async fn update_notifications(
         &self,
-        actor: &Actor,
-        read_at: DateTime<Utc>,
+        notifications: Vec<Allowed<Notification, Update>>,
     ) -> Result<(), Error> {
-        let recipient_id = match actor {
-            Actor::AccountUser(actor) => *actor.id(),
-            _ => return Err(errors::domain::DomainError::Forbidden.into()),
-        };
+        let notifications = notifications
+            .into_iter()
+            .map(Allowed::into_inner)
+            .collect::<Vec<_>>();
 
         self.client
             .notification()
-            .update_read_at_for_recipient(recipient_id, read_at)
+            .update_notifications(&notifications)
             .await
             .map_err(Into::into)
     }

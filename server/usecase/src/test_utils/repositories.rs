@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserId,
@@ -1086,33 +1085,45 @@ impl NotificationRepository for InMemoryNotificationRepository {
             .iter_mut()
             .find(|stored| stored.id() == notification.id())
         {
-            *stored_notification = notification;
+            if stored_notification.read_at().is_none() {
+                *stored_notification = notification;
+            }
             Ok(())
         } else {
             Err(not_found_error("Notification", notification_id))
         }
     }
 
-    async fn update_read_at_for_actor(
+    async fn update_notifications(
         &self,
-        actor: &Actor,
-        read_at: DateTime<Utc>,
+        notifications: Vec<Allowed<Notification, Update>>,
     ) -> Result<(), Error> {
-        let recipient_id = match actor {
-            Actor::AccountUser(actor) => *actor.id(),
-            _ => return Err(errors::domain::DomainError::Forbidden.into()),
-        };
+        let notifications = notifications
+            .into_iter()
+            .map(Allowed::into_inner)
+            .collect::<Vec<_>>();
+        let mut stored_notifications = self.notifications.lock().unwrap();
 
-        self.notifications
-            .lock()
-            .unwrap()
-            .iter_mut()
-            .filter(|notification| {
-                *notification.recipient_id() == recipient_id && notification.read_at().is_none()
-            })
-            .for_each(|notification| {
-                *notification = notification.clone().mark_as_read(read_at);
-            });
+        if let Some(notification) = notifications.iter().find(|notification| {
+            !stored_notifications
+                .iter()
+                .any(|stored| stored.id() == notification.id())
+        }) {
+            return Err(not_found_error("Notification", notification.id()));
+        }
+
+        for notification in notifications {
+            let Some(stored_notification) = stored_notifications
+                .iter_mut()
+                .find(|stored| stored.id() == notification.id())
+            else {
+                unreachable!("notification existence was checked before updating");
+            };
+
+            if stored_notification.read_at().is_none() {
+                *stored_notification = notification;
+            }
+        }
         Ok(())
     }
 

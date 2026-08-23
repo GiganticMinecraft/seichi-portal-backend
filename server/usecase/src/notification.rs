@@ -6,7 +6,7 @@ use domain::{
     notification::models::{
         Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
-    pagination::{Page, PageRequest},
+    pagination::{Page, PageLimit, PageRequest},
     repository::{
         notification_repository::NotificationRepository, user_repository::UserRepository,
     },
@@ -67,10 +67,40 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
     }
 
     pub async fn mark_all_notifications_as_read(&self, actor: &AccountUser) -> Result<(), Error> {
+        let recipient_id = *actor.id();
         let actor = Actor::from(actor.clone());
-        self.repository
-            .update_read_at_for_actor(&actor, Utc::now())
-            .await
+        let read_at = Utc::now();
+        let mut request = PageRequest::first(PageLimit::default_limit());
+        let mut notifications = Vec::new();
+
+        loop {
+            let page = self
+                .repository
+                .fetch_notifications(recipient_id, request)
+                .await?;
+            let (items, next) = page.into_parts();
+
+            notifications.extend(
+                items
+                    .into_iter()
+                    .map(|notification| {
+                        let notification =
+                            notification.try_read(actor.clone()).map_err(Error::from)?;
+                        let notification = notification.try_into_update().map_err(Error::from)?;
+                        Ok::<_, Error>(
+                            notification.map(|notification| notification.mark_as_read(read_at)),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?,
+            );
+
+            let Some(next) = next else {
+                break;
+            };
+            request = PageRequest::after(next, PageLimit::default_limit());
+        }
+
+        self.repository.update_notifications(notifications).await
     }
 
     pub async fn fetch_notification_settings(
@@ -226,6 +256,13 @@ mod tests {
 
         create_notification(&repositories.notification_repository, owner_read).await;
         create_notification(&repositories.notification_repository, owner_unread).await;
+        for _ in 0..50 {
+            create_notification(
+                &repositories.notification_repository,
+                notification(*owner.id()),
+            )
+            .await;
+        }
         create_notification(&repositories.notification_repository, other_unread).await;
         create_notification(&repositories.notification_repository, administrator_unread).await;
 
@@ -239,7 +276,8 @@ mod tests {
             .fetch_notifications(&owner, request.clone())
             .await
             .unwrap();
-        assert_eq!(owner_notifications.items().len(), 2);
+        assert_eq!(owner_notifications.items().len(), 50);
+        assert!(owner_notifications.next().is_some());
         assert!(
             owner_notifications
                 .items()
@@ -260,9 +298,11 @@ mod tests {
             .unwrap();
 
         let owner_notifications = usecase
-            .fetch_notifications(&owner, request.clone())
+            .fetch_notifications(&owner, PageRequest::first(PageLimit::try_new(100).unwrap()))
             .await
             .unwrap();
+        assert_eq!(owner_notifications.items().len(), 52);
+        assert_eq!(owner_notifications.next(), None);
         assert!(
             owner_notifications
                 .items()
@@ -311,6 +351,30 @@ mod tests {
                 .items()[0]
                 .read_at()
                 .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn read_all_succeeds_when_the_actor_has_no_notifications() {
+        let actor = user("actor", Role::StandardUser);
+        let repositories = FormUseCaseTestRepositories::default();
+        let usecase = NotificationUseCase {
+            repository: &repositories.notification_repository,
+            user_repository: &repositories.user_repository,
+        };
+
+        usecase
+            .mark_all_notifications_as_read(&actor)
+            .await
+            .unwrap();
+
+        assert!(
+            usecase
+                .fetch_notifications(&actor, PageRequest::first(PageLimit::default_limit()))
+                .await
+                .unwrap()
+                .items()
+                .is_empty()
         );
     }
 }
