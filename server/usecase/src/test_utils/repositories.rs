@@ -20,8 +20,7 @@ use domain::{
         },
     },
     notification::models::{
-        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
-        NotificationPreference,
+        Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
     pagination::{Page, PageRequest},
     repository::{
@@ -1094,12 +1093,16 @@ impl NotificationRepository for InMemoryNotificationRepository {
         }
     }
 
-    async fn mark_all_notifications_as_read(
+    async fn update_read_at_for_actor(
         &self,
-        operation: Allowed<MarkAllNotificationsAsRead, Update>,
+        actor: &Actor,
         read_at: DateTime<Utc>,
     ) -> Result<(), Error> {
-        let recipient_id = *operation.recipient_id();
+        let recipient_id = match actor {
+            Actor::AccountUser(actor) => *actor.id(),
+            _ => return Err(errors::domain::DomainError::Forbidden.into()),
+        };
+
         self.notifications
             .lock()
             .unwrap()
@@ -1108,8 +1111,7 @@ impl NotificationRepository for InMemoryNotificationRepository {
                 *notification.recipient_id() == recipient_id && notification.read_at().is_none()
             })
             .for_each(|notification| {
-                let updated = notification.clone().mark_as_read(read_at);
-                *notification = updated;
+                *notification = notification.clone().mark_as_read(read_at);
             });
         Ok(())
     }

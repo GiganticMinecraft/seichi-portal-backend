@@ -6,9 +6,9 @@ use uuid::Uuid;
 
 use crate::{
     account::models::UserId,
+    auth::Actor,
     notification::models::{
-        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
-        NotificationPreference,
+        Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
     pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
@@ -34,9 +34,9 @@ pub trait NotificationRepository: Send + Sync + 'static {
         &self,
         notification: Allowed<Notification, Update>,
     ) -> Result<(), Error>;
-    async fn mark_all_notifications_as_read(
+    async fn update_read_at_for_actor(
         &self,
-        operation: Allowed<MarkAllNotificationsAsRead, Update>,
+        actor: &Actor,
         read_at: DateTime<Utc>,
     ) -> Result<(), Error>;
     async fn create_notification_settings(

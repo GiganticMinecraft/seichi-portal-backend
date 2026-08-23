@@ -111,44 +111,6 @@ impl AuthorizationGuardDefinitions for Notification {
     }
 }
 
-/// 通知の所有者が、自分の未読通知を一括して既読にする操作を表す。
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MarkAllNotificationsAsRead {
-    recipient_id: UserId,
-}
-
-impl MarkAllNotificationsAsRead {
-    pub fn new(recipient_id: UserId) -> Self {
-        Self { recipient_id }
-    }
-
-    pub fn recipient_id(&self) -> &UserId {
-        &self.recipient_id
-    }
-}
-
-impl AuthorizationRole for MarkAllNotificationsAsRead {
-    type Role = SelfGuarded;
-}
-
-impl AuthorizationGuardDefinitions for MarkAllNotificationsAsRead {
-    fn can_create(&self, _actor: &Actor) -> bool {
-        false
-    }
-
-    fn can_read(&self, _actor: &Actor) -> bool {
-        false
-    }
-
-    fn can_update(&self, actor: &Actor) -> bool {
-        matches!(actor, Actor::AccountUser(actor) if self.recipient_id == *actor.id())
-    }
-
-    fn can_delete(&self, _actor: &Actor) -> bool {
-        false
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NotificationPagePosition(NotificationId);
 

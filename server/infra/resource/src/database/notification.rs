@@ -5,8 +5,7 @@ use chrono::{DateTime, Utc};
 use domain::{
     account::models::{Role, UserId},
     notification::models::{
-        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
-        NotificationPreference,
+        Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
     pagination::{Page, PageRequest},
 };
@@ -168,13 +167,13 @@ impl NotificationDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip_all, fields(recipient_id = %operation.recipient_id()))]
-    async fn mark_all_notifications_as_read(
+    #[tracing::instrument(skip_all, fields(recipient_id = %recipient_id))]
+    async fn update_read_at_for_recipient(
         &self,
-        operation: &MarkAllNotificationsAsRead,
+        recipient_id: UserId,
         read_at: DateTime<Utc>,
     ) -> Result<(), InfraError> {
-        let recipient_id = operation.recipient_id().to_string();
+        let recipient_id = recipient_id.to_string();
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {

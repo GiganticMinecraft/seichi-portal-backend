@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use domain::account::models::UserId;
 use domain::{
+    account::models::UserId,
+    auth::Actor,
     notification::models::{
-        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
-        NotificationPreference,
+        Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
     pagination::{Page, PageRequest},
     repository::notification_repository::NotificationRepository,
@@ -75,14 +75,19 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
             .map_err(Into::into)
     }
 
-    async fn mark_all_notifications_as_read(
+    async fn update_read_at_for_actor(
         &self,
-        operation: Allowed<MarkAllNotificationsAsRead, Update>,
+        actor: &Actor,
         read_at: DateTime<Utc>,
     ) -> Result<(), Error> {
+        let recipient_id = match actor {
+            Actor::AccountUser(actor) => *actor.id(),
+            _ => return Err(errors::domain::DomainError::Forbidden.into()),
+        };
+
         self.client
             .notification()
-            .mark_all_notifications_as_read(operation.value(), read_at)
+            .update_read_at_for_recipient(recipient_id, read_at)
             .await
             .map_err(Into::into)
     }

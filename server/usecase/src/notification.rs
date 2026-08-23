@@ -4,8 +4,7 @@ use domain::{
     account::models::AccountUser,
     auth::Actor,
     notification::models::{
-        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
-        NotificationPreference,
+        Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
     pagination::{Page, PageRequest},
     repository::{
@@ -68,11 +67,9 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
     }
 
     pub async fn mark_all_notifications_as_read(&self, actor: &AccountUser) -> Result<(), Error> {
-        let operation = AuthorizationGuard::from(MarkAllNotificationsAsRead::new(*actor.id()))
-            .try_update(Actor::from(actor.clone()))?;
-
+        let actor = Actor::from(actor.clone());
         self.repository
-            .mark_all_notifications_as_read(operation, Utc::now())
+            .update_read_at_for_actor(&actor, Utc::now())
             .await
     }
 
@@ -220,13 +217,17 @@ mod tests {
         let repositories = FormUseCaseTestRepositories::default();
 
         let owner_read = notification(*owner.id()).mark_as_read(Utc::now());
+        let owner_read_id = *owner_read.id();
+        let owner_read_at = (*owner_read.read_at()).expect("read notification has a timestamp");
         let owner_unread = notification(*owner.id());
         let other_unread = notification(*other_user.id());
         let other_unread_id = *other_unread.id();
+        let administrator_unread = notification(*administrator.id());
 
         create_notification(&repositories.notification_repository, owner_read).await;
         create_notification(&repositories.notification_repository, owner_unread).await;
         create_notification(&repositories.notification_repository, other_unread).await;
+        create_notification(&repositories.notification_repository, administrator_unread).await;
 
         let usecase = NotificationUseCase {
             repository: &repositories.notification_repository,
@@ -268,6 +269,15 @@ mod tests {
                 .iter()
                 .all(|notification| notification.read_at().is_some())
         );
+        assert_eq!(
+            *owner_notifications
+                .items()
+                .iter()
+                .find(|notification| *notification.id() == owner_read_id)
+                .expect("existing read notification is present")
+                .read_at(),
+            Some(owner_read_at)
+        );
 
         let other_notifications = usecase
             .fetch_notifications(&other_user, request.clone())
@@ -277,9 +287,30 @@ mod tests {
         assert!(other_notifications.items()[0].read_at().is_none());
 
         let administrator_notifications = usecase
+            .fetch_notifications(&administrator, request.clone())
+            .await
+            .unwrap();
+        assert_eq!(administrator_notifications.items().len(), 1);
+        assert!(administrator_notifications.items()[0].read_at().is_none());
+
+        usecase
+            .mark_all_notifications_as_read(&administrator)
+            .await
+            .unwrap();
+
+        let administrator_notifications = usecase
             .fetch_notifications(&administrator, request)
             .await
             .unwrap();
-        assert!(administrator_notifications.items().is_empty());
+        assert!(administrator_notifications.items()[0].read_at().is_some());
+        assert!(
+            usecase
+                .fetch_notifications(&other_user, PageRequest::first(PageLimit::default_limit()))
+                .await
+                .unwrap()
+                .items()[0]
+                .read_at()
+                .is_none()
+        );
     }
 }
