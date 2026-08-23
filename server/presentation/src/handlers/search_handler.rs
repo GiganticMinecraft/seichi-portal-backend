@@ -122,6 +122,7 @@ fn required_query(query: Result<Query<SearchQuery>, QueryRejection>) -> Result<S
         Unauthorized,
         Forbidden,
         InternalServerError,
+        ServiceUnavailable,
     ),
     security(("bearer" = [])),
     tag = "Search"
@@ -165,6 +166,7 @@ pub async fn cross_search(
         Unauthorized,
         Forbidden,
         InternalServerError,
+        ServiceUnavailable,
     ),
     security(("bearer" = [])),
     tag = "Search"
@@ -211,6 +213,7 @@ pub async fn search_users(
         Unauthorized,
         Forbidden,
         InternalServerError,
+        ServiceUnavailable,
     ),
     security(("bearer" = [])),
     tag = "Search"

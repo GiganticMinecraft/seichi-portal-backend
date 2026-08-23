@@ -275,10 +275,10 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
         InfraError::MeiliSearch { cause } => {
             tracing::error!("MeiliSearch Error: {}", cause);
             problem_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Internal Server Error",
-                "Search database Error",
-                "INTERNAL_SERVER_ERROR",
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Service Unavailable",
+                "Search service is temporarily unavailable.",
+                "SEARCH_SERVICE_UNAVAILABLE",
             )
         }
         InfraError::SerdeJson { cause } => {
@@ -411,6 +411,33 @@ mod tests {
         assert_eq!(
             problem["detail"],
             "Messages cannot be posted to temporary answers."
+        );
+    }
+
+    #[tokio::test]
+    async fn meilisearch_error_is_a_search_service_unavailable_problem() {
+        let response = handle_error(
+            InfraError::MeiliSearch {
+                cause: "connection refused".to_string(),
+            }
+            .into(),
+        );
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE).unwrap(),
+            "application/problem+json"
+        );
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(problem["status"], 503);
+        assert_eq!(problem["title"], "Service Unavailable");
+        assert_eq!(problem["errorCode"], "SEARCH_SERVICE_UNAVAILABLE");
+        assert_eq!(
+            problem["detail"],
+            "Search service is temporarily unavailable."
         );
     }
 }
