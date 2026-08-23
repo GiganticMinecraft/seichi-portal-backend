@@ -1,7 +1,7 @@
-use chrono::Utc;
-use domain::types::authorization_guard::{AuthorizationGuard, Create, Read};
+use chrono::{DateTime, Utc};
+use domain::types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update};
 use domain::{
-    account::models::AccountUser,
+    account::models::{AccountUser, UserId},
     auth::Actor,
     notification::models::{
         Notification, NotificationId, NotificationPagePosition, NotificationPreference,
@@ -23,7 +23,47 @@ pub struct NotificationUseCase<
     pub user_repository: &'a UserRepo,
 }
 
+fn mark_notifications_as_read(
+    notifications: Vec<AuthorizationGuard<Notification, Read>>,
+    actor: &Actor,
+    read_at: DateTime<Utc>,
+) -> Result<Vec<Allowed<Notification, Update>>, Error> {
+    notifications
+        .into_iter()
+        .map(|notification| {
+            let notification = notification.try_read(actor.clone()).map_err(Error::from)?;
+            let notification = notification.try_into_update().map_err(Error::from)?;
+            Ok(notification.map(|notification| notification.mark_as_read(read_at)))
+        })
+        .collect()
+}
+
 impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1, R2> {
+    async fn fetch_all_notification_guards(
+        &self,
+        recipient_id: UserId,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
+        let limit = PageLimit::default_limit();
+        let mut request = PageRequest::first(limit);
+        let mut notifications = Vec::new();
+
+        loop {
+            let page = self
+                .repository
+                .fetch_notifications(recipient_id, request)
+                .await?;
+            let (items, next) = page.into_parts();
+            notifications.extend(items);
+
+            let Some(next) = next else {
+                break;
+            };
+            request = PageRequest::after(next, limit);
+        }
+
+        Ok(notifications)
+    }
+
     pub async fn fetch_notifications(
         &self,
         actor: &AccountUser,
@@ -70,35 +110,8 @@ impl<R1: NotificationRepository, R2: UserRepository> NotificationUseCase<'_, R1,
         let recipient_id = *actor.id();
         let actor = Actor::from(actor.clone());
         let read_at = Utc::now();
-        let mut request = PageRequest::first(PageLimit::default_limit());
-        let mut notifications = Vec::new();
-
-        loop {
-            let page = self
-                .repository
-                .fetch_notifications(recipient_id, request)
-                .await?;
-            let (items, next) = page.into_parts();
-
-            notifications.extend(
-                items
-                    .into_iter()
-                    .map(|notification| {
-                        let notification =
-                            notification.try_read(actor.clone()).map_err(Error::from)?;
-                        let notification = notification.try_into_update().map_err(Error::from)?;
-                        Ok::<_, Error>(
-                            notification.map(|notification| notification.mark_as_read(read_at)),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?,
-            );
-
-            let Some(next) = next else {
-                break;
-            };
-            request = PageRequest::after(next, PageLimit::default_limit());
-        }
+        let notifications = self.fetch_all_notification_guards(recipient_id).await?;
+        let notifications = mark_notifications_as_read(notifications, &actor, read_at)?;
 
         self.repository.update_notifications(notifications).await
     }
