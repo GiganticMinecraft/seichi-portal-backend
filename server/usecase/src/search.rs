@@ -37,14 +37,17 @@ use std::{
     collections::{HashMap, HashSet},
     future::ready,
     iter::once,
-    sync::Arc,
     time::Duration,
 };
-use tokio::sync::{Notify, mpsc::Receiver};
+use tokio::sync::{mpsc::Receiver, watch};
 use tokio::time;
 use tracing::Instrument;
 
 const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
+#[cfg(not(test))]
+const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::from_secs(10);
+#[cfg(test)]
+const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::ZERO;
 
 pub struct SearchUseCase<
     'a,
@@ -538,42 +541,76 @@ impl<
     pub async fn start_sync(
         &self,
         receiver: Receiver<SearchableFieldsWithOperation>,
-        shutdown_notifier: Arc<Notify>,
+        mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
         let mut receiver = receiver;
+
         loop {
-            tokio::select! {
-                _ = shutdown_notifier.notified() => {
-                    break;
-                },
-                _ = async {
-                    if let Some(data) = receiver.recv().await {
+            if *shutdown_status.borrow() {
+                return Ok(());
+            }
+
+            let pending = tokio::select! {
+                biased;
+                _ = shutdown_status.changed() => return Ok(()),
+                pending = receiver.recv() => pending,
+            };
+            let Some(pending) = pending else {
+                return Ok(());
+            };
+
+            loop {
+                if *shutdown_status.borrow() {
+                    return Ok(());
+                }
+
+                let result = tokio::select! {
+                    biased;
+                    _ = shutdown_status.changed() => return Ok(()),
+                    result = self.search_repository
+                        .sync_search_engine(std::slice::from_ref(&pending))
                         // CDC consumer からチャンネル越しに受け取るため trace context はなく、
                         // 同期 1 件ごとに新しいルートスパンを作る
-                        self.search_repository
-                            .sync_search_engine(&[data])
-                            .instrument(tracing::info_span!(parent: None, "search_engine.sync"))
-                            .await?
-                    }
+                        .instrument(tracing::info_span!(parent: None, "search_engine.sync")) => result,
+                };
 
-                    Ok::<_, Error>(())
-                } => {}
+                match result {
+                    Ok(()) => break,
+                    Err(error) => {
+                        tracing::warn!(
+                            error = %error,
+                            retry_after_seconds = SEARCH_ENGINE_SYNC_RETRY_DELAY.as_secs(),
+                            "failed to synchronize search engine; retrying",
+                        );
+
+                        tokio::select! {
+                            biased;
+                            _ = shutdown_status.changed() => return Ok(()),
+                            _ = time::sleep(SEARCH_ENGINE_SYNC_RETRY_DELAY) => {}
+                        }
+                    }
+                }
             }
         }
-
-        Ok(())
     }
 
     pub async fn start_watch_out_of_sync(
         &self,
-        shutdown_notifier: Arc<Notify>,
+        mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
         let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
+            if *shutdown_status.borrow() {
+                break;
+            }
+
             tokio::select! {
-                _ = shutdown_notifier.notified() => {
-                    break
+                biased;
+                result = shutdown_status.changed() => {
+                    if result.is_err() || *shutdown_status.borrow() {
+                        break;
+                    }
                 },
                 _ = interval.tick() => {
                     if let Err(error) = self.check_and_resync_search_engine().await {
@@ -801,8 +838,13 @@ mod tests {
             },
             search_repository::MockSearchRepository,
         },
-        search::models::{AnswerSearchHit, CommentSearchHit, FormSearchHit},
+        search::models::{
+            AnswerSearchHit, CommentSearchHit, FormSearchHit, SearchableFields,
+            SearchableFieldsWithOperation, Users,
+        },
     };
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::{Notify, mpsc, watch};
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
@@ -827,6 +869,166 @@ mod tests {
             FormSettings::new()
                 .change_allowed_user_groups(AllowedUserGroups::new(vec![*group.id()])),
         )
+    }
+
+    struct SearchSyncDependencies {
+        active_form_repository: InMemoryActiveFormRepository,
+        form_answer_label_repository: MockAnswerLabelRepository,
+        form_label_repository: InMemoryFormLabelRepository,
+        user_repository: InMemoryUserRepository,
+        answer_entry_repository: InMemoryAnswerEntryRepository,
+        comment_thread_repository: MockCommentThreadRepository,
+    }
+
+    impl SearchSyncDependencies {
+        fn new() -> Self {
+            Self {
+                active_form_repository: InMemoryActiveFormRepository::default(),
+                form_answer_label_repository: MockAnswerLabelRepository::new(),
+                form_label_repository: InMemoryFormLabelRepository,
+                user_repository: InMemoryUserRepository::default(),
+                answer_entry_repository: InMemoryAnswerEntryRepository::default(),
+                comment_thread_repository: MockCommentThreadRepository::new(),
+            }
+        }
+
+        fn use_case<'a>(
+            &'a self,
+            search_repository: &'a MockSearchRepository,
+        ) -> SearchUseCase<
+            'a,
+            MockSearchRepository,
+            InMemoryActiveFormRepository,
+            MockAnswerLabelRepository,
+            InMemoryFormLabelRepository,
+            InMemoryUserRepository,
+            InMemoryAnswerEntryRepository,
+            MockCommentThreadRepository,
+        > {
+            SearchUseCase {
+                search_repository,
+                active_form_repository: &self.active_form_repository,
+                form_answer_label_repository: &self.form_answer_label_repository,
+                form_label_repository: &self.form_label_repository,
+                user_repository: &self.user_repository,
+                answer_entry_repository: &self.answer_entry_repository,
+                comment_thread_repository: &self.comment_thread_repository,
+            }
+        }
+    }
+
+    fn user_search_event(id: Uuid) -> SearchableFieldsWithOperation {
+        (
+            SearchableFields::Users(Users {
+                id,
+                name: id.to_string(),
+            }),
+            Operation::Update,
+        )
+    }
+
+    fn user_id_from_search_event(data: &[SearchableFieldsWithOperation]) -> Uuid {
+        match &data[0].0 {
+            SearchableFields::Users(user) => user.id,
+            _ => panic!("test event must be a user document"),
+        }
+    }
+
+    fn temporary_search_error() -> Error {
+        errors::infra::InfraError::Unexpected {
+            cause: "temporary search engine failure".to_string(),
+        }
+        .into()
+    }
+
+    #[tokio::test]
+    async fn start_sync_retries_pending_event_before_processing_the_next_event() {
+        let first_id = Uuid::from_u128(1);
+        let second_id = Uuid::from_u128(2);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let call_progress = Arc::new(Notify::new());
+        let mut search_repository = MockSearchRepository::new();
+        let calls_for_repository = Arc::clone(&calls);
+        let progress_for_repository = Arc::clone(&call_progress);
+        search_repository
+            .expect_sync_search_engine()
+            .times(3)
+            .returning(move |data| {
+                let mut calls = calls_for_repository.lock().unwrap();
+                let attempt = calls.len();
+                calls.push(user_id_from_search_event(data));
+                progress_for_repository.notify_one();
+
+                if attempt == 0 {
+                    Err(temporary_search_error())
+                } else {
+                    Ok(())
+                }
+            });
+
+        let dependencies = SearchSyncDependencies::new();
+        let use_case = dependencies.use_case(&search_repository);
+        let (sender, receiver) = mpsc::channel(2);
+        let (_shutdown_sender, shutdown_status) = watch::channel(false);
+        let sync = use_case.start_sync(receiver, shutdown_status);
+        let calls_for_producer = Arc::clone(&calls);
+        let producer = async move {
+            sender.send(user_search_event(first_id)).await.unwrap();
+            sender.send(user_search_event(second_id)).await.unwrap();
+
+            call_progress.notified().await;
+            assert_eq!(calls_for_producer.lock().unwrap().as_slice(), &[first_id]);
+
+            call_progress.notified().await;
+            call_progress.notified().await;
+            drop(sender);
+        };
+
+        let (result, ()) = tokio::join!(sync, producer);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &[first_id, first_id, second_id]
+        );
+    }
+
+    #[tokio::test]
+    async fn start_sync_returns_when_receiver_is_closed() {
+        let search_repository = MockSearchRepository::new();
+        let dependencies = SearchSyncDependencies::new();
+        let use_case = dependencies.use_case(&search_repository);
+        let (sender, receiver) = mpsc::channel(1);
+        drop(sender);
+        let (_shutdown_sender, shutdown_status) = watch::channel(false);
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            use_case.start_sync(receiver, shutdown_status),
+        )
+        .await
+        .expect("start_sync must stop after its receiver is closed");
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn start_sync_returns_when_shutdown_was_already_requested() {
+        let search_repository = MockSearchRepository::new();
+        let dependencies = SearchSyncDependencies::new();
+        let use_case = dependencies.use_case(&search_repository);
+        let (_sender, receiver) = mpsc::channel(1);
+        let (shutdown_sender, shutdown_status) = watch::channel(false);
+        shutdown_sender.send(true).unwrap();
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            use_case.start_sync(receiver, shutdown_status),
+        )
+        .await
+        .expect("start_sync must stop after shutdown was requested");
+
+        assert!(result.is_ok());
     }
 
     #[tokio::test]

@@ -24,7 +24,11 @@ use domain::{
 use errors::infra::InfraError;
 use futures::{future::try_join_all, try_join};
 use itertools::Itertools;
-use meilisearch_sdk::{errors::Error as MeilisearchError, search::Selectors};
+use meilisearch_sdk::{
+    errors::{Error as MeilisearchError, ErrorCode},
+    search::Selectors,
+    tasks::Task,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -192,6 +196,28 @@ fn add_meilisearch_stats_auth(
         Some(api_key) => request.bearer_auth(api_key),
         None => request,
     }
+}
+
+fn ensure_meilisearch_task_succeeded(
+    task: Task,
+    allow_index_already_exists: bool,
+) -> Result<(), MeilisearchError> {
+    if task.is_failure() {
+        let error = task.unwrap_failure();
+        if allow_index_already_exists && error.error_code == ErrorCode::IndexAlreadyExists {
+            return Ok(());
+        }
+
+        return Err(MeilisearchError::Meilisearch(error));
+    }
+
+    if matches!(task, Task::Succeeded { .. }) {
+        return Ok(());
+    }
+
+    Err(MeilisearchError::Other(Box::new(std::io::Error::other(
+        "Meilisearch task did not finish successfully",
+    ))))
 }
 
 #[async_trait]
@@ -540,27 +566,29 @@ impl SearchDatabase for ConnectionPool {
         let futures = index_with_uid
             .into_iter()
             .map(async |(index, uid)| {
-                self.meilisearch_client
+                let task = self
+                    .meilisearch_client
                     .create_index(index, Some(uid))
                     .await?
                     .wait_for_completion(&self.meilisearch_client, None, None)
                     .await?;
 
-                Ok::<_, MeilisearchError>(())
+                ensure_meilisearch_task_succeeded(task, true)
             })
             .collect_vec();
 
         try_join_all(futures).await?;
 
         let settings_futures = ["answers", "real_answers"].into_iter().map(async |index| {
-            self.meilisearch_client
+            let task = self
+                .meilisearch_client
                 .index(index)
                 .set_filterable_attributes(["form_id", "status"])
                 .await?
                 .wait_for_completion(&self.meilisearch_client, None, None)
                 .await?;
 
-            Ok::<_, MeilisearchError>(())
+            ensure_meilisearch_task_succeeded(task, false)
         });
         try_join_all(settings_futures).await?;
 
