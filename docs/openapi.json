@@ -4520,6 +4520,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "The server is temporarily unable to handle the request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4616,6 +4626,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "The server is temporarily unable to handle the request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4686,6 +4706,16 @@
           },
           "500": {
             "description": "Server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is temporarily unable to handle the request.",
             "content": {
               "application/problem+json": {
                 "schema": {
