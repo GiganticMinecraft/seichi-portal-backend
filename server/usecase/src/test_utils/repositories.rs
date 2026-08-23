@@ -1,7 +1,9 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use domain::{
     account::models::{
-        AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserPagePosition,
+        AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserId,
+        UserPagePosition,
     },
     auth::Actor,
     form::{
@@ -17,7 +19,10 @@ use domain::{
             FormPagePosition,
         },
     },
-    notification::models::NotificationPreference,
+    notification::models::{
+        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
+        NotificationPreference,
+    },
     pagination::{Page, PageRequest},
     repository::{
         form::{
@@ -1008,10 +1013,107 @@ impl ArchivedFormRepository for InMemoryArchivedFormRepository {
 #[derive(Default)]
 pub(crate) struct InMemoryNotificationRepository {
     preferences: Mutex<Vec<NotificationPreference>>,
+    notifications: Mutex<Vec<Notification>>,
 }
 
 #[async_trait]
 impl NotificationRepository for InMemoryNotificationRepository {
+    async fn create_notification(
+        &self,
+        notification: Allowed<Notification, Create>,
+    ) -> Result<(), Error> {
+        self.notifications
+            .lock()
+            .unwrap()
+            .push(notification.into_inner());
+        Ok(())
+    }
+
+    async fn fetch_notification(
+        &self,
+        id: NotificationId,
+    ) -> Result<Option<AuthorizationGuard<Notification, Read>>, Error> {
+        Ok(self
+            .notifications
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|notification| *notification.id() == id)
+            .cloned()
+            .map(AuthorizationGuard::from))
+    }
+
+    async fn fetch_notifications(
+        &self,
+        recipient_id: UserId,
+        request: PageRequest<NotificationPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<Notification, Read>, NotificationPagePosition>, Error> {
+        let mut notifications = self
+            .notifications
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|notification| *notification.recipient_id() == recipient_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        notifications.sort_by(|left, right| right.id().cmp(left.id()));
+
+        if let Some(position) = request.after_position() {
+            notifications.retain(|notification| *notification.id() < position.id());
+        }
+
+        let page = Page::from_overfetched_items(notifications, request.limit(), |notification| {
+            NotificationPagePosition::new(*notification.id())
+        });
+        let (notifications, next) = page.into_parts();
+
+        Ok(Page::new(
+            notifications
+                .into_iter()
+                .map(AuthorizationGuard::from)
+                .collect(),
+            next,
+        ))
+    }
+
+    async fn update_notification(
+        &self,
+        notification: Allowed<Notification, Update>,
+    ) -> Result<(), Error> {
+        let notification = notification.into_inner();
+        let notification_id = *notification.id();
+        let mut notifications = self.notifications.lock().unwrap();
+        if let Some(stored_notification) = notifications
+            .iter_mut()
+            .find(|stored| stored.id() == notification.id())
+        {
+            *stored_notification = notification;
+            Ok(())
+        } else {
+            Err(not_found_error("Notification", notification_id))
+        }
+    }
+
+    async fn mark_all_notifications_as_read(
+        &self,
+        operation: Allowed<MarkAllNotificationsAsRead, Update>,
+        read_at: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        let recipient_id = *operation.recipient_id();
+        self.notifications
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|notification| {
+                *notification.recipient_id() == recipient_id && notification.read_at().is_none()
+            })
+            .for_each(|notification| {
+                let updated = notification.clone().mark_as_read(read_at);
+                *notification = updated;
+            });
+        Ok(())
+    }
+
     async fn create_notification_settings(
         &self,
         notification_settings: Allowed<NotificationPreference, Create>,

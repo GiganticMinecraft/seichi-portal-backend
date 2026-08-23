@@ -64,6 +64,8 @@ use utoipa_axum::routes;
         presentation::schemas::form::form_response_schemas::Role,
         presentation::schemas::form::form_response_schemas::SenderSchema,
         presentation::schemas::form::form_response_schemas::User,
+        presentation::schemas::notification::notification_response_schemas::NotificationPageResponse,
+        presentation::schemas::notification::notification_response_schemas::NotificationResponse,
         presentation::schemas::notification::notification_response_schemas::NotificationSettingsResponse,
         presentation::schemas::search_schemas::SearchCommentSchema,
         presentation::schemas::search_schemas::CrossSearchResult,
@@ -225,6 +227,11 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             message_handler::delete_message_handler
         ))
         .routes(routes!(notification_handler::get_notification_settings))
+        .routes(routes!(notification_handler::get_notifications))
+        .routes(routes!(notification_handler::mark_notification_as_read))
+        .routes(routes!(
+            notification_handler::mark_all_notifications_as_read
+        ))
         .routes(routes!(
             notification_handler::get_my_notification_settings,
             notification_handler::update_notification_settings

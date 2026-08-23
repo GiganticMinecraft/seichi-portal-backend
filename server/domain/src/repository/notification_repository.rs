@@ -1,16 +1,44 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use errors::Error;
 use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    notification::models::NotificationPreference,
+    account::models::UserId,
+    notification::models::{
+        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
+        NotificationPreference,
+    },
+    pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
 
 #[automock]
 #[async_trait]
 pub trait NotificationRepository: Send + Sync + 'static {
+    async fn create_notification(
+        &self,
+        notification: Allowed<Notification, Create>,
+    ) -> Result<(), Error>;
+    async fn fetch_notification(
+        &self,
+        id: NotificationId,
+    ) -> Result<Option<AuthorizationGuard<Notification, Read>>, Error>;
+    async fn fetch_notifications(
+        &self,
+        recipient_id: UserId,
+        request: PageRequest<NotificationPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<Notification, Read>, NotificationPagePosition>, Error>;
+    async fn update_notification(
+        &self,
+        notification: Allowed<Notification, Update>,
+    ) -> Result<(), Error>;
+    async fn mark_all_notifications_as_read(
+        &self,
+        operation: Allowed<MarkAllNotificationsAsRead, Update>,
+        read_at: DateTime<Utc>,
+    ) -> Result<(), Error>;
     async fn create_notification_settings(
         &self,
         notification_settings: Allowed<NotificationPreference, Create>,

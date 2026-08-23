@@ -3,7 +3,7 @@ use crate::{
     records::{
         ActiveFormRecord, AnswerLabelRecord, AnswerStatusHistoryRecord, AnswerTitleHistoryRecord,
         ArchivedFormRecord, CommentHistoryRecord, CommentRecord, DiscordUserRecord,
-        FormAnswerRecord, FormLabelRecord, MessageHistoryRecord, MessageRecord,
+        FormAnswerRecord, FormLabelRecord, MessageHistoryRecord, MessageRecord, NotificationRecord,
         NotificationSettingsRecord,
     },
 };
@@ -33,7 +33,10 @@ use domain::{
         },
     },
     minecraft_ban::MinecraftBan,
-    notification::models::NotificationPreference,
+    notification::models::{
+        MarkAllNotificationsAsRead, Notification, NotificationId, NotificationPagePosition,
+        NotificationPreference,
+    },
     pagination::{Page, PageRequest},
     search::models::SearchableFieldsWithOperation,
     types::authorization_guard::{Allowed, Create, Read, Update},
@@ -391,6 +394,22 @@ pub trait SearchDatabase: Send + Sync {
 #[automock]
 #[async_trait]
 pub trait NotificationDatabase: Send + Sync {
+    async fn create_notification(&self, notification: &Notification) -> Result<(), InfraError>;
+    async fn fetch_notification(
+        &self,
+        id: NotificationId,
+    ) -> Result<Option<NotificationRecord>, InfraError>;
+    async fn fetch_notifications(
+        &self,
+        recipient_id: UserId,
+        request: PageRequest<NotificationPagePosition>,
+    ) -> Result<Page<NotificationRecord, NotificationPagePosition>, InfraError>;
+    async fn update_notification(&self, notification: &Notification) -> Result<(), InfraError>;
+    async fn mark_all_notifications_as_read(
+        &self,
+        operation: &MarkAllNotificationsAsRead,
+        read_at: DateTime<Utc>,
+    ) -> Result<(), InfraError>;
     async fn upsert_notification_settings(
         &self,
         notification_settings: &NotificationPreference,

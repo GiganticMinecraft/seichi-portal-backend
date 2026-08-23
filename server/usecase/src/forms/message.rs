@@ -1,7 +1,7 @@
 use chrono::Utc;
 use common::config::FRONTEND;
 use domain::form::models::{ActiveForm, FormId};
-use domain::notification::models::{NotificationContent, NotificationType};
+use domain::notification::models::{Notification, NotificationContent, NotificationType};
 use domain::notification::notificator::Notificator;
 use domain::{
     account::models::AccountUser,
@@ -53,11 +53,11 @@ fn message_notification_content(
         .map(|title| title.into_inner())
         .unwrap_or_else(|| "（タイトルなし）".to_string());
 
-    NotificationContent::new(vec![
+    NotificationContent::new(
         format!("回答『{title}』に新しいメッセージが届きました。"),
-        "以下のリンクからメッセージを確認できます。".to_string(),
+        "以下のリンクからメッセージを確認できます。",
         format!("{frontend_url}/forms/{form_id}/answers/{answer_id}?messageId={message_id}"),
-    ])
+    )
 }
 
 pub struct MessageUseCase<
@@ -130,6 +130,7 @@ impl<
         let message_id = message.id().to_string();
         let message_body = message.body().as_str().to_owned();
         let message_sender_id = *message.sender_id();
+        let message_timestamp = *message.timestamp();
 
         let thread = self
             .message_thread_repository
@@ -160,6 +161,19 @@ impl<
         }
 
         if let Some(notification_content) = notification_content {
+            let notification = Notification::new(
+                notification_recipient_id,
+                NotificationType::MessageReceived,
+                answer_id,
+                notification_content.clone(),
+                message_timestamp,
+            );
+            self.notification_repository
+                .create_notification(
+                    AuthorizationGuard::from(notification).try_create(Actor::System)?,
+                )
+                .await?;
+
             let fetched_notification_preference = self
                 .notification_repository
                 .fetch_notification_settings(notification_recipient_id.into_inner())
@@ -757,6 +771,12 @@ https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
         }
 
         assert_eq!(messages.message_count_for(answer_id), 2);
+        let notifications = repositories
+            .notification_repository
+            .fetch_notifications(*actor.id(), PageRequest::first(PageLimit::default_limit()))
+            .await
+            .unwrap();
+        assert!(notifications.items().is_empty());
     }
 
     #[tokio::test]
@@ -914,7 +934,7 @@ https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
         repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
-        repositories.user_repository.save_user(recipient);
+        repositories.user_repository.save_user(recipient.clone());
         let messages = InMemoryMessageThreadRepository::default();
         let publisher = RecordingPublisher::default();
         let notificator = FailingNotificator::default();
@@ -947,9 +967,28 @@ https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
             Some(format!(
                 "回答『回答タイトル』に新しいメッセージが届きました。\n\
 以下のリンクからメッセージを確認できます。\n\
-https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
+                https://example.com/forms/{form_id}/answers/{answer_id}?messageId={message_id}"
             ))
         );
+        let notification = repositories
+            .notification_repository
+            .fetch_notifications(recipient_id, PageRequest::first(PageLimit::default_limit()))
+            .await
+            .unwrap()
+            .into_items()
+            .into_iter()
+            .next()
+            .expect("a notification should be stored before Discord delivery")
+            .try_read(Actor::from(recipient))
+            .unwrap()
+            .into_inner();
+        assert_eq!(*notification.recipient_id(), recipient_id);
+        assert_eq!(*notification.related_answer_id(), answer_id);
+        assert_eq!(
+            *notification.notification_type(),
+            NotificationType::MessageReceived
+        );
+        assert!(notification.read_at().is_none());
         assert!(matches!(
             publisher.0.lock().unwrap().as_slice(),
             [ApplicationEvent::MessageCreated { body, .. }] if body == "saved"
