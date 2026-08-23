@@ -1016,9 +1016,9 @@ dependencies = [
 
 [[package]]
 name = "deriving_via"
-version = "2.2.0"
+version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0780dfead67c553fb8867f2a85b934cd13919e2988e787f653fcddeac894005b"
+checksum = "8f216e74a207a8892ede67f4a1a8bd67674240d614a1057409d260fe770d3fac"
 dependencies = [
  "deriving_via_macros",
 ]

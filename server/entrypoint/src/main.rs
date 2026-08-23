@@ -24,7 +24,9 @@ use presentation::handlers::form::message_handler::{
     RealInfrastructureRepositoryWithNotificator, post_message_handler,
 };
 use presentation::handlers::search_handler::{
-    initialize_search_engine, start_sync, start_watch_out_of_sync,
+    SearchEngineInitializationStatus, start_initialize_search_engine, start_sync,
+    start_watch_out_of_sync, update_search_engine_initialization_status,
+    wait_for_search_engine_initialization,
 };
 use presentation::rate_limit::{RateLimitState, middleware as rate_limit_middleware};
 use presentation::turnstile::{TurnstileState, middleware as turnstile_middleware};
@@ -95,8 +97,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (sender, receiver) = mpsc::channel::<SearchableFieldsWithOperation>(100);
 
-    let messaging_conn =
-        resource::messaging::connection::MessagingConnectionPool::new(sender).await;
+    let messaging_conn = resource::messaging::connection::MessagingConnectionPool::new(sender);
 
     let shared_manager = discord_connection.pool.shard_manager.clone();
     let messaging_conn = Arc::new(messaging_conn);
@@ -260,10 +261,11 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown_notifier = Arc::new(Notify::new());
     let (search_sync_shutdown_sender, search_sync_shutdown_status) = watch::channel(false);
+    let (search_engine_initialization_sender, search_engine_initialization_receiver) =
+        watch::channel(SearchEngineInitializationStatus::Pending);
+    let messaging_search_engine_initialization = search_engine_initialization_receiver.clone();
 
-    initialize_search_engine(shared_repository.to_owned()).await?;
-
-    let (_discord, _axum, _syncer, _messaging, _auto_of_sync_watcher) = join!(
+    let (_discord, _axum, _search_engine_initializer, _syncer, _messaging, _auto_of_sync_watcher) = join!(
         discord_connection.pool.start(),
         axum::serve(
             listener,
@@ -274,15 +276,32 @@ async fn main() -> anyhow::Result<()> {
             messaging_conn.clone(),
             shutdown_notifier.clone(),
             search_sync_shutdown_sender.clone(),
+            search_engine_initialization_sender.clone(),
         ))
         .into_future(),
+        start_initialize_search_engine(
+            shared_repository.to_owned(),
+            search_engine_initialization_sender,
+            search_engine_initialization_receiver.clone(),
+        ),
         start_sync(
             shared_repository.to_owned(),
             receiver,
             search_sync_shutdown_status,
+            search_engine_initialization_receiver.clone(),
         ),
-        messaging_conn.consumer(),
-        start_watch_out_of_sync(shared_repository.to_owned(), shutdown_notifier.clone())
+        async move {
+            if wait_for_search_engine_initialization(messaging_search_engine_initialization).await {
+                messaging_conn.consumer().await
+            } else {
+                Ok(())
+            }
+        },
+        start_watch_out_of_sync(
+            shared_repository.to_owned(),
+            shutdown_notifier.clone(),
+            search_engine_initialization_receiver,
+        )
     );
 
     if let Some(agent) = pyroscope_agent {
@@ -320,6 +339,7 @@ async fn graceful_handler(
     messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
     search_engine_syncer_shutdown_notifier: Arc<Notify>,
     search_sync_shutdown_sender: watch::Sender<bool>,
+    search_engine_initialization_sender: watch::Sender<SearchEngineInitializationStatus>,
 ) {
     let ctrl_c = async {
         signal::ctrl_c()
@@ -348,6 +368,10 @@ async fn graceful_handler(
 
     info!("Gracefully shutdown...");
     let _ = search_sync_shutdown_sender.send(true);
+    update_search_engine_initialization_status(
+        &search_engine_initialization_sender,
+        SearchEngineInitializationStatus::Shutdown,
+    );
     serenity_shared_manager.shutdown_all().await;
     messaging_connection.shutdown().await;
     search_engine_syncer_shutdown_notifier.notify_waiters();

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::extract::rejection::QueryRejection;
 use axum::response::Response;
@@ -16,6 +16,7 @@ use errors::{Error, ErrorExtra, presentation::PresentationError};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
 use tokio::sync::{Notify, mpsc::Receiver, watch};
+use tracing::{error, info};
 use usecase::search::SearchUseCase;
 
 use crate::schemas::error_responses::*;
@@ -25,6 +26,34 @@ use crate::{
         AnswerSearchQuery, AnswerSearchResult, CrossSearchResult, SearchQuery, UserSearchResult,
     },
 };
+
+const SEARCH_ENGINE_INITIALIZATION_RETRY_INTERVAL: Duration = Duration::from_secs(10);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SearchEngineInitializationStatus {
+    Pending,
+    Ready,
+    Shutdown,
+}
+
+pub fn update_search_engine_initialization_status(
+    sender: &watch::Sender<SearchEngineInitializationStatus>,
+    next: SearchEngineInitializationStatus,
+) -> bool {
+    sender.send_if_modified(|current| {
+        if *current == SearchEngineInitializationStatus::Shutdown
+            && next != SearchEngineInitializationStatus::Shutdown
+        {
+            return false;
+        }
+        if *current == next {
+            return false;
+        }
+
+        *current = next;
+        true
+    })
+}
 
 #[derive(utoipa::IntoResponses)]
 pub enum CrossSearchResponse {
@@ -223,7 +252,15 @@ pub async fn start_sync(
     repository: RealInfrastructureRepository,
     receiver: Receiver<SearchableFieldsWithOperation>,
     shutdown_status: watch::Receiver<bool>,
+    search_engine_initialization: watch::Receiver<SearchEngineInitializationStatus>,
 ) -> Result<(), Error> {
+    if !wait_for_search_engine_initialization(search_engine_initialization.clone()).await {
+        return Ok(());
+    }
+    if *search_engine_initialization.borrow() == SearchEngineInitializationStatus::Shutdown {
+        return Ok(());
+    }
+
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
@@ -240,7 +277,15 @@ pub async fn start_sync(
 pub async fn start_watch_out_of_sync(
     repository: RealInfrastructureRepository,
     shutdown_notifier: Arc<Notify>,
+    search_engine_initialization: watch::Receiver<SearchEngineInitializationStatus>,
 ) -> Result<(), Error> {
+    if !wait_for_search_engine_initialization(search_engine_initialization.clone()).await {
+        return Ok(());
+    }
+    if *search_engine_initialization.borrow() == SearchEngineInitializationStatus::Shutdown {
+        return Ok(());
+    }
+
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
@@ -270,4 +315,125 @@ pub async fn initialize_search_engine(
     };
 
     search_use_case.initialize_search_engine().await
+}
+
+pub async fn wait_for_search_engine_initialization(
+    mut status: watch::Receiver<SearchEngineInitializationStatus>,
+) -> bool {
+    loop {
+        match *status.borrow() {
+            SearchEngineInitializationStatus::Pending => {}
+            SearchEngineInitializationStatus::Ready => return true,
+            SearchEngineInitializationStatus::Shutdown => return false,
+        }
+
+        if status.changed().await.is_err() {
+            return false;
+        }
+    }
+}
+
+pub async fn start_initialize_search_engine(
+    repository: RealInfrastructureRepository,
+    status_sender: watch::Sender<SearchEngineInitializationStatus>,
+    mut status: watch::Receiver<SearchEngineInitializationStatus>,
+) -> Result<(), Error> {
+    loop {
+        let result = tokio::select! {
+            _ = wait_for_search_engine_shutdown(&mut status) => {
+                info!("Search engine initialization stopped by shutdown");
+                return Ok(());
+            }
+            result = initialize_search_engine(repository.clone()) => result,
+        };
+
+        match result {
+            Ok(()) => {
+                if !update_search_engine_initialization_status(
+                    &status_sender,
+                    SearchEngineInitializationStatus::Ready,
+                ) {
+                    return Ok(());
+                }
+                info!("Search engine initialization completed");
+                return Ok(());
+            }
+            Err(error) => {
+                error!(
+                    %error,
+                    retry_interval_seconds = SEARCH_ENGINE_INITIALIZATION_RETRY_INTERVAL.as_secs(),
+                    "failed to initialize search engine; retrying"
+                );
+            }
+        }
+
+        tokio::select! {
+            _ = wait_for_search_engine_shutdown(&mut status) => {
+                info!("Search engine initialization stopped by shutdown");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(SEARCH_ENGINE_INITIALIZATION_RETRY_INTERVAL) => {}
+        }
+    }
+}
+
+async fn wait_for_search_engine_shutdown(
+    status: &mut watch::Receiver<SearchEngineInitializationStatus>,
+) {
+    loop {
+        if *status.borrow() == SearchEngineInitializationStatus::Shutdown {
+            return;
+        }
+
+        if status.changed().await.is_err() {
+            return;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn search_engine_initialization_gate_waits_for_ready() {
+        let (sender, receiver) = watch::channel(SearchEngineInitializationStatus::Pending);
+        let waiter = tokio::spawn(wait_for_search_engine_initialization(receiver));
+
+        sender
+            .send(SearchEngineInitializationStatus::Ready)
+            .unwrap();
+
+        assert!(waiter.await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn search_engine_initialization_gate_releases_on_shutdown() {
+        let (sender, receiver) = watch::channel(SearchEngineInitializationStatus::Pending);
+        let waiter = tokio::spawn(wait_for_search_engine_initialization(receiver));
+
+        sender
+            .send(SearchEngineInitializationStatus::Shutdown)
+            .unwrap();
+
+        assert!(!waiter.await.unwrap());
+    }
+
+    #[test]
+    fn search_engine_shutdown_status_cannot_be_overwritten_by_ready() {
+        let (sender, receiver) = watch::channel(SearchEngineInitializationStatus::Pending);
+
+        assert!(update_search_engine_initialization_status(
+            &sender,
+            SearchEngineInitializationStatus::Shutdown,
+        ));
+        assert!(!update_search_engine_initialization_status(
+            &sender,
+            SearchEngineInitializationStatus::Ready,
+        ));
+        assert_eq!(
+            *receiver.borrow(),
+            SearchEngineInitializationStatus::Shutdown
+        );
+    }
 }
