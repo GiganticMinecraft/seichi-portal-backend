@@ -21,7 +21,9 @@ use domain::{
         },
         question::{Choice, Question, QuestionType},
     },
-    notification::models::NotificationPreference,
+    notification::models::{
+        Notification, NotificationContent, NotificationPreference, NotificationType,
+    },
 };
 use errors::{Error, domain::DomainError, infra::InfraError};
 use types::non_empty_string::NonEmptyString;
@@ -576,6 +578,54 @@ impl TryFrom<MessageRecord> for Message {
 pub struct NotificationSettingsRecord {
     pub recipient: UserRecord,
     pub is_send_message_notification: bool,
+}
+
+pub struct NotificationRecord {
+    pub id: String,
+    pub recipient_id: String,
+    pub notification_type: String,
+    pub related_answer_id: String,
+    pub title: String,
+    pub body: String,
+    pub url: String,
+    pub created_at: DateTime<Utc>,
+    pub read_at: Option<DateTime<Utc>>,
+}
+
+impl TryFrom<NotificationRecord> for Notification {
+    type Error = Error;
+
+    fn try_from(
+        NotificationRecord {
+            id,
+            recipient_id,
+            notification_type,
+            related_answer_id,
+            title,
+            body,
+            url,
+            created_at,
+            read_at,
+        }: NotificationRecord,
+    ) -> Result<Self, Self::Error> {
+        Ok(unsafe {
+            Notification::from_raw_parts(
+                Uuid::from_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                Uuid::from_str(&recipient_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                NotificationType::from_str(&notification_type).map_err(Into::<InfraError>::into)?,
+                Uuid::from_str(&related_answer_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                NotificationContent::new(title, body, url),
+                created_at,
+                read_at,
+            )
+        })
+    }
 }
 
 impl TryFrom<NotificationSettingsRecord> for NotificationPreference {

@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use domain::{
     account::models::{
-        AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserPagePosition,
+        AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserId,
+        UserPagePosition,
     },
     auth::Actor,
     form::{
@@ -17,7 +18,9 @@ use domain::{
             FormPagePosition,
         },
     },
-    notification::models::NotificationPreference,
+    notification::models::{
+        Notification, NotificationId, NotificationPagePosition, NotificationPreference,
+    },
     pagination::{Page, PageRequest},
     repository::{
         form::{
@@ -1008,10 +1011,142 @@ impl ArchivedFormRepository for InMemoryArchivedFormRepository {
 #[derive(Default)]
 pub(crate) struct InMemoryNotificationRepository {
     preferences: Mutex<Vec<NotificationPreference>>,
+    notifications: Mutex<Vec<Notification>>,
 }
 
 #[async_trait]
 impl NotificationRepository for InMemoryNotificationRepository {
+    async fn create_notification(
+        &self,
+        notification: Allowed<Notification, Create>,
+    ) -> Result<(), Error> {
+        self.notifications
+            .lock()
+            .unwrap()
+            .push(notification.into_inner());
+        Ok(())
+    }
+
+    async fn fetch_notification(
+        &self,
+        id: NotificationId,
+    ) -> Result<Option<AuthorizationGuard<Notification, Read>>, Error> {
+        Ok(self
+            .notifications
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|notification| *notification.id() == id)
+            .cloned()
+            .map(AuthorizationGuard::from))
+    }
+
+    async fn fetch_notifications(
+        &self,
+        recipient_id: UserId,
+        request: PageRequest<NotificationPagePosition>,
+    ) -> Result<Page<AuthorizationGuard<Notification, Read>, NotificationPagePosition>, Error> {
+        let mut notifications = self
+            .notifications
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|notification| *notification.recipient_id() == recipient_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        notifications.sort_by(|left, right| right.id().cmp(left.id()));
+
+        if let Some(position) = request.after_position() {
+            notifications.retain(|notification| *notification.id() < position.id());
+        }
+
+        let page = Page::from_overfetched_items(notifications, request.limit(), |notification| {
+            NotificationPagePosition::new(*notification.id())
+        });
+        let (notifications, next) = page.into_parts();
+
+        Ok(Page::new(
+            notifications
+                .into_iter()
+                .map(AuthorizationGuard::from)
+                .collect(),
+            next,
+        ))
+    }
+
+    async fn fetch_all_notifications(
+        &self,
+        recipient_id: UserId,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
+        let mut notifications = self
+            .notifications
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|notification| *notification.recipient_id() == recipient_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        notifications.sort_by(|left, right| right.id().cmp(left.id()));
+
+        Ok(notifications
+            .into_iter()
+            .map(AuthorizationGuard::from)
+            .collect())
+    }
+
+    async fn update_notification(
+        &self,
+        notification: Allowed<Notification, Update>,
+    ) -> Result<(), Error> {
+        let notification = notification.into_inner();
+        let notification_id = *notification.id();
+        let mut notifications = self.notifications.lock().unwrap();
+        if let Some(stored_notification) = notifications
+            .iter_mut()
+            .find(|stored| stored.id() == notification.id())
+        {
+            if stored_notification.read_at().is_none() {
+                *stored_notification = notification;
+            }
+            Ok(())
+        } else {
+            Err(not_found_error("Notification", notification_id))
+        }
+    }
+
+    async fn update_notifications(
+        &self,
+        notifications: Vec<Allowed<Notification, Update>>,
+    ) -> Result<(), Error> {
+        let notifications = notifications
+            .into_iter()
+            .map(Allowed::into_inner)
+            .collect::<Vec<_>>();
+        let mut stored_notifications = self.notifications.lock().unwrap();
+
+        if let Some(notification) = notifications.iter().find(|notification| {
+            !stored_notifications
+                .iter()
+                .any(|stored| stored.id() == notification.id())
+        }) {
+            return Err(not_found_error("Notification", notification.id()));
+        }
+
+        for notification in notifications {
+            let Some(stored_notification) = stored_notifications
+                .iter_mut()
+                .find(|stored| stored.id() == notification.id())
+            else {
+                unreachable!("notification existence was checked before updating");
+            };
+
+            if stored_notification.read_at().is_none() {
+                *stored_notification = notification;
+            }
+        }
+        Ok(())
+    }
+
     async fn create_notification_settings(
         &self,
         notification_settings: Allowed<NotificationPreference, Create>,

@@ -240,6 +240,21 @@ CREATE TABLE IF NOT EXISTS messages(
     FOREIGN KEY fk_message_sender(sender) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS notifications(
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    recipient_id CHAR(36) NOT NULL,
+    notification_type ENUM('MESSAGE_RECEIVED') NOT NULL,
+    related_answer_id CHAR(36) NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    url TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP NULL,
+    INDEX idx_notifications_recipient_id_id(recipient_id, id DESC),
+    FOREIGN KEY fk_notifications_recipient_id(recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY fk_notifications_related_answer_id(related_answer_id) REFERENCES answers(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS message_history(
     id CHAR(36) NOT NULL PRIMARY KEY,
     related_answer_id CHAR(36) NOT NULL,

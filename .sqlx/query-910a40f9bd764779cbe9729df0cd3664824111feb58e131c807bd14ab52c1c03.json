@@ -1,0 +1,167 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT id, recipient_id, notification_type, related_answer_id,\n                                    title, body, url, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`,\n                                    read_at\n                                FROM notifications\n                                WHERE recipient_id = ? AND id < ?\n                                ORDER BY id DESC LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "recipient_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "recipient_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "notification_type",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 64
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "notification_type"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "related_answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "related_answer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "body",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "url",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at!: chrono::DateTime<chrono::Utc>",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "NOT_NULL | UNSIGNED | BINARY | TIMESTAMP",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "read_at",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "UNSIGNED | BINARY",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.notifications",
+            "name": "read_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "910a40f9bd764779cbe9729df0cd3664824111feb58e131c807bd14ab52c1c03"
+}
