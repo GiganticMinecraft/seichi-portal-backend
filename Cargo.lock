@@ -759,6 +759,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "affbf0190ed2caf063e3def54ff444b449371d55c58e513a95ab98eca50adb49"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "cookie-factory"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1005,38 +1014,37 @@ dependencies = [
 
 [[package]]
 name = "deriving-via-impl"
-version = "2.2.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15039215161d424bbde22218524bd8c974d6514c925eb59d4a410edab3a1b11d"
+checksum = "0f9efca6cc4dbe2b0b82d1140d818cc80fd7c21a6adc650a546691a16fe7c9e7"
 dependencies = [
- "convert_case",
+ "convert_case 0.11.0",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]
 name = "deriving_via"
-version = "2.3.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "728e868bc7e64cb85459bcd05b6da59b69d56991732a7599a91ac4cf162a7e33"
+checksum = "7b90c7a2c6dff8e0737f88a13e185c51c11c3e219113a9e4086dd0a43a1b6f31"
 dependencies = [
  "deriving_via_macros",
 ]
 
 [[package]]
 name = "deriving_via_macros"
-version = "2.2.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d5483e05546a137b5759015a738eb75d3ca50cfc2be3997cc38255d3f244175"
+checksum = "23f4b627983c733a1e30b68efd280756f40d98b4b9a6e6099b89e9d26cfa0587"
 dependencies = [
  "deriving-via-impl",
- "itertools 0.14.0",
- "proc-macro-error2",
+ "itertools 0.15.0",
  "proc-macro2",
  "quote",
- "strum 0.27.2",
- "strum_macros 0.27.2",
- "syn 2.0.119",
+ "strum",
+ "strum_macros",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -1099,8 +1107,8 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "strum 0.28.0",
- "strum_macros 0.28.0",
+ "strum",
+ "strum_macros",
  "test-case",
  "tracing",
  "types",
@@ -1244,7 +1252,7 @@ dependencies = [
  "serde_json",
  "serenity",
  "sqlx",
- "strum 0.28.0",
+ "strum",
  "thiserror 2.0.20",
  "tokio",
  "uuid",
@@ -2332,7 +2340,7 @@ version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93b5b21df781c820a9cc387b808d4128cbc164dd28d67ac6ed666a00996f8f15"
 dependencies = [
- "convert_case",
+ "convert_case 0.8.0",
  "proc-macro2",
  "quote",
  "structmeta",
@@ -2956,28 +2964,6 @@ dependencies = [
  "utoipa",
  "utoipa-axum",
  "uuid",
-]
-
-[[package]]
-name = "proc-macro-error-attr2"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "proc-macro-error2"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
-dependencies = [
- "proc-macro-error-attr2",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -4349,27 +4335,9 @@ dependencies = [
 
 [[package]]
 name = "strum"
-version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
-
-[[package]]
-name = "strum"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
-
-[[package]]
-name = "strum_macros"
-version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
 
 [[package]]
 name = "strum_macros"
