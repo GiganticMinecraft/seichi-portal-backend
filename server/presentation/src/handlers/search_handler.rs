@@ -15,7 +15,7 @@ use domain::{
 use errors::{Error, ErrorExtra, presentation::PresentationError};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
-use tokio::sync::{Notify, mpsc::Receiver};
+use tokio::sync::{Notify, mpsc::Receiver, watch};
 use usecase::search::SearchUseCase;
 
 use crate::schemas::error_responses::*;
@@ -222,7 +222,7 @@ pub async fn search_answers(
 pub async fn start_sync(
     repository: RealInfrastructureRepository,
     receiver: Receiver<SearchableFieldsWithOperation>,
-    shutdown_notifier: Arc<Notify>,
+    shutdown_status: watch::Receiver<bool>,
 ) -> Result<(), Error> {
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
@@ -234,9 +234,7 @@ pub async fn start_sync(
         comment_thread_repository: repository.comment_thread_repository(),
     };
 
-    search_use_case
-        .start_sync(receiver, shutdown_notifier)
-        .await
+    search_use_case.start_sync(receiver, shutdown_status).await
 }
 
 pub async fn start_watch_out_of_sync(

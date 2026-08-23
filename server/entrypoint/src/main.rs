@@ -36,7 +36,7 @@ use serenity::all::ShardManager;
 use tokio::{
     net::TcpListener,
     signal,
-    sync::{Notify, mpsc},
+    sync::{Notify, mpsc, watch},
 };
 use tower_http::{
     catch_panic::CatchPanicLayer,
@@ -259,6 +259,7 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await.unwrap();
 
     let shutdown_notifier = Arc::new(Notify::new());
+    let (search_sync_shutdown_sender, search_sync_shutdown_status) = watch::channel(false);
 
     initialize_search_engine(shared_repository.to_owned()).await?;
 
@@ -272,12 +273,13 @@ async fn main() -> anyhow::Result<()> {
             shared_manager,
             messaging_conn.clone(),
             shutdown_notifier.clone(),
+            search_sync_shutdown_sender.clone(),
         ))
         .into_future(),
         start_sync(
             shared_repository.to_owned(),
             receiver,
-            shutdown_notifier.clone(),
+            search_sync_shutdown_status,
         ),
         messaging_conn.consumer(),
         start_watch_out_of_sync(shared_repository.to_owned(), shutdown_notifier.clone())
@@ -317,6 +319,7 @@ async fn graceful_handler(
     serenity_shared_manager: Arc<ShardManager>,
     messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
     search_engine_syncer_shutdown_notifier: Arc<Notify>,
+    search_sync_shutdown_sender: watch::Sender<bool>,
 ) {
     let ctrl_c = async {
         signal::ctrl_c()
@@ -344,6 +347,7 @@ async fn graceful_handler(
     }
 
     info!("Gracefully shutdown...");
+    let _ = search_sync_shutdown_sender.send(true);
     serenity_shared_manager.shutdown_all().await;
     messaging_connection.shutdown().await;
     search_engine_syncer_shutdown_notifier.notify_waiters();
