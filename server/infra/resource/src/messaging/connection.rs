@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use domain::search::models::{SearchableFields, SearchableFieldsWithOperation};
+use domain::search::models::SearchableFieldsWithOperation;
 use errors::infra::InfraError;
 use futures::StreamExt;
 use lapin::{
@@ -19,7 +19,7 @@ use tracing::Instrument;
 
 use crate::messaging::{
     config::{RABBITMQ, RabbitMQ},
-    schema::{Operation, RabbitMQSchema},
+    schema::RabbitMQSchema,
 };
 
 const RABBITMQ_RECONNECT_INTERVAL: Duration = Duration::from_secs(10);
@@ -129,26 +129,12 @@ impl MessagingConnectionPool {
                         );
                         async {
                             let data = String::from_utf8_lossy(&delivery.data);
-                            let payload = serde_json::from_str::<RabbitMQSchema>(&data)?.payload;
+                            let searchable_fields = serde_json::from_str::<RabbitMQSchema>(&data)?
+                                .payload
+                                .try_into_searchable_fields()?;
 
-                            let operation = match payload.op.to_owned() {
-                                Operation::Create => domain::search::models::Operation::Create,
-                                Operation::Update => domain::search::models::Operation::Update,
-                                Operation::Delete => domain::search::models::Operation::Delete,
-                            };
-                            let data_fields = match operation {
-                                domain::search::models::Operation::Create | domain::search::models::Operation::Update => {
-                                    payload.try_into_after()?
-                                }
-                                domain::search::models::Operation::Delete => {
-                                    payload.try_into_before()?
-                                }
-                            };
-
-                            if let Some(data_fields) = data_fields {
-                                self.sender
-                                    .send((SearchableFields::try_from(data_fields)?, operation))
-                                    .await?;
+                            if let Some(searchable_fields) = searchable_fields {
+                                self.sender.send(searchable_fields).await?;
                             }
 
                             delivery.ack(BasicAckOptions::default()).await?;

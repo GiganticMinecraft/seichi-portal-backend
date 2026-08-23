@@ -1,15 +1,19 @@
 use std::str::FromStr;
 
-use domain::{form::answer::AnswerStatus, search::models::SearchableFields};
+use domain::{
+    form::answer::AnswerStatus,
+    search::models::{
+        Operation as SearchOperation, SearchableFields, SearchableFieldsWithOperation,
+    },
+};
 use errors::infra::InfraError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use types::non_empty_string::NonEmptyString;
 use uuid::Uuid;
 
-// Debezium から送られてくる Payload の op フィールドには CRUD 操作が入っている。
-// Read に該当する R は存在しない理由は、op フィールドに R が含まれるのは
-// Debezium の Snapshot mode が有効のときのみ存在するからである。
+// Debezium から送られてくる CDC イベントに含まれる操作種別。
+// `r` は Snapshot で取得した既存行を表すため、検索側では Create として扱う。
 // 詳細は https://debezium.io/documentation/reference/stable/connectors/mariadb.html#mariadb-events の
 // Table 11. Descriptions of create event value fields を参照
 #[derive(Deserialize, Copy, Clone, Debug)]
@@ -20,19 +24,28 @@ pub enum Operation {
     Update,
     #[serde(rename = "d")]
     Delete,
+    #[serde(rename = "r")]
+    Read,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Source {
-    pub table: String,
+    #[serde(default)]
+    pub table: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Payload {
-    pub op: Operation,
-    pub source: Source,
+    #[serde(default)]
+    pub op: Option<Operation>,
+    #[serde(default)]
+    pub source: Option<Source>,
     // before, after は source によってテーブル名が判別するまで型が不定
+    #[serde(default)]
     pub before: Value,
+    #[serde(default)]
     pub after: Value,
 }
 
@@ -85,17 +98,47 @@ impl Payload {
     }
 
     pub fn try_into_after(self) -> Result<Option<ActualDataFields>, InfraError> {
-        let table_name = self.source.table.as_str();
-        let after = self.after;
+        let Self { source, after, .. } = self;
+        let Some(table_name) = source.as_ref().and_then(|source| source.table.as_deref()) else {
+            return Ok(None);
+        };
 
         Self::try_into_actual_data_fields(table_name, after)
     }
 
     pub fn try_into_before(self) -> Result<Option<ActualDataFields>, InfraError> {
-        let table_name = self.source.table.as_str();
-        let before = self.before;
+        let Self { source, before, .. } = self;
+        let Some(table_name) = source.as_ref().and_then(|source| source.table.as_deref()) else {
+            return Ok(None);
+        };
 
         Self::try_into_actual_data_fields(table_name, before)
+    }
+
+    pub fn try_into_searchable_fields(
+        self,
+    ) -> Result<Option<SearchableFieldsWithOperation>, InfraError> {
+        let operation = match self.op {
+            Some(Operation::Create) => SearchOperation::Create,
+            Some(Operation::Update) => SearchOperation::Update,
+            Some(Operation::Delete) => SearchOperation::Delete,
+            Some(Operation::Read) => SearchOperation::Create,
+            None | Some(Operation::Unknown) => return Ok(None),
+        };
+
+        let actual_data_fields = match self.op {
+            Some(Operation::Delete) => self.try_into_before()?,
+            Some(Operation::Create | Operation::Update | Operation::Read) => {
+                self.try_into_after()?
+            }
+            None | Some(Operation::Unknown) => return Ok(None),
+        };
+
+        let data_fields = actual_data_fields
+            .map(SearchableFields::try_from)
+            .transpose()?;
+
+        Ok(data_fields.map(|data_fields| (data_fields, operation)))
     }
 }
 
@@ -375,6 +418,149 @@ mod tests {
     use super::{RabbitMQSchema, SearchableFields};
     use serde_json::json;
     use uuid::Uuid;
+
+    fn answer_image(answer_id: Uuid, form_id: Uuid) -> serde_json::Value {
+        json!({
+            "id": answer_id.to_string(),
+            "form_id": form_id.to_string(),
+            "title": "検索できるタイトル"
+        })
+    }
+
+    fn operation_from_answer_payload(
+        operation: &str,
+        before: serde_json::Value,
+        after: serde_json::Value,
+    ) -> domain::search::models::Operation {
+        let schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": operation,
+                "source": { "table": "answers" },
+                "before": before,
+                "after": after
+            }
+        }))
+        .unwrap();
+
+        schema
+            .payload
+            .try_into_searchable_fields()
+            .unwrap()
+            .unwrap()
+            .1
+    }
+
+    #[test]
+    fn non_row_payloads_are_ignored_by_search_conversion() {
+        let payloads = [
+            json!({
+                "schema": { "type": "struct" },
+                "payload": {
+                    "source": {
+                        "table": null,
+                        "db": "seichi-portal",
+                        "connector": "mariadb"
+                    },
+                    "databaseName": "seichi_portal",
+                    "schemaName": null,
+                    "ddl": "CREATE TABLE answers (...)"
+                }
+            }),
+            json!({
+                "payload": {
+                    "source": {},
+                    "tableChanges": []
+                }
+            }),
+            json!({ "payload": { "source": null } }),
+            json!({ "payload": {} }),
+            json!({
+                "payload": {
+                    "op": null,
+                    "source": { "table": "answers" }
+                }
+            }),
+            json!({
+                "payload": {
+                    "op": "unknown",
+                    "source": { "table": "answers" }
+                }
+            }),
+        ];
+
+        for payload in payloads {
+            let schema: RabbitMQSchema = serde_json::from_value(payload).unwrap();
+            assert!(
+                schema
+                    .payload
+                    .try_into_searchable_fields()
+                    .unwrap()
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn snapshot_read_payload_uses_after_image_as_create() {
+        let answer_id = Uuid::from_u128(1);
+        let form_id = Uuid::from_u128(2);
+        let schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": "r",
+                "source": { "table": "answers" },
+                "before": null,
+                "after": answer_image(answer_id, form_id)
+            }
+        }))
+        .unwrap();
+
+        let Some((SearchableFields::AnswerTitle(document), operation)) =
+            schema.payload.try_into_searchable_fields().unwrap()
+        else {
+            panic!("snapshot payload must become a search event");
+        };
+
+        assert!(matches!(
+            operation,
+            domain::search::models::Operation::Create
+        ));
+        assert_eq!(document.id.into_inner(), answer_id);
+        assert_eq!(document.form_id.into_inner(), form_id);
+    }
+
+    #[test]
+    fn c_u_d_payloads_keep_their_domain_operations() {
+        let answer_id = Uuid::from_u128(1);
+        let form_id = Uuid::from_u128(2);
+
+        assert!(matches!(
+            operation_from_answer_payload("c", json!(null), answer_image(answer_id, form_id)),
+            domain::search::models::Operation::Create
+        ));
+        assert!(matches!(
+            operation_from_answer_payload("u", json!(null), answer_image(answer_id, form_id)),
+            domain::search::models::Operation::Update
+        ));
+        assert!(matches!(
+            operation_from_answer_payload("d", answer_image(answer_id, form_id), json!(null)),
+            domain::search::models::Operation::Delete
+        ));
+    }
+
+    #[test]
+    fn known_table_with_invalid_after_image_returns_conversion_error() {
+        let schema: RabbitMQSchema = serde_json::from_value(json!({
+            "payload": {
+                "op": "u",
+                "source": { "table": "answers" },
+                "before": null,
+                "after": { "id": "not-a-complete-answer-row" }
+            }
+        }))
+        .unwrap();
+
+        assert!(schema.payload.try_into_searchable_fields().is_err());
+    }
 
     #[test]
     fn answers_create_or_update_payload_uses_after_image() {
