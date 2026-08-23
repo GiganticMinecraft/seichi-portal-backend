@@ -1,8 +1,8 @@
-use std::{fmt::Debug, future::Future, pin::Pin};
+use std::{fmt::Debug, future::Future, pin::Pin, time::Duration};
 
 use async_trait::async_trait;
 use redis::Client;
-use sqlx::{MySql, mysql::MySqlPoolOptions};
+use sqlx::{Connection, MySql, mysql::MySqlPoolOptions};
 
 use crate::database::{
     components::DatabaseComponents,
@@ -10,6 +10,8 @@ use crate::database::{
 };
 
 pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
+
+const VALKEY_OPERATION_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
@@ -56,10 +58,18 @@ impl ConnectionPool {
     }
 
     pub async fn ping_db(&self) -> bool {
-        sqlx::query("SELECT 1")
-            .execute(&self.rdb_pool)
-            .await
-            .is_ok()
+        let (portal_db, minecraft_bans_db) = tokio::join!(
+            Self::ping_pool(&self.rdb_pool),
+            Self::ping_pool(&self.minecraft_bans_pool),
+        );
+        portal_db && minecraft_bans_db
+    }
+
+    async fn ping_pool(pool: &sqlx::MySqlPool) -> bool {
+        let Ok(mut connection) = pool.acquire().await else {
+            return false;
+        };
+        connection.ping().await.is_ok()
     }
 
     pub async fn ping_meilisearch(&self) -> bool {
@@ -215,6 +225,30 @@ pub async fn redis_connection() -> Client {
     let client_result = Client::open(redis_url);
 
     client_result.unwrap_or_else(|_| panic!("Cannot connect to Valkey."))
+}
+
+pub async fn ping_valkey() -> bool {
+    let (Ok(host), Ok(port)) = (std::env::var("REDIS_HOST"), std::env::var("REDIS_PORT")) else {
+        return false;
+    };
+    let Ok(client) = Client::open(format!("redis://{host}:{port}/")) else {
+        return false;
+    };
+    let connection = tokio::time::timeout(
+        VALKEY_OPERATION_TIMEOUT,
+        client.get_multiplexed_async_connection(),
+    )
+    .await;
+    let Ok(Ok(mut connection)) = connection else {
+        return false;
+    };
+
+    let response = tokio::time::timeout(
+        VALKEY_OPERATION_TIMEOUT,
+        redis::cmd("PING").query_async::<String>(&mut connection),
+    )
+    .await;
+    matches!(response, Ok(Ok(response)) if response == "PONG")
 }
 
 use errors::infra::InfraError;

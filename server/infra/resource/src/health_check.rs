@@ -1,10 +1,15 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use domain::repository::health_check_repository::{ComponentHealth, HealthCheckRepository};
+use domain::repository::health_check_repository::{
+    ComponentHealth, ComponentRequirement, HealthCheckRepository,
+};
 use serenity::gateway::ConnectionStage;
 
-use crate::{database::connection::ConnectionPool, messaging::connection::MessagingConnectionPool};
+use crate::{
+    database::connection::{ConnectionPool, ping_valkey},
+    messaging::connection::MessagingConnectionPool,
+};
 
 pub struct HealthCheckRepositoryImpl {
     pub(crate) db_conn: Arc<ConnectionPool>,
@@ -29,8 +34,9 @@ impl HealthCheckRepositoryImpl {
 #[async_trait]
 impl HealthCheckRepository for HealthCheckRepositoryImpl {
     async fn check_components(&self) -> Vec<ComponentHealth> {
-        let (db, meilisearch, rabbitmq, discord) = tokio::join!(
+        let (db, valkey, meilisearch, rabbitmq, discord) = tokio::join!(
             self.db_conn.ping_db(),
+            ping_valkey(),
             self.db_conn.ping_meilisearch(),
             async { self.rabbitmq_conn.is_rabbitmq_connected() },
             async {
@@ -44,18 +50,27 @@ impl HealthCheckRepository for HealthCheckRepositoryImpl {
         vec![
             ComponentHealth {
                 name: "MariaDB".to_string(),
+                requirement: ComponentRequirement::Required,
                 healthy: db,
             },
             ComponentHealth {
+                name: "Valkey".to_string(),
+                requirement: ComponentRequirement::Required,
+                healthy: valkey,
+            },
+            ComponentHealth {
                 name: "Meilisearch".to_string(),
+                requirement: ComponentRequirement::Optional,
                 healthy: meilisearch,
             },
             ComponentHealth {
                 name: "RabbitMQ".to_string(),
+                requirement: ComponentRequirement::Optional,
                 healthy: rabbitmq,
             },
             ComponentHealth {
                 name: "DiscordBot".to_string(),
+                requirement: ComponentRequirement::Optional,
                 healthy: discord,
             },
         ]
