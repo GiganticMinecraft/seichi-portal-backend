@@ -4,7 +4,7 @@ use domain::{
     notification::models::{
         Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
-    pagination::{Page, PageRequest},
+    pagination::{Page, PageLimit, PageRequest},
     repository::notification_repository::NotificationRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
@@ -13,8 +13,19 @@ use uuid::Uuid;
 
 use crate::{
     database::components::{DatabaseComponents, NotificationDatabase},
+    records::NotificationRecord,
     repository::Repository,
 };
+
+fn into_notification_guards(
+    records: Vec<NotificationRecord>,
+) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
+    records
+        .into_iter()
+        .map(TryInto::<Notification>::try_into)
+        .map(|notification| notification.map(Into::into))
+        .collect()
+}
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository<Client> {
@@ -53,13 +64,35 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
             .fetch_notifications(recipient_id, request)
             .await?;
         let (records, next) = page.into_parts();
-        let notifications = records
-            .into_iter()
-            .map(TryInto::<Notification>::try_into)
-            .map(|notification| notification.map(Into::into))
-            .collect::<Result<Vec<_>, Error>>()?;
+        let notifications = into_notification_guards(records)?;
 
         Ok(Page::new(notifications, next))
+    }
+
+    async fn fetch_all_notifications(
+        &self,
+        recipient_id: UserId,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
+        let limit = PageLimit::default_limit();
+        let mut request = PageRequest::first(limit);
+        let mut notifications = Vec::new();
+
+        loop {
+            let page = self
+                .client
+                .notification()
+                .fetch_notifications(recipient_id, request)
+                .await?;
+            let (records, next) = page.into_parts();
+            notifications.extend(into_notification_guards(records)?);
+
+            let Some(next) = next else {
+                break;
+            };
+            request = PageRequest::after(next, limit);
+        }
+
+        Ok(notifications)
     }
 
     async fn update_notification(

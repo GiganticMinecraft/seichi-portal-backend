@@ -28,6 +28,10 @@ pub trait NotificationRepository: Send + Sync + 'static {
         recipient_id: UserId,
         request: PageRequest<NotificationPagePosition>,
     ) -> Result<Page<AuthorizationGuard<Notification, Read>, NotificationPagePosition>, Error>;
+    async fn fetch_all_notifications(
+        &self,
+        recipient_id: UserId,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error>;
     async fn update_notification(
         &self,
         notification: Allowed<Notification, Update>,

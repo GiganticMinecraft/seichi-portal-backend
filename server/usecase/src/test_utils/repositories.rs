@@ -1074,6 +1074,26 @@ impl NotificationRepository for InMemoryNotificationRepository {
         ))
     }
 
+    async fn fetch_all_notifications(
+        &self,
+        recipient_id: UserId,
+    ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
+        let mut notifications = self
+            .notifications
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|notification| *notification.recipient_id() == recipient_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        notifications.sort_by(|left, right| right.id().cmp(left.id()));
+
+        Ok(notifications
+            .into_iter()
+            .map(AuthorizationGuard::from)
+            .collect())
+    }
+
     async fn update_notification(
         &self,
         notification: Allowed<Notification, Update>,
