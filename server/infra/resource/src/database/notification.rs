@@ -143,6 +143,33 @@ impl NotificationDatabase for ConnectionPool {
         }))
     }
 
+    #[tracing::instrument(skip_all, fields(recipient_id = %recipient_id))]
+    async fn fetch_all_notifications(
+        &self,
+        recipient_id: UserId,
+    ) -> Result<Vec<NotificationRecord>, InfraError> {
+        let recipient_id = recipient_id.to_string();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                sqlx::query_as!(
+                    NotificationRecord,
+                    r"SELECT id, recipient_id, notification_type, related_answer_id,
+                        title, body, url, created_at AS `created_at!: chrono::DateTime<chrono::Utc>`,
+                        read_at
+                    FROM notifications
+                    WHERE recipient_id = ?
+                    ORDER BY id DESC",
+                    recipient_id,
+                )
+                .fetch_all(&mut **txn)
+                .await
+                .map_err(Into::<InfraError>::into)
+            })
+        })
+        .await
+    }
+
     #[tracing::instrument(skip_all, fields(notification_id = %notification.id()))]
     async fn update_notification(&self, notification: &Notification) -> Result<(), InfraError> {
         let id = notification.id().to_string();

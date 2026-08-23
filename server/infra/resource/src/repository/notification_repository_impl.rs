@@ -4,7 +4,7 @@ use domain::{
     notification::models::{
         Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
-    pagination::{Page, PageLimit, PageRequest},
+    pagination::{Page, PageRequest},
     repository::notification_repository::NotificationRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read, Update},
 };
@@ -73,26 +73,13 @@ impl<Client: DatabaseComponents + 'static> NotificationRepository for Repository
         &self,
         recipient_id: UserId,
     ) -> Result<Vec<AuthorizationGuard<Notification, Read>>, Error> {
-        let limit = PageLimit::default_limit();
-        let mut request = PageRequest::first(limit);
-        let mut notifications = Vec::new();
+        let records = self
+            .client
+            .notification()
+            .fetch_all_notifications(recipient_id)
+            .await?;
 
-        loop {
-            let page = self
-                .client
-                .notification()
-                .fetch_notifications(recipient_id, request)
-                .await?;
-            let (records, next) = page.into_parts();
-            notifications.extend(into_notification_guards(records)?);
-
-            let Some(next) = next else {
-                break;
-            };
-            request = PageRequest::after(next, limit);
-        }
-
-        Ok(notifications)
+        into_notification_guards(records)
     }
 
     async fn update_notification(

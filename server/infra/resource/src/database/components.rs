@@ -403,6 +403,10 @@ pub trait NotificationDatabase: Send + Sync {
         recipient_id: UserId,
         request: PageRequest<NotificationPagePosition>,
     ) -> Result<Page<NotificationRecord, NotificationPagePosition>, InfraError>;
+    async fn fetch_all_notifications(
+        &self,
+        recipient_id: UserId,
+    ) -> Result<Vec<NotificationRecord>, InfraError>;
     async fn update_notification(&self, notification: &Notification) -> Result<(), InfraError>;
     async fn update_notifications(&self, notifications: &[Notification]) -> Result<(), InfraError>;
     async fn upsert_notification_settings(
