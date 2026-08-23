@@ -38,7 +38,7 @@ use serenity::all::ShardManager;
 use tokio::{
     net::TcpListener,
     signal,
-    sync::{Notify, mpsc, watch},
+    sync::{mpsc, watch},
 };
 use tower_http::{
     catch_panic::CatchPanicLayer,
@@ -259,7 +259,6 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    let shutdown_notifier = Arc::new(Notify::new());
     let (search_sync_shutdown_sender, search_sync_shutdown_status) = watch::channel(false);
     let (search_engine_initialization_sender, search_engine_initialization_receiver) =
         watch::channel(SearchEngineInitializationStatus::Pending);
@@ -274,7 +273,6 @@ async fn main() -> anyhow::Result<()> {
         .with_graceful_shutdown(graceful_handler(
             shared_manager,
             messaging_conn.clone(),
-            shutdown_notifier.clone(),
             search_sync_shutdown_sender.clone(),
             search_engine_initialization_sender.clone(),
         ))
@@ -287,7 +285,7 @@ async fn main() -> anyhow::Result<()> {
         start_sync(
             shared_repository.to_owned(),
             receiver,
-            search_sync_shutdown_status,
+            search_sync_shutdown_status.clone(),
             search_engine_initialization_receiver.clone(),
         ),
         async move {
@@ -299,7 +297,7 @@ async fn main() -> anyhow::Result<()> {
         },
         start_watch_out_of_sync(
             shared_repository.to_owned(),
-            shutdown_notifier.clone(),
+            search_sync_shutdown_status,
             search_engine_initialization_receiver,
         )
     );
@@ -337,7 +335,6 @@ async fn not_found_handler() -> impl IntoResponse {
 async fn graceful_handler(
     serenity_shared_manager: Arc<ShardManager>,
     messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
-    search_engine_syncer_shutdown_notifier: Arc<Notify>,
     search_sync_shutdown_sender: watch::Sender<bool>,
     search_engine_initialization_sender: watch::Sender<SearchEngineInitializationStatus>,
 ) {
@@ -374,5 +371,4 @@ async fn graceful_handler(
     );
     serenity_shared_manager.shutdown_all().await;
     messaging_connection.shutdown().await;
-    search_engine_syncer_shutdown_notifier.notify_waiters();
 }

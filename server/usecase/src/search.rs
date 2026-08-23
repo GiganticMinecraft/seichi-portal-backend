@@ -37,10 +37,9 @@ use std::{
     collections::{HashMap, HashSet},
     future::ready,
     iter::once,
-    sync::Arc,
     time::Duration,
 };
-use tokio::sync::{Notify, mpsc::Receiver, watch};
+use tokio::sync::{mpsc::Receiver, watch};
 use tokio::time;
 use tracing::Instrument;
 
@@ -597,14 +596,21 @@ impl<
 
     pub async fn start_watch_out_of_sync(
         &self,
-        shutdown_notifier: Arc<Notify>,
+        mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
         let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
+            if *shutdown_status.borrow() {
+                break;
+            }
+
             tokio::select! {
-                _ = shutdown_notifier.notified() => {
-                    break
+                biased;
+                result = shutdown_status.changed() => {
+                    if result.is_err() || *shutdown_status.borrow() {
+                        break;
+                    }
                 },
                 _ = interval.tick() => {
                     if let Err(error) = self.check_and_resync_search_engine().await {
@@ -837,8 +843,8 @@ mod tests {
             SearchableFieldsWithOperation, Users,
         },
     };
-    use std::sync::Mutex;
-    use tokio::sync::{mpsc, watch};
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::{Notify, mpsc, watch};
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 

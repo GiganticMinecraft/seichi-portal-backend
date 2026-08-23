@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use axum::extract::rejection::QueryRejection;
 use axum::response::Response;
@@ -15,7 +15,7 @@ use domain::{
 use errors::{Error, ErrorExtra, presentation::PresentationError};
 use resource::repository::RealInfrastructureRepository;
 use serde_json::json;
-use tokio::sync::{Notify, mpsc::Receiver, watch};
+use tokio::sync::{mpsc::Receiver, watch};
 use tracing::{error, info};
 use usecase::search::SearchUseCase;
 
@@ -276,7 +276,7 @@ pub async fn start_sync(
 
 pub async fn start_watch_out_of_sync(
     repository: RealInfrastructureRepository,
-    shutdown_notifier: Arc<Notify>,
+    shutdown_status: watch::Receiver<bool>,
     search_engine_initialization: watch::Receiver<SearchEngineInitializationStatus>,
 ) -> Result<(), Error> {
     if !wait_for_search_engine_initialization(search_engine_initialization.clone()).await {
@@ -297,7 +297,7 @@ pub async fn start_watch_out_of_sync(
     };
 
     search_use_case
-        .start_watch_out_of_sync(shutdown_notifier)
+        .start_watch_out_of_sync(shutdown_status)
         .await
 }
 
