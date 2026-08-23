@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT answers.form_id, answers.id AS answer_id, answers.title, answers.publication,\n            answers.status,\n            answers.author_type, answers.user, users.name AS user_name, users.role AS user_role,\n            answers.temporary_user_id, temporary_users.name AS temporary_user_name,\n            temporary_users.contact_text AS temporary_user_contact_text,\n            answers.redmine_user_id, answers.redmine_author_name,\n            redmine_reference.redmine_issue_id,\n            answers.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n        FROM answers\n        LEFT JOIN users ON answers.user = users.id\n        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n        LEFT JOIN redmine_imported_answer_references redmine_reference\n            ON redmine_reference.answer_id = answers.id\n        WHERE (? IS NULL OR answers.form_id = ?)\n            AND (? IS NULL OR answers.status = ?)\n            AND (\n                ? IS NULL\n                OR answers.timestamp < ?\n                OR (answers.timestamp = ? AND answers.id < ?)\n            )\n        ORDER BY answers.timestamp DESC, answers.id DESC\n        LIMIT ?",
+  "query": "SELECT answers.form_id, answers.id AS answer_id, answers.title, answers.publication,\n            answers.status,\n            answers.author_type, answers.user, users.name AS user_name, users.role AS user_role,\n            answers.temporary_user_id, temporary_users.name AS temporary_user_name,\n            temporary_users.contact_text AS temporary_user_contact_text,\n            answers.redmine_user_id, answers.redmine_author_name,\n            redmine_reference.redmine_issue_id,\n            answers.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n        FROM answers\n        LEFT JOIN users ON answers.user = users.id\n        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n        LEFT JOIN redmine_imported_answer_references redmine_reference\n            ON redmine_reference.answer_id = answers.id\n        WHERE (? IS NULL OR answers.form_id = ?)\n            AND (? IS NULL OR answers.status = ?)\n            AND (? IS NULL OR answers.user = ?)\n            AND (\n                ? IS NULL\n                OR answers.timestamp < ?\n                OR (answers.timestamp = ? AND answers.id < ?)\n            )\n        ORDER BY answers.timestamp DESC, answers.id DESC\n        LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -261,7 +261,7 @@
       }
     ],
     "parameters": {
-      "Right": 9
+      "Right": 11
     },
     "nullable": [
       false,
@@ -282,5 +282,5 @@
       false
     ]
   },
-  "hash": "76f92b3a46d43f6dc5540e0042a7bee4efd3d004b8bee071e0188604fae92c3a"
+  "hash": "e1b724aaf2b65b9e48dae86cb8c7830c855c5d2d05732eab02e12dec97a692e6"
 }

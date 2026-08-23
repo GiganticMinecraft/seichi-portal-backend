@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use domain::{
-    account::models::UserSnapshot,
+    account::models::{UserId, UserSnapshot},
     auth::Actor,
     form::{
         answer::{
@@ -86,6 +86,7 @@ where
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
         status: Option<AnswerStatus>,
+        user_id: Option<UserId>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         let mut scan_cursor = request.after_position().copied();
         let mut authorized_entries = Vec::new();
@@ -98,6 +99,7 @@ where
                     *form.id(),
                     PageRequest::new(scan_cursor, request.limit()),
                     status,
+                    user_id,
                 )
                 .await?;
             let (entries, next_raw) = page.into_parts();
@@ -134,6 +136,7 @@ where
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
         status: Option<AnswerStatus>,
+        user_id: Option<UserId>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         if forms.is_empty() {
             return Ok(Page::new(Vec::new(), None));
@@ -150,7 +153,11 @@ where
             let page = self
                 .client
                 .form()
-                .list_all_answer_entries(PageRequest::new(scan_cursor, request.limit()), status)
+                .list_all_answer_entries(
+                    PageRequest::new(scan_cursor, request.limit()),
+                    status,
+                    user_id,
+                )
                 .await?;
             let (entries, next_raw) = page.into_parts();
             authorized_entries.extend(entries.into_iter().filter_map(|entry| {

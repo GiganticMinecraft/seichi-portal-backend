@@ -1,7 +1,7 @@
 #[cfg(test)]
 use chrono::Utc;
 use domain::{
-    account::models::AccountUser,
+    account::models::{AccountUser, UserId},
     auth::Actor,
     form::answer::TemporaryAnswerAuthor,
     form::{
@@ -377,13 +377,14 @@ impl<
         actor: &AccountUser,
         request: PageRequest<AnswerPagePosition>,
         status: Option<AnswerStatus>,
+        user_id: Option<UserId>,
     ) -> Result<Page<AnswerDetails, AnswerPagePosition>, Error> {
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
 
         let page = self
             .answer_entry_repository
-            .list_by_form(&form, request, status)
+            .list_by_form(&form, request, status, user_id)
             .await?;
         let (visible_answers, next) = page.into_parts();
         let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
@@ -429,13 +430,14 @@ impl<
         user: &AccountUser,
         request: PageRequest<AnswerPagePosition>,
         status: Option<AnswerStatus>,
+        user_id: Option<UserId>,
     ) -> Result<Page<AnswerDetails, AnswerPagePosition>, Error> {
         let actor_ref = Actor::from(user.clone());
         let readable_forms = self.readable_forms(&actor_ref).await?;
 
         let page = self
             .answer_entry_repository
-            .list_all(&readable_forms, request, status)
+            .list_all(&readable_forms, request, status, user_id)
             .await?;
         let (visible_answers, next) = page.into_parts();
         let publication_by_form_id = readable_forms
@@ -853,7 +855,12 @@ mod tests {
             .unwrap();
         let answers = repositories
             .answer_entry_repository
-            .list_by_form(&form, PageRequest::first(PageLimit::default_limit()), None)
+            .list_by_form(
+                &form,
+                PageRequest::first(PageLimit::default_limit()),
+                None,
+                None,
+            )
             .await
             .unwrap();
 

@@ -332,10 +332,11 @@ pub async fn get_all_answers(
     let form_answer_use_case = build_answer_use_case(&repository, None);
     let Query(query) = query.map_err_to_error().map_err(handle_error)?;
     let status = query.status;
+    let user_id = query.user;
     let request = answer_list_page_request(query).map_err(handle_error)?;
 
     let page = form_answer_use_case
-        .get_all_answers(&user, request, status)
+        .get_all_answers(&user, request, status, user_id)
         .await
         .map_err(handle_error)?;
     let (answers, next) = page.into_parts();
@@ -503,10 +504,11 @@ pub async fn get_answer_by_form_id_handler(
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
     let Query(query) = query.map_err_to_error().map_err(handle_error)?;
     let status = query.status;
+    let user_id = query.user;
     let request = answer_list_page_request(query).map_err(handle_error)?;
 
     let page = form_answer_use_case
-        .get_answers_by_form_id(form_id, &user, request, status)
+        .get_answers_by_form_id(form_id, &user, request, status, user_id)
         .await
         .map_err(handle_error)?;
     let (answers, next) = page.into_parts();
