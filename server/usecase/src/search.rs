@@ -91,7 +91,7 @@ impl<
         loop {
             let page = self
                 .answer_entry_repository
-                .list_all(forms, request, None)
+                .list_all(forms, request, None, None)
                 .await?;
             let (items, next) = page.into_parts();
             answers.extend(items);

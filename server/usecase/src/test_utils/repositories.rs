@@ -339,6 +339,7 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
         status: Option<AnswerStatus>,
+        user_id: Option<UserId>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         let mut answers = self
             .answers
@@ -347,6 +348,10 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .iter()
             .filter(|answer| answer.form_id() == form.id())
             .filter(|answer| status.is_none_or(|status| *answer.status() == status))
+            .filter(|answer| {
+                user_id
+                    .is_none_or(|user_id| answer.author().authenticated_user_id() == Some(user_id))
+            })
             .cloned()
             .filter_map(|answer| form.read_entry(answer).ok())
             .collect::<Vec<_>>();
@@ -373,6 +378,7 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
         status: Option<AnswerStatus>,
+        user_id: Option<UserId>,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         let forms_by_id = forms
             .iter()
@@ -385,6 +391,10 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .iter()
             .cloned()
             .filter(|answer| status.is_none_or(|status| *answer.status() == status))
+            .filter(|answer| {
+                user_id
+                    .is_none_or(|user_id| answer.author().authenticated_user_id() == Some(user_id))
+            })
             .filter_map(|answer| {
                 forms_by_id
                     .get(&answer.form_id().into_inner())
@@ -579,12 +589,66 @@ mod answer_entry_repository_tests {
                 &form,
                 PageRequest::first(PageLimit::try_new(1).unwrap()),
                 Some(AnswerStatus::IN_PROGRESS),
+                None,
             )
             .await
             .unwrap();
         let (entries, next) = page.into_parts();
         assert_eq!(ids(entries), vec![Uuid::from_u128(2)]);
         assert!(next.is_some());
+    }
+
+    #[tokio::test]
+    async fn list_answers_filters_by_user_before_paginating_and_none_keeps_all_answers() {
+        let form = active_form("answers");
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer(&form, 1, timestamp),
+            answer(&form, 2, timestamp - chrono::TimeDelta::seconds(1)),
+        ]);
+        let form = AuthorizationGuard::from(form)
+            .try_read(Actor::System)
+            .unwrap();
+        let forms = [form.clone()];
+        let target_user: UserId = Uuid::from_u128(102).into();
+
+        let filtered_by_form = repository
+            .list_by_form(
+                &form,
+                PageRequest::first(PageLimit::try_new(1).unwrap()),
+                None,
+                Some(target_user),
+            )
+            .await
+            .unwrap();
+        let (entries, next) = filtered_by_form.into_parts();
+        assert_eq!(ids(entries), vec![Uuid::from_u128(2)]);
+        assert_eq!(next, None);
+
+        let unfiltered = repository
+            .list_all(
+                &forms,
+                PageRequest::first(PageLimit::try_new(10).unwrap()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            ids(unfiltered.into_items()),
+            vec![Uuid::from_u128(1), Uuid::from_u128(2)]
+        );
+
+        let filtered_all = repository
+            .list_all(
+                &forms,
+                PageRequest::first(PageLimit::try_new(10).unwrap()),
+                None,
+                Some(target_user),
+            )
+            .await
+            .unwrap();
+        assert_eq!(ids(filtered_all.into_items()), vec![Uuid::from_u128(2)]);
     }
 
     #[tokio::test]
@@ -607,12 +671,12 @@ mod answer_entry_repository_tests {
         let limit = PageLimit::try_new(2).unwrap();
 
         let first_page = repository
-            .list_all(&forms, PageRequest::first(limit), None)
+            .list_all(&forms, PageRequest::first(limit), None, None)
             .await
             .unwrap();
         let (first_entries, next) = first_page.into_parts();
         let second_page = repository
-            .list_all(&forms, PageRequest::after(next.unwrap(), limit), None)
+            .list_all(&forms, PageRequest::after(next.unwrap(), limit), None, None)
             .await
             .unwrap();
         let (second_entries, next) = second_page.into_parts();
@@ -657,6 +721,7 @@ mod answer_entry_repository_tests {
                 &[form],
                 PageRequest::first(PageLimit::try_new(10).unwrap()),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -689,6 +754,7 @@ mod answer_entry_repository_tests {
             .list_all(
                 &[form],
                 PageRequest::first(PageLimit::try_new(2).unwrap()),
+                None,
                 None,
             )
             .await
@@ -725,6 +791,7 @@ mod answer_entry_repository_tests {
                 &form,
                 PageRequest::first(PageLimit::try_new(2).unwrap()),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -751,12 +818,12 @@ mod answer_entry_repository_tests {
         let limit = PageLimit::try_new(2).unwrap();
 
         let first_page = repository
-            .list_by_form(&form, PageRequest::first(limit), None)
+            .list_by_form(&form, PageRequest::first(limit), None, None)
             .await
             .unwrap();
         let (first_entries, next) = first_page.into_parts();
         let second_page = repository
-            .list_by_form(&form, PageRequest::after(next.unwrap(), limit), None)
+            .list_by_form(&form, PageRequest::after(next.unwrap(), limit), None, None)
             .await
             .unwrap();
         let (second_entries, next) = second_page.into_parts();

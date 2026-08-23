@@ -1,4 +1,4 @@
-use domain::account::models::UserGroupId;
+use domain::account::models::{UserGroupId, UserId};
 use domain::form::question::{ChoiceId, QuestionId, QuestionType, TemplateKey};
 use domain::form::{
     answer::{AnswerId, AnswerLabelId, AnswerPublication, AnswerStatus, AnswerTitle},
@@ -69,6 +69,9 @@ pub struct AnswerListQuery {
     /// Limit results to the specified answer status
     #[param(value_type = Option<String>)]
     pub status: Option<AnswerStatus>,
+    /// Limit results to answers submitted by the specified user
+    #[param(value_type = Option<String>)]
+    pub user: Option<UserId>,
 }
 
 #[derive(Deserialize, Debug, utoipa::IntoParams)]
@@ -167,6 +170,16 @@ impl<'de> Deserialize<'de> for DiscordWebhookUrlSchema {
 mod tests {
     use super::*;
     use types::non_empty_string::NonEmptyString;
+    use uuid::Uuid;
+
+    #[test]
+    fn answer_list_query_deserializes_user_as_user_id() {
+        let user_id = Uuid::from_u128(1);
+        let query =
+            serde_json::from_str::<AnswerListQuery>(&format!(r#"{{"user":"{user_id}"}}"#)).unwrap();
+
+        assert_eq!(query.user, Some(user_id.into()));
+    }
 
     /// リクエストの JSON が usecase 境界へ渡す値になるまでを通して観測する。
     /// 外側の `Option` が「変更するか」、内側の `Option` が「設定するか解除するか」を表す。
