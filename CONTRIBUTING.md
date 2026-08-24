@@ -5,7 +5,15 @@ Windowsで開発する場合はWSL2を利用してください。
 
 ### ツール類のインストール
 
-以下 Ubuntu/Debian を仮定します。
+[Nix](https://nixos.org/) が使える場合は、リポジトリ直下の `flake.nix` が Rust ツールチェイン(`rust-toolchain.toml` を参照)・`cargo-make`・`sqlx-cli`・`cargo-nextest`・`cargo-sort`・`taplo` を含む開発シェルを提供しているので、以下だけで環境が揃います。
+
+```shell
+nix develop
+```
+
+[direnv](https://direnv.net/) を使っている場合は、`.envrc` に `use flake` と書いておけばディレクトリに入るだけで自動的にこのシェルが有効になります。
+
+Nix を使わない場合は、以下 Ubuntu/Debian を仮定した手順でツールをインストールします。
 
 - `rustup` で Rust ツールチェインをインストールします
 
