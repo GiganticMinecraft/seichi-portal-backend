@@ -2,6 +2,7 @@
 server/target
 target
 .envrc
+.direnv/
 proptest-regressions/
 .hypothesis
 .vscode/

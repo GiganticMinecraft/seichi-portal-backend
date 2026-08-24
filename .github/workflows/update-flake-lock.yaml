@@ -1,0 +1,21 @@
+name: update-flake-lock
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/update-flake-lock@v28
+        with:
+          pr-title: "chore(deps): update flake.lock"
+          branch: deps/update-flake-lock
