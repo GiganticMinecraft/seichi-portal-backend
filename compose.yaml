@@ -120,7 +120,7 @@ services:
   # backend は OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 を設定して起動し、
   # http://localhost:3000 の Grafana でトレースを確認する。
   otel-lgtm:
-    image: grafana/otel-lgtm:0.31.0
+    image: grafana/otel-lgtm:0.32.0
     container_name: otel-lgtm
     profiles:
       - observability
