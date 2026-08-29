@@ -3,8 +3,8 @@ use domain::form::question::{ChoiceId, QuestionId, QuestionType, TemplateKey};
 use domain::form::{
     answer::{AnswerId, AnswerLabelId, AnswerPublication, AnswerStatus, AnswerTitle},
     models::{
-        AnswerAcceptancePeriod, AnswerVisibility, DefaultAnswerTitle, DiscordWebhookUrl, FormId,
-        FormLabelId, FormTitle, Visibility,
+        AnswerAcceptancePeriod, AnswerResponseVisibility, AnswerVisibility, DefaultAnswerTitle,
+        DiscordWebhookUrl, FormId, FormLabelId, FormTitle, Visibility,
     },
 };
 use serde::{Deserialize, Deserializer};
@@ -106,6 +106,9 @@ pub struct AnswerSettingsSchema {
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub visibility: Option<AnswerVisibility>,
+    #[serde(default)]
+    #[schema(value_type = Option<String>)]
+    pub answer_response_visibility: Option<AnswerResponseVisibility>,
     #[serde(default)]
     #[schema(value_type = Option<AnswerAcceptancePeriodInput>)]
     pub acceptance_period: Option<AnswerAcceptancePeriod>,

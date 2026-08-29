@@ -342,6 +342,7 @@ pub async fn create_form_handler(
             answer_settings
                 .hide_author
                 .map(AnswerAuthorPublicationPolicy::from_hide_author),
+            answer_settings.answer_response_visibility,
             &user,
         )
         .await
@@ -542,6 +543,7 @@ pub async fn update_form_handler(
                 .map(AnswerAuthorPublicationPolicy::from_hide_author),
             questions,
             labels,
+            answer_settings.answer_response_visibility,
         )
         .await
         .map_err(handle_error)?;

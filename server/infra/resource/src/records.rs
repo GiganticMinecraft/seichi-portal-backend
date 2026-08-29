@@ -119,6 +119,7 @@ pub struct ActiveFormRecord {
     pub discord_webhook_url: Option<String>,
     pub visibility: String,
     pub answer_visibility: String,
+    pub answer_response_visibility: String,
     pub hide_author: bool,
     pub allow_temporary_answers: bool,
     pub acceptance_period_start_at: Option<DateTime<Utc>>,
@@ -143,6 +144,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             discord_webhook_url,
             visibility,
             answer_visibility,
+            answer_response_visibility,
             hide_author,
             allow_temporary_answers,
             acceptance_period_start_at,
@@ -171,6 +173,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
             allow_temporary_answers,
             AllowedUserGroups::new(answer_group_ids),
         )?
+        .change_answer_response_visibility(answer_response_visibility.try_into()?)
         .change_author_publication_policy(
             AnswerAuthorPublicationPolicy::from_hide_author(hide_author),
         );

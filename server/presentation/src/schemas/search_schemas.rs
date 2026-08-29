@@ -15,7 +15,12 @@ use crate::schemas::{
 
 impl From<AnswerDetails> for FormAnswer {
     fn from(details: AnswerDetails) -> Self {
-        Self::new(details.answer, details.form_id, details.labels)
+        Self::new(
+            details.answer,
+            details.form_id,
+            details.labels,
+            details.answer_response_visibility,
+        )
     }
 }
 
@@ -272,6 +277,7 @@ mod tests {
                 labels: vec![AnswerLabel::new(
                     "answer label".to_string().try_into().unwrap(),
                 )],
+                answer_response_visibility: domain::form::answer::AnswerResponseVisibility::FULL,
             }],
             label_for_forms: vec![FormLabel::new(FormLabelName::new(
                 "matching form label".to_string().try_into().unwrap(),

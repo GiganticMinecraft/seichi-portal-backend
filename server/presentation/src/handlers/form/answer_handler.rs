@@ -353,6 +353,7 @@ pub async fn get_all_answers(
                     answer_details.answer,
                     answer_details.form_id,
                     answer_details.labels,
+                    answer_details.answer_response_visibility,
                 )
             })
             .collect_vec(),
@@ -398,6 +399,7 @@ pub async fn get_answer_handler(
         answer_details.answer,
         answer_details.form_id,
         answer_details.labels,
+        answer_details.answer_response_visibility,
     )))
 }
 
@@ -525,6 +527,7 @@ pub async fn get_answer_by_form_id_handler(
                     answer_details.answer,
                     answer_details.form_id,
                     answer_details.labels,
+                    answer_details.answer_response_visibility,
                 )
             })
             .collect_vec(),
@@ -687,6 +690,7 @@ pub async fn update_answer_handler(
         answer_details.answer,
         answer_details.form_id,
         answer_details.labels,
+        answer_details.answer_response_visibility,
     )))
 }
 

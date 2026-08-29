@@ -99,11 +99,16 @@ impl CommentThread {
     }
 
     fn can_access_as_account_user(&self, actor: &Actor) -> bool {
+        let answer_author_can_read = self
+            .answer_author
+            .as_ref()
+            .is_none_or(|author| self.answer_settings.can_read_comments(author, actor));
         matches!(
             actor,
             Actor::AccountUser(user)
                 if user.role() == &Administrator
-                    || (self.answer_settings.visibility() == &AnswerVisibility::PUBLIC
+                    || (answer_author_can_read
+                        && self.answer_settings.visibility() == &AnswerVisibility::PUBLIC
                         && self.publication == AnswerPublication::PUBLIC
                         && self.answer_settings.allows_authenticated_user(actor))
         )
@@ -251,6 +256,33 @@ mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn restricted_response_visibility_hides_public_comments_from_the_answer_author() {
+        let author = AccountUser::new(
+            "author".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::StandardUser,
+        );
+        let thread = CommentThread::try_new(
+            AnswerId::new(),
+            AnswerAuthor::AuthenticatedUser(*author.id()),
+            AnswerPublication::PUBLIC,
+            AnswerSettings::default()
+                .change_visibility(AnswerVisibility::PUBLIC)
+                .change_answer_response_visibility(
+                    crate::form::answer::AnswerResponseVisibility::RESTRICTED,
+                ),
+            Vec::new(),
+        )
+        .unwrap();
+
+        assert!(
+            AuthorizationGuard::<_, Read>::from(thread)
+                .try_read(Actor::from(author))
+                .is_err()
+        );
     }
 
     #[test]

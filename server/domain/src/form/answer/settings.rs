@@ -9,14 +9,18 @@ use proptest::prelude::*;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 use types::non_empty_string::NonEmptyString;
 
 use crate::{
     account::models::{Role, UserGroupId},
     auth::Actor,
-    form::answer::{AnswerAuthor, AnswerEntry},
     form::settings::AllowedUserGroups,
+    form::{
+        answer::{AnswerAuthor, AnswerEntry},
+        is_administrator,
+    },
 };
 
 #[cfg_attr(test, derive(Arbitrary))]
@@ -57,6 +61,25 @@ impl AnswerAuthorPublicationPolicy {
         } else {
             actual_name
         }
+    }
+}
+
+/// 回答者が自分の回答を閲覧するときに、回答の管理情報を公開する範囲です。
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(
+    Serialize, Deserialize, Debug, Copy, Clone, Default, PartialEq, Eq, Display, EnumString,
+)]
+pub enum AnswerResponseVisibility {
+    #[default]
+    FULL,
+    RESTRICTED,
+}
+
+impl TryFrom<String> for AnswerResponseVisibility {
+    type Error = DomainError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(&value).map_err(Into::into)
     }
 }
 
@@ -269,6 +292,8 @@ impl Arbitrary for AnswerAudience {
 pub struct AnswerSettings {
     default_answer_title: DefaultAnswerTitle,
     visibility: AnswerVisibility,
+    #[serde(default)]
+    answer_response_visibility: AnswerResponseVisibility,
     acceptance_period: AnswerAcceptancePeriod,
     #[serde(flatten)]
     #[getter(skip)]
@@ -286,6 +311,7 @@ impl Arbitrary for AnswerSettings {
         (
             any::<DefaultAnswerTitle>(),
             any::<AnswerVisibility>(),
+            any::<AnswerResponseVisibility>(),
             any::<AnswerAcceptancePeriod>(),
             any::<AnswerAudience>(),
             any::<AnswerAuthorPublicationPolicy>(),
@@ -294,12 +320,14 @@ impl Arbitrary for AnswerSettings {
                 |(
                     default_answer_title,
                     visibility,
+                    answer_response_visibility,
                     acceptance_period,
                     audience,
                     author_publication_policy,
                 )| Self {
                     default_answer_title,
                     visibility,
+                    answer_response_visibility,
                     acceptance_period,
                     audience,
                     author_publication_policy,
@@ -319,6 +347,7 @@ impl AnswerSettings {
         Self {
             default_answer_title,
             visibility,
+            answer_response_visibility: AnswerResponseVisibility::default(),
             acceptance_period,
             audience: AnswerAudience::try_new(
                 allow_temporary_answers,
@@ -339,6 +368,7 @@ impl AnswerSettings {
         Ok(Self {
             default_answer_title,
             visibility,
+            answer_response_visibility: AnswerResponseVisibility::default(),
             acceptance_period,
             audience: AnswerAudience::try_new(allow_temporary_answers, answer_groups)?,
             author_publication_policy: AnswerAuthorPublicationPolicy::default(),
@@ -354,6 +384,16 @@ impl AnswerSettings {
 
     pub fn change_visibility(self, visibility: AnswerVisibility) -> Self {
         Self { visibility, ..self }
+    }
+
+    pub fn change_answer_response_visibility(
+        self,
+        answer_response_visibility: AnswerResponseVisibility,
+    ) -> Self {
+        Self {
+            answer_response_visibility,
+            ..self
+        }
     }
 
     pub fn change_acceptance_period(self, acceptance_period: AnswerAcceptancePeriod) -> Self {
@@ -434,6 +474,27 @@ impl AnswerSettings {
             Actor::System => true,
             _ => false,
         }
+    }
+
+    pub fn can_read_comments(&self, author: &AnswerAuthor, actor: &Actor) -> bool {
+        if *self.answer_response_visibility() == AnswerResponseVisibility::FULL
+            || matches!(actor, Actor::System)
+            || is_administrator(actor)
+        {
+            return true;
+        }
+
+        !matches!(
+            actor,
+            Actor::AccountUser(user)
+                if author.authenticated_user_id() == Some(*user.id())
+        )
+    }
+
+    pub fn can_read_history(&self, actor: &Actor) -> bool {
+        *self.answer_response_visibility() == AnswerResponseVisibility::FULL
+            || matches!(actor, Actor::System)
+            || is_administrator(actor)
     }
 }
 
@@ -787,6 +848,22 @@ mod tests {
             settings.author_disclosure_for(&Actor::from(active_user(Role::Administrator))),
             AnswerAuthorDisclosure::Disclosed
         );
+    }
+
+    #[test]
+    fn restricted_response_visibility_hides_comments_from_author_and_history_from_non_administrators()
+     {
+        let author = active_user(Role::StandardUser);
+        let other_user = active_user(Role::StandardUser);
+        let administrator = active_user(Role::Administrator);
+        let entry = answer_entry(AnswerAuthor::AuthenticatedUser(*author.id()));
+        let settings = AnswerSettings::default()
+            .change_answer_response_visibility(AnswerResponseVisibility::RESTRICTED);
+
+        assert!(!settings.can_read_comments(entry.author(), &Actor::from(author)));
+        assert!(settings.can_read_comments(entry.author(), &Actor::from(other_user)));
+        assert!(!settings.can_read_history(&Actor::from(active_user(Role::StandardUser,))));
+        assert!(settings.can_read_history(&Actor::from(administrator)));
     }
 
     #[test]

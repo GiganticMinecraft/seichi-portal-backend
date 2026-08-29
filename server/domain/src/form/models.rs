@@ -13,7 +13,7 @@ use types::non_empty_string::NonEmptyString;
 pub use crate::form::{
     answer::{
         AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy,
-        AnswerSettings, AnswerVisibility, DefaultAnswerTitle,
+        AnswerResponseVisibility, AnswerSettings, AnswerVisibility, DefaultAnswerTitle,
     },
     label::{FormLabel, FormLabelAssignment, FormLabelId, FormLabelName},
     question::{Question, QuestionSet},

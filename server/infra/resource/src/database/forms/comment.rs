@@ -19,7 +19,10 @@ use domain::{
 use domain::{
     auth::Actor,
     form::{
-        answer::{AnswerAuthor, AnswerId, AnswerPublication, AnswerSettings, AnswerVisibility},
+        answer::{
+            AnswerAuthor, AnswerId, AnswerPublication, AnswerResponseVisibility, AnswerSettings,
+            AnswerVisibility,
+        },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
         comment_thread::CommentThread,
         models::{ActiveForm, FormId, active_form_allows_read},
@@ -408,7 +411,8 @@ async fn lock_comment_thread(
     let answer_id_text = answer_id.to_string();
     let form_id = form_id.to_string();
     let locked_form = sqlx::query!(
-        "SELECT visibility, answer_visibility FROM form_meta_data WHERE id = ? FOR UPDATE",
+        "SELECT visibility, answer_visibility, answer_response_visibility
+         FROM form_meta_data WHERE id = ? FOR UPDATE",
         form_id,
     )
     .fetch_optional(&mut **transaction)
@@ -417,6 +421,8 @@ async fn lock_comment_thread(
     .ok_or(DomainError::NotFound)?;
     let form_visibility = Visibility::try_from(locked_form.visibility)?;
     let answer_visibility = AnswerVisibility::try_from(locked_form.answer_visibility)?;
+    let answer_response_visibility =
+        AnswerResponseVisibility::try_from(locked_form.answer_response_visibility)?;
 
     let form_group_ids = sqlx::query!(
         "SELECT group_id FROM form_allowed_user_groups WHERE form_id = ? ORDER BY id ASC",
@@ -529,6 +535,7 @@ async fn lock_comment_thread(
     };
     let answer_settings = AnswerSettings::default()
         .change_visibility(answer_visibility)
+        .change_answer_response_visibility(answer_response_visibility)
         .try_change_audience(false, AllowedUserGroups::new(answer_group_ids))?;
     let thread = CommentThread::try_new(
         answer_id,

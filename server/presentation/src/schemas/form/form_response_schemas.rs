@@ -10,13 +10,13 @@ use domain::form::{
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
-        ActiveForm, AnswerSettings, DefaultAnswerTitle, FormDescription, FormId, FormLabel,
-        FormMeta, FormSettings, FormTitle, Visibility,
+        ActiveForm, AnswerResponseVisibility, AnswerSettings, DefaultAnswerTitle, FormDescription,
+        FormId, FormLabel, FormMeta, FormSettings, FormTitle, Visibility,
     },
     question::{Choice, Question, QuestionType},
 };
 use itertools::Itertools;
-use serde::Serialize;
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 use types::non_empty_string::NonEmptyString;
 use usecase::models::{
     CommentAuthor, CommentWithAuthor, PublishedAnswerAuthor, PublishedAnswerEntry,
@@ -89,6 +89,8 @@ pub struct AnswerSettingsSchema {
     #[schema(value_type = Option<String>)]
     pub default_answer_title: DefaultAnswerTitle,
     pub visibility: AnswerVisibility,
+    #[schema(value_type = String)]
+    pub answer_response_visibility: AnswerResponseVisibility,
     pub acceptance_period: AnswerAcceptancePeriodSchema,
     #[schema(value_type = Vec<String>)]
     pub answer_group_ids: Vec<UserGroupId>,
@@ -100,6 +102,7 @@ impl AnswerSettingsSchema {
             hide_author: answer_settings.author_publication_policy().hides_author(),
             default_answer_title: answer_settings.default_answer_title().to_owned(),
             visibility: answer_settings.visibility().to_owned().into(),
+            answer_response_visibility: *answer_settings.answer_response_visibility(),
             acceptance_period: AnswerAcceptancePeriodSchema {
                 start_at: answer_settings.acceptance_period().start_at().to_owned(),
                 end_at: answer_settings.acceptance_period().end_at().to_owned(),
@@ -700,18 +703,52 @@ impl From<AnswerLabel> for AnswerLabels {
     }
 }
 
-#[derive(Serialize, Debug, utoipa::ToSchema)]
+#[derive(Debug, utoipa::ToSchema)]
 pub struct FormAnswer {
     id: Uuid,
+    #[schema(required = false)]
     author: AnswerAuthor,
     form_id: Uuid,
+    #[schema(required = false)]
     timestamp: DateTime<Utc>,
     title: Option<String>,
+    #[schema(required = false)]
     publication: AnswerPublication,
+    #[schema(required = false)]
     status: AnswerStatus,
     answers: Vec<AnswerContent>,
+    #[schema(required = false)]
     labels: Vec<AnswerLabels>,
     redmine_issue_id: Option<i64>,
+    #[schema(ignore)]
+    redacted: bool,
+}
+
+impl Serialize for FormAnswer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state =
+            serializer.serialize_struct("FormAnswer", if self.redacted { 3 } else { 10 })?;
+        state.serialize_field("id", &self.id)?;
+        if !self.redacted {
+            state.serialize_field("author", &self.author)?;
+        }
+        state.serialize_field("form_id", &self.form_id)?;
+        if !self.redacted {
+            state.serialize_field("timestamp", &self.timestamp)?;
+            state.serialize_field("title", &self.title)?;
+            state.serialize_field("publication", &self.publication)?;
+            state.serialize_field("status", &self.status)?;
+        }
+        state.serialize_field("answers", &self.answers)?;
+        if !self.redacted {
+            state.serialize_field("labels", &self.labels)?;
+            state.serialize_field("redmine_issue_id", &self.redmine_issue_id)?;
+        }
+        state.end()
+    }
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -736,7 +773,12 @@ pub struct AnswerListPageResponse {
 }
 
 impl FormAnswer {
-    pub fn new(answer: PublishedAnswerEntry, form_id: FormId, labels: Vec<AnswerLabel>) -> Self {
+    pub fn new(
+        answer: PublishedAnswerEntry,
+        form_id: FormId,
+        labels: Vec<AnswerLabel>,
+        answer_response_visibility: AnswerResponseVisibility,
+    ) -> Self {
         FormAnswer {
             id: answer.id.into(),
             author: answer.author.into(),
@@ -754,6 +796,7 @@ impl FormAnswer {
             redmine_issue_id: answer
                 .redmine_reference
                 .map(|reference| reference.issue_id().into_inner()),
+            redacted: answer_response_visibility == AnswerResponseVisibility::RESTRICTED,
         }
     }
 }
@@ -882,12 +925,56 @@ mod tests {
             answer,
             FormId::from(Uuid::new_v4()),
             vec![],
+            AnswerResponseVisibility::FULL,
         ))
         .unwrap();
 
         assert_eq!(serialized["author"]["type"], "ANONYMOUS");
         assert_eq!(serialized["author"].as_object().unwrap().len(), 1);
         assert_eq!(serialized["publication"], "PUBLIC");
+    }
+
+    #[test]
+    fn restricted_answer_response_contains_only_resource_ids_and_answer_values() {
+        let answer = PublishedAnswerEntry {
+            id: AnswerId::from(Uuid::from_u128(1)),
+            author: PublishedAnswerAuthor::Anonymous,
+            timestamp: Utc::now(),
+            title: AnswerTitle::new(Some("management title".to_string().try_into().unwrap())),
+            publication: DomainAnswerPublication::PRIVATE,
+            status: DomainAnswerStatus::COMPLETED,
+            contents: vec![FormAnswerContent {
+                id: Uuid::from_u128(3).into(),
+                question_id: Uuid::from_u128(4).into(),
+                answer: "input value".to_string(),
+            }],
+            redmine_reference: None,
+        };
+
+        let serialized = serde_json::to_value(FormAnswer::new(
+            answer,
+            FormId::from(Uuid::from_u128(2)),
+            vec![],
+            AnswerResponseVisibility::RESTRICTED,
+        ))
+        .unwrap();
+
+        assert_eq!(serialized.as_object().unwrap().len(), 3);
+        assert!(serialized.get("id").is_some());
+        assert!(serialized.get("form_id").is_some());
+        assert!(serialized.get("answers").is_some());
+        assert_eq!(serialized["answers"][0]["answer"], "input value");
+        for hidden in [
+            "author",
+            "timestamp",
+            "title",
+            "publication",
+            "status",
+            "labels",
+            "redmine_issue_id",
+        ] {
+            assert!(serialized.get(hidden).is_none(), "field {hidden} leaked");
+        }
     }
 
     #[test]
@@ -919,6 +1006,7 @@ mod tests {
             answer,
             FormId::from(Uuid::new_v4()),
             vec![],
+            AnswerResponseVisibility::FULL,
         ))
         .unwrap();
         let comment_json = serde_json::to_value(AnswerComment::from(CommentWithAuthor {

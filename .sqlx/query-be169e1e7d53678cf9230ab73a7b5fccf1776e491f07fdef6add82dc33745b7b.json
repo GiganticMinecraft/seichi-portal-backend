@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT f.id, f.title, f.description, f.visibility,\n            f.answer_visibility, f.hide_author AS `hide_author: _`,\n            f.allow_temporary_answers AS `allow_temporary_answers: _`,\n            f.acceptance_period_start_at AS `acceptance_period_start_at: _`,\n            f.acceptance_period_end_at AS `acceptance_period_end_at: _`, f.default_answer_title,\n            f.created_at AS `created_at: _`, f.updated_at AS `updated_at: _`,\n            w.url AS `discord_webhook_url?`,\n            f.archived_at AS `archived_at: _`, u.name AS archived_by_name,\n            u.id AS archived_by_id, u.role AS archived_by_role\n        FROM archived_form_meta_data f\n        INNER JOIN users u ON f.archived_by = u.id\n        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id\n        WHERE f.id = ?",
+  "query": "SELECT f.id, f.title, f.description, f.visibility,\n                        f.answer_visibility, f.answer_response_visibility,\n                        f.hide_author AS `hide_author: _`,\n                        f.allow_temporary_answers AS `allow_temporary_answers: _`,\n                        f.acceptance_period_start_at AS `acceptance_period_start_at: _`,\n                        f.acceptance_period_end_at AS `acceptance_period_end_at: _`,\n                        f.default_answer_title, f.created_at AS `created_at: _`,\n                        f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`,\n                        f.archived_at AS `archived_at: _`, u.name AS archived_by_name,\n                        u.id AS archived_by_id, u.role AS archived_by_role\n                        FROM archived_form_meta_data f\n                        INNER JOIN users u ON f.archived_by = u.id\n                        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id\n                        WHERE (f.archived_at < ? OR (f.archived_at = ? AND f.id > ?))\n                            AND (f.title LIKE ? OR f.description LIKE ?)\n                        ORDER BY f.archived_at DESC, f.id ASC\n                        LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -85,6 +85,22 @@
       },
       {
         "ordinal": 5,
+        "name": "answer_response_visibility",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 40
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.archived_form_meta_data",
+            "name": "answer_response_visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "hide_author: _",
         "type_info": {
           "type": "Tiny",
@@ -100,7 +116,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "allow_temporary_answers: _",
         "type_info": {
           "type": "Tiny",
@@ -116,7 +132,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "acceptance_period_start_at: _",
         "type_info": {
           "type": "Datetime",
@@ -132,7 +148,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "acceptance_period_end_at: _",
         "type_info": {
           "type": "Datetime",
@@ -148,7 +164,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "default_answer_title",
         "type_info": {
           "type": "Blob",
@@ -164,7 +180,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "created_at: _",
         "type_info": {
           "type": "Datetime",
@@ -180,7 +196,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "updated_at: _",
         "type_info": {
           "type": "Datetime",
@@ -196,7 +212,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "discord_webhook_url?",
         "type_info": {
           "type": "Blob",
@@ -212,7 +228,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "archived_at: _",
         "type_info": {
           "type": "Datetime",
@@ -228,7 +244,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "archived_by_name",
         "type_info": {
           "type": "VarString",
@@ -244,7 +260,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "archived_by_id",
         "type_info": {
           "type": "String",
@@ -260,7 +276,7 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "archived_by_role",
         "type_info": {
           "type": "String",
@@ -277,9 +293,10 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 6
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -299,5 +316,5 @@
       false
     ]
   },
-  "hash": "79494e0a41542d624e726451738c602098daefb2f4ef0991571df31f5ae6aeb1"
+  "hash": "be169e1e7d53678cf9230ab73a7b5fccf1776e491f07fdef6add82dc33745b7b"
 }
