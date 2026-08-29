@@ -2,7 +2,7 @@ use axum::{
     Extension, Json,
     extract::{State, rejection::JsonRejection},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
 };
 use domain::{
     account::models::AccountUser, auth::Actor, global_discord_webhook::GlobalDiscordWebhookSetting,
@@ -13,7 +13,7 @@ use types::non_empty_string::NonEmptyString;
 use usecase::global_discord_webhook::GlobalDiscordWebhookUseCase;
 
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{ApiError, handle_error},
     schemas::{
         error_responses::{BadRequest, Forbidden, InternalServerError, Unauthorized},
         global_discord_webhook::{
@@ -38,7 +38,7 @@ use crate::{
 pub async fn get_global_discord_webhook(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<Json<GlobalDiscordWebhookStatusSchema>, Response> {
+) -> Result<Json<GlobalDiscordWebhookStatusSchema>, ApiError> {
     let usecase = GlobalDiscordWebhookUseCase {
         repository: repository.global_discord_webhook_repository(),
     };
@@ -71,7 +71,7 @@ pub async fn update_global_discord_webhook(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<GlobalDiscordWebhookUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let Json(request) = json.map_err_to_error().map_err(handle_error)?;
     let url = request
         .url

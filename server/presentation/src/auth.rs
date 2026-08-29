@@ -1,11 +1,5 @@
-use axum::response::IntoResponse;
 use axum::{
-    Json, RequestExt,
-    body::Body,
-    extract::State,
-    http::{Request, StatusCode, header},
-    middleware::Next,
-    response::Response,
+    RequestExt, body::Body, extract::State, http::Request, middleware::Next, response::Response,
 };
 use axum_extra::{
     extract::TypedHeader,
@@ -14,28 +8,18 @@ use axum_extra::{
 use domain::repository::Repositories;
 use domain::{account::models::AccountUser, auth::Actor};
 use resource::repository::RealInfrastructureRepository;
-use serde_json::json;
 use usecase::user::UserUseCase;
 
-fn unauthorized_response(detail: &str) -> Response {
-    (
-        StatusCode::UNAUTHORIZED,
-        [(header::CONTENT_TYPE, "application/problem+json")],
-        Json(json!({
-            "type": "about:blank",
-            "title": "Unauthorized",
-            "status": 401,
-            "detail": detail,
-            "errorCode": "UNAUTHORIZED"
-        })),
-    )
-        .into_response()
+use crate::handlers::error_handler::ApiError;
+
+fn unauthorized_response(detail: &str) -> ApiError {
+    ApiError::unauthorized(detail)
 }
 
 async fn resolve_user(
     repository: &RealInfrastructureRepository,
     session_id: &str,
-) -> Result<AccountUser, Response> {
+) -> Result<AccountUser, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -56,7 +40,7 @@ pub async fn auth(
     State(repository): State<RealInfrastructureRepository>,
     mut request: Request<Body>,
     next: Next,
-) -> Result<Response, Response> {
+) -> Result<Response, ApiError> {
     let auth = request
         .extract_parts::<TypedHeader<Authorization<Bearer>>>()
         .await
@@ -73,7 +57,7 @@ pub async fn optional_auth(
     State(repository): State<RealInfrastructureRepository>,
     mut request: Request<Body>,
     next: Next,
-) -> Result<Response, Response> {
+) -> Result<Response, ApiError> {
     let auth = request
         .extract_parts::<TypedHeader<Authorization<Bearer>>>()
         .await;

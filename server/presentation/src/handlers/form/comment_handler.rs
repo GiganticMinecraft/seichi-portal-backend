@@ -25,7 +25,8 @@ use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::{CommentUpdateSchema, HistoryListQuery};
 use crate::schemas::form::form_response_schemas::{AnswerComment, CommentHistoryPageResponse};
 use crate::{
-    handlers::error_handler::handle_error, schemas::form::form_request_schemas::CommentPostSchema,
+    handlers::error_handler::{ApiError, handle_error},
+    schemas::form::form_request_schemas::CommentPostSchema,
 };
 
 #[derive(utoipa::IntoResponses)]
@@ -98,7 +99,7 @@ pub async fn get_comment_history(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     query: Query<HistoryListQuery>,
-) -> Result<Json<CommentHistoryPageResponse>, Response> {
+) -> Result<Json<CommentHistoryPageResponse>, ApiError> {
     let use_case = CommentUseCase {
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
@@ -161,7 +162,7 @@ pub async fn get_form_comment(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
-) -> Result<GetFormCommentResponse, Response> {
+) -> Result<GetFormCommentResponse, ApiError> {
     let form_comment_use_case = CommentUseCase {
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
@@ -211,7 +212,7 @@ pub async fn post_form_comment(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<CommentPostSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_comment_use_case = CommentUseCase {
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
@@ -264,7 +265,7 @@ pub async fn update_form_comment(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
     json: Result<Json<CommentUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_comment_use_case = CommentUseCase {
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),
@@ -315,7 +316,7 @@ pub async fn delete_form_comment_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, CommentId)>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_comment_use_case = CommentUseCase {
         active_form_repository: repository.active_form_repository(),
         user_repository: repository.user_repository(),

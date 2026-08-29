@@ -39,7 +39,7 @@ use usecase::forms::{
 use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
 use crate::schemas::error_responses::*;
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{ApiError, handle_error},
     schemas::form::{
         form_request_schemas::{
             AnswerCreateSchema, AnswerListQuery, AnswerUpdateSchema, HistoryListQuery,
@@ -328,7 +328,7 @@ pub async fn get_all_answers(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<AnswerListQuery>, axum::extract::rejection::QueryRejection>,
-) -> Result<GetAllAnswersResponse, Response> {
+) -> Result<GetAllAnswersResponse, ApiError> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
     let Query(query) = query.map_err_to_error().map_err(handle_error)?;
     let status = query.status;
@@ -384,7 +384,7 @@ pub async fn get_answer_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
-) -> Result<GetAnswerResponse, Response> {
+) -> Result<GetAnswerResponse, ApiError> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -415,7 +415,7 @@ pub async fn get_answer_status_history_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     query: Result<Query<HistoryListQuery>, axum::extract::rejection::QueryRejection>,
-) -> Result<Json<AnswerStatusHistoryPageResponse>, Response> {
+) -> Result<Json<AnswerStatusHistoryPageResponse>, ApiError> {
     let use_case = build_answer_use_case(&repository, None);
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Query(query) = query.map_err_to_error().map_err(handle_error)?;
@@ -451,7 +451,7 @@ pub async fn get_answer_title_history_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     query: Result<Query<HistoryListQuery>, axum::extract::rejection::QueryRejection>,
-) -> Result<Json<AnswerTitleHistoryPageResponse>, Response> {
+) -> Result<Json<AnswerTitleHistoryPageResponse>, ApiError> {
     let use_case = build_answer_use_case(&repository, None);
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Query(query) = query.map_err_to_error().map_err(handle_error)?;
@@ -498,7 +498,7 @@ pub async fn get_answer_by_form_id_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     query: Result<Query<AnswerListQuery>, axum::extract::rejection::QueryRejection>,
-) -> Result<GetAnswersByFormResponse, Response> {
+) -> Result<GetAnswersByFormResponse, ApiError> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -557,7 +557,7 @@ pub async fn post_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<AnswerCreateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let discord_answer_webhook_notifier =
         ResourceDiscordAnswerWebhookNotifier::new(DiscordWebhookSender::new());
     let form_answer_use_case =
@@ -608,7 +608,7 @@ pub async fn post_temporary_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<TemporaryAnswerCreateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let discord_answer_webhook_notifier =
         ResourceDiscordAnswerWebhookNotifier::new(DiscordWebhookSender::new());
     let form_answer_use_case =
@@ -665,7 +665,7 @@ pub async fn update_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<AnswerUpdateSchema>, JsonRejection>,
-) -> Result<UpdateAnswerResponse, Response> {
+) -> Result<UpdateAnswerResponse, ApiError> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
@@ -719,7 +719,8 @@ mod tests {
             .unwrap(),
         );
 
-        let response = handle_error(decode_answer_list_cursor(&old_cursor).unwrap_err());
+        let response =
+            handle_error(decode_answer_list_cursor(&old_cursor).unwrap_err()).into_response();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }

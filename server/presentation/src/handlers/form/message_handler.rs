@@ -23,7 +23,7 @@ use usecase::forms::message::MessageUseCase;
 use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
 use crate::schemas::error_responses::*;
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{ApiError, handle_error},
     schemas::form::{
         form_request_schemas::{HistoryListQuery, MessageUpdateSchema, PostedMessageSchema},
         form_response_schemas::{MessageContentSchema, MessageHistoryPageResponse, SenderSchema},
@@ -127,7 +127,7 @@ pub async fn get_message_history(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     query: Query<HistoryListQuery>,
-) -> Result<Json<MessageHistoryPageResponse>, Response> {
+) -> Result<Json<MessageHistoryPageResponse>, ApiError> {
     let use_case = MessageUseCase {
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
@@ -181,7 +181,7 @@ pub async fn post_message_handler<N: Notificator>(
     State(state): State<Arc<RealInfrastructureRepositoryWithNotificator<N>>>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json: Result<Json<PostedMessageSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_message_use_case = MessageUseCase {
         notification_repository: state.repository.notification_repository(),
         active_form_repository: state.repository.active_form_repository(),
@@ -236,7 +236,7 @@ pub async fn update_message_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
     json: Result<Json<MessageUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_message_use_case = MessageUseCase {
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
@@ -287,7 +287,7 @@ pub async fn get_messages_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
-) -> Result<GetMessagesResponse, Response> {
+) -> Result<GetMessagesResponse, ApiError> {
     let form_message_use_case = MessageUseCase {
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),
@@ -345,7 +345,7 @@ pub async fn delete_message_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, MessageId)>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_message_use_case = MessageUseCase {
         notification_repository: repository.notification_repository(),
         active_form_repository: repository.active_form_repository(),

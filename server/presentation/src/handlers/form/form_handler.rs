@@ -36,7 +36,7 @@ use usecase::{
 };
 
 use crate::api::global_discord_webhook::APPLICATION_EVENT_PUBLISHER;
-use crate::handlers::error_handler::handle_error;
+use crate::handlers::error_handler::{ApiError, handle_error};
 use crate::schemas::{
     error_responses::*,
     form::{
@@ -308,7 +308,7 @@ pub async fn create_form_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormCreateSchema>, JsonRejection>,
-) -> Result<CreateFormResponse, Response> {
+) -> Result<CreateFormResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
 
     let Json(form) = json.map_err_to_error().map_err(handle_error)?;
@@ -374,7 +374,7 @@ pub async fn form_list_handler(
     Extension(actor): Extension<Actor>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<FormListQuery>, axum::extract::rejection::QueryRejection>,
-) -> Result<FormListResponse, Response> {
+) -> Result<FormListResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
     let Query(query) = query.map_err_to_error().map_err(handle_error)?;
     let request = form_list_page_request(&query).map_err(handle_error)?;
@@ -422,7 +422,7 @@ pub async fn get_form_handler(
     Extension(actor): Extension<Actor>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-) -> Result<GetFormResponse, Response> {
+) -> Result<GetFormResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -459,7 +459,7 @@ pub async fn archive_form_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -501,7 +501,7 @@ pub async fn update_form_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
     json: Result<Json<FormUpdateSchema>, JsonRejection>,
-) -> Result<UpdateFormResponse, Response> {
+) -> Result<UpdateFormResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
@@ -573,7 +573,7 @@ pub async fn archived_form_list_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<ArchivedFormListQuery>, axum::extract::rejection::QueryRejection>,
-) -> Result<ArchivedFormListResponse, Response> {
+) -> Result<ArchivedFormListResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
     let Query(query) = query.map_err_to_error().map_err(handle_error)?;
     let request = archived_form_list_page_request(&query).map_err(handle_error)?;
@@ -623,7 +623,7 @@ pub async fn get_archived_form_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-) -> Result<ArchivedFormResponse, Response> {
+) -> Result<ArchivedFormResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 
@@ -665,7 +665,7 @@ pub async fn restore_archived_form_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_use_case = build_form_use_case(&repository);
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
 

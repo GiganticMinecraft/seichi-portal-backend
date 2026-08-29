@@ -32,7 +32,10 @@ use crate::schemas::user::{
     UserGroupSchema, UserInfoResponse, UserListPageResponse, UserListQuery, UserSchema,
     UserUpdateSchema,
 };
-use crate::{handlers::error_handler::handle_error, schemas::user::DiscordOAuthToken};
+use crate::{
+    handlers::error_handler::{ApiError, handle_error},
+    schemas::user::DiscordOAuthToken,
+};
 use axum::response::Response;
 use axum_extra::typed_header::TypedHeaderRejection;
 use errors::presentation::PresentationError;
@@ -271,7 +274,7 @@ fn user_list_page_request(query: UserListQuery) -> Result<PageRequest<UserPagePo
 pub async fn get_my_user_info(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<GetUserInfoResponse, Response> {
+) -> Result<GetUserInfoResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -324,7 +327,7 @@ pub async fn get_user_info(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetUserInfoResponse, Response> {
+) -> Result<GetUserInfoResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -381,7 +384,7 @@ pub async fn patch_user_role(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
     json: Result<Json<UserUpdateSchema>, JsonRejection>,
-) -> Result<PatchUserRoleResponse, Response> {
+) -> Result<PatchUserRoleResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -420,7 +423,7 @@ pub async fn user_list(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<UserListQuery>, QueryRejection>,
-) -> Result<UserListResponse, Response> {
+) -> Result<UserListResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -463,7 +466,7 @@ pub async fn create_user_group(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<UserGroupRequest>, JsonRejection>,
-) -> Result<UserGroupResponse, Response> {
+) -> Result<UserGroupResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -494,7 +497,7 @@ pub async fn create_user_group(
 pub async fn user_group_list(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<UserGroupListResponse, Response> {
+) -> Result<UserGroupListResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -531,7 +534,7 @@ pub async fn user_group_user_list(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<UserGroupUserListResponse, Response> {
+) -> Result<UserGroupUserListResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -572,7 +575,7 @@ pub async fn update_user_group(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
     json: Result<Json<UserGroupRequest>, JsonRejection>,
-) -> Result<UserGroupResponse, Response> {
+) -> Result<UserGroupResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -609,7 +612,7 @@ pub async fn delete_user_group(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<DeleteUserGroupResponse, Response> {
+) -> Result<DeleteUserGroupResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -646,7 +649,7 @@ pub async fn add_user_to_group(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(Uuid, Uuid)>, PathRejection>,
-) -> Result<UserGroupMembershipResponse, Response> {
+) -> Result<UserGroupMembershipResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -683,7 +686,7 @@ pub async fn remove_user_from_group(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(Uuid, Uuid)>, PathRejection>,
-) -> Result<UserGroupMembershipResponse, Response> {
+) -> Result<UserGroupMembershipResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -719,7 +722,7 @@ pub async fn get_form_submission_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetFormSubmissionRestrictionResponse, Response> {
+) -> Result<GetFormSubmissionRestrictionResponse, ApiError> {
     let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
         restriction_repository: repository.form_submission_restriction_repository(),
@@ -758,7 +761,7 @@ pub async fn get_form_submission_restriction_history(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetFormSubmissionRestrictionHistoryResponse, Response> {
+) -> Result<GetFormSubmissionRestrictionHistoryResponse, ApiError> {
     let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
         restriction_repository: repository.form_submission_restriction_repository(),
@@ -796,7 +799,7 @@ pub async fn get_minecraft_punishments(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetMinecraftPunishmentsResponse, Response> {
+) -> Result<GetMinecraftPunishmentsResponse, ApiError> {
     let Path(uuid) = path.map_err_to_error().map_err(handle_error)?;
     let usecase = MinecraftBanUseCase {
         repository: repository.minecraft_ban_repository(),
@@ -833,7 +836,7 @@ pub async fn put_form_submission_restriction(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
     json: Result<Json<FormSubmissionRestrictionRequest>, JsonRejection>,
-) -> Result<PutFormSubmissionRestrictionResponse, Response> {
+) -> Result<PutFormSubmissionRestrictionResponse, ApiError> {
     let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
         restriction_repository: repository.form_submission_restriction_repository(),
@@ -876,7 +879,7 @@ pub async fn delete_form_submission_restriction(
     Extension(actor): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let restriction_use_case = FormSubmissionRestrictionUseCase {
         user_repository: repository.user_repository(),
         restriction_repository: repository.form_submission_restriction_repository(),
@@ -916,7 +919,7 @@ pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
     header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
     json: Result<Json<UserSessionExpires>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -974,7 +977,7 @@ pub async fn start_session(
 pub async fn end_session(
     State(repository): State<RealInfrastructureRepository>,
     typed_header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -1023,7 +1026,7 @@ pub async fn link_discord(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<DiscordOAuthToken>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
@@ -1060,7 +1063,7 @@ pub async fn link_discord(
 pub async fn unlink_discord(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };

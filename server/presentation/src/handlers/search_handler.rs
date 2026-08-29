@@ -21,7 +21,7 @@ use usecase::search::SearchUseCase;
 
 use crate::schemas::error_responses::*;
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{ApiError, handle_error},
     schemas::search_schemas::{
         AnswerSearchQuery, AnswerSearchResult, CrossSearchResult, SearchQuery, UserSearchResult,
     },
@@ -131,7 +131,7 @@ pub async fn cross_search(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<SearchQuery>, QueryRejection>,
-) -> Result<CrossSearchResponse, Response> {
+) -> Result<CrossSearchResponse, ApiError> {
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
@@ -175,7 +175,7 @@ pub async fn search_users(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<SearchQuery>, QueryRejection>,
-) -> Result<UserSearchResponse, Response> {
+) -> Result<UserSearchResponse, ApiError> {
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
@@ -222,7 +222,7 @@ pub async fn search_answers(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<AnswerSearchQuery>, QueryRejection>,
-) -> Result<AnswerSearchResponse, Response> {
+) -> Result<AnswerSearchResponse, ApiError> {
     let search_use_case = SearchUseCase {
         search_repository: repository.search_repository(),
         active_form_repository: repository.active_form_repository(),
