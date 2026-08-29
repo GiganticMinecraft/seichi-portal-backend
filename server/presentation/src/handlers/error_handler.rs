@@ -1,4 +1,3 @@
-use axum::response::Response;
 use axum::{
     Json,
     http::{StatusCode, header},
@@ -12,33 +11,70 @@ use errors::{
 
 use crate::schemas::error_response::{ErrorResponse, ErrorRestriction};
 
-fn problem_response(status: StatusCode, title: &str, detail: &str, error_code: &str) -> Response {
+pub struct ApiError {
+    status: StatusCode,
+    title: &'static str,
+    detail: String,
+    error_code: &'static str,
+    restriction: Option<ErrorRestriction>,
+}
+
+impl ApiError {
+    pub(crate) fn unauthorized(detail: &str) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            title: "Unauthorized",
+            detail: detail.to_owned(),
+            error_code: "UNAUTHORIZED",
+            restriction: None,
+        }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        (
+            self.status,
+            [(header::CONTENT_TYPE, "application/problem+json")],
+            Json(ErrorResponse {
+                problem_type: "about:blank".to_string(),
+                title: self.title.to_string(),
+                status: self.status.as_u16(),
+                detail: self.detail,
+                error_code: self.error_code.to_string(),
+                restriction: self.restriction,
+            }),
+        )
+            .into_response()
+    }
+}
+
+fn problem_response(
+    status: StatusCode,
+    title: &'static str,
+    detail: impl Into<String>,
+    error_code: &'static str,
+) -> ApiError {
     problem_response_with_restriction(status, title, detail, error_code, None)
 }
 
 fn problem_response_with_restriction(
     status: StatusCode,
-    title: &str,
-    detail: &str,
-    error_code: &str,
+    title: &'static str,
+    detail: impl Into<String>,
+    error_code: &'static str,
     restriction: Option<ErrorRestriction>,
-) -> Response {
-    (
+) -> ApiError {
+    ApiError {
         status,
-        [(header::CONTENT_TYPE, "application/problem+json")],
-        Json(ErrorResponse {
-            problem_type: "about:blank".to_string(),
-            title: title.to_string(),
-            status: status.as_u16(),
-            detail: detail.to_string(),
-            error_code: error_code.to_string(),
-            restriction,
-        }),
-    )
-        .into_response()
+        title,
+        detail: detail.into(),
+        error_code,
+        restriction,
+    }
 }
 
-fn handle_domain_error(err: DomainError) -> impl IntoResponse {
+fn handle_domain_error(err: DomainError) -> ApiError {
     match err {
         DomainError::Forbidden => problem_response(
             StatusCode::FORBIDDEN,
@@ -103,13 +139,13 @@ fn handle_domain_error(err: DomainError) -> impl IntoResponse {
         DomainError::InvalidEntity { message } => problem_response(
             StatusCode::UNPROCESSABLE_ENTITY,
             "Unprocessable Entity",
-            &message,
+            message,
             "INVALID_ENTITY",
         ),
     }
 }
 
-fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
+fn handle_usecase_error(err: UseCaseError) -> ApiError {
     match err {
         UseCaseError::AnswerNotFound => problem_response(
             StatusCode::NOT_FOUND,
@@ -180,7 +216,7 @@ fn handle_usecase_error(err: UseCaseError) -> impl IntoResponse {
     }
 }
 
-fn handle_infra_error(err: InfraError) -> impl IntoResponse {
+fn handle_infra_error(err: InfraError) -> ApiError {
     match err {
         InfraError::Database { source } => {
             tracing::error!("Database Error: {}", source);
@@ -320,7 +356,7 @@ fn handle_infra_error(err: InfraError) -> impl IntoResponse {
     }
 }
 
-fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
+fn handle_validation_error(err: ValidationError) -> ApiError {
     match err {
         ValidationError::EmptyValue => problem_response(
             StatusCode::BAD_REQUEST,
@@ -343,42 +379,36 @@ fn handle_validation_error(err: ValidationError) -> impl IntoResponse {
     }
 }
 
-fn handle_presentation_error(err: PresentationError) -> impl IntoResponse {
+fn handle_presentation_error(err: PresentationError) -> ApiError {
     match err {
         PresentationError::JsonRejection { cause } => problem_response(
             StatusCode::UNPROCESSABLE_ENTITY,
             "Unprocessable Content",
-            &cause,
+            cause,
             "UNPROCESSABLE_CONTENT",
         ),
-        PresentationError::PathRejection { cause } => problem_response(
-            StatusCode::BAD_REQUEST,
-            "Bad Request",
-            &cause,
-            "BAD_REQUEST",
-        ),
-        PresentationError::QueryRejection { cause } => problem_response(
-            StatusCode::BAD_REQUEST,
-            "Bad Request",
-            &cause,
-            "BAD_REQUEST",
-        ),
+        PresentationError::PathRejection { cause } => {
+            problem_response(StatusCode::BAD_REQUEST, "Bad Request", cause, "BAD_REQUEST")
+        }
+        PresentationError::QueryRejection { cause } => {
+            problem_response(StatusCode::BAD_REQUEST, "Bad Request", cause, "BAD_REQUEST")
+        }
         PresentationError::TypedHeaderRejection { cause } => problem_response(
             StatusCode::UNAUTHORIZED,
             "Unauthorized",
-            &cause,
+            cause,
             "UNAUTHORIZED",
         ),
     }
 }
 
-pub fn handle_error(err: Error) -> Response {
+pub fn handle_error(err: Error) -> ApiError {
     match err {
-        Error::Domain { source } => handle_domain_error(source).into_response(),
-        Error::UseCase { source } => handle_usecase_error(source).into_response(),
-        Error::Infra { source } => handle_infra_error(source).into_response(),
-        Error::Validation { source } => handle_validation_error(source).into_response(),
-        Error::Presentation { source } => handle_presentation_error(source).into_response(),
+        Error::Domain { source } => handle_domain_error(source),
+        Error::UseCase { source } => handle_usecase_error(source),
+        Error::Infra { source } => handle_infra_error(source),
+        Error::Validation { source } => handle_validation_error(source),
+        Error::Presentation { source } => handle_presentation_error(source),
     }
 }
 
@@ -391,7 +421,8 @@ mod tests {
     #[tokio::test]
     async fn temporary_answer_message_posting_error_is_an_unprocessable_entity_problem() {
         let response =
-            handle_error(DomainError::MessagePostingNotSupportedForTemporaryAnswer.into());
+            handle_error(DomainError::MessagePostingNotSupportedForTemporaryAnswer.into())
+                .into_response();
 
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
@@ -412,6 +443,27 @@ mod tests {
             problem["detail"],
             "Messages cannot be posted to temporary answers."
         );
+        assert!(problem.get("restriction").is_none());
+    }
+
+    #[tokio::test]
+    async fn submission_restriction_error_includes_restriction_details() {
+        let response = handle_error(
+            DomainError::SubmissionRestricted {
+                reason: "spam".to_string(),
+                expires_at: None,
+            }
+            .into(),
+        )
+        .into_response();
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(problem["status"], 403);
+        assert_eq!(problem["errorCode"], "SUBMISSION_RESTRICTED");
+        assert_eq!(problem["restriction"]["reason"], "spam");
+        assert!(problem["restriction"].get("expires_at").is_some());
     }
 
     #[tokio::test]
@@ -421,7 +473,8 @@ mod tests {
                 cause: "connection refused".to_string(),
             }
             .into(),
-        );
+        )
+        .into_response();
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(

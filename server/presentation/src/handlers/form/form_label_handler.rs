@@ -20,7 +20,7 @@ use crate::schemas::error_responses::*;
 use crate::schemas::form::form_request_schemas::FormLabelCreateSchema;
 use crate::schemas::form::form_response_schemas::FormLabelResponseSchema;
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{ApiError, handle_error},
     schemas::form::form_request_schemas::FormLabelUpdateSchema,
 };
 
@@ -83,7 +83,7 @@ pub async fn create_label_for_forms(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<FormLabelCreateSchema>, JsonRejection>,
-) -> Result<CreateFormLabelResponse, Response> {
+) -> Result<CreateFormLabelResponse, ApiError> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
@@ -115,7 +115,7 @@ pub async fn create_label_for_forms(
 pub async fn get_labels_for_forms(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<GetFormLabelsResponse, Response> {
+) -> Result<GetFormLabelsResponse, ApiError> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
@@ -151,7 +151,7 @@ pub async fn delete_label_for_forms(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormLabelId>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };
@@ -191,7 +191,7 @@ pub async fn edit_label_for_forms(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormLabelId>, PathRejection>,
     json: Result<Json<FormLabelUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let form_label_use_case = FormLabelUseCase {
         form_label_repository: repository.form_label_repository(),
     };

@@ -1,6 +1,6 @@
 use crate::schemas::error_responses::*;
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{ApiError, handle_error},
     schemas::notification::{
         notification_request_schemas::{NotificationListQuery, NotificationSettingsUpdateSchema},
         notification_response_schemas::{
@@ -125,7 +125,7 @@ pub async fn get_notifications(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     query: Result<Query<NotificationListQuery>, QueryRejection>,
-) -> Result<GetNotificationsResponse, Response> {
+) -> Result<GetNotificationsResponse, ApiError> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
@@ -170,7 +170,7 @@ pub async fn mark_notification_as_read(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
@@ -201,7 +201,7 @@ pub async fn mark_notification_as_read(
 pub async fn mark_all_notifications_as_read(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
@@ -238,7 +238,7 @@ pub async fn get_notification_settings(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<Uuid>, PathRejection>,
-) -> Result<GetNotificationSettingsResponse, Response> {
+) -> Result<GetNotificationSettingsResponse, ApiError> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
@@ -277,7 +277,7 @@ pub async fn get_notification_settings(
 pub async fn get_my_notification_settings(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-) -> Result<GetNotificationSettingsResponse, Response> {
+) -> Result<GetNotificationSettingsResponse, ApiError> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),
@@ -318,7 +318,7 @@ pub async fn update_notification_settings(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     json: Result<Json<NotificationSettingsUpdateSchema>, JsonRejection>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let notification_usecase = NotificationUseCase {
         repository: repository.notification_repository(),
         user_repository: repository.user_repository(),

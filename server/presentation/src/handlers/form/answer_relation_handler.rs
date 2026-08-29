@@ -13,7 +13,7 @@ use usecase::forms::answer_relation::AnswerRelationUseCase;
 use utoipa::IntoResponses;
 
 use crate::{
-    handlers::error_handler::handle_error,
+    handlers::error_handler::{ApiError, handle_error},
     schemas::error_responses::{
         BadRequest, Forbidden, InternalServerError, NotFound, Unauthorized, UnprocessableEntity,
     },
@@ -80,7 +80,7 @@ pub async fn get_related_answers_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
-) -> Result<GetRelatedAnswersResponse, axum::response::Response> {
+) -> Result<GetRelatedAnswersResponse, ApiError> {
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let use_case = build_answer_relation_use_case(&repository);
     let related_answers = use_case
@@ -120,7 +120,7 @@ pub async fn add_related_answer_handler(
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId)>, PathRejection>,
     json_body: Result<Json<RelatedAnswerRequest>, JsonRejection>,
-) -> Result<impl IntoResponse, axum::response::Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let Path((form_id, answer_id)) = path.map_err_to_error().map_err(handle_error)?;
     let Json(request) = json_body.map_err_to_error().map_err(handle_error)?;
     let use_case = build_answer_relation_use_case(&repository);
@@ -161,7 +161,7 @@ pub async fn remove_related_answer_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<(FormId, AnswerId, AnswerId)>, PathRejection>,
-) -> Result<impl IntoResponse, axum::response::Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let Path((form_id, answer_id, related_answer_id)) =
         path.map_err_to_error().map_err(handle_error)?;
     let use_case = build_answer_relation_use_case(&repository);
