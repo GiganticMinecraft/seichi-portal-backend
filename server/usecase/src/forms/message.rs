@@ -31,6 +31,7 @@ use domain::{
 };
 use errors::{
     Error,
+    domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, MessageNotFound, UserNotFound},
 };
 
@@ -359,9 +360,12 @@ impl<
         request: PageRequest<MessageHistoryPagePosition>,
     ) -> Result<Page<Allowed<MessageHistoryEntry, Read>, MessageHistoryPagePosition>, Error> {
         let actor_user = Actor::from(actor.clone());
-        let (_, form_answer) = self
+        let (form, form_answer) = self
             .read_form_and_answer_entry(&actor_user, form_id, answer_id)
             .await?;
+        if !form.answer_settings().can_read_history(&actor_user) {
+            return Err(Error::from(DomainError::Forbidden));
+        }
         let thread = self
             .message_thread_repository
             .get_for_answer(&form_answer)

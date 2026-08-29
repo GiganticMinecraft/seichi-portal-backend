@@ -45,6 +45,7 @@ struct FormRow {
     discord_webhook_url: Option<String>,
     visibility: String,
     answer_visibility: String,
+    answer_response_visibility: String,
     hide_author: bool,
     allow_temporary_answers: bool,
     acceptance_period_start_at: Option<DateTime<Utc>>,
@@ -69,6 +70,7 @@ struct ArchivedFormQueryRow {
     discord_webhook_url: Option<String>,
     visibility: String,
     answer_visibility: String,
+    answer_response_visibility: String,
     hide_author: bool,
     allow_temporary_answers: bool,
     acceptance_period_start_at: Option<DateTime<Utc>>,
@@ -102,6 +104,7 @@ impl TryFrom<ArchivedFormQueryRow> for ArchivedFormRow {
                 discord_webhook_url: row.discord_webhook_url,
                 visibility: row.visibility,
                 answer_visibility: row.answer_visibility,
+                answer_response_visibility: row.answer_response_visibility,
                 hide_author: row.hide_author,
                 allow_temporary_answers: row.allow_temporary_answers,
                 acceptance_period_start_at: row.acceptance_period_start_at,
@@ -257,6 +260,7 @@ async fn build_active_form_record(
         discord_webhook_url: row.discord_webhook_url,
         visibility: row.visibility,
         answer_visibility: row.answer_visibility,
+        answer_response_visibility: row.answer_response_visibility,
         hide_author: row.hide_author,
         allow_temporary_answers: row.allow_temporary_answers,
         acceptance_period_start_at: row.acceptance_period_start_at,
@@ -563,7 +567,8 @@ async fn fetch_form_row(
     let row = sqlx::query_as!(
         FormRow,
         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.hide_author AS `hide_author: _`,
+            f.answer_visibility, f.answer_response_visibility,
+            f.hide_author AS `hide_author: _`,
             f.allow_temporary_answers AS `allow_temporary_answers: _`,
             f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
             f.acceptance_period_end_at AS `acceptance_period_end_at: _`, f.default_answer_title,
@@ -587,7 +592,8 @@ async fn fetch_archived_form_row(
     let row = sqlx::query_as!(
         ArchivedFormQueryRow,
         r"SELECT f.id, f.title, f.description, f.visibility,
-            f.answer_visibility, f.hide_author AS `hide_author: _`,
+            f.answer_visibility, f.answer_response_visibility,
+            f.hide_author AS `hide_author: _`,
             f.allow_temporary_answers AS `allow_temporary_answers: _`,
             f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
             f.acceptance_period_end_at AS `acceptance_period_end_at: _`, f.default_answer_title,
@@ -620,6 +626,7 @@ async fn insert_form_root(
 
     let answer_settings = form.answer_settings();
     let answer_visibility = answer_settings.visibility().to_string();
+    let answer_response_visibility = answer_settings.answer_response_visibility().to_string();
     let hide_author = answer_settings.author_publication_policy().hides_author();
     let allow_temporary_answers = answer_settings.allow_temporary_answers();
     let default_answer_title = answer_settings
@@ -633,15 +640,17 @@ async fn insert_form_root(
 
     sqlx::query!(
         r#"INSERT INTO form_meta_data
-        (id, title, description, visibility, answer_visibility, hide_author, allow_temporary_answers,
+        (id, title, description, visibility, answer_visibility, answer_response_visibility,
+         hide_author, allow_temporary_answers,
          acceptance_period_start_at, acceptance_period_end_at, default_answer_title,
          created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         form_id,
         title,
         description,
         visibility,
         answer_visibility,
+        answer_response_visibility,
         hide_author,
         allow_temporary_answers,
         acceptance_period_start_at,
@@ -686,6 +695,7 @@ async fn update_form_root(
 
     let answer_settings = form.answer_settings();
     let answer_visibility = answer_settings.visibility().to_string();
+    let answer_response_visibility = answer_settings.answer_response_visibility().to_string();
     let hide_author = answer_settings.author_publication_policy().hides_author();
     let allow_temporary_answers = answer_settings.allow_temporary_answers();
     let default_answer_title = answer_settings
@@ -704,6 +714,7 @@ async fn update_form_root(
             description = ?,
             visibility = ?,
             answer_visibility = ?,
+            answer_response_visibility = ?,
             hide_author = ?,
             allow_temporary_answers = ?,
             acceptance_period_start_at = ?,
@@ -715,6 +726,7 @@ async fn update_form_root(
         description,
         visibility,
         answer_visibility,
+        answer_response_visibility,
         hide_author,
         allow_temporary_answers,
         acceptance_period_start_at,
@@ -749,8 +761,14 @@ async fn copy_active_form_to_archive(
     execute_typed_query!(
         txn,
         r"INSERT INTO archived_form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, archived_at, archived_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by, ?, ?
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility,
+         answer_response_visibility, hide_author, acceptance_period_start_at,
+         acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at,
+         updated_by, archived_at, archived_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility,
+            answer_response_visibility, hide_author, acceptance_period_start_at,
+            acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at,
+            updated_by, ?, ?
         FROM form_meta_data
         WHERE id = ?",
         archived_at,
@@ -857,8 +875,14 @@ async fn restore_archived_form_to_active(
     execute_typed_query!(
         txn,
         r"INSERT INTO form_meta_data
-        (id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by)
-        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility, hide_author, acceptance_period_start_at, acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at, updated_by
+        (id, title, description, visibility, allow_temporary_answers, answer_visibility,
+         answer_response_visibility, hide_author, acceptance_period_start_at,
+         acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at,
+         updated_by)
+        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility,
+            answer_response_visibility, hide_author, acceptance_period_start_at,
+            acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at,
+            updated_by
         FROM archived_form_meta_data
         WHERE id = ?",
         &form_id,
@@ -1043,7 +1067,8 @@ impl FormDatabase for ConnectionPool {
                     sqlx::query_as!(
                         FormRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-                    f.answer_visibility, f.hide_author AS `hide_author: _`,
+                    f.answer_visibility, f.answer_response_visibility,
+                    f.hide_author AS `hide_author: _`,
                     f.allow_temporary_answers AS `allow_temporary_answers: _`,
                     f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
                     f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
@@ -1063,7 +1088,8 @@ impl FormDatabase for ConnectionPool {
                     sqlx::query_as!(
                         FormRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-                    f.answer_visibility, f.hide_author AS `hide_author: _`,
+                    f.answer_visibility, f.answer_response_visibility,
+                    f.hide_author AS `hide_author: _`,
                     f.allow_temporary_answers AS `allow_temporary_answers: _`,
                     f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
                     f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
@@ -1136,7 +1162,8 @@ impl FormDatabase for ConnectionPool {
                 let form_rows = sqlx::query_as!(
                     FormRow,
                     r"SELECT f.id, f.title, f.description, f.visibility,
-                    f.answer_visibility, f.hide_author AS `hide_author: _`,
+                    f.answer_visibility, f.answer_response_visibility,
+                    f.hide_author AS `hide_author: _`,
                     f.allow_temporary_answers AS `allow_temporary_answers: _`,
                     f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
                     f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
@@ -1214,7 +1241,8 @@ impl FormDatabase for ConnectionPool {
                         sqlx::query_as!(
                             ArchivedFormQueryRow,
                             r"SELECT f.id, f.title, f.description, f.visibility,
-                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.answer_visibility, f.answer_response_visibility,
+                        f.hide_author AS `hide_author: _`,
                         f.allow_temporary_answers AS `allow_temporary_answers: _`,
                         f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
                         f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
@@ -1242,7 +1270,8 @@ impl FormDatabase for ConnectionPool {
                         sqlx::query_as!(
                             ArchivedFormQueryRow,
                             r"SELECT f.id, f.title, f.description, f.visibility,
-                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.answer_visibility, f.answer_response_visibility,
+                        f.hide_author AS `hide_author: _`,
                         f.allow_temporary_answers AS `allow_temporary_answers: _`,
                         f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
                         f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
@@ -1267,7 +1296,8 @@ impl FormDatabase for ConnectionPool {
                     sqlx::query_as!(
                         ArchivedFormQueryRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.answer_visibility, f.answer_response_visibility,
+                        f.hide_author AS `hide_author: _`,
                         f.allow_temporary_answers AS `allow_temporary_answers: _`,
                         f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
                         f.acceptance_period_end_at AS `acceptance_period_end_at: _`,
@@ -1292,7 +1322,8 @@ impl FormDatabase for ConnectionPool {
                     sqlx::query_as!(
                         ArchivedFormQueryRow,
                         r"SELECT f.id, f.title, f.description, f.visibility,
-                        f.answer_visibility, f.hide_author AS `hide_author: _`,
+                        f.answer_visibility, f.answer_response_visibility,
+                        f.hide_author AS `hide_author: _`,
                         f.allow_temporary_answers AS `allow_temporary_answers: _`,
                         f.acceptance_period_start_at AS `acceptance_period_start_at: _`,
                         f.acceptance_period_end_at AS `acceptance_period_end_at: _`,

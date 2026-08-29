@@ -4,10 +4,10 @@ use domain::{
     auth::Actor,
     form::models::{
         ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerAuthorPublicationPolicy,
-        AnswerSettings, AnswerVisibility, ArchivedForm, ArchivedFormPagePosition,
-        DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId, FormLabel,
-        FormLabelAssignment, FormLabelId, FormPagePosition, FormSettings, FormTitle, Question,
-        QuestionSet, Visibility,
+        AnswerResponseVisibility, AnswerSettings, AnswerVisibility, ArchivedForm,
+        ArchivedFormPagePosition, DefaultAnswerTitle, DiscordWebhookUrl, FormDescription, FormId,
+        FormLabel, FormLabelAssignment, FormLabelId, FormPagePosition, FormSettings, FormTitle,
+        Question, QuestionSet, Visibility,
     },
     pagination::{Page, PageLimit, PageRequest},
     repository::{
@@ -96,6 +96,7 @@ impl<
         acceptance_period: Option<AnswerAcceptancePeriod>,
         default_answer_title: Option<DefaultAnswerTitle>,
         author_publication_policy: Option<AnswerAuthorPublicationPolicy>,
+        answer_response_visibility: Option<AnswerResponseVisibility>,
         user: &AccountUser,
     ) -> Result<ActiveForm, Error> {
         let user_as_user = Actor::from(user.clone());
@@ -146,6 +147,10 @@ impl<
         };
         let answer_settings = match author_publication_policy {
             Some(policy) => answer_settings.change_author_publication_policy(policy),
+            None => answer_settings,
+        };
+        let answer_settings = match answer_response_visibility {
+            Some(visibility) => answer_settings.change_answer_response_visibility(visibility),
             None => answer_settings,
         };
 
@@ -423,6 +428,7 @@ impl<
         author_publication_policy: Option<AnswerAuthorPublicationPolicy>,
         questions: Option<Vec<UpsertQuestionInput>>,
         label_ids: Option<Vec<FormLabelId>>,
+        answer_response_visibility: Option<AnswerResponseVisibility>,
     ) -> Result<(ActiveForm, Vec<FormLabel>), Error> {
         let actor_user = Actor::from(actor.clone());
         if let Some(groups) = &allowed_user_groups {
@@ -538,6 +544,12 @@ impl<
             let updated_answer_settings = match author_publication_policy {
                 None => updated_answer_settings,
                 Some(policy) => updated_answer_settings.change_author_publication_policy(policy),
+            };
+            let updated_answer_settings = match answer_response_visibility {
+                None => updated_answer_settings,
+                Some(visibility) => {
+                    updated_answer_settings.change_answer_response_visibility(visibility)
+                }
             };
 
             let updated_form = match title {
@@ -666,6 +678,10 @@ fn form_creation_details(form: &ActiveForm) -> Vec<EventDetail> {
             format_author_publication_policy(*form.answer_settings().author_publication_policy()),
         ),
         EventDetail::new(
+            "回答者向け回答表示範囲",
+            format_answer_response_visibility(*form.answer_settings().answer_response_visibility()),
+        ),
+        EventDetail::new(
             "匿名回答",
             format_allowed(form.answer_settings().allow_temporary_answers()),
         ),
@@ -752,6 +768,16 @@ fn form_update_details(before: &ActiveForm, after: &ActiveForm) -> Vec<EventDeta
                 ),
             )
         }),
+        (before.answer_settings().answer_response_visibility()
+            != after.answer_settings().answer_response_visibility())
+        .then(|| {
+            EventDetail::new(
+                "回答者向け回答表示範囲",
+                format_answer_response_visibility(
+                    *after.answer_settings().answer_response_visibility(),
+                ),
+            )
+        }),
     ]
     .into_iter()
     .flatten()
@@ -815,6 +841,13 @@ fn format_author_publication_policy(policy: AnswerAuthorPublicationPolicy) -> &'
     match policy {
         AnswerAuthorPublicationPolicy::Publish => "公開",
         AnswerAuthorPublicationPolicy::Hide => "非公開",
+    }
+}
+
+fn format_answer_response_visibility(policy: AnswerResponseVisibility) -> &'static str {
+    match policy {
+        AnswerResponseVisibility::FULL => "全項目",
+        AnswerResponseVisibility::RESTRICTED => "回答値のみ",
     }
 }
 
@@ -1108,6 +1141,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 &user,
             )
             .await
@@ -1140,6 +1174,7 @@ mod tests {
             .update_form(
                 &user,
                 form.id().to_owned(),
+                None,
                 None,
                 None,
                 None,
@@ -1199,6 +1234,7 @@ mod tests {
                 Some(AnswerAuthorPublicationPolicy::Hide),
                 None, // questions
                 None, // label_ids
+                None, // answer_response_visibility
             )
             .await
             .unwrap();
@@ -1231,6 +1267,7 @@ mod tests {
                 &user,
                 form_id,
                 Some(title),
+                None,
                 None,
                 None,
                 None,

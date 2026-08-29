@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT f.id, f.title, f.description, f.visibility,\n                    f.answer_visibility, f.hide_author AS `hide_author: _`,\n                    f.allow_temporary_answers AS `allow_temporary_answers: _`,\n                    f.acceptance_period_start_at AS `acceptance_period_start_at: _`,\n                    f.acceptance_period_end_at AS `acceptance_period_end_at: _`,\n                    f.default_answer_title, f.created_at AS `created_at: _`,\n                    f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`\n                    FROM form_meta_data f\n                    LEFT JOIN form_discord_webhooks w ON f.id = w.form_id\n                    ORDER BY f.id\n                    LIMIT ?",
+  "query": "SELECT f.id, f.title, f.description, f.visibility,\n                    f.answer_visibility, f.answer_response_visibility,\n                    f.hide_author AS `hide_author: _`,\n                    f.allow_temporary_answers AS `allow_temporary_answers: _`,\n                    f.acceptance_period_start_at AS `acceptance_period_start_at: _`,\n                    f.acceptance_period_end_at AS `acceptance_period_end_at: _`,\n                    f.default_answer_title, f.created_at AS `created_at: _`,\n                    f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`\n                    FROM form_meta_data f\n                    LEFT JOIN form_discord_webhooks w ON f.id = w.form_id\n                    ORDER BY f.id\n                    LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -85,6 +85,22 @@
       },
       {
         "ordinal": 5,
+        "name": "answer_response_visibility",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 40
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_meta_data",
+            "name": "answer_response_visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "hide_author: _",
         "type_info": {
           "type": "Tiny",
@@ -100,7 +116,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "allow_temporary_answers: _",
         "type_info": {
           "type": "Tiny",
@@ -116,7 +132,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "acceptance_period_start_at: _",
         "type_info": {
           "type": "Datetime",
@@ -132,7 +148,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "acceptance_period_end_at: _",
         "type_info": {
           "type": "Datetime",
@@ -148,7 +164,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "default_answer_title",
         "type_info": {
           "type": "Blob",
@@ -164,7 +180,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "created_at: _",
         "type_info": {
           "type": "Datetime",
@@ -180,7 +196,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "updated_at: _",
         "type_info": {
           "type": "Datetime",
@@ -196,7 +212,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "discord_webhook_url?",
         "type_info": {
           "type": "Blob",
@@ -223,6 +239,7 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
@@ -231,5 +248,5 @@
       true
     ]
   },
-  "hash": "70d73dc3e23d7dce166e1342edb7bd82e9e35cc03af675208c9313c640a14fd7"
+  "hash": "ca56ddf4826f4e541e90661d175aef57af491bd63958dde689e17750b1ab0efd"
 }

@@ -6773,6 +6773,7 @@
         "required": [
           "hide_author",
           "visibility",
+          "answer_response_visibility",
           "acceptance_period",
           "answer_group_ids"
         ],
@@ -6785,6 +6786,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "answer_response_visibility": {
+            "type": "string"
           },
           "default_answer_title": {
             "type": [
@@ -7267,13 +7271,8 @@
         "type": "object",
         "required": [
           "id",
-          "author",
           "form_id",
-          "timestamp",
-          "publication",
-          "status",
-          "answers",
-          "labels"
+          "answers"
         ],
         "properties": {
           "answers": {

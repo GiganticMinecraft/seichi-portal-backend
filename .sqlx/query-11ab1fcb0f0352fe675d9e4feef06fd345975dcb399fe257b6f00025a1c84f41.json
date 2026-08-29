@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_form_meta_data\n        (id, title, description, visibility, allow_temporary_answers, answer_visibility,\n         answer_response_visibility, hide_author, acceptance_period_start_at,\n         acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at,\n         updated_by, archived_at, archived_by)\n        SELECT id, title, description, visibility, allow_temporary_answers, answer_visibility,\n            answer_response_visibility, hide_author, acceptance_period_start_at,\n            acceptance_period_end_at, default_answer_title, created_at, created_by, updated_at,\n            updated_by, ?, ?\n        FROM form_meta_data\n        WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "11ab1fcb0f0352fe675d9e4feef06fd345975dcb399fe257b6f00025a1c84f41"
+}

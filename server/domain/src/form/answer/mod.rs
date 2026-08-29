@@ -20,8 +20,8 @@ pub use relation::{
     AnswerReference, AnswerRelation, AnswerRelationEndpoint, ReadableAnswerRelation,
 };
 pub use settings::{
-    AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy, AnswerSettings,
-    AnswerVisibility, DefaultAnswerTitle,
+    AnswerAcceptancePeriod, AnswerAuthorDisclosure, AnswerAuthorPublicationPolicy,
+    AnswerResponseVisibility, AnswerSettings, AnswerVisibility, DefaultAnswerTitle,
 };
 pub use status::{
     AnswerStatus, AnswerStatusChange, AnswerStatusHistoryEntry, AnswerStatusHistoryId,

@@ -85,6 +85,15 @@ impl<
         let (form, answer) = self
             .readable_form_and_answer(actor, form_id, answer_id)
             .await?;
+        if !form
+            .answer_settings()
+            .can_read_comments(answer.author(), actor)
+        {
+            return Err(Error::from(DomainError::Forbidden));
+        }
+        if !form.answer_settings().can_read_history(actor) {
+            return Err(Error::from(DomainError::Forbidden));
+        }
         self.comment_thread_repository
             .get_for_answer(&form, answer)
             .await
@@ -99,6 +108,12 @@ impl<
         let (form, answer) = self
             .readable_form_and_answer(actor, form_id, answer_id)
             .await?;
+        if !form
+            .answer_settings()
+            .can_read_comments(answer.author(), actor)
+        {
+            return Err(Error::from(DomainError::Forbidden));
+        }
         self.comment_thread_repository
             .get_with_comments_for_answer(&form, answer)
             .await

@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
 use domain::{
-    account::models::{AccountUser, DiscordUser},
+    account::models::{AccountUser, DiscordUser, Role},
     form::{
         answer::{
-            AnswerEntry, AnswerId, AnswerLabel, AnswerPublication, AnswerStatus, AnswerTitle,
-            FormAnswerContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
-            TemporaryAnswerAuthor,
+            AnswerEntry, AnswerId, AnswerLabel, AnswerPublication, AnswerResponseVisibility,
+            AnswerStatus, AnswerTitle, FormAnswerContent, RedmineImportedAnswerReference,
+            RedmineUserSnapshot, TemporaryAnswerAuthor,
         },
         comment::Comment,
         message::Message,
@@ -51,6 +51,21 @@ pub struct AnswerDetails {
     pub form_id: FormId,
     pub answer: PublishedAnswerEntry,
     pub labels: Vec<AnswerLabel>,
+    pub answer_response_visibility: AnswerResponseVisibility,
+}
+
+pub fn answer_response_visibility_for(
+    policy: AnswerResponseVisibility,
+    answer: &AnswerEntry,
+    viewer: &AccountUser,
+) -> AnswerResponseVisibility {
+    if viewer.role() == &Role::Administrator
+        || answer.author().authenticated_user_id() != Some(*viewer.id())
+    {
+        AnswerResponseVisibility::FULL
+    } else {
+        policy
+    }
 }
 
 pub struct ActiveFormWithLabels {

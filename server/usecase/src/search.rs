@@ -2,6 +2,7 @@ use crate::{
     models::{
         ActiveFormWithLabels, AnswerDetails, CommentAuthor, CommentWithAuthor, CrossSearchComment,
         CrossSearchOutput, PublishedAnswerAuthor, PublishedAnswerEntry,
+        answer_response_visibility_for,
     },
     user_reference_resolver::resolve_user_references,
 };
@@ -283,6 +284,11 @@ impl<
                     .map(|label| label.into_inner())
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let answer_response_visibility = answer_response_visibility_for(
+            *form.answer_settings().answer_response_visibility(),
+            answer.value(),
+            account_user,
+        );
         let author = match form.answer_settings().author_disclosure_for(actor) {
             AnswerAuthorDisclosure::Anonymous => PublishedAnswerAuthor::Anonymous,
             AnswerAuthorDisclosure::Disclosed => {
@@ -317,6 +323,7 @@ impl<
             form_id,
             answer: PublishedAnswerEntry::new(answer.into_inner(), author),
             labels,
+            answer_response_visibility,
         }))
     }
 

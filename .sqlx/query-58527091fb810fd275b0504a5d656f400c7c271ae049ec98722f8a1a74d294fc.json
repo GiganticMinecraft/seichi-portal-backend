@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT f.id, f.title, f.description, f.visibility,\n                    f.answer_visibility, f.hide_author AS `hide_author: _`,\n                    f.allow_temporary_answers AS `allow_temporary_answers: _`,\n                    f.acceptance_period_start_at AS `acceptance_period_start_at: _`,\n                    f.acceptance_period_end_at AS `acceptance_period_end_at: _`,\n                    f.default_answer_title, f.created_at AS `created_at: _`,\n                    f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`\n                    FROM form_meta_data f\n                    LEFT JOIN form_discord_webhooks w ON f.id = w.form_id\n                    ORDER BY f.id",
+  "query": "SELECT f.id, f.title, f.description, f.visibility,\n                        f.answer_visibility, f.answer_response_visibility,\n                        f.hide_author AS `hide_author: _`,\n                        f.allow_temporary_answers AS `allow_temporary_answers: _`,\n                        f.acceptance_period_start_at AS `acceptance_period_start_at: _`,\n                        f.acceptance_period_end_at AS `acceptance_period_end_at: _`,\n                        f.default_answer_title, f.created_at AS `created_at: _`,\n                        f.updated_at AS `updated_at: _`, w.url AS `discord_webhook_url?`,\n                        f.archived_at AS `archived_at: _`, u.name AS archived_by_name,\n                        u.id AS archived_by_id, u.role AS archived_by_role\n                        FROM archived_form_meta_data f\n                        INNER JOIN users u ON f.archived_by = u.id\n                        LEFT JOIN archived_form_discord_webhooks w ON f.id = w.form_id\n                        ORDER BY f.archived_at DESC, f.id ASC\n                        LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -14,7 +14,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "id"
           }
         }
@@ -30,7 +30,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "title"
           }
         }
@@ -46,7 +46,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "description"
           }
         }
@@ -62,7 +62,7 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "visibility"
           }
         }
@@ -78,13 +78,29 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "answer_visibility"
           }
         }
       },
       {
         "ordinal": 5,
+        "name": "answer_response_visibility",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM",
+          "collation": 224,
+          "max_size": 40
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.archived_form_meta_data",
+            "name": "answer_response_visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "hide_author: _",
         "type_info": {
           "type": "Tiny",
@@ -94,13 +110,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "hide_author"
           }
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "allow_temporary_answers: _",
         "type_info": {
           "type": "Tiny",
@@ -110,13 +126,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "allow_temporary_answers"
           }
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "acceptance_period_start_at: _",
         "type_info": {
           "type": "Datetime",
@@ -126,13 +142,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "acceptance_period_start_at"
           }
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "acceptance_period_end_at: _",
         "type_info": {
           "type": "Datetime",
@@ -142,13 +158,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "acceptance_period_end_at"
           }
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "default_answer_title",
         "type_info": {
           "type": "Blob",
@@ -158,45 +174,45 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "default_answer_title"
           }
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "created_at: _",
         "type_info": {
           "type": "Datetime",
-          "flags": "NOT_NULL | BINARY",
+          "flags": "NOT_NULL | BINARY | NO_DEFAULT_VALUE",
           "collation": 63,
           "max_size": 19
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "created_at"
           }
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "updated_at: _",
         "type_info": {
           "type": "Datetime",
-          "flags": "NOT_NULL | BINARY | ON_UPDATE_NOW",
+          "flags": "NOT_NULL | BINARY | NO_DEFAULT_VALUE",
           "collation": 63,
           "max_size": 19
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_meta_data",
+            "table": "seichi_portal.archived_form_meta_data",
             "name": "updated_at"
           }
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "discord_webhook_url?",
         "type_info": {
           "type": "Blob",
@@ -206,14 +222,78 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_discord_webhooks",
+            "table": "seichi_portal.archived_form_discord_webhooks",
             "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "archived_at: _",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "NOT_NULL | BINARY",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.archived_form_meta_data",
+            "name": "archived_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "archived_by_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 64
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "archived_by_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "archived_by_role",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 52
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "role"
           }
         }
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       false,
@@ -223,13 +303,18 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
       false,
       false,
-      true
+      true,
+      false,
+      false,
+      false,
+      false
     ]
   },
-  "hash": "2c16541775bb21510f5e5485b7e94a3500789ed5cbfbaf234a65f182fa667060"
+  "hash": "58527091fb810fd275b0504a5d656f400c7c271ae049ec98722f8a1a74d294fc"
 }

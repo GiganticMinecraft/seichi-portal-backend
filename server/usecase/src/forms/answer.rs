@@ -7,10 +7,10 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerLabel,
-            AnswerPagePosition, AnswerPublication, AnswerStatus, AnswerStatusChange,
-            AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition, AnswerTitle,
-            AnswerTitleHistoryEntry, AnswerTitleHistoryPagePosition, FormAnswerContent,
-            PostedAnswerContents,
+            AnswerPagePosition, AnswerPublication, AnswerResponseVisibility, AnswerStatus,
+            AnswerStatusChange, AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition,
+            AnswerTitle, AnswerTitleHistoryEntry, AnswerTitleHistoryPagePosition,
+            FormAnswerContent, PostedAnswerContents,
         },
         models::{ActiveForm, FormId},
         service::DefaultAnswerTitleDomainService,
@@ -42,7 +42,9 @@ use crate::{
     forms::discord_answer_webhook::{
         DiscordAnswerWebhookField, DiscordAnswerWebhookNotification, DiscordAnswerWebhookNotifier,
     },
-    models::{AnswerDetails, PublishedAnswerAuthor, PublishedAnswerEntry},
+    models::{
+        AnswerDetails, PublishedAnswerAuthor, PublishedAnswerEntry, answer_response_visibility_for,
+    },
     user_reference_resolver::resolve_user_references,
 };
 use common::config::FRONTEND;
@@ -91,6 +93,7 @@ impl<
         form_id: FormId,
         form_answer: Allowed<AnswerEntry, Read>,
         author_disclosure: AnswerAuthorDisclosure,
+        answer_response_visibility: AnswerResponseVisibility,
         labels: Vec<AnswerLabel>,
     ) -> Result<AnswerDetails, Error> {
         let author = match author_disclosure {
@@ -126,6 +129,7 @@ impl<
             form_id,
             answer: PublishedAnswerEntry::new(form_answer.into_inner(), author),
             labels,
+            answer_response_visibility,
         })
     }
 
@@ -367,8 +371,20 @@ impl<
             .collect::<Result<Vec<_>, _>>()?;
 
         let author_disclosure = form.answer_settings().author_disclosure_for(&actor);
-        self.build_answer_details(user, form_id, form_answer, author_disclosure, labels)
-            .await
+        let answer_response_visibility = answer_response_visibility_for(
+            *form.answer_settings().answer_response_visibility(),
+            form_answer.value(),
+            user,
+        );
+        self.build_answer_details(
+            user,
+            form_id,
+            form_answer,
+            author_disclosure,
+            answer_response_visibility,
+            labels,
+        )
+        .await
     }
 
     pub async fn get_answers_by_form_id(
@@ -388,6 +404,7 @@ impl<
             .await?;
         let (visible_answers, next) = page.into_parts();
         let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
+        let answer_response_visibility = *form.answer_settings().answer_response_visibility();
 
         let answers = stream::iter(visible_answers)
             .then(|form_answer| async {
@@ -404,8 +421,20 @@ impl<
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
-                self.build_answer_details(actor, form_id, form_answer, author_disclosure, labels)
-                    .await
+                let answer_response_visibility = answer_response_visibility_for(
+                    answer_response_visibility,
+                    form_answer.value(),
+                    actor,
+                );
+                self.build_answer_details(
+                    actor,
+                    form_id,
+                    form_answer,
+                    author_disclosure,
+                    answer_response_visibility,
+                    labels,
+                )
+                .await
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
@@ -445,51 +474,67 @@ impl<
             .map(|form| {
                 (
                     *form.id(),
-                    form.answer_settings().author_disclosure_for(&actor_ref),
+                    (
+                        form.answer_settings().author_disclosure_for(&actor_ref),
+                        *form.answer_settings().answer_response_visibility(),
+                    ),
                 )
             })
             .collect::<std::collections::HashMap<_, _>>();
-        let visible_answers: Vec<(FormId, AnswerAuthorDisclosure, Allowed<AnswerEntry, Read>)> =
-            visible_answers
-                .into_iter()
-                .filter_map(|entry| {
-                    let form_id = *entry.value().form_id();
-                    publication_by_form_id
-                        .get(&form_id)
-                        .copied()
-                        .map(|disclosure| (form_id, disclosure, entry))
-                })
-                .collect();
+        let visible_answers: Vec<(
+            FormId,
+            AnswerAuthorDisclosure,
+            AnswerResponseVisibility,
+            Allowed<AnswerEntry, Read>,
+        )> = visible_answers
+            .into_iter()
+            .filter_map(|entry| {
+                let form_id = *entry.value().form_id();
+                publication_by_form_id.get(&form_id).copied().map(
+                    |(disclosure, response_visibility)| {
+                        (form_id, disclosure, response_visibility, entry)
+                    },
+                )
+            })
+            .collect();
 
         let answers = stream::iter(visible_answers)
-            .then(|(form_id, author_disclosure, form_answer)| {
-                let user = user.clone();
-                async move {
-                    let actor_ref = Actor::from(user.clone());
+            .then(
+                |(form_id, author_disclosure, response_visibility, form_answer)| {
+                    let user = user.clone();
+                    async move {
+                        let actor_ref = Actor::from(user.clone());
 
-                    let answer_id = *form_answer.id();
-                    let labels = self
-                        .answer_label_repository
-                        .get_labels_for_answers_by_answer_id(answer_id)
-                        .await?
-                        .into_iter()
-                        .map(|label| {
-                            label
-                                .try_read(actor_ref.clone())
-                                .map(|label| label.into_inner())
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
+                        let answer_id = *form_answer.id();
+                        let labels = self
+                            .answer_label_repository
+                            .get_labels_for_answers_by_answer_id(answer_id)
+                            .await?
+                            .into_iter()
+                            .map(|label| {
+                                label
+                                    .try_read(actor_ref.clone())
+                                    .map(|label| label.into_inner())
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let answer_response_visibility = answer_response_visibility_for(
+                            response_visibility,
+                            form_answer.value(),
+                            &user,
+                        );
 
-                    self.build_answer_details(
-                        &user,
-                        form_id,
-                        form_answer,
-                        author_disclosure,
-                        labels,
-                    )
-                    .await
-                }
-            })
+                        self.build_answer_details(
+                            &user,
+                            form_id,
+                            form_answer,
+                            author_disclosure,
+                            answer_response_visibility,
+                            labels,
+                        )
+                        .await
+                    }
+                },
+            )
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
             .into_iter()
@@ -585,8 +630,20 @@ impl<
             .collect::<Result<Vec<_>, _>>()?;
 
         let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
-        self.build_answer_details(actor, form_id, form_answer, author_disclosure, labels)
-            .await
+        let answer_response_visibility = answer_response_visibility_for(
+            *form.answer_settings().answer_response_visibility(),
+            form_answer.value(),
+            actor,
+        );
+        self.build_answer_details(
+            actor,
+            form_id,
+            form_answer,
+            author_disclosure,
+            answer_response_visibility,
+            labels,
+        )
+        .await
     }
 
     pub async fn get_status_history(
@@ -599,6 +656,9 @@ impl<
     {
         let actor = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor).await?;
+        if !form.answer_settings().can_read_history(&actor) {
+            return Err(Error::from(DomainError::Forbidden));
+        }
         let answer = self
             .answer_entry_repository
             .get(&form, answer_id)
@@ -617,6 +677,9 @@ impl<
     {
         let actor = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor).await?;
+        if !form.answer_settings().can_read_history(&actor) {
+            return Err(Error::from(DomainError::Forbidden));
+        }
         let answer = self
             .answer_entry_repository
             .get(&form, answer_id)
