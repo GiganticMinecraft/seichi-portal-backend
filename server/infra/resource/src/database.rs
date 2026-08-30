@@ -7,5 +7,6 @@ pub mod global_discord_webhook;
 mod meilisearch_schemas;
 pub mod minecraft_ban;
 pub mod notification;
+pub mod redmine_import;
 pub mod search;
 pub mod user;

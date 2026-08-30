@@ -12,7 +12,7 @@ use crate::{
         answer::{
             AnswerAuthor, AnswerStatus, AnswerStatusHistoryEntry, AnswerTitle,
             AnswerTitleHistoryEntry, FormAnswerContent, PostedAnswerContents,
-            RedmineImportedAnswerReference,
+            RedmineImportedAnswerReference, RedmineUserSnapshot,
         },
         models::{ActiveForm, ArchivedForm, FormId},
     },
@@ -218,6 +218,44 @@ impl AnswerEntry {
             contents: contents.into_inner(),
             redmine_reference: None,
         }
+    }
+
+    /// Redmine の issue を Portal の回答として新しく表します。
+    ///
+    /// Imported 回答は通常の回答投稿とは異なり、Redmine の作成日時・状態・公開範囲と
+    /// issue 参照を最初から保持します。呼び出し側が通常の回答投稿認可や通知を通らない
+    /// ことを明確にするため、この入口は Redmine author と issue ID を引数に取ります。
+    #[allow(clippy::too_many_arguments)]
+    pub fn import_from_redmine(
+        form_id: FormId,
+        issue_id: crate::form::answer::RedmineIssueId,
+        author: RedmineUserSnapshot,
+        timestamp: DateTime<Utc>,
+        title: AnswerTitle,
+        publication: AnswerPublication,
+        status: AnswerStatus,
+        contents: PostedAnswerContents,
+    ) -> Result<Self, DomainError> {
+        if issue_id.into_inner() <= 0 {
+            return Err(DomainError::InvalidEntity {
+                message: "Redmine issue ID must be positive".to_string(),
+            });
+        }
+        author.validate()?;
+
+        let id = AnswerId::new();
+
+        Ok(Self {
+            id,
+            form_id,
+            author: AnswerAuthor::ImportedFromRedmine(author),
+            timestamp,
+            title,
+            publication,
+            status,
+            contents: contents.into_inner(),
+            redmine_reference: Some(RedmineImportedAnswerReference::new(id, issue_id)),
+        })
     }
 
     pub fn with_title(self, title: AnswerTitle) -> Self {

@@ -1,5 +1,7 @@
 .git
 server/target
+/target
+**/target
 .vscode
 .cargo-husky
 server/.idea

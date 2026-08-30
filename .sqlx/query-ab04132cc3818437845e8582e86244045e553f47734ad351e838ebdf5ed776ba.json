@@ -1,0 +1,99 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT redmine_journal_id, redmine_user_id, redmine_author_name, content,\n            timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n        FROM redmine_imported_comments\n        WHERE answer_id = ?\n        ORDER BY redmine_journal_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "redmine_journal_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | UNIQUE_KEY | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "redmine_journal_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "redmine_user_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "collation": 63,
+          "max_size": 20
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "redmine_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "redmine_author_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "redmine_author_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "content",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "content"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "timestamp!: chrono::DateTime<chrono::Utc>",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "NOT_NULL | UNSIGNED | BINARY | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 19
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "timestamp"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ab04132cc3818437845e8582e86244045e553f47734ad351e838ebdf5ed776ba"
+}

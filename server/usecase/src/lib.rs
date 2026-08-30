@@ -6,6 +6,7 @@ pub mod health_check;
 pub mod minecraft_ban;
 pub mod models;
 pub mod notification;
+pub mod redmine_import;
 pub mod search;
 #[cfg(test)]
 pub(crate) mod test_utils;

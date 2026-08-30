@@ -1,0 +1,150 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT question_id, form_id, template_key, position, title, description,\n            question_type, is_required\n        FROM form_questions\n        WHERE form_id = ?\n        ORDER BY position ASC, question_id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "question_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "question_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "form_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "form_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "template_key",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 1020
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "template_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position",
+        "type_info": {
+          "type": "Short",
+          "flags": "NOT_NULL | UNSIGNED | NO_DEFAULT_VALUE",
+          "collation": 63,
+          "max_size": 5
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "description",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "question_type",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 128
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "question_type"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "is_required",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "collation": 63,
+          "max_size": 1
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "is_required"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "d124c2d35d0a0f0489f76daec687c2c10b8212a23ba40584693371915798760b"
+}

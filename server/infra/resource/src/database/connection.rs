@@ -149,6 +149,88 @@ impl ConnectionPool {
     }
 }
 
+/// Redmine importer が必要とする Portal DB だけを開く専用接続です。
+///
+/// 通常の [`ConnectionPool`] は Valkey・Minecraft bans DB・Meilisearch も初期化するため、
+/// 一回限りの移行 Job が通常 API の依存関係や副作用を読み込まないよう分離します。
+#[derive(Clone, Debug)]
+pub struct RedmineImportConnectionPool {
+    pub(crate) rdb_pool: sqlx::MySqlPool,
+}
+
+impl RedmineImportConnectionPool {
+    pub async fn new() -> anyhow::Result<Self> {
+        let rdb_pool = MySqlPoolOptions::new()
+            .connect(&ConnectionPool::database_url())
+            .await?;
+
+        Ok(Self { rdb_pool })
+    }
+
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "mariadb"))]
+    pub async fn read_only_transaction<F, T, E>(&self, callback: F) -> Result<T, InfraError>
+    where
+        F: for<'c> FnOnce(
+                &'c mut DatabaseTransaction,
+            ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'c>>
+            + Send,
+        T: Send,
+        E: Into<InfraError> + Send,
+    {
+        let mut transaction = self
+            .rdb_pool
+            .begin_with("START TRANSACTION READ ONLY")
+            .await
+            .map_err(|error| InfraError::DatabaseTransaction {
+                cause: error.to_string(),
+            })?;
+
+        let result = callback(&mut transaction).await;
+        match result {
+            Ok(value) => {
+                transaction.commit().await?;
+                Ok(value)
+            }
+            Err(error) => {
+                let infra_error = error.into();
+                let _ = transaction.rollback().await;
+                Err(infra_error)
+            }
+        }
+    }
+
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "mariadb"))]
+    pub async fn read_write_transaction<F, T, E>(&self, callback: F) -> Result<T, E>
+    where
+        F: for<'c> FnOnce(
+                &'c mut DatabaseTransaction,
+            ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'c>>
+            + Send,
+        T: Send,
+        E: From<InfraError> + Send,
+    {
+        let mut transaction = self
+            .rdb_pool
+            .begin_with("START TRANSACTION READ WRITE")
+            .await
+            .map_err(|error| InfraError::DatabaseTransaction {
+                cause: error.to_string(),
+            })?;
+
+        let result = callback(&mut transaction).await;
+        match result {
+            Ok(value) => {
+                transaction.commit().await.map_err(InfraError::from)?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = transaction.rollback().await;
+                Err(error)
+            }
+        }
+    }
+}
+
 #[async_trait]
 impl DatabaseComponents for ConnectionPool {
     type ConcreteDiscordAPI = Self;

@@ -3,6 +3,7 @@ pub mod form_submission_restriction_repository_impl;
 pub mod global_discord_webhook_repository_impl;
 pub mod minecraft_ban_repository_impl;
 pub mod notification_repository_impl;
+pub mod redmine_import_repository_impl;
 pub mod search_repository_impl;
 pub mod user_repository_impl;
 
@@ -38,15 +39,17 @@ impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Syn
     }
 }
 
-pub struct Repository<Client: DatabaseComponents + 'static> {
+pub struct Repository<Client> {
     pub(crate) client: Client,
 }
 
-impl<Client: DatabaseComponents + 'static> Repository<Client> {
+impl<Client> Repository<Client> {
     pub fn new(client: Client) -> Self {
         Self { client }
     }
+}
 
+impl<Client: DatabaseComponents + 'static> Repository<Client> {
     pub fn into_shared<H: HealthCheckRepository + Send + Sync + 'static>(
         self,
         health_check: Arc<H>,

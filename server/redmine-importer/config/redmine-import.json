@@ -1,0 +1,287 @@
+{
+  "redmine_projects": [
+    { "id": 3, "name": "整地鯖　運営チーム" },
+    { "id": 4, "name": "整地鯖　環境整備チーム" },
+    { "id": 5, "name": "一般閲覧用プロジェクト" },
+    { "id": 6, "name": "アイデア提案用プロジェクト" },
+    { "id": 8, "name": "整地鯖　建築チーム" },
+    { "id": 10, "name": "整地鯖 サーバ管理チーム" }
+  ],
+  "page_size": 100,
+  "detail_concurrency": 8,
+  "max_retries": 4,
+  "retry_base_delay_ms": 500,
+  "status_mapping": {
+    "新規": "UNADDRESSED",
+    "開発者募集中": "IN_PROGRESS",
+    "進行中": "IN_PROGRESS",
+    "デバッグ": "IN_PROGRESS",
+    "フィードバック": "IN_PROGRESS",
+    "終了": "COMPLETED",
+    "開発保留": "IN_PROGRESS",
+    "実装保留": "IN_PROGRESS",
+    "却下": "COMPLETED",
+    "処分": "COMPLETED",
+    "意見募集中": "IN_PROGRESS",
+    "要調査": "IN_PROGRESS",
+    "承認": "COMPLETED",
+    "運営協議中": "IN_PROGRESS",
+    "経過観察": "COMPLETED",
+    "承認待ち": "IN_PROGRESS",
+    "統合済み": "COMPLETED",
+    "議事録待ち": "IN_PROGRESS"
+  },
+  "status_label_mappings": {
+    "19": {
+      "承認": "移行元ステータス: 承認",
+      "却下": "移行元ステータス: 却下"
+    }
+  },
+  "tracker_mappings": {
+    "1": {
+      "redmine_name": "不具合",
+      "form_id": "01a050c7-7c1a-7f01-bfd0-5c1841f81001",
+      "form_title": "運営課題フォーム",
+      "question_mappings": {
+        "issue_type": { "source": "static", "value": "不具合" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: 不具合"]
+    },
+    "2": {
+      "redmine_name": "アイデア",
+      "form_id": "01a050c7-7c1a-7f01-bfd0-5c1841f81001",
+      "form_title": "運営課題フォーム",
+      "question_mappings": {
+        "issue_type": { "source": "static", "value": "アイデア" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: アイデア"]
+    },
+    "4": {
+      "redmine_name": "お問い合わせ",
+      "form_id": "01a04c1f-4ce6-7761-bde2-d59b8542f30e",
+      "form_title": "お問い合わせフォーム",
+      "question_mappings": {
+        "inquiry_content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "inquiry_content",
+      "labels": []
+    },
+    "5": {
+      "redmine_name": "ご意見ご感想",
+      "form_id": "01a04c15-4c82-7b81-a6b5-99350312fa71",
+      "form_title": "ご意見ご感想フォーム",
+      "question_mappings": {
+        "feedback_content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "feedback_content",
+      "labels": []
+    },
+    "6": {
+      "redmine_name": "通報",
+      "form_id": "01a04c0c-7d3c-7973-bbde-dadbfd9abc0b",
+      "form_title": "通報フォーム",
+      "question_mappings": {
+        "summary": { "source": "subject" },
+        "report_content": { "source": "description" },
+        "includes_direct_message": { "source": "static", "value": "いいえ" }
+      },
+      "custom_field_content_template_key": "report_content",
+      "custom_field_question_mappings": {
+        "3": "target_minecraft_id"
+      },
+      "labels": []
+    },
+    "9": {
+      "redmine_name": "不具合報告",
+      "form_id": "01a04c05-2cd2-74b0-bf0c-eab63b3f2213",
+      "form_title": "不具合報告フォーム",
+      "question_mappings": {
+        "bug_type": { "source": "static", "value": "ゲーム内" },
+        "bug_content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "bug_content",
+      "labels": []
+    },
+    "12": {
+      "redmine_name": "公共建築",
+      "form_id": "01a052fd-44a5-72b3-aff7-6035df6d6772",
+      "form_title": "公共建築フォーム",
+      "question_mappings": {
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "custom_field_question_mappings": {
+        "7": "completion_condition"
+      },
+      "labels": ["移行元トラッカー: 公共建築"]
+    },
+    "15": {
+      "redmine_name": "修繕依頼",
+      "form_id": "01a052fd-8ae3-7a73-8856-d101b56d47b8",
+      "form_title": "修繕依頼フォーム",
+      "question_mappings": {
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "custom_field_question_mappings": {
+        "11": "server",
+        "12": "world",
+        "13": "coordinate",
+        "14": "coordinate_2",
+        "20": "repair_types"
+      },
+      "labels": ["移行元トラッカー: 修繕依頼"]
+    },
+    "18": {
+      "redmine_name": "イベント",
+      "form_id": "01a050c7-e518-7fc2-af67-ba2df61aa4ff",
+      "form_title": "企画・制作フォーム",
+      "question_mappings": {
+        "request_type": { "source": "static", "value": "イベント" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: イベント"]
+    },
+    "19": {
+      "redmine_name": "アイデア提案",
+      "form_id": "01a04c19-06d1-78e1-82a1-b437f1c81ede",
+      "form_title": "アイデア投稿フォーム",
+      "question_mappings": {
+        "redmine_checked": {
+          "source": "static",
+          "value": "[\"私はRedmineを検索し、同じアイデアがないことを確認しました\"]"
+        },
+        "idea_summary": { "source": "subject" },
+        "idea_content": { "source": "subject_and_description" },
+        "idea_reason": { "source": "description" }
+      },
+      "custom_field_content_template_key": "idea_content",
+      "labels": []
+    },
+    "22": {
+      "redmine_name": "デザイン",
+      "form_id": "01a050c7-e518-7fc2-af67-ba2df61aa4ff",
+      "form_title": "企画・制作フォーム",
+      "question_mappings": {
+        "request_type": { "source": "static", "value": "デザイン" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: デザイン"]
+    },
+    "29": {
+      "redmine_name": "運営会議",
+      "form_id": "01a050c7-e547-7e62-8efe-0ccc3209c06a",
+      "form_title": "会議記録フォーム",
+      "question_mappings": {
+        "meeting_type": { "source": "static", "value": "運営会議" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: 運営会議"]
+    },
+    "33": {
+      "redmine_name": "ゲーム内処罰エビデンス",
+      "form_id": "01a050c7-e56e-7010-8425-c7201cef8032",
+      "form_title": "処罰エビデンスフォーム",
+      "question_mappings": {
+        "evidence_type": { "source": "static", "value": "ゲーム内" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: ゲーム内処罰エビデンス"]
+    },
+    "34": {
+      "redmine_name": "アイデア会議",
+      "form_id": "01a050c7-e547-7e62-8efe-0ccc3209c06a",
+      "form_title": "会議記録フォーム",
+      "question_mappings": {
+        "meeting_type": { "source": "static", "value": "アイデア会議" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: アイデア会議"]
+    },
+    "35": {
+      "redmine_name": "Discord処罰エビデンス",
+      "form_id": "01a050c7-e56e-7010-8425-c7201cef8032",
+      "form_title": "処罰エビデンスフォーム",
+      "question_mappings": {
+        "evidence_type": { "source": "static", "value": "Discord" },
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": ["移行元トラッカー: Discord処罰エビデンス"]
+    },
+    "36": {
+      "redmine_name": "不要保護報告",
+      "form_id": "01a052fd-da04-7951-acd8-ad28963480a9",
+      "form_title": "不要保護報告フォーム",
+      "question_mappings": {
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "custom_field_question_mappings": {
+        "2": "minecraft_id",
+        "11": "server",
+        "12": "world",
+        "13": "coordinate",
+        "19": "reason"
+      },
+      "labels": ["移行元トラッカー: 不要保護報告"]
+    }
+  },
+  "inquiry_mappings": {
+    "mod": {
+      "form_id": "01a04c1f-4c7d-7e42-96bf-856e78f482a4",
+      "form_title": "MOD使用可否のお問い合わせ",
+      "question_mappings": {
+        "mod_name": { "source": "mod_name" },
+        "mod_content": { "source": "subject_and_description" },
+        "mod_description_url": { "source": "first_url" }
+      },
+      "custom_field_content_template_key": "mod_content"
+    },
+    "login": {
+      "form_id": "01a04c1f-4c5d-7ab2-baf4-753b65eef361",
+      "form_title": "サーバーにログインできない方へ",
+      "question_mappings": {
+        "login_message_or_action": { "source": "subject_and_description" },
+        "global_ip_address": { "source": "ipv4_addresses" }
+      },
+      "custom_field_content_template_key": "login_message_or_action"
+    },
+    "experience_overflow": {
+      "form_id": "01a04c1f-4c98-74e0-b92b-c400d4e1fbb1",
+      "form_title": "経験値がオーバーフローしてしまった方へ",
+      "question_mappings": {
+        "login_schedule": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "login_schedule"
+    },
+    "appeal": {
+      "form_id": "01a04c1f-4cb3-7f91-b64b-e2057b56f55f",
+      "form_title": "処罰への異議申し立て",
+      "question_mappings": {
+        "appeal_content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "appeal_content"
+    }
+  },
+  "excluded_trackers": {
+    "7": "TT申請",
+    "8": "道路整備",
+    "10": "(過去ログ)ゲーム内処罰エビデンス",
+    "20": "動画制作",
+    "21": "公式HP編集",
+    "24": "Webアプリ開発",
+    "28": "WikiEditor申請",
+    "30": "Observer申請",
+    "32": "公式生配信"
+  }
+}
