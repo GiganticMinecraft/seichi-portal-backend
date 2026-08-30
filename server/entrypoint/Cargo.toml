@@ -7,7 +7,7 @@ default-run = "entrypoint"
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
-axum-tracing-opentelemetry = "0.39.0"
+axum-tracing-opentelemetry = "0.39.1"
 common = { path = "../common" }
 hyper = { version = "1.11.1", features = ["full"] }
 json-subscriber = { version = "0.3.0", features = ["tracing-opentelemetry-0-33"] }
