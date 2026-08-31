@@ -1,6 +1,7 @@
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use domain_derive::UnsafeFromRawParts;
+use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -63,6 +64,30 @@ impl RedmineUserSnapshot {
             display_name,
         }
     }
+
+    pub(crate) fn validate(&self) -> Result<(), DomainError> {
+        if self.redmine_user_id.is_some_and(|id| id <= 0) {
+            return Err(DomainError::InvalidEntity {
+                message: "Redmine user ID must be positive when present".to_string(),
+            });
+        }
+        if self.display_name.trim().is_empty() {
+            return Err(DomainError::InvalidEntity {
+                message: "Redmine author display name must not be empty".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn try_new(
+        redmine_user_id: Option<i64>,
+        display_name: String,
+    ) -> Result<Self, DomainError> {
+        let snapshot = Self::new(redmine_user_id, display_name);
+        snapshot.validate()?;
+        Ok(snapshot)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -102,6 +127,16 @@ pub struct RedmineIssueId(i64);
 impl RedmineIssueId {
     pub fn new(value: i64) -> Self {
         Self(value)
+    }
+
+    pub fn try_new(value: i64) -> Result<Self, DomainError> {
+        if value <= 0 {
+            return Err(DomainError::InvalidEntity {
+                message: "Redmine issue ID must be positive".to_string(),
+            });
+        }
+
+        Ok(Self::new(value))
     }
 
     pub fn into_inner(self) -> i64 {

@@ -1,0 +1,17 @@
+[package]
+name = "redmine-importer"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+domain = { path = "../domain" }
+futures = { workspace = true }
+reqwest = { workspace = true }
+resource = { path = "../infra/resource" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+usecase = { path = "../usecase" }
+uuid = { workspace = true }

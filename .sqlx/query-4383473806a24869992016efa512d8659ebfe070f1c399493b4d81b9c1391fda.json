@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT label_id\n        FROM label_settings_for_form_answers\n        WHERE answer_id = ?\n        ORDER BY label_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.label_settings_for_form_answers",
+            "name": "label_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4383473806a24869992016efa512d8659ebfe070f1c399493b4d81b9c1391fda"
+}

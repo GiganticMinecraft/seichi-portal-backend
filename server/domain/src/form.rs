@@ -6,6 +6,7 @@ pub mod message;
 pub mod message_thread;
 pub mod models;
 pub mod question;
+pub mod redmine_import;
 pub mod service;
 pub mod settings;
 pub mod submission_restriction;

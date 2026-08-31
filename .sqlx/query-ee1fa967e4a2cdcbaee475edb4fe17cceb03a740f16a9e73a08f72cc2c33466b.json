@@ -1,0 +1,65 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT reference.answer_id,\n                active_answer.form_id AS `active_form_id?: String`,\n                archived_answer.form_id AS `archived_form_id?: String`\n        FROM redmine_imported_answer_references reference\n        LEFT JOIN answers active_answer ON active_answer.id = reference.answer_id\n        LEFT JOIN archived_answers archived_answer ON archived_answer.id = reference.answer_id\n        WHERE reference.redmine_issue_id = ?\n        FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "answer_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_answer_references",
+            "name": "answer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "active_form_id?: String",
+        "type_info": {
+          "type": "String",
+          "flags": "MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answers",
+            "name": "form_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "archived_form_id?: String",
+        "type_info": {
+          "type": "String",
+          "flags": "MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.archived_answers",
+            "name": "form_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "ee1fa967e4a2cdcbaee475edb4fe17cceb03a740f16a9e73a08f72cc2c33466b"
+}

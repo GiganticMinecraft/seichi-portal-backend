@@ -141,6 +141,35 @@ impl Comment {
         }
     }
 
+    /// Redmine の journal を Portal の読み取り専用コメントとして新しく表します。
+    ///
+    /// コメント ID は Portal 内部で発行するため、移行元が内部 ID を指定する必要は
+    /// ありません。journal ID は同じ Redmine journal を二重に保存しないための外部
+    /// identity として保持します。
+    pub fn new_imported_from_redmine(
+        answer_id: AnswerId,
+        redmine_journal_id: i64,
+        author: RedmineUserSnapshot,
+        content: CommentContent,
+        timestamp: DateTime<Utc>,
+    ) -> Result<Self, DomainError> {
+        if redmine_journal_id <= 0 {
+            return Err(DomainError::InvalidEntity {
+                message: "Redmine journal ID must be positive".to_string(),
+            });
+        }
+        author.validate()?;
+
+        Ok(Self::imported_from_redmine(
+            answer_id,
+            CommentId::new(),
+            redmine_journal_id,
+            author,
+            content,
+            timestamp,
+        ))
+    }
+
     /// Portal コメントを DB 行から復元します。
     ///
     /// # Safety

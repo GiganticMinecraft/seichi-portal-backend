@@ -3285,6 +3285,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "redmine-importer"
+version = "0.2.7"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "domain",
+ "futures",
+ "reqwest 0.13.4",
+ "resource",
+ "serde",
+ "serde_json",
+ "tokio",
+ "usecase",
+ "uuid",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -4,6 +4,7 @@ pub mod global_discord_webhook_repository;
 pub mod health_check_repository;
 pub mod minecraft_ban_repository;
 pub mod notification_repository;
+pub mod redmine_import_repository;
 pub mod search_repository;
 pub mod user_repository;
 

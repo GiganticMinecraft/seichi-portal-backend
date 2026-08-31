@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT question_id FROM form_questions WHERE form_id = ? AND question_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "question_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_questions",
+            "name": "question_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "705a1615979e81f0687688fc749324c5d0521690c2e3345a2d7d17e601bf89f9"
+}

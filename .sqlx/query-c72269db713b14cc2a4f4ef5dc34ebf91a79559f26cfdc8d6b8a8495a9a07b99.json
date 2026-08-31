@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT first_form_id\n            FROM answer_relations\n            WHERE first_form_id = ? AND first_answer_id = ?\n              AND second_form_id = ? AND second_answer_id = ?\n            FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "first_form_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.answer_relations",
+            "name": "first_form_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c72269db713b14cc2a4f4ef5dc34ebf91a79559f26cfdc8d6b8a8495a9a07b99"
+}

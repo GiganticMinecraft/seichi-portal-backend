@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO redmine_imported_comments\n                (comment_id, answer_id, redmine_journal_id, redmine_user_id,\n                 redmine_author_name, content, timestamp)\n            VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "7271e0a6727e4b0667dcb896bd41b9ba0a68b3e033c31a46858f468344734489"
+}

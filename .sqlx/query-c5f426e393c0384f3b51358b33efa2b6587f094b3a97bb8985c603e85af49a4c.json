@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO answer_relations\n                (first_form_id, first_answer_id, second_form_id, second_answer_id)\n            VALUES (?, ?, ?, ?)\n            ON DUPLICATE KEY UPDATE first_form_id = first_form_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "c5f426e393c0384f3b51358b33efa2b6587f094b3a97bb8985c603e85af49a4c"
+}
