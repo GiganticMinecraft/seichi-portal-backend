@@ -7,6 +7,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use axum_extra::extract::Query as ExtraQuery;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use domain::form::answer::{
@@ -18,7 +19,7 @@ use domain::{
     form::answer::TemporaryAnswerAuthor,
     form::{answer::AnswerId, models::FormId},
     pagination::{PageLimit, PageRequest},
-    repository::Repositories,
+    repository::{Repositories, form::answer_entry_repository::AnswerListFilter},
 };
 use errors::{Error, ErrorExtra, presentation::PresentationError};
 use itertools::Itertools;
@@ -42,8 +43,8 @@ use crate::{
     handlers::error_handler::{ApiError, handle_error},
     schemas::form::{
         form_request_schemas::{
-            AnswerCreateSchema, AnswerListQuery, AnswerUpdateSchema, HistoryListQuery,
-            TemporaryAnswerCreateSchema,
+            AllAnswerListQuery, AllAnswersFormFilterQuery, AnswerCreateSchema, AnswerListQuery,
+            AnswerUpdateSchema, HistoryListQuery, TemporaryAnswerCreateSchema,
         },
         form_response_schemas::{
             AnswerListPageResponse, AnswerStatusHistoryPageResponse,
@@ -291,7 +292,7 @@ fn encode_answer_list_cursor(position: AnswerPagePosition) -> Result<String, Err
 }
 
 fn answer_list_page_request(
-    query: AnswerListQuery,
+    query: &AnswerListQuery,
 ) -> Result<PageRequest<AnswerPagePosition>, Error> {
     let limit = match query.limit {
         Some(limit) => PageLimit::try_new(limit)
@@ -307,12 +308,40 @@ fn answer_list_page_request(
     Ok(PageRequest::new(after, limit))
 }
 
+fn answer_list_request(
+    query: AnswerListQuery,
+    form_ids: Option<Vec<FormId>>,
+) -> Result<(PageRequest<AnswerPagePosition>, AnswerListFilter), Error> {
+    if query
+        .created_after
+        .zip(query.created_before)
+        .is_some_and(|(after, before)| after > before)
+    {
+        return Err(bad_query(
+            "created_after must not be later than created_before.",
+        ));
+    }
+
+    let request = answer_list_page_request(&query)?;
+    let filter = AnswerListFilter::new(
+        query.status.unwrap_or_default(),
+        query.user,
+        query.label_id.unwrap_or_default(),
+        query.created_after,
+        query.created_before,
+        form_ids,
+    );
+
+    Ok((request, filter))
+}
+
 #[utoipa::path(
     get,
     path = "/forms/answers",
     summary = "すべての回答をフォームを横断して取得",
     params(
         AnswerListQuery,
+        AllAnswersFormFilterQuery,
     ),
     responses(
         GetAllAnswersResponse,
@@ -327,16 +356,15 @@ fn answer_list_page_request(
 pub async fn get_all_answers(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
-    query: Result<Query<AnswerListQuery>, axum::extract::rejection::QueryRejection>,
+    query: Result<ExtraQuery<AllAnswerListQuery>, axum_extra::extract::QueryRejection>,
 ) -> Result<GetAllAnswersResponse, ApiError> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
-    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
-    let status = query.status;
-    let user_id = query.user;
-    let request = answer_list_page_request(query).map_err(handle_error)?;
+    let ExtraQuery(query) = query.map_err_to_error().map_err(handle_error)?;
+    let (answers, form_ids) = query.into_answer_list_parts();
+    let (request, filter) = answer_list_request(answers, form_ids).map_err(handle_error)?;
 
     let page = form_answer_use_case
-        .get_all_answers(&user, request, status, user_id)
+        .get_all_answers(&user, request, filter)
         .await
         .map_err(handle_error)?;
     let (answers, next) = page.into_parts();
@@ -499,18 +527,16 @@ pub async fn get_answer_by_form_id_handler(
     Extension(user): Extension<AccountUser>,
     State(repository): State<RealInfrastructureRepository>,
     path: Result<Path<FormId>, PathRejection>,
-    query: Result<Query<AnswerListQuery>, axum::extract::rejection::QueryRejection>,
+    query: Result<ExtraQuery<AnswerListQuery>, axum_extra::extract::QueryRejection>,
 ) -> Result<GetAnswersByFormResponse, ApiError> {
     let form_answer_use_case = build_answer_use_case(&repository, None);
 
     let Path(form_id) = path.map_err_to_error().map_err(handle_error)?;
-    let Query(query) = query.map_err_to_error().map_err(handle_error)?;
-    let status = query.status;
-    let user_id = query.user;
-    let request = answer_list_page_request(query).map_err(handle_error)?;
+    let ExtraQuery(query) = query.map_err_to_error().map_err(handle_error)?;
+    let (request, filter) = answer_list_request(query, None).map_err(handle_error)?;
 
     let page = form_answer_use_case
-        .get_answers_by_form_id(form_id, &user, request, status, user_id)
+        .get_answers_by_form_id(form_id, &user, request, filter)
         .await
         .map_err(handle_error)?;
     let (answers, next) = page.into_parts();
@@ -696,7 +722,9 @@ pub async fn update_answer_handler(
 
 #[cfg(test)]
 mod tests {
+    use axum::http::Uri;
     use chrono::TimeZone;
+    use domain::form::answer::AnswerStatus;
     use uuid::Uuid;
 
     use super::*;
@@ -727,5 +755,71 @@ mod tests {
             handle_error(decode_answer_list_cursor(&old_cursor).unwrap_err()).into_response();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn answer_list_query_accepts_repeated_filter_values() {
+        let first_form_id = Uuid::from_u128(1);
+        let second_form_id = Uuid::from_u128(2);
+        let first_label_id = Uuid::from_u128(3);
+        let second_label_id = Uuid::from_u128(4);
+        let created_after = "2026-08-01T00:00:00Z";
+        let created_before = "2026-08-31T23:59:59Z";
+        let uri: Uri = format!(
+            "/forms/answers?status=UNADDRESSED&status=IN_PROGRESS&label_id={first_label_id}&label_id={second_label_id}&form_id={first_form_id}&form_id={second_form_id}&created_after={created_after}&created_before={created_before}"
+        )
+        .parse()
+        .unwrap();
+
+        let ExtraQuery(query) = ExtraQuery::<AllAnswerListQuery>::try_from_uri(&uri).unwrap();
+        let (answers, form_ids) = query.into_answer_list_parts();
+        let (_, filter) = answer_list_request(answers, form_ids).unwrap();
+
+        assert_eq!(
+            filter.statuses(),
+            &[AnswerStatus::UNADDRESSED, AnswerStatus::IN_PROGRESS]
+        );
+        assert_eq!(
+            filter.label_ids(),
+            &[first_label_id.into(), second_label_id.into()]
+        );
+        assert_eq!(
+            filter.form_ids(),
+            Some([first_form_id.into(), second_form_id.into()].as_slice())
+        );
+        assert_eq!(
+            filter.created_after(),
+            Some(Utc.with_ymd_and_hms(2026, 8, 1, 0, 0, 0).unwrap())
+        );
+        assert_eq!(
+            filter.created_before(),
+            Some(Utc.with_ymd_and_hms(2026, 8, 31, 23, 59, 59).unwrap())
+        );
+    }
+
+    #[test]
+    fn answer_list_query_rejects_reversed_date_range() {
+        let uri: Uri =
+            "/forms/answers?created_after=2026-08-31T00:00:00Z&created_before=2026-08-01T00:00:00Z"
+                .parse()
+                .unwrap();
+        let ExtraQuery(query) = ExtraQuery::<AnswerListQuery>::try_from_uri(&uri).unwrap();
+
+        assert!(answer_list_request(query, None).is_err());
+    }
+
+    #[test]
+    fn answer_list_query_keeps_single_status_and_no_form_restriction() {
+        let uri: Uri = "/forms/answers?status=COMPLETED".parse().unwrap();
+        let ExtraQuery(form_query) = ExtraQuery::<AnswerListQuery>::try_from_uri(&uri).unwrap();
+        assert_eq!(form_query.status, Some(vec![AnswerStatus::COMPLETED]));
+
+        let ExtraQuery(query) = ExtraQuery::<AllAnswerListQuery>::try_from_uri(&uri).unwrap();
+        assert_eq!(query.status, Some(vec![AnswerStatus::COMPLETED]));
+        assert_eq!(query.form_id, None);
+
+        let (answers, form_ids) = query.into_answer_list_parts();
+        let (_, filter) = answer_list_request(answers, form_ids).unwrap();
+        assert_eq!(filter.form_ids(), None);
     }
 }

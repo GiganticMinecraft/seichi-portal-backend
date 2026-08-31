@@ -37,6 +37,7 @@ use domain::{
         Notification, NotificationId, NotificationPagePosition, NotificationPreference,
     },
     pagination::{Page, PageRequest},
+    repository::form::answer_entry_repository::AnswerListFilter,
     search::models::SearchableFieldsWithOperation,
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
@@ -104,14 +105,12 @@ pub trait FormDatabase: Send + Sync {
         &self,
         form_id: FormId,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError>;
     async fn list_all_answer_entries(
         &self,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError>;
 }
 

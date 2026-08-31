@@ -6,7 +6,7 @@ use crate::{
     },
     user_reference_resolver::resolve_user_references,
 };
-use domain::repository::form::answer_entry_repository::AnswerEntryRepository;
+use domain::repository::form::answer_entry_repository::{AnswerEntryRepository, AnswerListFilter};
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_thread_repository::CommentThreadRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
@@ -95,7 +95,7 @@ impl<
         loop {
             let page = self
                 .answer_entry_repository
-                .list_all(forms, request, None, None)
+                .list_all(forms, request, AnswerListFilter::default())
                 .await?;
             let (items, next) = page.into_parts();
             answers.extend(items);

@@ -13,7 +13,7 @@ use domain::{
     repository::{
         form::{
             active_form_repository::ActiveFormRepository,
-            answer_entry_repository::AnswerEntryRepository,
+            answer_entry_repository::{AnswerEntryRepository, AnswerListFilter},
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
         },
@@ -470,8 +470,7 @@ impl<
                 .list_by_form(
                     &current_form_read,
                     PageRequest::first(PageLimit::default_limit()),
-                    None,
-                    None,
+                    AnswerListFilter::default(),
                 )
                 .await?
                 .items()

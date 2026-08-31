@@ -1,20 +1,88 @@
 use crate::account::models::UserId;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use errors::Error;
 use mockall::automock;
 
 use crate::{
     form::{
         answer::{
-            AnswerEntry, AnswerId, AnswerPagePosition, AnswerStatus, AnswerStatusChange,
-            AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition, AnswerTitleHistoryEntry,
-            AnswerTitleHistoryPagePosition,
+            AnswerEntry, AnswerId, AnswerLabelId, AnswerPagePosition, AnswerStatus,
+            AnswerStatusChange, AnswerStatusHistoryEntry, AnswerStatusHistoryPagePosition,
+            AnswerTitleHistoryEntry, AnswerTitleHistoryPagePosition,
         },
-        models::ActiveForm,
+        models::{ActiveForm, FormId},
     },
     pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
+
+/// 回答一覧に適用する絞り込み条件です。
+///
+/// `statuses` と `form_ids` の各要素は OR 条件、異なる種類の条件は AND 条件として扱い
+/// ます。`label_ids` は指定されたすべてのラベルを持つ回答に絞り込みます。`form_ids` は
+/// 横断一覧でだけ使われ、`None` はフォームによる制限なしを表します。
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AnswerListFilter {
+    statuses: Vec<AnswerStatus>,
+    user_id: Option<UserId>,
+    label_ids: Vec<AnswerLabelId>,
+    created_after: Option<DateTime<Utc>>,
+    created_before: Option<DateTime<Utc>>,
+    form_ids: Option<Vec<FormId>>,
+}
+
+impl AnswerListFilter {
+    pub fn new(
+        statuses: Vec<AnswerStatus>,
+        user_id: Option<UserId>,
+        label_ids: Vec<AnswerLabelId>,
+        created_after: Option<DateTime<Utc>>,
+        created_before: Option<DateTime<Utc>>,
+        form_ids: Option<Vec<FormId>>,
+    ) -> Self {
+        Self {
+            statuses,
+            user_id,
+            label_ids,
+            created_after,
+            created_before,
+            form_ids,
+        }
+    }
+
+    pub fn statuses(&self) -> &[AnswerStatus] {
+        &self.statuses
+    }
+
+    pub fn user_id(&self) -> Option<UserId> {
+        self.user_id
+    }
+
+    pub fn label_ids(&self) -> &[AnswerLabelId] {
+        &self.label_ids
+    }
+
+    pub fn created_after(&self) -> Option<DateTime<Utc>> {
+        self.created_after
+    }
+
+    pub fn created_before(&self) -> Option<DateTime<Utc>> {
+        self.created_before
+    }
+
+    pub fn form_ids(&self) -> Option<&[FormId]> {
+        self.form_ids.as_deref()
+    }
+
+    /// 認可済みフォームだけを対象にするため、フォーム条件を置き換えます。
+    pub fn restrict_to_form_ids(self, form_ids: Vec<FormId>) -> Self {
+        Self {
+            form_ids: Some(form_ids),
+            ..self
+        }
+    }
+}
 
 #[automock]
 #[async_trait]
@@ -38,15 +106,13 @@ pub trait AnswerEntryRepository: Send + Sync + 'static {
         &self,
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error>;
     async fn list_all(
         &self,
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error>;
     async fn post(
         &self,
