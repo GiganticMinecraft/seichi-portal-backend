@@ -38,6 +38,14 @@ impl From<QueryRejection> for PresentationError {
     }
 }
 
+impl From<axum_extra::extract::QueryRejection> for PresentationError {
+    fn from(value: axum_extra::extract::QueryRejection) -> Self {
+        PresentationError::QueryRejection {
+            cause: value.to_string(),
+        }
+    }
+}
+
 impl From<TypedHeaderRejection> for PresentationError {
     fn from(value: TypedHeaderRejection) -> Self {
         PresentationError::TypedHeaderRejection {

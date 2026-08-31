@@ -8,8 +8,8 @@ use domain::{
     form::{
         FormSubmissionRestriction, FormSubmissionRestrictionHistory, FormSubmissionRestrictionId,
         answer::{
-            AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerReference,
-            AnswerRelation, AnswerStatus, AnswerStatusChange, AnswerStatusHistoryEntry,
+            AnswerEntry, AnswerId, AnswerLabelId, AnswerPagePosition, AnswerPublication,
+            AnswerReference, AnswerRelation, AnswerStatusChange, AnswerStatusHistoryEntry,
             AnswerStatusHistoryPagePosition, AnswerTitleHistoryEntry,
             AnswerTitleHistoryPagePosition, ArchivedAnswerEntry, ReadableAnswerRelation,
         },
@@ -25,7 +25,7 @@ use domain::{
     repository::{
         form::{
             active_form_repository::ActiveFormRepository,
-            answer_entry_repository::AnswerEntryRepository,
+            answer_entry_repository::{AnswerEntryRepository, AnswerListFilter},
             answer_relation_repository::AnswerRelationRepository,
             archived_form_repository::ArchivedFormRepository,
             form_label_repository::FormLabelRepository,
@@ -281,14 +281,49 @@ impl FormLabelRepository for InMemoryFormLabelRepository {
 #[derive(Default)]
 pub(crate) struct InMemoryAnswerEntryRepository {
     answers: Mutex<Vec<AnswerEntry>>,
+    labels: Mutex<HashMap<AnswerId, Vec<AnswerLabelId>>>,
 }
 
 impl InMemoryAnswerEntryRepository {
     pub(crate) fn new(answers: Vec<AnswerEntry>) -> Self {
         Self {
             answers: Mutex::new(answers),
+            labels: Mutex::new(HashMap::new()),
         }
     }
+
+    pub(crate) fn set_labels(&self, answer_id: AnswerId, labels: Vec<AnswerLabelId>) {
+        self.labels.lock().unwrap().insert(answer_id, labels);
+    }
+}
+
+fn answer_matches_filter(
+    answer: &AnswerEntry,
+    filter: &AnswerListFilter,
+    labels_by_answer_id: &HashMap<AnswerId, Vec<AnswerLabelId>>,
+) -> bool {
+    let answer_labels = labels_by_answer_id
+        .get(answer.id())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+
+    (filter.statuses().is_empty() || filter.statuses().contains(answer.status()))
+        && filter
+            .user_id()
+            .is_none_or(|user_id| answer.author().authenticated_user_id() == Some(user_id))
+        && filter
+            .created_after()
+            .is_none_or(|created_after| *answer.timestamp() >= created_after)
+        && filter
+            .created_before()
+            .is_none_or(|created_before| *answer.timestamp() <= created_before)
+        && filter
+            .form_ids()
+            .is_none_or(|form_ids| form_ids.contains(answer.form_id()))
+        && filter
+            .label_ids()
+            .iter()
+            .all(|label_id| answer_labels.contains(label_id))
 }
 
 #[async_trait]
@@ -338,20 +373,16 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         &self,
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
+        let labels_by_answer_id = self.labels.lock().unwrap().clone();
         let mut answers = self
             .answers
             .lock()
             .unwrap()
             .iter()
             .filter(|answer| answer.form_id() == form.id())
-            .filter(|answer| status.is_none_or(|status| *answer.status() == status))
-            .filter(|answer| {
-                user_id
-                    .is_none_or(|user_id| answer.author().authenticated_user_id() == Some(user_id))
-            })
+            .filter(|answer| answer_matches_filter(answer, &filter, &labels_by_answer_id))
             .cloned()
             .filter_map(|answer| form.read_entry(answer).ok())
             .collect::<Vec<_>>();
@@ -377,9 +408,9 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
         &self,
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
+        let labels_by_answer_id = self.labels.lock().unwrap().clone();
         let forms_by_id = forms
             .iter()
             .map(|form| (form.id().into_inner(), form))
@@ -390,11 +421,7 @@ impl AnswerEntryRepository for InMemoryAnswerEntryRepository {
             .unwrap()
             .iter()
             .cloned()
-            .filter(|answer| status.is_none_or(|status| *answer.status() == status))
-            .filter(|answer| {
-                user_id
-                    .is_none_or(|user_id| answer.author().authenticated_user_id() == Some(user_id))
-            })
+            .filter(|answer| answer_matches_filter(answer, &filter, &labels_by_answer_id))
             .filter_map(|answer| {
                 forms_by_id
                     .get(&answer.form_id().into_inner())
@@ -562,7 +589,7 @@ mod answer_entry_repository_tests {
     }
 
     #[tokio::test]
-    async fn list_filters_answers_by_status_before_paginating() {
+    async fn list_filters_answers_by_multiple_statuses_before_paginating() {
         let form = active_form("answers");
         let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
         let repository = InMemoryAnswerEntryRepository::new(vec![
@@ -587,15 +614,104 @@ mod answer_entry_repository_tests {
         let page = repository
             .list_by_form(
                 &form,
-                PageRequest::first(PageLimit::try_new(1).unwrap()),
-                Some(AnswerStatus::IN_PROGRESS),
-                None,
+                PageRequest::first(PageLimit::try_new(2).unwrap()),
+                AnswerListFilter::new(
+                    vec![AnswerStatus::COMPLETED, AnswerStatus::IN_PROGRESS],
+                    None,
+                    Vec::new(),
+                    None,
+                    None,
+                    None,
+                ),
             )
             .await
             .unwrap();
         let (entries, next) = page.into_parts();
-        assert_eq!(ids(entries), vec![Uuid::from_u128(2)]);
+        assert_eq!(ids(entries), vec![Uuid::from_u128(1), Uuid::from_u128(2)]);
         assert!(next.is_some());
+    }
+
+    #[tokio::test]
+    async fn list_filters_answers_by_all_labels_and_inclusive_date_range() {
+        let form = active_form("answers");
+        let start = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let first_label: AnswerLabelId = Uuid::from_u128(201).into();
+        let second_label: AnswerLabelId = Uuid::from_u128(202).into();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer(&form, 1, start),
+            answer(&form, 2, start + chrono::TimeDelta::seconds(1)),
+            answer(&form, 3, start + chrono::TimeDelta::seconds(2)),
+            answer(&form, 4, start + chrono::TimeDelta::seconds(1)),
+        ]);
+        repository.set_labels(Uuid::from_u128(1).into(), vec![first_label, second_label]);
+        repository.set_labels(Uuid::from_u128(2).into(), vec![first_label, second_label]);
+        repository.set_labels(Uuid::from_u128(3).into(), vec![first_label, second_label]);
+        repository.set_labels(Uuid::from_u128(4).into(), vec![first_label]);
+        let form = AuthorizationGuard::from(form)
+            .try_read(Actor::System)
+            .unwrap();
+
+        let page = repository
+            .list_by_form(
+                &form,
+                PageRequest::first(PageLimit::try_new(10).unwrap()),
+                AnswerListFilter::new(
+                    Vec::new(),
+                    None,
+                    vec![first_label, second_label],
+                    Some(start),
+                    Some(start + chrono::TimeDelta::seconds(1)),
+                    None,
+                ),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            ids(page.into_items()),
+            vec![Uuid::from_u128(2), Uuid::from_u128(1)]
+        );
+    }
+
+    #[tokio::test]
+    async fn list_all_intersects_requested_forms_with_readable_forms() {
+        let first_form = active_form("first");
+        let second_form = active_form("second");
+        let inaccessible_form = active_form("inaccessible");
+        let inaccessible_form_id = *inaccessible_form.id();
+        let timestamp = Utc.with_ymd_and_hms(2026, 8, 3, 12, 0, 0).unwrap();
+        let repository = InMemoryAnswerEntryRepository::new(vec![
+            answer(&first_form, 1, timestamp),
+            answer(&second_form, 2, timestamp - chrono::TimeDelta::seconds(1)),
+            answer(
+                &inaccessible_form,
+                3,
+                timestamp - chrono::TimeDelta::seconds(2),
+            ),
+        ]);
+        let forms = [first_form, second_form].map(|form| {
+            AuthorizationGuard::from(form)
+                .try_read(Actor::System)
+                .unwrap()
+        });
+
+        let page = repository
+            .list_all(
+                &forms,
+                PageRequest::first(PageLimit::try_new(10).unwrap()),
+                AnswerListFilter::new(
+                    Vec::new(),
+                    None,
+                    Vec::new(),
+                    None,
+                    None,
+                    Some(vec![*forms[0].id(), inaccessible_form_id]),
+                ),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(ids(page.into_items()), vec![Uuid::from_u128(1)]);
     }
 
     #[tokio::test]
@@ -616,8 +732,7 @@ mod answer_entry_repository_tests {
             .list_by_form(
                 &form,
                 PageRequest::first(PageLimit::try_new(1).unwrap()),
-                None,
-                Some(target_user),
+                AnswerListFilter::new(Vec::new(), Some(target_user), Vec::new(), None, None, None),
             )
             .await
             .unwrap();
@@ -629,8 +744,7 @@ mod answer_entry_repository_tests {
             .list_all(
                 &forms,
                 PageRequest::first(PageLimit::try_new(10).unwrap()),
-                None,
-                None,
+                AnswerListFilter::default(),
             )
             .await
             .unwrap();
@@ -643,8 +757,7 @@ mod answer_entry_repository_tests {
             .list_all(
                 &forms,
                 PageRequest::first(PageLimit::try_new(10).unwrap()),
-                None,
-                Some(target_user),
+                AnswerListFilter::new(Vec::new(), Some(target_user), Vec::new(), None, None, None),
             )
             .await
             .unwrap();
@@ -671,12 +784,20 @@ mod answer_entry_repository_tests {
         let limit = PageLimit::try_new(2).unwrap();
 
         let first_page = repository
-            .list_all(&forms, PageRequest::first(limit), None, None)
+            .list_all(
+                &forms,
+                PageRequest::first(limit),
+                AnswerListFilter::default(),
+            )
             .await
             .unwrap();
         let (first_entries, next) = first_page.into_parts();
         let second_page = repository
-            .list_all(&forms, PageRequest::after(next.unwrap(), limit), None, None)
+            .list_all(
+                &forms,
+                PageRequest::after(next.unwrap(), limit),
+                AnswerListFilter::default(),
+            )
             .await
             .unwrap();
         let (second_entries, next) = second_page.into_parts();
@@ -720,8 +841,7 @@ mod answer_entry_repository_tests {
             .list_all(
                 &[form],
                 PageRequest::first(PageLimit::try_new(10).unwrap()),
-                None,
-                None,
+                AnswerListFilter::default(),
             )
             .await
             .unwrap();
@@ -754,8 +874,7 @@ mod answer_entry_repository_tests {
             .list_all(
                 &[form],
                 PageRequest::first(PageLimit::try_new(2).unwrap()),
-                None,
-                None,
+                AnswerListFilter::default(),
             )
             .await
             .unwrap();
@@ -790,8 +909,7 @@ mod answer_entry_repository_tests {
             .list_by_form(
                 &form,
                 PageRequest::first(PageLimit::try_new(2).unwrap()),
-                None,
-                None,
+                AnswerListFilter::default(),
             )
             .await
             .unwrap();
@@ -818,12 +936,20 @@ mod answer_entry_repository_tests {
         let limit = PageLimit::try_new(2).unwrap();
 
         let first_page = repository
-            .list_by_form(&form, PageRequest::first(limit), None, None)
+            .list_by_form(
+                &form,
+                PageRequest::first(limit),
+                AnswerListFilter::default(),
+            )
             .await
             .unwrap();
         let (first_entries, next) = first_page.into_parts();
         let second_page = repository
-            .list_by_form(&form, PageRequest::after(next.unwrap(), limit), None, None)
+            .list_by_form(
+                &form,
+                PageRequest::after(next.unwrap(), limit),
+                AnswerListFilter::default(),
+            )
             .await
             .unwrap();
         let (second_entries, next) = second_page.into_parts();

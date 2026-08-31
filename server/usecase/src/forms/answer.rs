@@ -1,7 +1,7 @@
 #[cfg(test)]
 use chrono::Utc;
 use domain::{
-    account::models::{AccountUser, UserId},
+    account::models::AccountUser,
     auth::Actor,
     form::answer::TemporaryAnswerAuthor,
     form::{
@@ -20,7 +20,7 @@ use domain::{
     repository::{
         form::{
             active_form_repository::ActiveFormRepository,
-            answer_entry_repository::AnswerEntryRepository,
+            answer_entry_repository::{AnswerEntryRepository, AnswerListFilter},
             answer_label_repository::AnswerLabelRepository,
         },
         form_submission_restriction_repository::FormSubmissionRestrictionRepository,
@@ -392,15 +392,14 @@ impl<
         form_id: FormId,
         actor: &AccountUser,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<AnswerDetails, AnswerPagePosition>, Error> {
         let actor_ref = Actor::from(actor.clone());
         let form = self.read_form(form_id, &actor_ref).await?;
 
         let page = self
             .answer_entry_repository
-            .list_by_form(&form, request, status, user_id)
+            .list_by_form(&form, request, filter)
             .await?;
         let (visible_answers, next) = page.into_parts();
         let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
@@ -458,15 +457,14 @@ impl<
         &self,
         user: &AccountUser,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<AnswerDetails, AnswerPagePosition>, Error> {
         let actor_ref = Actor::from(user.clone());
         let readable_forms = self.readable_forms(&actor_ref).await?;
 
         let page = self
             .answer_entry_repository
-            .list_all(&readable_forms, request, status, user_id)
+            .list_all(&readable_forms, request, filter)
             .await?;
         let (visible_answers, next) = page.into_parts();
         let publication_by_form_id = readable_forms
@@ -921,8 +919,7 @@ mod tests {
             .list_by_form(
                 &form,
                 PageRequest::first(PageLimit::default_limit()),
-                None,
-                None,
+                AnswerListFilter::default(),
             )
             .await
             .unwrap();

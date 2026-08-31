@@ -66,12 +66,57 @@ pub struct AnswerListQuery {
     pub limit: Option<u32>,
     /// Cursor returned by the previous page
     pub cursor: Option<String>,
-    /// Limit results to the specified answer status
-    #[param(value_type = Option<String>)]
-    pub status: Option<AnswerStatus>,
+    /// Limit results to the specified answer statuses. Repeating this parameter combines them with OR.
+    #[param(value_type = Option<Vec<String>>, style = Form, explode)]
+    pub status: Option<Vec<AnswerStatus>>,
     /// Limit results to answers submitted by the specified user
     #[param(value_type = Option<String>)]
     pub user: Option<UserId>,
+    /// Limit results to answers that have all of the specified labels. Repeating this parameter combines them with AND.
+    #[param(value_type = Option<Vec<String>>, style = Form, explode)]
+    pub label_id: Option<Vec<AnswerLabelId>>,
+    /// Limit results to answers submitted at or after this timestamp
+    pub created_after: Option<chrono::DateTime<chrono::Utc>>,
+    /// Limit results to answers submitted at or before this timestamp
+    pub created_before: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Deserialize, Debug, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct AllAnswersFormFilterQuery {
+    /// Limit results to the specified forms. Repeating this parameter combines them with OR.
+    #[param(value_type = Option<Vec<String>>, style = Form, explode)]
+    pub form_id: Option<Vec<FormId>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AllAnswerListQuery {
+    pub limit: Option<u32>,
+    pub cursor: Option<String>,
+    pub status: Option<Vec<AnswerStatus>>,
+    pub user: Option<UserId>,
+    pub label_id: Option<Vec<AnswerLabelId>>,
+    pub created_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_before: Option<chrono::DateTime<chrono::Utc>>,
+    pub form_id: Option<Vec<FormId>>,
+}
+
+impl AllAnswerListQuery {
+    pub fn into_answer_list_parts(self) -> (AnswerListQuery, Option<Vec<FormId>>) {
+        let form_ids = self.form_id.filter(|form_ids| !form_ids.is_empty());
+        (
+            AnswerListQuery {
+                limit: self.limit,
+                cursor: self.cursor,
+                status: self.status,
+                user: self.user,
+                label_id: self.label_id,
+                created_after: self.created_after,
+                created_before: self.created_before,
+            },
+            form_ids,
+        )
+    }
 }
 
 #[derive(Deserialize, Debug, utoipa::IntoParams)]
@@ -182,6 +227,8 @@ mod tests {
             serde_json::from_str::<AnswerListQuery>(&format!(r#"{{"user":"{user_id}"}}"#)).unwrap();
 
         assert_eq!(query.user, Some(user_id.into()));
+        assert_eq!(query.status, None);
+        assert_eq!(query.label_id, None);
     }
 
     /// リクエストの JSON が usecase 境界へ渡す値になるまでを通して観測する。

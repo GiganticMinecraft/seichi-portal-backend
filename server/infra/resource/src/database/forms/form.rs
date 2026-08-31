@@ -2,20 +2,21 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::account::models::UserGroupId;
 use domain::form::{
-    answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, AnswerStatus},
+    answer::{AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication},
     models::{ArchivedFormPagePosition, FormLabelId, FormPagePosition, FormSettings},
     question::{Choice, Question, QuestionId, QuestionType},
 };
 use domain::{
-    account::models::{AccountUser, Role, UserId},
+    account::models::{AccountUser, Role},
     auth::Actor,
     form::models::{ActiveForm, ArchivedForm, FormId},
     pagination::{Page, PageRequest},
+    repository::form::answer_entry_repository::AnswerListFilter,
 };
 use errors::{Error, infra::InfraError};
 use futures::{TryStreamExt, stream};
 use itertools::Itertools;
-use sqlx::{AssertSqlSafe, MySqlConnection, Row, query};
+use sqlx::{AssertSqlSafe, MySql, MySqlConnection, QueryBuilder, Row, query};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 use types::non_empty_string::NonEmptyString;
@@ -80,6 +81,26 @@ struct ArchivedFormQueryRow {
     archived_by_name: String,
     archived_by_id: String,
     archived_by_role: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct AnswerQueryRow {
+    form_id: String,
+    answer_id: String,
+    title: Option<String>,
+    publication: String,
+    status: String,
+    author_type: String,
+    user: Option<String>,
+    user_name: Option<String>,
+    user_role: Option<String>,
+    temporary_user_id: Option<String>,
+    temporary_user_name: Option<String>,
+    temporary_user_contact_text: Option<String>,
+    redmine_user_id: Option<i64>,
+    redmine_author_name: Option<String>,
+    redmine_issue_id: Option<i64>,
+    timestamp: DateTime<Utc>,
 }
 
 macro_rules! execute_typed_query {
@@ -448,23 +469,15 @@ async fn fetch_answer_entries_page(
     txn: &mut DatabaseTransaction,
     form_id: Option<FormId>,
     request: PageRequest<AnswerPagePosition>,
-    status: Option<AnswerStatus>,
-    user_id: Option<UserId>,
+    filter: AnswerListFilter,
 ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
-    let form_id = form_id.map(|form_id| form_id.into_inner().to_string());
-    let status = status.map(|status| status.to_string());
-    let user_id = user_id.map(|user_id| user_id.into_inner().to_string());
-    let (after_timestamp, after_answer_id) = request
-        .after_position()
-        .map(|position| {
-            (
-                position.last_timestamp(),
-                position.last_answer_id().into_inner().to_string(),
-            )
-        })
-        .unzip();
+    if filter.form_ids().is_some_and(<[FormId]>::is_empty) {
+        return Ok(Page::new(Vec::new(), None));
+    }
 
-    let answers = sqlx::query!(
+    // Repeated query parameters require dynamic IN clauses. SQL fragments are kept static and
+    // every value from the filter is bound separately to preserve SQL injection protection.
+    let mut query_builder = QueryBuilder::<MySql>::new(
         r"SELECT answers.form_id, answers.id AS answer_id, answers.title, answers.publication,
             answers.status,
             answers.author_type, answers.user, users.name AS user_name, users.role AS user_role,
@@ -472,70 +485,95 @@ async fn fetch_answer_entries_page(
             temporary_users.contact_text AS temporary_user_contact_text,
             answers.redmine_user_id, answers.redmine_author_name,
             redmine_reference.redmine_issue_id,
-            answers.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+            answers.timestamp
         FROM answers
         LEFT JOIN users ON answers.user = users.id
         LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
         LEFT JOIN redmine_imported_answer_references redmine_reference
             ON redmine_reference.answer_id = answers.id
-        WHERE (? IS NULL OR answers.form_id = ?)
-            AND (? IS NULL OR answers.status = ?)
-            AND (? IS NULL OR answers.user = ?)
-            AND (
-                ? IS NULL
-                OR answers.timestamp < ?
-                OR (answers.timestamp = ? AND answers.id < ?)
-            )
-        ORDER BY answers.timestamp DESC, answers.id DESC
-        LIMIT ?",
-        form_id.as_deref(),
-        form_id.as_deref(),
-        status.as_deref(),
-        status.as_deref(),
-        user_id.as_deref(),
-        user_id.as_deref(),
-        after_timestamp,
-        after_timestamp,
-        after_timestamp,
-        after_answer_id,
-        i64::from(request.limit().overfetch_value()),
-    )
-    .fetch_all(&mut **txn)
-    .await?;
+        WHERE 1 = 1",
+    );
+
+    if let Some(form_id) = form_id {
+        query_builder
+            .push(" AND answers.form_id = ")
+            .push_bind(form_id.into_inner().to_string());
+    }
+
+    if let Some(form_ids) = filter.form_ids() {
+        query_builder.push(" AND answers.form_id IN (");
+        let mut separated = query_builder.separated(", ");
+        for form_id in form_ids {
+            separated.push_bind(form_id.into_inner().to_string());
+        }
+        separated.push_unseparated(")");
+    }
+
+    if !filter.statuses().is_empty() {
+        query_builder.push(" AND answers.status IN (");
+        let mut separated = query_builder.separated(", ");
+        for status in filter.statuses() {
+            separated.push_bind(status.to_string());
+        }
+        separated.push_unseparated(")");
+    }
+
+    if let Some(user_id) = filter.user_id() {
+        query_builder
+            .push(" AND answers.user = ")
+            .push_bind(user_id.into_inner().to_string());
+    }
+
+    if !filter.label_ids().is_empty() {
+        let label_ids = filter.label_ids().iter().unique().collect_vec();
+        query_builder.push(
+            r#" AND answers.id IN (
+                SELECT answer_id
+                FROM label_settings_for_form_answers
+                WHERE label_id IN ("#,
+        );
+        let mut separated = query_builder.separated(", ");
+        for label_id in &label_ids {
+            separated.push_bind(label_id.into_inner().to_string());
+        }
+        separated.push_unseparated(") GROUP BY answer_id HAVING COUNT(DISTINCT label_id) = ");
+        query_builder.push_bind(label_ids.len() as i64);
+        query_builder.push(")");
+    }
+
+    if let Some(created_after) = filter.created_after() {
+        query_builder
+            .push(" AND answers.timestamp >= ")
+            .push_bind(created_after);
+    }
+
+    if let Some(created_before) = filter.created_before() {
+        query_builder
+            .push(" AND answers.timestamp <= ")
+            .push_bind(created_before);
+    }
+
+    if let Some(position) = request.after_position() {
+        query_builder
+            .push(" AND (answers.timestamp < ")
+            .push_bind(position.last_timestamp())
+            .push(" OR (answers.timestamp = ")
+            .push_bind(position.last_timestamp())
+            .push(" AND answers.id < ")
+            .push_bind(position.last_answer_id().into_inner().to_string())
+            .push("))");
+    }
+
+    let answers = query_builder
+        .push(" ORDER BY answers.timestamp DESC, answers.id DESC LIMIT ")
+        .push_bind(i64::from(request.limit().overfetch_value()))
+        .build_query_as::<AnswerQueryRow>()
+        .fetch_all(&mut **txn)
+        .await?;
 
     let form_answer_records = answers
         .into_iter()
-        .map(|row| {
-            let answer_id = Uuid::parse_str(&row.answer_id)?;
-
-            Ok::<_, InfraError>(FormAnswerRecord {
-                id: row.answer_id,
-                author: author_from_values(
-                    row.author_type,
-                    row.user,
-                    row.user_name,
-                    row.user_role,
-                    row.temporary_user_id,
-                    row.temporary_user_name,
-                    row.temporary_user_contact_text,
-                    row.redmine_user_id,
-                    row.redmine_author_name,
-                )?,
-                timestamp: row.timestamp,
-                form_id: row.form_id,
-                title: row.title,
-                publication: row.publication,
-                status: row.status,
-                contents: Vec::new(),
-                messages: Vec::new(),
-                redmine_reference: row.redmine_issue_id.map(|issue_id| {
-                    domain::form::answer::RedmineImportedAnswerReference::new(
-                        answer_id.into(),
-                        issue_id.into(),
-                    )
-                }),
-            })
-        })
+        .map(answer_record_from_row)
         .collect::<Result<Vec<_>, _>>()?;
 
     let answer_ids = form_answer_records
@@ -558,6 +596,38 @@ async fn fetch_answer_entries_page(
         request.limit(),
         |entry| AnswerPagePosition::new(*entry.timestamp(), *entry.id()),
     ))
+}
+
+fn answer_record_from_row(row: AnswerQueryRow) -> Result<FormAnswerRecord, InfraError> {
+    let answer_id = Uuid::parse_str(&row.answer_id)?;
+
+    Ok(FormAnswerRecord {
+        id: row.answer_id,
+        author: author_from_values(
+            row.author_type,
+            row.user,
+            row.user_name,
+            row.user_role,
+            row.temporary_user_id,
+            row.temporary_user_name,
+            row.temporary_user_contact_text,
+            row.redmine_user_id,
+            row.redmine_author_name,
+        )?,
+        timestamp: row.timestamp,
+        form_id: row.form_id,
+        title: row.title,
+        publication: row.publication,
+        status: row.status,
+        contents: Vec::new(),
+        messages: Vec::new(),
+        redmine_reference: row.redmine_issue_id.map(|issue_id| {
+            domain::form::answer::RedmineImportedAnswerReference::new(
+                answer_id.into(),
+                issue_id.into(),
+            )
+        }),
+    })
 }
 
 async fn fetch_form_row(
@@ -1535,13 +1605,12 @@ impl FormDatabase for ConnectionPool {
         &self,
         form_id: FormId,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(async move {
-                fetch_answer_entries_page(txn, Some(form_id), request, status, user_id).await
-            })
+            Box::pin(
+                async move { fetch_answer_entries_page(txn, Some(form_id), request, filter).await },
+            )
         })
         .await
     }
@@ -1550,13 +1619,10 @@ impl FormDatabase for ConnectionPool {
     async fn list_all_answer_entries(
         &self,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<AnswerEntry, AnswerPagePosition>, InfraError> {
         self.read_only_transaction(|txn| {
-            Box::pin(
-                async move { fetch_answer_entries_page(txn, None, request, status, user_id).await },
-            )
+            Box::pin(async move { fetch_answer_entries_page(txn, None, request, filter).await })
         })
         .await
     }

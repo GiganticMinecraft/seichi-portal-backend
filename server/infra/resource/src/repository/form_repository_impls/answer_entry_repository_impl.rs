@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use domain::{
-    account::models::{UserId, UserSnapshot},
+    account::models::UserSnapshot,
     auth::Actor,
     form::{
         answer::{
@@ -13,7 +13,7 @@ use domain::{
         models::ActiveForm,
     },
     pagination::{Page, PageRequest},
-    repository::form::answer_entry_repository::AnswerEntryRepository,
+    repository::form::answer_entry_repository::{AnswerEntryRepository, AnswerListFilter},
     types::authorization_guard::{Allowed, Create, Read, Update},
 };
 use errors::{Error, infra::InfraError};
@@ -85,8 +85,7 @@ where
         &self,
         form: &Allowed<ActiveForm, Read>,
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         let mut scan_cursor = request.after_position().copied();
         let mut authorized_entries = Vec::new();
@@ -98,8 +97,7 @@ where
                 .list_answer_entries(
                     *form.id(),
                     PageRequest::new(scan_cursor, request.limit()),
-                    status,
-                    user_id,
+                    filter.clone(),
                 )
                 .await?;
             let (entries, next_raw) = page.into_parts();
@@ -135,8 +133,7 @@ where
         &self,
         forms: &[Allowed<ActiveForm, Read>],
         request: PageRequest<AnswerPagePosition>,
-        status: Option<AnswerStatus>,
-        user_id: Option<UserId>,
+        filter: AnswerListFilter,
     ) -> Result<Page<Allowed<AnswerEntry, Read>, AnswerPagePosition>, Error> {
         if forms.is_empty() {
             return Ok(Page::new(Vec::new(), None));
@@ -146,6 +143,18 @@ where
             .iter()
             .map(|form| (form.id().into_inner(), form))
             .collect::<HashMap<_, _>>();
+        let form_ids: Vec<_> = match filter.form_ids() {
+            Some(requested_form_ids) => forms
+                .iter()
+                .map(|form| *form.id())
+                .filter(|form_id| requested_form_ids.contains(form_id))
+                .collect(),
+            None => forms.iter().map(|form| *form.id()).collect(),
+        };
+        if form_ids.is_empty() {
+            return Ok(Page::new(Vec::new(), None));
+        }
+        let filter = filter.restrict_to_form_ids(form_ids);
         let mut scan_cursor = request.after_position().copied();
         let mut authorized_entries = Vec::new();
 
@@ -155,8 +164,7 @@ where
                 .form()
                 .list_all_answer_entries(
                     PageRequest::new(scan_cursor, request.limit()),
-                    status,
-                    user_id,
+                    filter.clone(),
                 )
                 .await?;
             let (entries, next_raw) = page.into_parts();
