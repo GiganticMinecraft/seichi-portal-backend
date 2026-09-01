@@ -102,7 +102,7 @@ jobs:
       # actions-rs/cargo (アーカイブ済み + 廃止された Node ランタイム) の use-cross 相当を直接実行する。
       # cross は GitHub Releases のビルド済みバイナリを導入する (cargo install よりも高速)
       - name: Install cross
-        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
+        uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
         with:
           tool: cross@0.2.5
       - name: Build binary using cross
