@@ -1,5 +1,7 @@
 # seichi-portal-backend
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GiganticMinecraft/seichi-portal-backend)
+
 このリポジトリは Seichi Portal のバックエンド実装です。
 
 プロジェクトの目的やフロントエンドなどの関連リポジトリについては、[こちらのリポジトリ](https://github.com/GiganticMinecraft/seichi-portal)を参照してください。
