@@ -800,17 +800,34 @@ impl<
             "search engine is out of sync; starting incremental resync",
         );
 
+        // 1 つのインデックスで ID を引けなくても、他の乖離したインデックスの再同期は進める
         let indexed_ids = stream::iter(out_of_sync_indexes)
             .then(async |index| {
-                Ok::<_, Error>((
+                (
                     index,
                     self.search_repository
                         .fetch_indexed_document_ids(index)
-                        .await?,
-                ))
+                        .await,
+                )
             })
-            .try_collect()
-            .await?;
+            .filter_map(async |(index, result)| match result {
+                Ok(indexed_ids) => Some((index, indexed_ids)),
+                Err(error) => {
+                    tracing::error!(
+                        index = index.as_str(),
+                        error = %error,
+                        "failed to fetch indexed document ids; skipping the index in this resync pass",
+                    );
+
+                    None
+                }
+            })
+            .collect::<HashMap<_, _>>()
+            .await;
+
+        if indexed_ids.is_empty() {
+            return Ok(None);
+        }
 
         Ok(Some(ResyncPass::new(indexed_ids, repository_records)))
     }
@@ -1363,6 +1380,73 @@ mod tests {
             deleted.lock().unwrap().as_slice(),
             &[(SearchIndex::Users, vec![orphaned_id])],
             "リポジトリ側に対応する行がないドキュメントは削除する"
+        );
+    }
+
+    #[tokio::test]
+    async fn resync_keeps_scanning_the_other_indexes_when_one_index_cannot_report_its_documents() {
+        let member_group = UserGroup::new(UserGroupName::new(
+            "members".to_string().try_into().unwrap(),
+        ));
+        let form = form_restricted_to("form", &member_group);
+        let form_id = form.id().into_inner();
+        let missing_user = AccountUser::new(
+            "missing".to_string(),
+            Uuid::from_u128(1).into(),
+            Role::StandardUser,
+        );
+
+        let synced = Arc::new(Mutex::new(Vec::new()));
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_fetch_search_engine_stats()
+            .returning(|| Ok(NumberOfRecordsPerAggregate::default()));
+        search_repository
+            .expect_fetch_indexed_document_ids()
+            .withf(|index| *index == SearchIndex::FormMetaData)
+            .returning(|_| Err(temporary_search_error()));
+        search_repository
+            .expect_fetch_indexed_document_ids()
+            .withf(|index| *index == SearchIndex::Users)
+            .returning(|_| Ok(HashSet::new()));
+        let synced_for_repository = Arc::clone(&synced);
+        search_repository
+            .expect_sync_search_engine()
+            .returning(move |data| {
+                synced_for_repository
+                    .lock()
+                    .unwrap()
+                    .extend(data.iter().map(|(fields, _)| fields.document_id()));
+                Ok(())
+            });
+        search_repository.expect_delete_search_documents().never();
+
+        let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
+        let user_repository = InMemoryUserRepository::default();
+        user_repository.save_user(missing_user.clone());
+        let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
+        let form_label_repository = InMemoryFormLabelRepository;
+        let answer_entry_repository = InMemoryAnswerEntryRepository::default();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_thread_repository: &comment_thread_repository,
+        };
+
+        use_case.resync_search_engine_step(None).await.unwrap();
+
+        let synced = synced.lock().unwrap();
+        assert!(
+            synced.contains(&missing_user.id().into_inner()),
+            "ID を引けなかったインデックスがあっても、他のインデックスの再同期は進める"
+        );
+        assert!(
+            !synced.contains(&form_id),
+            "ID を引けなかったインデックスは今回の巡回の対象にしない"
         );
     }
 
