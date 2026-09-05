@@ -1,0 +1,26 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT COUNT(*) AS `count!: i64`\n                     FROM form_answer_comment_attachments WHERE comment_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "collation": 63,
+          "max_size": 21
+        },
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c3304a63a263da4b17c832e4fca999a1a81f3a18034c0d17df8c732885865d6d"
+}

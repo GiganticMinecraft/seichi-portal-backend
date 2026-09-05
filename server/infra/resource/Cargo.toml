@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+aws-sdk-s3 = { workspace = true }
 chrono = { workspace = true }
 domain = { path = "../../domain" }
 envy = { workspace = true }

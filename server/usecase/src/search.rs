@@ -8,6 +8,7 @@ use crate::{
 };
 use domain::repository::form::answer_entry_repository::{AnswerEntryRepository, AnswerListFilter};
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
+use domain::repository::form::comment_attachment_repository::CommentAttachmentRepository;
 use domain::repository::form::comment_thread_repository::CommentThreadRepository;
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
@@ -20,6 +21,7 @@ use domain::{
             AnswerStatus,
         },
         comment::Comment,
+        comment_attachment::CommentAttachment,
         comment_thread::CommentThread,
         models::{ActiveForm, FormId},
     },
@@ -176,6 +178,7 @@ pub struct SearchUseCase<
     pub user_repository: &'a UserRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
     pub comment_thread_repository: &'a CommentThreadRepo,
+    pub comment_attachment_repository: Option<&'a dyn CommentAttachmentRepository>,
 }
 
 impl<
@@ -436,21 +439,21 @@ impl<
     async fn cross_search_comments_with_authors(
         &self,
         account_user: &AccountUser,
-        comments: Vec<(FormId, Comment)>,
+        comments: Vec<(FormId, Comment, Vec<CommentAttachment>)>,
     ) -> Result<Vec<CrossSearchComment>, Error> {
         let users = resolve_user_references(
             self.user_repository,
             account_user,
             comments
                 .iter()
-                .filter_map(|(_, comment)| comment.commented_by().copied())
+                .filter_map(|(_, comment, _)| comment.commented_by().copied())
                 .collect(),
         )
         .await?;
 
         Ok(comments
             .into_iter()
-            .filter_map(|(form_id, comment)| {
+            .filter_map(|(form_id, comment, attachments)| {
                 let commented_by = match comment.commented_by() {
                     Some(user_id) => users.get(user_id).cloned().map(CommentAuthor::Portal)?,
                     None => comment
@@ -463,6 +466,7 @@ impl<
                     comment: CommentWithAuthor {
                         comment,
                         commented_by,
+                        attachments,
                     },
                 })
             })
@@ -587,35 +591,52 @@ impl<
             .visible_answer_details(account_user, actor_ref, answers, &visible_answers_by_id)
             .await?;
 
-        let visible_comments: Vec<(FormId, Comment)> = stream::iter(comments)
-            .map(|comment| {
-                let visible_answers_by_id = &visible_answers_by_id;
+        let visible_comments: Vec<(FormId, Comment, Vec<CommentAttachment>)> =
+            stream::iter(comments)
+                .map(|comment| {
+                    let visible_answers_by_id = &visible_answers_by_id;
 
-                async move {
-                    let Some(answer) = visible_answers_by_id.get(&comment.answer_id).cloned()
-                    else {
-                        return Ok::<_, Error>(None);
-                    };
-                    let form_id = *answer.form_id();
-                    let Some(thread) = self.comment_thread_for_answer(actor_ref, answer).await?
-                    else {
-                        return Ok::<_, Error>(None);
-                    };
+                    async move {
+                        let Some(answer) = visible_answers_by_id.get(&comment.answer_id).cloned()
+                        else {
+                            return Ok::<_, Error>(None);
+                        };
+                        let form_id = *answer.form_id();
+                        let Some(thread) =
+                            self.comment_thread_for_answer(actor_ref, answer).await?
+                        else {
+                            return Ok::<_, Error>(None);
+                        };
 
-                    Ok::<_, Error>(
-                        thread
+                        let Some(comment) = thread
                             .comments()
                             .iter()
                             .find(|loaded| *loaded.comment_id() == comment.comment_id)
                             .cloned()
-                            .map(|comment| (form_id, comment)),
-                    )
-                }
-            })
-            .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
-            .try_filter_map(|visible| ready(Ok(visible)))
-            .try_collect()
-            .await?;
+                        else {
+                            return Ok(None);
+                        };
+                        let attachments = if comment.commented_by().is_some() {
+                            match self.comment_attachment_repository {
+                                Some(repository) => repository
+                                    .read(&thread, *comment.comment_id())
+                                    .await?
+                                    .into_iter()
+                                    .map(|attachment| attachment.into_inner())
+                                    .collect(),
+                                None => Vec::new(),
+                            }
+                        } else {
+                            Vec::new()
+                        };
+
+                        Ok(Some((form_id, comment, attachments)))
+                    }
+                })
+                .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
+                .try_filter_map(|visible| ready(Ok(visible)))
+                .try_collect()
+                .await?;
         let visible_comments = self
             .cross_search_comments_with_authors(account_user, visible_comments)
             .await?;
@@ -1127,6 +1148,7 @@ mod tests {
             form::{
                 answer_entry_repository::MockAnswerEntryRepository,
                 answer_label_repository::MockAnswerLabelRepository,
+                comment_attachment_repository::MockCommentAttachmentRepository,
                 comment_thread_repository::MockCommentThreadRepository,
             },
             search_repository::MockSearchRepository,
@@ -1206,6 +1228,7 @@ mod tests {
                 user_repository: &self.user_repository,
                 answer_entry_repository: &self.answer_entry_repository,
                 comment_thread_repository: &self.comment_thread_repository,
+                comment_attachment_repository: None,
             }
         }
     }
@@ -1363,6 +1386,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_thread_repository,
+            comment_attachment_repository: None,
         };
 
         let remaining = use_case.resync_search_engine_step(None).await.unwrap();
@@ -1435,6 +1459,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_thread_repository,
+            comment_attachment_repository: None,
         };
 
         use_case.resync_search_engine_step(None).await.unwrap();
@@ -1475,6 +1500,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_thread_repository,
+            comment_attachment_repository: None,
         };
 
         assert!(
@@ -1587,6 +1613,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let output = use_case
@@ -1718,6 +1745,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let answers = use_case
@@ -1794,6 +1822,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let answers = use_case
@@ -1832,6 +1861,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let answers = use_case
@@ -1869,6 +1899,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let answers = use_case
@@ -1969,6 +2000,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let output = use_case
@@ -2099,6 +2131,29 @@ mod tests {
                 form.comment_thread_with_comments(answer, stored_comments.clone())
                     .map_err(Error::from)
             });
+        let attachment = CommentAttachment::new(
+            answer_id,
+            first_comment_id,
+            "first.txt".to_string(),
+            "text/plain".to_string(),
+            5,
+            Utc::now(),
+        )
+        .unwrap();
+        let mut attachment_repository = MockCommentAttachmentRepository::new();
+        attachment_repository
+            .expect_read()
+            .returning(move |thread, comment_id| {
+                if comment_id == first_comment_id {
+                    Ok(vec![
+                        thread
+                            .authorize_comment_attachment_read(attachment.clone())
+                            .unwrap(),
+                    ])
+                } else {
+                    Ok(vec![])
+                }
+            });
         let use_case = SearchUseCase {
             search_repository: &search_repository,
             active_form_repository: &active_form_repository,
@@ -2107,6 +2162,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: Some(&attachment_repository),
         };
 
         let output = use_case
@@ -2127,6 +2183,17 @@ mod tests {
             .map(|comment| *comment.comment.comment.comment_id())
             .collect::<Vec<_>>();
         assert_eq!(comment_ids, vec![second_comment_id, first_comment_id]);
+
+        let first_comment = output
+            .comments
+            .iter()
+            .find(|comment| *comment.comment.comment.comment_id() == first_comment_id)
+            .unwrap();
+        assert_eq!(first_comment.comment.attachments.len(), 1);
+        assert_eq!(
+            first_comment.comment.attachments[0].file_name().as_str(),
+            "first.txt"
+        );
 
         let form_ids = output
             .comments
@@ -2305,6 +2372,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let output = use_case
@@ -2407,6 +2475,7 @@ mod tests {
             user_repository: &user_repository,
             answer_entry_repository: &answer_entry_repository,
             comment_thread_repository: &comment_repository,
+            comment_attachment_repository: None,
         };
 
         let output = use_case

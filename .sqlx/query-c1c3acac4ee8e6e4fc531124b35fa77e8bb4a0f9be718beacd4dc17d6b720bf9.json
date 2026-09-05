@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_form_answer_comment_attachments\n            (id, answer_id, comment_id, file_name, content_type, size, created_at)\n        SELECT a.id, a.answer_id, a.comment_id, a.file_name, a.content_type, a.size, a.created_at\n        FROM form_answer_comment_attachments a\n        INNER JOIN answers answer ON a.answer_id = answer.id\n        WHERE answer.form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c1c3acac4ee8e6e4fc531124b35fa77e8bb4a0f9be718beacd4dc17d6b720bf9"
+}

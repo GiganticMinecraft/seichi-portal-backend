@@ -7,6 +7,7 @@ use domain::{
         comment::{
             Comment, CommentContent, CommentHistoryEntry, CommentHistoryPagePosition, CommentId,
         },
+        comment_attachment::{CommentAttachment, CommentAttachmentBatch, CommentAttachmentId},
         comment_thread::CommentThread,
         models::{ActiveForm, FormId},
     },
@@ -15,6 +16,7 @@ use domain::{
         form::{
             active_form_repository::ActiveFormRepository,
             answer_entry_repository::AnswerEntryRepository,
+            comment_attachment_repository::CommentAttachmentRepository,
             comment_thread_repository::CommentThreadRepository,
         },
         form_submission_restriction_repository::FormSubmissionRestrictionRepository,
@@ -27,6 +29,7 @@ use errors::{
     domain::DomainError,
     usecase::UseCaseError::{AnswerNotFound, FormNotFound, UserNotFound},
 };
+use std::collections::HashMap;
 
 use crate::{
     application_event::{ApplicationActor, ApplicationEvent, ApplicationEventPublisher},
@@ -40,11 +43,13 @@ pub struct CommentUseCase<
     UserRepo: UserRepository,
     AnswerEntryRepo: AnswerEntryRepository,
     CommentThreadRepo: CommentThreadRepository,
+    CommentAttachmentRepo: CommentAttachmentRepository,
 > {
     pub active_form_repository: &'a FormRepo,
     pub user_repository: &'a UserRepo,
     pub answer_entry_repository: &'a AnswerEntryRepo,
     pub comment_thread_repository: &'a CommentThreadRepo,
+    pub comment_attachment_repository: &'a CommentAttachmentRepo,
     pub application_event_publisher: Option<&'a dyn ApplicationEventPublisher>,
 }
 
@@ -53,7 +58,8 @@ impl<
     R2: UserRepository,
     R3: AnswerEntryRepository,
     R4: CommentThreadRepository,
-> CommentUseCase<'_, R1, R2, R3, R4>
+    R5: CommentAttachmentRepository,
+> CommentUseCase<'_, R1, R2, R3, R4, R5>
 {
     async fn readable_form_and_answer(
         &self,
@@ -123,6 +129,7 @@ impl<
         &self,
         actor: &AccountUser,
         comments: Vec<Comment>,
+        mut attachments: HashMap<CommentId, Vec<CommentAttachment>>,
     ) -> Result<Vec<CommentWithAuthor>, Error> {
         let user_ids = comments
             .iter()
@@ -147,6 +154,7 @@ impl<
                     ),
                 };
                 Ok(CommentWithAuthor {
+                    attachments: attachments.remove(comment.comment_id()).unwrap_or_default(),
                     comment,
                     commented_by,
                 })
@@ -167,7 +175,21 @@ impl<
                 answer_id,
             )
             .await?;
-        self.build_comments_with_authors(actor, thread.comments().to_vec())
+        let mut attachments = HashMap::new();
+        for comment in thread.comments() {
+            if comment.commented_by().is_some() {
+                attachments.insert(
+                    *comment.comment_id(),
+                    self.comment_attachment_repository
+                        .read(&thread, *comment.comment_id())
+                        .await?
+                        .into_iter()
+                        .map(|attachment| attachment.into_inner())
+                        .collect(),
+                );
+            }
+        }
+        self.build_comments_with_authors(actor, thread.comments().to_vec(), attachments)
             .await
     }
 
@@ -211,6 +233,105 @@ impl<
             });
         }
         Ok(())
+    }
+
+    pub async fn post_attachments(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        comment_id: CommentId,
+        uploads: Vec<CommentAttachmentUpload>,
+    ) -> Result<(), Error> {
+        let (form, answer) = self
+            .readable_form_and_answer(&Actor::from(actor.clone()), form_id, answer_id)
+            .await?;
+        let thread = self
+            .comment_thread_repository
+            .get_with_comments_for_answer(&form, answer)
+            .await?;
+        let authorized_thread = AuthorizationGuard::<_, Update>::from(thread.into_inner())
+            .try_update(Actor::from(actor.clone()))?;
+        let mut contents = Vec::with_capacity(uploads.len());
+        let mut attachments = Vec::with_capacity(uploads.len());
+        for upload in uploads {
+            let CommentAttachmentUpload {
+                file_name,
+                content_type,
+                content,
+            } = upload;
+            let size = content.len() as u64;
+            attachments.push(CommentAttachment::new(
+                *authorized_thread.answer_id(),
+                comment_id,
+                file_name,
+                content_type,
+                size,
+                Utc::now(),
+            )?);
+            contents.push(content);
+        }
+        let batch = CommentAttachmentBatch::try_new(
+            *authorized_thread.answer_id(),
+            comment_id,
+            attachments,
+        )?;
+        let batch = authorized_thread.authorize_comment_attachment_batch_create(batch)?;
+        self.comment_attachment_repository
+            .create_many(batch, contents)
+            .await
+    }
+
+    pub async fn download_attachment(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        attachment_id: CommentAttachmentId,
+    ) -> Result<(CommentAttachment, Vec<u8>), Error> {
+        let thread = self
+            .comment_thread_with_comments_for_answer(
+                &Actor::from(actor.clone()),
+                form_id,
+                answer_id,
+            )
+            .await?;
+        let attachment = self
+            .comment_attachment_repository
+            .get(&thread, attachment_id)
+            .await?
+            .ok_or(DomainError::NotFound)?;
+        let content = self
+            .comment_attachment_repository
+            .download(&attachment)
+            .await?;
+        Ok((attachment.into_inner(), content))
+    }
+
+    pub async fn delete_attachment(
+        &self,
+        actor: &AccountUser,
+        form_id: FormId,
+        answer_id: AnswerId,
+        attachment_id: CommentAttachmentId,
+    ) -> Result<(), Error> {
+        let (form, answer) = self
+            .readable_form_and_answer(&Actor::from(actor.clone()), form_id, answer_id)
+            .await?;
+        let thread = self
+            .comment_thread_repository
+            .get_with_comments_for_answer(&form, answer)
+            .await?;
+        let attachment = self
+            .comment_attachment_repository
+            .get(&thread, attachment_id)
+            .await?
+            .ok_or(DomainError::NotFound)?
+            .into_inner();
+        let attachment = AuthorizationGuard::<_, Update>::from(thread.into_inner())
+            .try_update(Actor::from(actor.clone()))?
+            .authorize_comment_attachment_delete(attachment)?;
+        self.comment_attachment_repository.delete(attachment).await
     }
 
     pub async fn get_history(
@@ -307,6 +428,9 @@ impl<
             .to_owned()
             .into_inner()
             .into_inner();
+        self.comment_attachment_repository
+            .delete_for_comment(&comment)
+            .await?;
         self.comment_thread_repository
             .delete(&form, comment)
             .await?;
@@ -324,6 +448,12 @@ impl<
     }
 }
 
+pub struct CommentAttachmentUpload {
+    pub file_name: String,
+    pub content_type: String,
+    pub content: Vec<u8>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,6 +468,7 @@ mod tests {
             models::{FormDescription, FormTitle, QuestionSet},
             question::Question,
         },
+        repository::form::comment_attachment_repository::MockCommentAttachmentRepository,
         repository::form::comment_thread_repository::CommentThreadRepository,
         types::authorization_guard::{Create, Update},
     };
@@ -452,11 +583,13 @@ mod tests {
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
         repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
         let thread_repository = ThreadRepository;
+        let attachment_repository = MockCommentAttachmentRepository::new();
         let use_case = CommentUseCase {
             active_form_repository: &repositories.active_form_repository,
             user_repository: &repositories.user_repository,
             answer_entry_repository: &repositories.answer_entry_repository,
             comment_thread_repository: &thread_repository,
+            comment_attachment_repository: &attachment_repository,
             application_event_publisher: None,
         };
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_answer_comment_attachments\n                            (id, answer_id, comment_id, file_name, content_type, size, created_at)\n                        VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "ff98d11ba0013d70cbbc95ee1ea258d6fb97b4b7ac97eab1b121e0446e52e2b0"
+}

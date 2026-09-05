@@ -21,7 +21,7 @@ publish = false
 
 [workspace.dependencies]
 tokio = { version = "1.53.1", features = ["full"] }
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["multipart"] }
 axum-extra = { version = "0.12.6", features = ["query", "typed-header"] }
 serde = { version = "1.0.229", features = ["derive"] }
 anyhow = "1.0.104"
@@ -51,6 +51,7 @@ redis = { version = "1.6.0", features = ["tokio-comp"] }
 meilisearch-sdk = "0.33.0"
 serenity = "0.12.5"
 lapin = "4.10.0"
+aws-sdk-s3 = "1.145.0"
 utoipa = { version = "5.5.0", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }

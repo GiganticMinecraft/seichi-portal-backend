@@ -2,6 +2,7 @@ pub mod database;
 pub mod external;
 pub mod health_check;
 pub mod messaging;
+pub mod object_storage;
 pub mod outgoing;
 pub mod rate_limit;
 pub mod records;

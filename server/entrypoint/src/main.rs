@@ -34,6 +34,7 @@ use presentation::handlers::search_handler::{
 use presentation::rate_limit::{RateLimitState, middleware as rate_limit_middleware};
 use presentation::session::SessionPolicy;
 use presentation::turnstile::{TurnstileState, middleware as turnstile_middleware};
+use resource::object_storage::GarageObjectStorage;
 use resource::rate_limit::ValkeyRateLimitStore;
 use resource::turnstile::TurnstileSiteverifyClient;
 use resource::{database::connection::ConnectionPool, repository::Repository};
@@ -112,7 +113,14 @@ async fn main() -> anyhow::Result<()> {
         messaging_conn.clone(),
         shared_manager.clone(),
     ));
-    let shared_repository = Repository::new(conn).into_shared(health_check_repo);
+    let repository = Repository::new(conn);
+    let repository = if std::env::var_os("S3_ENDPOINT").is_some() {
+        repository.with_object_storage(Arc::new(GarageObjectStorage::from_environment()?))
+    } else {
+        tracing::warn!("S3_ENDPOINT is not set; comment attachment uploads are disabled");
+        repository
+    };
+    let shared_repository = repository.into_shared(health_check_repo);
 
     let rate_limit_store =
         Arc::new(ValkeyRateLimitStore::from_environment().map_err(|error| {

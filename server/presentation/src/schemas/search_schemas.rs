@@ -290,6 +290,7 @@ mod tests {
                 comment: CommentWithAuthor {
                     comment,
                     commented_by: CommentAuthor::Portal(answer_author),
+                    attachments: vec![],
                 },
             }],
         });

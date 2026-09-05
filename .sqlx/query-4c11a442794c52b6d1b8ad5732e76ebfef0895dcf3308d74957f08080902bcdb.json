@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_answer_comment_attachments\n            (id, answer_id, comment_id, file_name, content_type, size, created_at)\n        SELECT id, answer_id, comment_id, file_name, content_type, size, created_at\n        FROM archived_form_answer_comment_attachments\n        WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4c11a442794c52b6d1b8ad5732e76ebfef0895dcf3308d74957f08080902bcdb"
+}
