@@ -8,7 +8,6 @@ use crate::form::{
 };
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
-use errors::Error;
 use serde::{Deserialize, Serialize};
 use types::natural_f32::NonNegativeF32;
 use uuid::Uuid;
@@ -28,6 +27,34 @@ pub enum SearchableFields {
     LabelForFormAnswers(LabelForFormAnswers),
     LabelForForms(LabelForForms),
     Users(Users),
+}
+
+impl SearchableFields {
+    /// このドキュメントが属する検索インデックス。
+    pub fn index(&self) -> SearchIndex {
+        match self {
+            Self::FormMetaData(_) => SearchIndex::FormMetaData,
+            Self::AnswerTitle(_) => SearchIndex::Answers,
+            Self::RealAnswers(_) => SearchIndex::RealAnswers,
+            Self::FormAnswerComments(_) => SearchIndex::FormAnswerComments,
+            Self::LabelForFormAnswers(_) => SearchIndex::LabelForFormAnswers,
+            Self::LabelForForms(_) => SearchIndex::LabelForForms,
+            Self::Users(_) => SearchIndex::Users,
+        }
+    }
+
+    /// 検索エンジン上の主キーとして使うドキュメント ID。
+    pub fn document_id(&self) -> Uuid {
+        match self {
+            Self::FormMetaData(data) => data.id.into_inner(),
+            Self::AnswerTitle(answer) => answer.id.into_inner(),
+            Self::RealAnswers(answers) => answers.id.into_inner(),
+            Self::FormAnswerComments(comments) => comments.id.into_inner(),
+            Self::LabelForFormAnswers(label) => label.id.into_inner(),
+            Self::LabelForForms(label) => label.id.into_inner(),
+            Self::Users(users) => users.id,
+        }
+    }
 }
 
 pub type SearchableFieldsWithOperation = (SearchableFields, Operation);
@@ -115,6 +142,45 @@ pub struct Users {
     pub name: String,
 }
 
+/// 検索エンジン上のインデックス。
+///
+/// [`SearchableFields`] は 1 件のドキュメントを表すのに対し、こちらはドキュメントの置き場所を表す。
+/// 件数比較や再同期のように、ドキュメントの中身ではなくインデックス単位で扱いたい処理で使う。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SearchIndex {
+    FormMetaData,
+    Answers,
+    RealAnswers,
+    FormAnswerComments,
+    LabelForFormAnswers,
+    LabelForForms,
+    Users,
+}
+
+impl SearchIndex {
+    pub const ALL: [Self; 7] = [
+        Self::FormMetaData,
+        Self::Answers,
+        Self::RealAnswers,
+        Self::FormAnswerComments,
+        Self::LabelForFormAnswers,
+        Self::LabelForForms,
+        Self::Users,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FormMetaData => "form_meta_data",
+            Self::Answers => "answers",
+            Self::RealAnswers => "real_answers",
+            Self::FormAnswerComments => "form_answer_comments",
+            Self::LabelForFormAnswers => "label_for_form_answers",
+            Self::LabelForForms => "label_for_forms",
+            Self::Users => "users",
+        }
+    }
+}
+
 #[derive(Getters, Default, Debug)]
 pub struct NumberOfRecordsPerAggregate {
     pub form_meta_data: NumberOfRecords,
@@ -127,59 +193,30 @@ pub struct NumberOfRecordsPerAggregate {
 }
 
 impl NumberOfRecordsPerAggregate {
-    pub fn try_into_sync_rate(&self, other: &Self) -> Result<SyncRate, Error> {
-        let Self {
-            form_meta_data,
-            answers,
-            real_answers,
-            form_answer_comments,
-            label_for_form_answers,
-            label_for_forms,
-            users,
-        } = self;
+    pub fn records_of(&self, index: SearchIndex) -> NumberOfRecords {
+        match index {
+            SearchIndex::FormMetaData => self.form_meta_data,
+            SearchIndex::Answers => self.answers,
+            SearchIndex::RealAnswers => self.real_answers,
+            SearchIndex::FormAnswerComments => self.form_answer_comments,
+            SearchIndex::LabelForFormAnswers => self.label_for_form_answers,
+            SearchIndex::LabelForForms => self.label_for_forms,
+            SearchIndex::Users => self.users,
+        }
+    }
 
-        let Self {
-            form_meta_data: other_form_meta_data,
-            answers: other_answers,
-            real_answers: other_real_answers,
-            form_answer_comments: other_form_answer_comments,
-            label_for_form_answers: other_label_for_form_answers,
-            label_for_forms: other_label_for_forms,
-            users: other_users,
-        } = other;
-
-        let form_meta_data_sync_rate = SyncRate::new(NonNegativeF32::try_new(
-            form_meta_data.0 as f32 / other_form_meta_data.0 as f32,
-        )?);
-        let answers_sync_rate = SyncRate::new(NonNegativeF32::try_new(
-            answers.0 as f32 / other_answers.0 as f32,
-        )?);
-        let real_answers_sync_rate = SyncRate::new(NonNegativeF32::try_new(
-            real_answers.0 as f32 / other_real_answers.0 as f32,
-        )?);
-
-        let form_answer_comments_sync_rate = SyncRate::new(NonNegativeF32::try_new(
-            form_answer_comments.0 as f32 / other_form_answer_comments.0 as f32,
-        )?);
-        let label_for_form_answers_sync_rate = SyncRate::new(NonNegativeF32::try_new(
-            label_for_form_answers.0 as f32 / other_label_for_form_answers.0 as f32,
-        )?);
-        let label_for_forms_sync_rate = SyncRate::new(NonNegativeF32::try_new(
-            label_for_forms.0 as f32 / other_label_for_forms.0 as f32,
-        )?);
-        let users_sync_rate = SyncRate::new(NonNegativeF32::try_new(
-            users.0 as f32 / other_users.0 as f32,
-        )?);
-
-        Ok(SyncRate::average(&[
-            form_meta_data_sync_rate,
-            answers_sync_rate,
-            real_answers_sync_rate,
-            form_answer_comments_sync_rate,
-            label_for_form_answers_sync_rate,
-            label_for_forms_sync_rate,
-            users_sync_rate,
-        ]))
+    /// 検索エンジン側 (`self`) と永続化側 (`other`) の件数を突き合わせ、
+    /// 同期率が [`SyncRate::OUT_OF_SYNC_THRESHOLD`] を下回るインデックスを返す。
+    ///
+    /// 平均ではなくインデックス単位で判定するのは、乖離しているインデックスだけを
+    /// 再同期の走査対象にするため。
+    pub fn out_of_sync_indexes(&self, other: &Self) -> Vec<SearchIndex> {
+        SearchIndex::ALL
+            .into_iter()
+            .filter(|&index| {
+                SyncRate::between(self.records_of(index), other.records_of(index)).is_out_of_sync()
+            })
+            .collect()
     }
 }
 
@@ -205,11 +242,20 @@ impl SyncRate {
         })
     }
 
-    pub fn average(sync_rates: &[Self]) -> Self {
-        let sum = sync_rates.iter().map(|rate| rate.0).sum::<NonNegativeF32>();
-        let size = unsafe { NonNegativeF32::new_unchecked(sync_rates.len() as f32) };
+    /// 2 つの件数の同期率を求める。
+    ///
+    /// 検索エンジン側にドキュメントが残りすぎている場合も乖離として扱いたいので、
+    /// 小さい方を大きい方で割ることで、どちら向きのずれも 1.0 未満になるようにしている。
+    pub fn between(left: NumberOfRecords, right: NumberOfRecords) -> Self {
+        let larger = left.0.max(right.0);
 
-        SyncRate::new(sum / size)
+        if larger == 0 {
+            // 同期すべきデータが存在しない
+            return Self(unsafe { NonNegativeF32::new_unchecked(1.0) });
+        }
+
+        // 商は必ず 0.0..=1.0 に収まる
+        Self(unsafe { NonNegativeF32::new_unchecked(left.0.min(right.0) as f32 / larger as f32) })
     }
 
     /// [`SyncRate`] が OutOfSync となる閾値
@@ -219,5 +265,55 @@ impl SyncRate {
     /// 同期率が [`Self::OUT_OF_SYNC_THRESHOLD`] を基準とした同期率を下回っているかどうかを判定する
     pub fn is_out_of_sync(&self) -> bool {
         self.0 < Self::OUT_OF_SYNC_THRESHOLD.0.into_inner()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NumberOfRecords, NumberOfRecordsPerAggregate, SearchIndex};
+
+    #[test]
+    fn out_of_sync_indexes_reports_only_the_diverging_index() {
+        let search_engine = NumberOfRecordsPerAggregate {
+            answers: NumberOfRecords(90),
+            users: NumberOfRecords(100),
+            ..Default::default()
+        };
+        let repository = NumberOfRecordsPerAggregate {
+            answers: NumberOfRecords(100),
+            users: NumberOfRecords(100),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            search_engine.out_of_sync_indexes(&repository),
+            vec![SearchIndex::Answers]
+        );
+    }
+
+    #[test]
+    fn out_of_sync_indexes_reports_an_index_holding_more_documents_than_the_repository() {
+        let search_engine = NumberOfRecordsPerAggregate {
+            users: NumberOfRecords(100),
+            ..Default::default()
+        };
+        let repository = NumberOfRecordsPerAggregate {
+            users: NumberOfRecords(90),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            search_engine.out_of_sync_indexes(&repository),
+            vec![SearchIndex::Users]
+        );
+    }
+
+    #[test]
+    fn out_of_sync_indexes_is_empty_when_nothing_is_stored() {
+        assert!(
+            NumberOfRecordsPerAggregate::default()
+                .out_of_sync_indexes(&NumberOfRecordsPerAggregate::default())
+                .is_empty()
+        );
     }
 }

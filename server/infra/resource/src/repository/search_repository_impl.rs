@@ -8,10 +8,12 @@ use domain::{
     repository::search_repository::SearchRepository,
     search::models::{
         AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
-        NumberOfRecordsPerAggregate, SearchableFieldsWithOperation, UserSearchHit,
+        NumberOfRecordsPerAggregate, SearchIndex, SearchableFieldsWithOperation, UserSearchHit,
     },
 };
 use errors::Error;
+use std::collections::HashSet;
+use uuid::Uuid;
 
 #[async_trait]
 impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Client> {
@@ -78,6 +80,26 @@ impl<Client: DatabaseComponents + 'static> SearchRepository for Repository<Clien
         self.client
             .search()
             .sync_search_engine(data)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn fetch_indexed_document_ids(&self, index: SearchIndex) -> Result<HashSet<Uuid>, Error> {
+        self.client
+            .search()
+            .fetch_indexed_document_ids(index)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_search_documents(
+        &self,
+        index: SearchIndex,
+        ids: Vec<Uuid>,
+    ) -> Result<(), Error> {
+        self.client
+            .search()
+            .delete_search_documents(index, ids)
             .await
             .map_err(Into::into)
     }

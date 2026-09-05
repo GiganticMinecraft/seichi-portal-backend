@@ -12,10 +12,13 @@ use domain::repository::form::comment_thread_repository::CommentThreadRepository
 use domain::repository::form::form_label_repository::FormLabelRepository;
 use domain::repository::user_repository::UserRepository;
 use domain::{
-    account::models::AccountUser,
+    account::models::{AccountUser, UserPagePosition},
     auth::Actor,
     form::{
-        answer::{AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerStatus},
+        answer::{
+            AnswerAuthor, AnswerAuthorDisclosure, AnswerEntry, AnswerId, AnswerPagePosition,
+            AnswerStatus,
+        },
         comment::Comment,
         comment_thread::CommentThread,
         models::{ActiveForm, FormId},
@@ -27,10 +30,12 @@ use domain::{
     search::models::{
         AnswerSearchHit, AnswerTitleSearchDocument, FormAnswerComments, FormMetaData,
         LabelForFormAnswers, LabelForForms, NumberOfRecords, NumberOfRecordsPerAggregate,
-        Operation, RealAnswers, SearchableFields, SearchableFieldsWithOperation, UserSearchHit,
-        Users,
+        Operation, RealAnswers, SearchIndex, SearchableFields, SearchableFieldsWithOperation,
+        UserSearchHit, Users,
     },
-    types::authorization_guard::{Allowed, AuthorizationGuard, Read},
+    types::authorization_guard::{
+        Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Read,
+    },
 };
 use errors::{Error, domain::DomainError};
 use futures::{StreamExt, TryStreamExt, stream, try_join};
@@ -43,12 +48,116 @@ use std::{
 use tokio::sync::{mpsc::Receiver, watch};
 use tokio::time;
 use tracing::Instrument;
+use uuid::Uuid;
 
 const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
 #[cfg(not(test))]
 const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::from_secs(10);
 #[cfg(test)]
 const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::ZERO;
+const OUT_OF_SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+/// 1 回の再同期で走査するドキュメント数の上限。
+///
+/// 全件を一度に処理すると、検索エンジンへの投入とデータベースの読み出しが同時に跳ね上がるため、
+/// ここまで走査したら打ち切り、続きは次の [`OUT_OF_SYNC_CHECK_INTERVAL`] で再開する。
+const RESYNC_DOCUMENT_SCAN_BUDGET: usize = 2_000;
+
+fn resync_page_limit() -> PageLimit {
+    PageLimit::default_limit()
+}
+
+fn next_page_request<Position>(next: Option<Position>) -> Option<PageRequest<Position>> {
+    next.map(|position| PageRequest::after(position, resync_page_limit()))
+}
+
+/// 1 ページ分の検索ドキュメントと、続きを読むための次のページ要求。
+type DocumentPage<Position> = (
+    Vec<SearchableFieldsWithOperation>,
+    Option<PageRequest<Position>>,
+);
+
+/// システムとして読み取った集約を、検索エンジンへ投入するドキュメントへ投影する。
+fn system_readable_documents<T: AuthorizationGuardDefinitions>(
+    guards: Vec<AuthorizationGuard<T, Read>>,
+    into_searchable_fields: impl Fn(&T) -> SearchableFields,
+) -> Result<Vec<SearchableFieldsWithOperation>, Error> {
+    guards
+        .into_iter()
+        .map(|guard| {
+            let value = guard.try_read(Actor::System)?.into_inner();
+
+            Ok((into_searchable_fields(&value), Operation::Update))
+        })
+        .collect()
+}
+
+/// 再同期 1 巡分の進捗。
+///
+/// 1 回の [`SearchUseCase::resync_search_engine_step`] では走査しきれないため、
+/// 走査位置と検索エンジン側の ID 集合を呼び出しをまたいで持ち回る。
+struct ResyncPass {
+    /// 巡回開始時点で検索エンジンに存在した、乖離しているインデックスのドキュメント ID。
+    ///
+    /// 走査で見つかった ID は取り除いていくので、巡回し終えたときに残っている ID が
+    /// リポジトリ側に対応する行を持たないドキュメントになる。
+    indexed_ids: HashMap<SearchIndex, HashSet<Uuid>>,
+    /// 巡回開始時点のリポジトリ側の件数。走査漏れの検出に使う。
+    repository_records: NumberOfRecordsPerAggregate,
+    scanned: HashMap<SearchIndex, usize>,
+    small_aggregates_done: bool,
+    /// 次に読むページ。`None` は走査済みを表す。
+    users: Option<PageRequest<UserPagePosition>>,
+    answers: Option<PageRequest<AnswerPagePosition>>,
+}
+
+impl ResyncPass {
+    fn new(
+        indexed_ids: HashMap<SearchIndex, HashSet<Uuid>>,
+        repository_records: NumberOfRecordsPerAggregate,
+    ) -> Self {
+        Self {
+            indexed_ids,
+            repository_records,
+            scanned: HashMap::new(),
+            small_aggregates_done: false,
+            users: Some(PageRequest::first(resync_page_limit())),
+            answers: Some(PageRequest::first(resync_page_limit())),
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.small_aggregates_done && self.users.is_none() && self.answers.is_none()
+    }
+
+    /// `index` が今回の巡回の対象かどうか。
+    fn is_scanning(&self, index: SearchIndex) -> bool {
+        self.indexed_ids.contains_key(&index)
+    }
+
+    /// 走査したドキュメントのうち、検索エンジンに存在しないものだけを返す。
+    ///
+    /// 存在が確認できたドキュメントは [`Self::indexed_ids`] から取り除く。
+    fn take_missing(
+        &mut self,
+        documents: Vec<SearchableFieldsWithOperation>,
+    ) -> Vec<SearchableFieldsWithOperation> {
+        documents
+            .iter()
+            .map(|(fields, _)| fields.index())
+            .filter(|index| self.indexed_ids.contains_key(index))
+            .for_each(|index| *self.scanned.entry(index).or_default() += 1);
+
+        documents
+            .into_iter()
+            .filter(|(fields, _)| {
+                // 乖離していないインデックスは `indexed_ids` を持たないので、投入対象にならない
+                self.indexed_ids
+                    .get_mut(&fields.index())
+                    .is_some_and(|indexed_ids| !indexed_ids.remove(&fields.document_id()))
+            })
+            .collect()
+    }
+}
 
 pub struct SearchUseCase<
     'a,
@@ -83,30 +192,6 @@ impl<
         &self,
     ) -> Result<Vec<AuthorizationGuard<ActiveForm, Read>>, Error> {
         self.active_form_repository.list_all().await
-    }
-
-    async fn list_all_answer_entries(
-        &self,
-        forms: &[Allowed<ActiveForm, Read>],
-    ) -> Result<Vec<Allowed<AnswerEntry, Read>>, Error> {
-        let mut request = PageRequest::first(PageLimit::default_limit());
-        let mut answers = Vec::new();
-
-        loop {
-            let page = self
-                .answer_entry_repository
-                .list_all(forms, request, AnswerListFilter::default())
-                .await?;
-            let (items, next) = page.into_parts();
-            answers.extend(items);
-
-            let Some(next) = next else {
-                break;
-            };
-            request = PageRequest::after(next, PageLimit::default_limit());
-        }
-
-        Ok(answers)
     }
 
     async fn visible_answer_entries_by_id(
@@ -605,7 +690,11 @@ impl<
         &self,
         mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
-        let mut interval = time::interval(Duration::from_secs(60));
+        let mut interval = time::interval(OUT_OF_SYNC_CHECK_INTERVAL);
+        // 1 回の再同期が interval より長引いても、溜まった tick が一斉に発火して
+        // 再同期を多重に走らせないようにする
+        interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
+        let mut pass = None;
 
         loop {
             if *shutdown_status.borrow() {
@@ -620,8 +709,11 @@ impl<
                     }
                 },
                 _ = interval.tick() => {
-                    if let Err(error) = self.check_and_resync_search_engine().await {
-                        tracing::error!(error = %error, "failed to check search engine synchronization");
+                    match self.resync_search_engine_step(pass.take()).await {
+                        Ok(next) => pass = next,
+                        Err(error) => {
+                            tracing::error!(error = %error, "failed to check search engine synchronization");
+                        }
                     }
                 }
             }
@@ -630,14 +722,8 @@ impl<
         Ok(())
     }
 
-    /// 検索エンジンとリポジトリのレコード数を比較し、乖離があれば全件再同期する。
-    ///
-    /// 定期実行タスクのため、実行ごとに新しいルートスパンを作る。
-    #[tracing::instrument(name = "search_engine.watch_out_of_sync", parent = None, skip_all)]
-    async fn check_and_resync_search_engine(&self) -> Result<(), Error> {
-        let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
-
-        let repository_records = NumberOfRecordsPerAggregate {
+    async fn repository_records(&self) -> Result<NumberOfRecordsPerAggregate, Error> {
+        Ok(NumberOfRecordsPerAggregate {
             form_meta_data: NumberOfRecords(self.active_form_repository.size().await?),
             answers: NumberOfRecords(self.answer_entry_repository.size().await?),
             real_answers: NumberOfRecords(self.answer_entry_repository.content_size().await?),
@@ -647,129 +733,312 @@ impl<
             ),
             label_for_forms: NumberOfRecords(self.form_label_repository.size().await?),
             users: NumberOfRecords(self.user_repository.size().await?),
+        })
+    }
+
+    async fn readable_forms_for_system(&self) -> Result<Vec<Allowed<ActiveForm, Read>>, Error> {
+        let system = Actor::System;
+
+        self.list_all_form_guards()
+            .await?
+            .into_iter()
+            .map(|guard| guard.try_read(system.clone()).map_err(Into::into))
+            .collect()
+    }
+
+    /// 検索エンジンとリポジトリの件数を比較し、乖離しているインデックスを少しずつ再同期する。
+    ///
+    /// 数万件規模で全件を一度に投入すると検索エンジンの CPU とファイルディスクリプタを使い切ってしまうため、
+    /// 1 回の呼び出しで走査するドキュメント数を [`RESYNC_DOCUMENT_SCAN_BUDGET`] 件までに制限し、
+    /// 途中経過を [`ResyncPass`] として返して次の呼び出しで再開する。
+    ///
+    /// 定期実行タスクのため、実行ごとに新しいルートスパンを作る。
+    #[tracing::instrument(name = "search_engine.watch_out_of_sync", parent = None, skip_all)]
+    async fn resync_search_engine_step(
+        &self,
+        pass: Option<ResyncPass>,
+    ) -> Result<Option<ResyncPass>, Error> {
+        let started = match pass {
+            Some(pass) => Some(pass),
+            None => self.start_resync_pass().await?,
+        };
+        let Some(mut pass) = started else {
+            return Ok(None);
         };
 
-        let sync_rate = search_engine_records.try_into_sync_rate(&repository_records)?;
+        let mut budget = RESYNC_DOCUMENT_SCAN_BUDGET;
 
-        if sync_rate.is_out_of_sync() {
-            let system = Actor::System;
+        if !pass.small_aggregates_done {
+            self.resync_small_aggregates(&mut pass, &mut budget).await?;
+            pass.small_aggregates_done = true;
+        }
 
-            let form_guards = self
-                .list_all_form_guards()
-                .await?
-                .into_iter()
-                .map(|guard| guard.try_read(system.clone()).map_err(Into::into))
-                .collect::<Result<Vec<_>, Error>>()?;
+        self.resync_users(&mut pass, &mut budget).await?;
+        self.resync_answers(&mut pass, &mut budget).await?;
 
-            let forms = form_guards
-                .iter()
-                .map(|form| {
-                    Ok((
-                        SearchableFields::FormMetaData(FormMetaData {
-                            id: form.value().id().to_owned(),
-                            title: form.value().title().to_owned(),
-                            description: form.value().description().to_owned(),
-                        }),
-                        Operation::Update,
-                    ))
+        if !pass.is_complete() {
+            return Ok(Some(pass));
+        }
+
+        self.delete_orphaned_documents(pass).await?;
+
+        Ok(None)
+    }
+
+    /// 乖離しているインデックスを特定し、再同期を始める必要があれば [`ResyncPass`] を作る。
+    async fn start_resync_pass(&self) -> Result<Option<ResyncPass>, Error> {
+        let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
+        let repository_records = self.repository_records().await?;
+        let out_of_sync_indexes = search_engine_records.out_of_sync_indexes(&repository_records);
+
+        if out_of_sync_indexes.is_empty() {
+            return Ok(None);
+        }
+
+        tracing::info!(
+            indexes = ?out_of_sync_indexes.iter().map(|index| index.as_str()).collect::<Vec<_>>(),
+            "search engine is out of sync; starting incremental resync",
+        );
+
+        let indexed_ids = stream::iter(out_of_sync_indexes)
+            .then(async |index| {
+                Ok::<_, Error>((
+                    index,
+                    self.search_repository
+                        .fetch_indexed_document_ids(index)
+                        .await?,
+                ))
+            })
+            .try_collect()
+            .await?;
+
+        Ok(Some(ResyncPass::new(indexed_ids, repository_records)))
+    }
+
+    /// フォームとラベルのように、件数が回答やユーザーほど増えないアグリゲートをまとめて走査する。
+    async fn resync_small_aggregates(
+        &self,
+        pass: &mut ResyncPass,
+        budget: &mut usize,
+    ) -> Result<(), Error> {
+        let forms = self
+            .readable_forms_for_system()
+            .await?
+            .into_iter()
+            .map(|form| {
+                (
+                    SearchableFields::FormMetaData(FormMetaData {
+                        id: form.value().id().to_owned(),
+                        title: form.value().title().to_owned(),
+                        description: form.value().description().to_owned(),
+                    }),
+                    Operation::Update,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let labels_for_forms =
+            system_readable_documents(self.form_label_repository.fetch_labels().await?, |label| {
+                SearchableFields::LabelForForms(LabelForForms {
+                    id: label.id().to_owned(),
+                    name: label.name().to_owned().into_inner().into_inner(),
                 })
-                .collect::<Result<Vec<_>, Error>>()?;
+            })?;
 
-            let answer_entries = self.list_all_answer_entries(&form_guards).await?;
-
-            let answer_documents = answer_search_documents(&answer_entries);
-
-            let comments = self
-                .comment_search_documents(&form_guards, &answer_entries)
-                .await?;
-
-            let labels_for_forms = self
-                .form_label_repository
-                .fetch_labels()
-                .await?
-                .into_iter()
-                .map(|guard| {
-                    let label = guard.try_read(system.clone())?.into_inner();
-
-                    Ok((
-                        SearchableFields::LabelForForms(LabelForForms {
-                            id: label.id().to_owned(),
-                            name: label.name().to_owned().into_inner().into_inner(),
-                        }),
-                        Operation::Update,
-                    ))
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-
-            let labels_for_answers = self
-                .form_answer_label_repository
+        let labels_for_answers = system_readable_documents(
+            self.form_answer_label_repository
                 .get_labels_for_answers()
-                .await?
-                .into_iter()
-                .map(|guard| {
-                    let label = guard.try_read(system.clone())?.into_inner();
-
-                    Ok((
-                        SearchableFields::LabelForFormAnswers(LabelForFormAnswers {
-                            id: label.id().to_owned(),
-                            name: label.name().to_owned().into_inner(),
-                        }),
-                        Operation::Update,
-                    ))
+                .await?,
+            |label| {
+                SearchableFields::LabelForFormAnswers(LabelForFormAnswers {
+                    id: label.id().to_owned(),
+                    name: label.name().to_owned().into_inner(),
                 })
-                .collect::<Result<Vec<_>, Error>>()?;
+            },
+        )?;
 
-            let users = self
-                .user_repository
-                .fetch_all_users()
-                .await?
+        self.sync_missing_documents(
+            pass,
+            forms
                 .into_iter()
-                .map(|guard| {
-                    let user = guard.try_read(system.clone())?.into_inner();
-
-                    Ok((
-                        SearchableFields::Users(Users {
-                            id: user.id().into_inner(),
-                            name: user.name().to_owned(),
-                        }),
-                        Operation::Update,
-                    ))
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-
-            let data = forms
-                .into_iter()
-                .chain(answer_documents)
-                .chain(comments)
                 .chain(labels_for_forms)
                 .chain(labels_for_answers)
-                .chain(users)
-                .collect::<Vec<_>>();
+                .collect(),
+            budget,
+        )
+        .await
+    }
 
-            self.search_repository
-                .sync_search_engine(data.as_slice())
-                .await?;
+    /// ユーザーを 1 ページ分だけ検索ドキュメントへ投影し、次のページの要求と一緒に返す。
+    async fn user_document_page(
+        &self,
+        request: PageRequest<UserPagePosition>,
+    ) -> Result<DocumentPage<UserPagePosition>, Error> {
+        let (users, next) = self
+            .user_repository
+            .fetch_users_page(request)
+            .await?
+            .into_parts();
+
+        Ok((
+            system_readable_documents(users, |user| {
+                SearchableFields::Users(Users {
+                    id: user.id().into_inner(),
+                    name: user.name().to_owned(),
+                })
+            })?,
+            next_page_request(next),
+        ))
+    }
+
+    /// 回答を 1 ページ分だけ検索ドキュメントへ投影し、次のページの要求と一緒に返す。
+    ///
+    /// コメントは回答 1 件ごとにスレッドを引く必要があるため、`with_comments` のときだけ取得する。
+    async fn answer_document_page(
+        &self,
+        forms: &[Allowed<ActiveForm, Read>],
+        request: PageRequest<AnswerPagePosition>,
+        with_comments: bool,
+    ) -> Result<DocumentPage<AnswerPagePosition>, Error> {
+        let (answers, next) = self
+            .answer_entry_repository
+            .list_all(forms, request, AnswerListFilter::default())
+            .await?
+            .into_parts();
+
+        let comments = if with_comments {
+            self.comment_search_documents(forms, &answers).await?
+        } else {
+            Vec::new()
+        };
+
+        Ok((
+            answer_search_documents(&answers)
+                .into_iter()
+                .chain(comments)
+                .collect(),
+            next_page_request(next),
+        ))
+    }
+
+    async fn resync_users(&self, pass: &mut ResyncPass, budget: &mut usize) -> Result<(), Error> {
+        while let Some(request) = pass.users.clone().filter(|_| *budget > 0) {
+            let (documents, next) = self.user_document_page(request).await?;
+
+            self.sync_missing_documents(pass, documents, budget).await?;
+            pass.users = next;
         }
+
         Ok(())
     }
 
+    async fn resync_answers(&self, pass: &mut ResyncPass, budget: &mut usize) -> Result<(), Error> {
+        if pass.answers.is_none() {
+            return Ok(());
+        }
+
+        let forms = self.readable_forms_for_system().await?;
+        let with_comments = pass.is_scanning(SearchIndex::FormAnswerComments);
+
+        while let Some(request) = pass.answers.clone().filter(|_| *budget > 0) {
+            let (documents, next) = self
+                .answer_document_page(&forms, request, with_comments)
+                .await?;
+
+            self.sync_missing_documents(pass, documents, budget).await?;
+            pass.answers = next;
+        }
+
+        Ok(())
+    }
+
+    /// 走査したドキュメントのうち、検索エンジンに存在しないものだけを投入する。
+    async fn sync_missing_documents(
+        &self,
+        pass: &mut ResyncPass,
+        documents: Vec<SearchableFieldsWithOperation>,
+        budget: &mut usize,
+    ) -> Result<(), Error> {
+        *budget = budget.saturating_sub(documents.len());
+
+        let missing = pass.take_missing(documents);
+
+        if missing.is_empty() {
+            return Ok(());
+        }
+
+        self.search_repository.sync_search_engine(&missing).await
+    }
+
+    /// 走査し終えても検索エンジンに残っていた、リポジトリ側に対応する行がないドキュメントを削除する。
+    ///
+    /// 走査した件数がリポジトリの件数に届いていないインデックスは、
+    /// 走査漏れと区別できないため削除しない。
+    async fn delete_orphaned_documents(&self, pass: ResyncPass) -> Result<(), Error> {
+        let ResyncPass {
+            indexed_ids,
+            scanned,
+            repository_records,
+            ..
+        } = pass;
+
+        let deletions = indexed_ids
+            .into_iter()
+            .filter(|(_, orphaned_ids)| !orphaned_ids.is_empty())
+            .filter(|(index, orphaned_ids)| {
+                let scanned = scanned.get(index).copied().unwrap_or_default();
+                let expected = repository_records.records_of(*index).0 as usize;
+                let covered_whole_repository = scanned >= expected;
+
+                if !covered_whole_repository {
+                    tracing::warn!(
+                        index = index.as_str(),
+                        scanned,
+                        expected,
+                        orphaned = orphaned_ids.len(),
+                        "skipped deleting search documents because the scan did not cover the whole repository",
+                    );
+                }
+
+                covered_whole_repository
+            })
+            .collect::<Vec<_>>();
+
+        stream::iter(deletions)
+            .map(Ok)
+            .try_for_each(async |(index, orphaned_ids): (_, HashSet<_>)| {
+                tracing::info!(
+                    index = index.as_str(),
+                    count = orphaned_ids.len(),
+                    "deleting search documents that no longer exist in the repository",
+                );
+
+                self.search_repository
+                    .delete_search_documents(index, orphaned_ids.into_iter().collect())
+                    .await
+            })
+            .await
+    }
+
     pub async fn initialize_search_engine(&self) -> Result<(), Error> {
-        if self.search_repository.initialize_search_engine().await? {
-            let system = Actor::System;
-            let form_guards = self
-                .list_all_form_guards()
-                .await?
-                .into_iter()
-                .map(|guard| guard.try_read(system.clone()).map_err(Into::into))
-                .collect::<Result<Vec<_>, Error>>()?;
-            let answer_entries = self.list_all_answer_entries(&form_guards).await?;
-            let documents = answer_search_documents(&answer_entries);
-            let comments = self
-                .comment_search_documents(&form_guards, &answer_entries)
+        if !self.search_repository.initialize_search_engine().await? {
+            return Ok(());
+        }
+
+        let forms = self.readable_forms_for_system().await?;
+        // 数万件規模の回答をすべてメモリに載せないよう、ページ単位で投影して投入する
+        let mut request = Some(PageRequest::first(resync_page_limit()));
+
+        while let Some(page_request) = request {
+            let (documents, next) = self
+                .answer_document_page(&forms, page_request, true)
                 .await?;
+
             self.search_repository
-                .sync_search_engine(&documents.into_iter().chain(comments).collect::<Vec<_>>())
+                .sync_search_engine(&documents)
                 .await?;
+
+            request = next;
         }
 
         Ok(())
@@ -997,6 +1266,139 @@ mod tests {
         assert_eq!(
             calls.lock().unwrap().as_slice(),
             &[first_id, first_id, second_id]
+        );
+    }
+
+    /// 件数比較しか行わない依存を、再同期のテストで使えるようにまとめて用意する。
+    fn empty_aggregate_dependencies() -> (MockAnswerLabelRepository, MockCommentThreadRepository) {
+        let mut answer_label_repository = MockAnswerLabelRepository::new();
+        answer_label_repository.expect_size().returning(|| Ok(0));
+        answer_label_repository
+            .expect_get_labels_for_answers()
+            .returning(|| Ok(vec![]));
+
+        let mut comment_thread_repository = MockCommentThreadRepository::new();
+        comment_thread_repository.expect_size().returning(|| Ok(0));
+
+        (answer_label_repository, comment_thread_repository)
+    }
+
+    #[tokio::test]
+    async fn resync_pushes_only_documents_missing_from_the_search_engine() {
+        let indexed_user = AccountUser::new(
+            "indexed".to_string(),
+            Uuid::from_u128(1).into(),
+            Role::StandardUser,
+        );
+        let missing_user = AccountUser::new(
+            "missing".to_string(),
+            Uuid::from_u128(2).into(),
+            Role::StandardUser,
+        );
+        let orphaned_id = Uuid::from_u128(3);
+        let indexed_ids = HashSet::from([indexed_user.id().into_inner(), orphaned_id]);
+
+        let synced = Arc::new(Mutex::new(Vec::new()));
+        let deleted = Arc::new(Mutex::new(Vec::new()));
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_fetch_search_engine_stats()
+            .returning(|| {
+                Ok(NumberOfRecordsPerAggregate {
+                    users: NumberOfRecords(1),
+                    ..Default::default()
+                })
+            });
+        search_repository
+            .expect_fetch_indexed_document_ids()
+            .withf(|index| *index == SearchIndex::Users)
+            .returning(move |_| Ok(indexed_ids.clone()));
+        let synced_for_repository = Arc::clone(&synced);
+        search_repository
+            .expect_sync_search_engine()
+            .returning(move |data| {
+                synced_for_repository
+                    .lock()
+                    .unwrap()
+                    .extend(data.iter().map(|(fields, _)| fields.document_id()));
+                Ok(())
+            });
+        let deleted_for_repository = Arc::clone(&deleted);
+        search_repository
+            .expect_delete_search_documents()
+            .returning(move |index, ids| {
+                deleted_for_repository.lock().unwrap().push((index, ids));
+                Ok(())
+            });
+
+        let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
+        let user_repository = InMemoryUserRepository::default();
+        user_repository.save_user(indexed_user.clone());
+        user_repository.save_user(missing_user.clone());
+        let active_form_repository = InMemoryActiveFormRepository::default();
+        let form_label_repository = InMemoryFormLabelRepository;
+        let answer_entry_repository = InMemoryAnswerEntryRepository::default();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_thread_repository: &comment_thread_repository,
+        };
+
+        let remaining = use_case.resync_search_engine_step(None).await.unwrap();
+
+        assert!(
+            remaining.is_none(),
+            "走査しきれる件数なら 1 回の呼び出しで巡回が完了する"
+        );
+        assert_eq!(
+            synced.lock().unwrap().as_slice(),
+            &[missing_user.id().into_inner()],
+            "検索エンジンに存在するドキュメントは投入し直さない"
+        );
+        assert_eq!(
+            deleted.lock().unwrap().as_slice(),
+            &[(SearchIndex::Users, vec![orphaned_id])],
+            "リポジトリ側に対応する行がないドキュメントは削除する"
+        );
+    }
+
+    #[tokio::test]
+    async fn resync_does_not_scan_anything_while_record_counts_match() {
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_fetch_search_engine_stats()
+            .returning(|| Ok(NumberOfRecordsPerAggregate::default()));
+        search_repository
+            .expect_fetch_indexed_document_ids()
+            .never();
+        search_repository.expect_sync_search_engine().never();
+        search_repository.expect_delete_search_documents().never();
+
+        let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
+        let active_form_repository = InMemoryActiveFormRepository::default();
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        let answer_entry_repository = InMemoryAnswerEntryRepository::default();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_thread_repository: &comment_thread_repository,
+        };
+
+        assert!(
+            use_case
+                .resync_search_engine_step(None)
+                .await
+                .unwrap()
+                .is_none()
         );
     }
 

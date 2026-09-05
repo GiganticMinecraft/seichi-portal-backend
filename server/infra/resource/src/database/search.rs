@@ -17,21 +17,40 @@ use domain::{
     search::models::{
         AnswerLabelSearchHit, AnswerSearchHit, AnswerTitleSearchDocument, CommentSearchHit,
         FormAnswerComments, FormLabelSearchHit, FormMetaData, FormSearchHit, LabelForFormAnswers,
-        LabelForForms, NumberOfRecordsPerAggregate, Operation, SearchableFields,
+        LabelForForms, NumberOfRecordsPerAggregate, Operation, SearchIndex, SearchableFields,
         SearchableFieldsWithOperation, UserSearchHit, Users,
     },
 };
 use errors::infra::InfraError;
-use futures::{future::try_join_all, try_join};
-use itertools::Itertools;
+use futures::{StreamExt, TryStreamExt, future::try_join_all, stream, try_join};
+use itertools::{Either, Itertools};
 use meilisearch_sdk::{
+    client::Client,
+    documents::DocumentsQuery,
     errors::{Error as MeilisearchError, ErrorCode},
     search::Selectors,
     tasks::Task,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 use uuid::Uuid;
+
+/// 1 リクエストでまとめて投入するドキュメント数の上限。
+///
+/// 1 ドキュメントごとにリクエストを投げると、再同期のように大量のドキュメントを扱うときに
+/// 同時接続数と検索エンジン側のタスク数がドキュメント数分だけ増えてしまうため、必ずまとめて投入する。
+const SYNC_DOCUMENT_CHUNK_SIZE: usize = 1_000;
+/// 検索エンジンへ同時に投げるリクエスト数の上限。
+const SYNC_REQUEST_CONCURRENCY: usize = 4;
+const SYNC_TASK_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const SYNC_TASK_TIMEOUT: Duration = Duration::from_secs(120);
+/// 検索エンジンからドキュメント ID を取得するときの 1 リクエストあたりの件数。
+const INDEXED_ID_FETCH_LIMIT: usize = 1_000;
+/// 回答を投影しているインデックス。`form_id` と `status` で絞り込めるようにしている。
+const ANSWER_SEARCH_INDEXES: [SearchIndex; 2] = [SearchIndex::Answers, SearchIndex::RealAnswers];
 
 #[derive(Serialize, Deserialize)]
 struct AnswerContentSearchDocument {
@@ -41,6 +60,120 @@ struct AnswerContentSearchDocument {
     question_id: QuestionId,
     answer: String,
     status: AnswerStatus,
+}
+
+#[derive(Deserialize)]
+struct IndexedDocumentId {
+    id: Uuid,
+}
+
+/// 検索エンジンへ反映したいドキュメント 1 件分の操作。
+enum SearchDocumentWrite {
+    Upsert(SearchIndex, serde_json::Value),
+    Delete(SearchIndex, String),
+}
+
+/// 同じインデックスへの [`SearchDocumentWrite`] をまとめた、検索エンジンへの 1 リクエスト。
+enum SearchDocumentRequest {
+    Upsert {
+        index: SearchIndex,
+        documents: Vec<serde_json::Value>,
+    },
+    Delete {
+        index: SearchIndex,
+        ids: Vec<String>,
+    },
+}
+
+impl SearchDocumentRequest {
+    async fn execute(self, client: &Client) -> Result<(), InfraError> {
+        let task = match self {
+            Self::Upsert { index, documents } => {
+                client
+                    .index(index.as_str())
+                    .add_or_replace(&documents, Some("id"))
+                    .await?
+            }
+            Self::Delete { index, ids } => {
+                client.index(index.as_str()).delete_documents(&ids).await?
+            }
+        };
+
+        // 投入は 202 が返るだけで完了を保証しないため、タスクの完了まで待って結果を確認する。
+        // ここで待たないと、失敗した投入を再試行できず、件数比較による同期判定も投入直後に必ず外れる
+        let task = task
+            .wait_for_completion(
+                client,
+                Some(SYNC_TASK_POLL_INTERVAL),
+                Some(SYNC_TASK_TIMEOUT),
+            )
+            .await?;
+
+        ensure_meilisearch_task_succeeded(task, false).map_err(Into::into)
+    }
+}
+
+/// インデックスごとにまとめたドキュメントを [`SYNC_DOCUMENT_CHUNK_SIZE`] 件単位のリクエストに分割する。
+fn chunked_requests<T: Clone>(
+    grouped: HashMap<SearchIndex, Vec<T>>,
+    into_request: impl Fn(SearchIndex, Vec<T>) -> SearchDocumentRequest,
+) -> impl Iterator<Item = SearchDocumentRequest> {
+    grouped.into_iter().flat_map(move |(index, values)| {
+        values
+            .chunks(SYNC_DOCUMENT_CHUNK_SIZE)
+            .map(|chunk| into_request(index, chunk.to_vec()))
+            .collect_vec()
+    })
+}
+
+/// [`SearchDocumentWrite`] をインデックスごとにまとめ、リクエスト単位に分割する。
+fn search_document_requests(
+    writes: impl IntoIterator<Item = SearchDocumentWrite>,
+) -> Vec<SearchDocumentRequest> {
+    let (upserts, deletes): (Vec<_>, Vec<_>) =
+        writes.into_iter().partition_map(|write| match write {
+            SearchDocumentWrite::Upsert(index, document) => Either::Left((index, document)),
+            SearchDocumentWrite::Delete(index, id) => Either::Right((index, id)),
+        });
+
+    chunked_requests(upserts.into_iter().into_group_map(), |index, documents| {
+        SearchDocumentRequest::Upsert { index, documents }
+    })
+    .chain(chunked_requests(
+        deletes.into_iter().into_group_map(),
+        |index, ids| SearchDocumentRequest::Delete { index, ids },
+    ))
+    .collect()
+}
+
+async fn execute_search_document_requests(
+    client: &Client,
+    requests: Vec<SearchDocumentRequest>,
+) -> Result<(), InfraError> {
+    stream::iter(requests)
+        .map(|request| request.execute(client))
+        .buffer_unordered(SYNC_REQUEST_CONCURRENCY)
+        .try_collect()
+        .await
+}
+
+fn upsert_document(
+    fields: &SearchableFields,
+    content_documents: &HashMap<FormAnswerContentId, AnswerContentSearchDocument>,
+) -> Result<serde_json::Value, InfraError> {
+    Ok(match fields {
+        SearchableFields::FormMetaData(data) => serde_json::to_value(data)?,
+        SearchableFields::AnswerTitle(_) => {
+            unreachable!("answer title updates are handled by database reprojection")
+        }
+        SearchableFields::RealAnswers(answers) => {
+            serde_json::to_value(&content_documents[&answers.id])?
+        }
+        SearchableFields::FormAnswerComments(comments) => serde_json::to_value(comments)?,
+        SearchableFields::LabelForFormAnswers(label) => serde_json::to_value(label)?,
+        SearchableFields::LabelForForms(label) => serde_json::to_value(label)?,
+        SearchableFields::Users(users) => serde_json::to_value(users)?,
+    })
 }
 
 #[derive(Deserialize)]
@@ -156,10 +289,10 @@ fn answer_documents_from_record(
 async fn answer_documents_need_reprojection(
     connection: &ConnectionPool,
 ) -> Result<bool, InfraError> {
-    for index in ["answers", "real_answers"] {
+    for index in ANSWER_SEARCH_INDEXES {
         let missing_form_id = connection
             .meilisearch_client
-            .index(index)
+            .index(index.as_str())
             .search()
             .with_filter("form_id NOT EXISTS OR status NOT EXISTS")
             .with_limit(1)
@@ -389,46 +522,46 @@ impl SearchDatabase for ConnectionPool {
             })?;
         let content_documents = answer_content_documents(data, &metadata_by_answer_id)?;
 
-        let reproject_futures = reprojected_documents.iter().map(|(fields, _)| async {
-            match fields {
-                SearchableFields::AnswerTitle(answer) => {
-                    self.meilisearch_client
-                        .index("answers")
-                        .add_or_replace(&[answer], Some("id"))
-                        .await?;
-                    Ok::<_, InfraError>(())
-                }
-                SearchableFields::RealAnswers(content) => {
-                    self.meilisearch_client
-                        .index("real_answers")
-                        .add_or_replace(
-                        &[AnswerContentSearchDocument {
-                            id: content.id,
-                            form_id: metadata_by_answer_id
-                                .get(&content.answer_id)
-                                .map(|(form_id, _)| *form_id)
-                                .ok_or_else(|| InfraError::Unexpected {
-                                    cause: format!(
-                                        "form id for answer {} was not found while reprojecting",
-                                        content.answer_id
-                                    ),
-                                })?,
-                            answer_id: content.answer_id,
-                            question_id: content.question_id,
-                            answer: content.answer.clone(),
-                            status: content.status,
-                        }],
-                        Some("id"),
-                    )
-                    .await?;
-                    Ok::<_, InfraError>(())
-                }
-                _ => Ok(()),
-            }
-        });
-        try_join_all(reproject_futures).await?;
+        let reprojected_writes =
+            reprojected_documents
+                .iter()
+                .filter_map(|(fields, _)| match fields {
+                    SearchableFields::AnswerTitle(answer) => Some(
+                        serde_json::to_value(answer)
+                            .map(|document| {
+                                SearchDocumentWrite::Upsert(SearchIndex::Answers, document)
+                            })
+                            .map_err(InfraError::from),
+                    ),
+                    SearchableFields::RealAnswers(content) => Some(
+                        metadata_by_answer_id
+                            .get(&content.answer_id)
+                            .map(|(form_id, _)| *form_id)
+                            .ok_or_else(|| InfraError::Unexpected {
+                                cause: format!(
+                                    "form id for answer {} was not found while reprojecting",
+                                    content.answer_id
+                                ),
+                            })
+                            .and_then(|form_id| {
+                                serde_json::to_value(AnswerContentSearchDocument {
+                                    id: content.id,
+                                    form_id,
+                                    answer_id: content.answer_id,
+                                    question_id: content.question_id,
+                                    answer: content.answer.clone(),
+                                    status: content.status,
+                                })
+                                .map_err(InfraError::from)
+                            })
+                            .map(|document| {
+                                SearchDocumentWrite::Upsert(SearchIndex::RealAnswers, document)
+                            }),
+                    ),
+                    _ => None,
+                });
 
-        let futures = data
+        let event_writes = data
             .iter()
             .filter(|(searchable_fields, operation)| {
                 !matches!(
@@ -439,98 +572,72 @@ impl SearchDatabase for ConnectionPool {
                     )
                 )
             })
-            .map(async |(searchable_fields, operation)| match operation {
-                Operation::Create | Operation::Update => match searchable_fields {
-                    SearchableFields::FormMetaData(data) => {
-                        self.meilisearch_client
-                            .index("form_meta_data")
-                            .add_or_replace(&[data], Some("id"))
-                            .await
-                    }
-                    SearchableFields::AnswerTitle(_) => {
-                        unreachable!("answer title updates are handled by database reprojection")
-                    }
-                    SearchableFields::RealAnswers(answers) => {
-                        self.meilisearch_client
-                            .index("real_answers")
-                            .add_or_replace(&[&content_documents[&answers.id]], Some("id"))
-                            .await
-                    }
-                    SearchableFields::FormAnswerComments(comments) => {
-                        self.meilisearch_client
-                            .index("form_answer_comments")
-                            .add_or_replace(&[comments], Some("id"))
-                            .await
-                    }
-                    SearchableFields::LabelForFormAnswers(label) => {
-                        self.meilisearch_client
-                            .index("label_for_form_answers")
-                            .add_or_replace(&[label], Some("id"))
-                            .await
-                    }
-                    SearchableFields::LabelForForms(label) => {
-                        self.meilisearch_client
-                            .index("label_for_forms")
-                            .add_or_replace(&[label], Some("id"))
-                            .await
-                    }
-                    SearchableFields::Users(users) => {
-                        self.meilisearch_client
-                            .index("users")
-                            .add_or_replace(&[users], Some("id"))
-                            .await
-                    }
-                },
-                Operation::Delete => match searchable_fields {
-                    SearchableFields::FormMetaData(data) => {
-                        self.meilisearch_client
-                            .index("form_meta_data")
-                            .delete_document(data.id.into_inner().to_string())
-                            .await
-                    }
-                    SearchableFields::AnswerTitle(answer) => {
-                        self.meilisearch_client
-                            .index("answers")
-                            .delete_document(answer.id.to_string())
-                            .await
-                    }
-                    SearchableFields::RealAnswers(answers) => {
-                        self.meilisearch_client
-                            .index("real_answers")
-                            .delete_document(answers.id.to_string())
-                            .await
-                    }
-                    SearchableFields::FormAnswerComments(comments) => {
-                        self.meilisearch_client
-                            .index("form_answer_comments")
-                            .delete_document(comments.id.into_inner().to_string())
-                            .await
-                    }
-                    SearchableFields::LabelForFormAnswers(label) => {
-                        self.meilisearch_client
-                            .index("label_for_form_answers")
-                            .delete_document(label.id.into_inner().to_string())
-                            .await
-                    }
-                    SearchableFields::LabelForForms(label) => {
-                        self.meilisearch_client
-                            .index("label_for_forms")
-                            .delete_document(label.id.into_inner().to_string())
-                            .await
-                    }
-                    SearchableFields::Users(users) => {
-                        self.meilisearch_client
-                            .index("users")
-                            .delete_document(users.id.to_string())
-                            .await
-                    }
-                },
-            })
-            .collect::<Vec<_>>();
+            .map(|(searchable_fields, operation)| match operation {
+                Operation::Create | Operation::Update => {
+                    upsert_document(searchable_fields, &content_documents).map(|document| {
+                        SearchDocumentWrite::Upsert(searchable_fields.index(), document)
+                    })
+                }
+                Operation::Delete => Ok(SearchDocumentWrite::Delete(
+                    searchable_fields.index(),
+                    searchable_fields.document_id().to_string(),
+                )),
+            });
 
-        try_join_all(futures).await?;
+        let writes = reprojected_writes
+            .chain(event_writes)
+            .collect::<Result<Vec<_>, InfraError>>()?;
 
-        Ok(())
+        execute_search_document_requests(&self.meilisearch_client, search_document_requests(writes))
+            .await
+    }
+
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    async fn fetch_indexed_document_ids(
+        &self,
+        index: SearchIndex,
+    ) -> Result<HashSet<Uuid>, InfraError> {
+        let meilisearch_index = self.meilisearch_client.index(index.as_str());
+        let meilisearch_index = &meilisearch_index;
+
+        // `None` は読み終えたことを表す。1 ページ取るごとに次のオフセットを決めて畳み込む
+        stream::try_unfold(Some(0), |offset| async move {
+            let Some(offset) = offset else {
+                return Ok(None);
+            };
+
+            let mut query = DocumentsQuery::new(meilisearch_index);
+            query
+                .with_fields(["id"])
+                .with_offset(offset)
+                .with_limit(INDEXED_ID_FETCH_LIMIT);
+
+            let documents = query.execute::<IndexedDocumentId>().await?.results;
+            let next_offset =
+                (documents.len() == INDEXED_ID_FETCH_LIMIT).then(|| offset + documents.len());
+
+            Ok::<_, InfraError>(Some((documents, next_offset)))
+        })
+        .try_fold(HashSet::new(), async |mut ids, documents: Vec<_>| {
+            ids.extend(documents.into_iter().map(|document| document.id));
+
+            Ok(ids)
+        })
+        .await
+    }
+
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    async fn delete_search_documents(
+        &self,
+        index: SearchIndex,
+        ids: Vec<Uuid>,
+    ) -> Result<(), InfraError> {
+        let writes = ids
+            .into_iter()
+            .map(|id| SearchDocumentWrite::Delete(index, id.to_string()));
+
+        execute_search_document_requests(&self.meilisearch_client, search_document_requests(writes))
+            .await
     }
 
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
@@ -553,22 +660,12 @@ impl SearchDatabase for ConnectionPool {
 
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
     async fn initialize_search_engine(&self) -> Result<bool, InfraError> {
-        let index_with_uid = vec![
-            ("form_meta_data", "id"),
-            ("answers", "id"),
-            ("real_answers", "id"),
-            ("form_answer_comments", "id"),
-            ("label_for_form_answers", "id"),
-            ("label_for_forms", "id"),
-            ("users", "id"),
-        ];
-
-        let futures = index_with_uid
+        let futures = SearchIndex::ALL
             .into_iter()
-            .map(async |(index, uid)| {
+            .map(async |index| {
                 let task = self
                     .meilisearch_client
-                    .create_index(index, Some(uid))
+                    .create_index(index.as_str(), Some("id"))
                     .await?
                     .wait_for_completion(&self.meilisearch_client, None, None)
                     .await?;
@@ -579,10 +676,10 @@ impl SearchDatabase for ConnectionPool {
 
         try_join_all(futures).await?;
 
-        let settings_futures = ["answers", "real_answers"].into_iter().map(async |index| {
+        let settings_futures = ANSWER_SEARCH_INDEXES.into_iter().map(async |index| {
             let task = self
                 .meilisearch_client
-                .index(index)
+                .index(index.as_str())
                 .set_filterable_attributes(["form_id", "status"])
                 .await?
                 .wait_for_completion(&self.meilisearch_client, None, None)
@@ -599,9 +696,11 @@ impl SearchDatabase for ConnectionPool {
 #[cfg(test)]
 mod tests {
     use super::{
+        SYNC_DOCUMENT_CHUNK_SIZE, SearchDocumentRequest, SearchDocumentWrite,
         add_meilisearch_stats_auth, answer_content_documents, answer_documents_from_entry,
-        answer_filter, merge_answer_hits,
+        answer_filter, merge_answer_hits, search_document_requests,
     };
+    use domain::search::models::SearchIndex;
     use domain::{
         form::{
             answer::{AnswerAuthor, AnswerEntry, AnswerId, AnswerStatus, AnswerTitle},
@@ -609,11 +708,50 @@ mod tests {
         },
         search::models::{Operation, RealAnswers, SearchableFields},
     };
+    use itertools::Itertools;
     use std::collections::HashMap;
     use uuid::Uuid;
 
     fn answer_id(value: u128) -> AnswerId {
         Uuid::from_u128(value).into()
+    }
+
+    #[test]
+    fn search_document_requests_group_documents_per_index_and_split_them_into_chunks() {
+        let writes = (0..=SYNC_DOCUMENT_CHUNK_SIZE)
+            .map(|number| {
+                SearchDocumentWrite::Upsert(SearchIndex::Users, serde_json::json!({ "id": number }))
+            })
+            .chain([
+                SearchDocumentWrite::Upsert(
+                    SearchIndex::Answers,
+                    serde_json::json!({ "id": "answer" }),
+                ),
+                SearchDocumentWrite::Delete(SearchIndex::Users, "orphan".to_string()),
+            ]);
+
+        let mut requests = search_document_requests(writes)
+            .iter()
+            .map(|request| match request {
+                SearchDocumentRequest::Upsert { index, documents } => {
+                    (index.as_str(), "upsert", documents.len())
+                }
+                SearchDocumentRequest::Delete { index, ids } => {
+                    (index.as_str(), "delete", ids.len())
+                }
+            })
+            .collect_vec();
+        requests.sort_unstable();
+
+        assert_eq!(
+            requests,
+            vec![
+                ("answers", "upsert", 1),
+                ("users", "delete", 1),
+                ("users", "upsert", 1),
+                ("users", "upsert", SYNC_DOCUMENT_CHUNK_SIZE),
+            ]
+        );
     }
 
     #[test]
