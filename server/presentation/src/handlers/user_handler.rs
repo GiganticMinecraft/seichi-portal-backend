@@ -959,7 +959,7 @@ pub async fn start_session(
                 header::SET_COOKIE,
                 HeaderValue::from_str(
                     format!(
-                        "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={lifetime_seconds}; Path=/; Secure; HttpOnly; SameSite=Lax"
+                        "__Host-Http-SEICHI_PORTAL_SESSION_ID={session_id}; Max-Age={lifetime_seconds}; Path=/; Secure; HttpOnly; SameSite=Lax"
                     )
                     .as_str(),
                 )
@@ -1011,7 +1011,7 @@ pub async fn end_session(
             header::SET_COOKIE,
             HeaderValue::from_str(
                 format!(
-                    "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age=0; Path=/; Secure; HttpOnly"
+                    "__Host-Http-SEICHI_PORTAL_SESSION_ID={session_id}; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax"
                 )
                 .as_str(),
             )
