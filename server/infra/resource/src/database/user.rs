@@ -6,7 +6,7 @@ use chrono::{NaiveDateTime, Utc};
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
-        UserPagePosition,
+        UserPagePosition, UserSessionLifetime,
     },
     form::{
         FormSubmissionRestriction, FormSubmissionRestrictionId, FormSubmissionRestrictionReason,
@@ -485,7 +485,7 @@ impl UserDatabase for ConnectionPool {
         &self,
         xbox_token: String,
         user: &AccountUser,
-        expires: u32,
+        lifetime: UserSessionLifetime,
     ) -> Result<String, InfraError> {
         let now = Utc::now().timestamp_millis();
         let session_id = digest(format!("{xbox_token}{now}"));
@@ -493,7 +493,11 @@ impl UserDatabase for ConnectionPool {
         let mut redis_connection = redis_connection().await;
 
         let user_json = serde_json::to_string(user)?;
-        redis_connection.set_ex::<&str, String, ()>(&session_id, user_json, expires as u64)?;
+        redis_connection.set_ex::<&str, String, ()>(
+            &session_id,
+            user_json,
+            u64::from(lifetime.into_seconds()),
+        )?;
 
         Ok(session_id)
     }

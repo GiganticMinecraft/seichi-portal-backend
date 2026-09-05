@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, DiscordUser, DiscordUserId, DiscordUserName, UserGroup,
-        UserGroupId, UserPagePosition,
+        UserGroupId, UserPagePosition, UserSessionLifetime,
     },
     pagination::{Page, PageRequest},
     repository::user_repository::UserRepository,
@@ -199,11 +199,11 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         &self,
         xbox_token: String,
         user: &AccountUser,
-        expires: u32,
+        lifetime: UserSessionLifetime,
     ) -> Result<String, Error> {
         self.client
             .user()
-            .start_user_session(xbox_token, user, expires)
+            .start_user_session(xbox_token, user, lifetime)
             .await
             .map_err(Into::into)
     }

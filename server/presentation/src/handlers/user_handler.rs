@@ -2,7 +2,7 @@ use axum::{
     Extension, Json,
     extract::rejection::{JsonRejection, PathRejection, QueryRejection},
     extract::{Path, Query, State},
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::IntoResponse,
 };
 use axum_extra::{
@@ -11,7 +11,7 @@ use axum_extra::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use domain::{
-    account::models::{AccountUser, UserPagePosition, UserSessionExpires},
+    account::models::{AccountUser, UserPagePosition, UserSessionLifetime},
     form::FormSubmissionRestrictionReason,
     pagination::{PageLimit, PageRequest},
     repository::Repositories,
@@ -34,7 +34,8 @@ use crate::schemas::user::{
 };
 use crate::{
     handlers::error_handler::{ApiError, handle_error},
-    schemas::user::DiscordOAuthToken,
+    schemas::{session::SessionCreateSchema, user::DiscordOAuthToken},
+    session::SessionPolicy,
 };
 use axum::response::Response;
 use axum_extra::typed_header::TypedHeaderRejection;
@@ -917,14 +918,30 @@ pub async fn delete_form_submission_restriction(
 )]
 pub async fn start_session(
     State(repository): State<RealInfrastructureRepository>,
+    Extension(session_policy): Extension<SessionPolicy>,
+    headers: HeaderMap,
     header: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
-    json: Result<Json<UserSessionExpires>, JsonRejection>,
+    json: Result<Json<SessionCreateSchema>, JsonRejection>,
 ) -> Result<impl IntoResponse, ApiError> {
     let user_use_case = UserUseCase {
         repository: repository.user_repository(),
     };
 
-    let Json(expires) = json.map_err_to_error().map_err(handle_error)?;
+    if !session_policy.allows_session_creation(&headers) {
+        return Err(ApiError::forbidden(
+            "Session creation must be requested through the trusted frontend.",
+        ));
+    }
+
+    let Json(session) = json.map_err_to_error().map_err(handle_error)?;
+    let lifetime = UserSessionLifetime::until(
+        session.expires_at,
+        chrono::Utc::now(),
+        session_policy.maximum_lifetime(),
+    )
+    .map_err(Error::from)
+    .map_err(handle_error)?;
+    let lifetime_seconds = lifetime.into_seconds();
 
     let TypedHeader(auth) = header.map_err_to_error().map_err(handle_error)?;
 
@@ -934,16 +951,15 @@ pub async fn start_session(
         .await
     {
         Ok(Some(user)) => {
-            let expires = expires.expires;
             let session_id = user_use_case
-                .start_user_session(token.to_string(), &user, expires)
+                .start_user_session(token.to_string(), &user, lifetime)
                 .await
                 .map_err(handle_error)?;
             Ok((StatusCode::CREATED, [(
                 header::SET_COOKIE,
                 HeaderValue::from_str(
                     format!(
-                        "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={expires}; Path=/; Secure; HttpOnly"
+                        "SEICHI_PORTAL__SESSION_ID={session_id}; Max-Age={lifetime_seconds}; Path=/; Secure; HttpOnly; SameSite=Lax"
                     )
                     .as_str(),
                 )

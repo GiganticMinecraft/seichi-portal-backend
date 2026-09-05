@@ -328,7 +328,7 @@ pub trait UserDatabase: Send + Sync {
         &self,
         xbox_token: String,
         user: &AccountUser,
-        expires: u32,
+        lifetime: domain::account::models::UserSessionLifetime,
     ) -> Result<String, InfraError>;
     async fn fetch_user_by_session_id(
         &self,

@@ -29,6 +29,16 @@ impl ApiError {
             restriction: None,
         }
     }
+
+    pub(crate) fn forbidden(detail: &str) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            title: "Forbidden",
+            detail: detail.to_owned(),
+            error_code: "FORBIDDEN",
+            restriction: None,
+        }
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -135,6 +145,12 @@ fn handle_domain_error(err: DomainError) -> ApiError {
             "Bad Request",
             "Invalid Discord webhook url. (Seichi-Portal only supports Discord webhook)",
             "INVALID_DISCORD_WEBHOOK_URL",
+        ),
+        DomainError::InvalidSessionExpiration => problem_response(
+            StatusCode::BAD_REQUEST,
+            "Bad Request",
+            "Session expiration must be in the future.",
+            "INVALID_SESSION_EXPIRATION",
         ),
         DomainError::InvalidEntity { message } => problem_response(
             StatusCode::UNPROCESSABLE_ENTITY,
