@@ -238,6 +238,7 @@ impl DatabaseComponents for ConnectionPool {
     type ConcreteFormAnswerRelationDatabase = Self;
     type ConcreteFormAnswerLabelDatabase = Self;
     type ConcreteFormCommentDatabase = Self;
+    type ConcreteFormCommentAttachmentDatabase = Self;
     type ConcreteFormDatabase = Self;
     type ConcreteFormLabelDatabase = Self;
     type ConcreteFormMessageDatabase = Self;
@@ -267,6 +268,10 @@ impl DatabaseComponents for ConnectionPool {
     }
 
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase {
+        self
+    }
+
+    fn form_comment_attachment(&self) -> &Self::ConcreteFormCommentAttachmentDatabase {
         self
     }
 

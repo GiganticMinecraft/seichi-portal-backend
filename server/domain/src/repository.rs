@@ -15,6 +15,8 @@ pub trait Repositories: Send + Sync {
     type ConcreteAnswerRelationRepository: form::answer_relation_repository::AnswerRelationRepository;
     type ConcreteAnswerLabelRepository: form::answer_label_repository::AnswerLabelRepository;
     type ConcreteCommentThreadRepository: form::comment_thread_repository::CommentThreadRepository;
+    type ConcreteCommentAttachmentRepository:
+        form::comment_attachment_repository::CommentAttachmentRepository;
     type ConcreteMessageThreadRepository: form::message_thread_repository::MessageThreadRepository;
     type ConcreteFormLabelRepository: form::form_label_repository::FormLabelRepository;
     type ConcreteFormSubmissionRestrictionRepository: form_submission_restriction_repository::FormSubmissionRestrictionRepository;
@@ -29,6 +31,7 @@ pub trait Repositories: Send + Sync {
     fn answer_relation_repository(&self) -> &Self::ConcreteAnswerRelationRepository;
     fn answer_label_repository(&self) -> &Self::ConcreteAnswerLabelRepository;
     fn comment_thread_repository(&self) -> &Self::ConcreteCommentThreadRepository;
+    fn comment_attachment_repository(&self) -> &Self::ConcreteCommentAttachmentRepository;
     fn message_thread_repository(&self) -> &Self::ConcreteMessageThreadRepository;
     fn form_label_repository(&self) -> &Self::ConcreteFormLabelRepository;
     fn form_submission_restriction_repository(

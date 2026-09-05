@@ -16,6 +16,7 @@ use domain::repository::health_check_repository::HealthCheckRepository;
 use crate::{
     database::{components::DatabaseComponents, connection::ConnectionPool},
     health_check::HealthCheckRepositoryImpl,
+    object_storage::ObjectStorage,
 };
 
 pub type RealInfrastructureRepository = SharedRepository<ConnectionPool, HealthCheckRepositoryImpl>;
@@ -41,11 +42,20 @@ impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Syn
 
 pub struct Repository<Client> {
     pub(crate) client: Client,
+    pub(crate) object_storage: Option<Arc<dyn ObjectStorage>>,
 }
 
 impl<Client> Repository<Client> {
     pub fn new(client: Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            object_storage: None,
+        }
+    }
+
+    pub fn with_object_storage(mut self, object_storage: Arc<dyn ObjectStorage>) -> Self {
+        self.object_storage = Some(object_storage);
+        self
     }
 }
 
@@ -76,6 +86,7 @@ impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Syn
     type ConcreteAnswerRelationRepository = Repository<Client>;
     type ConcreteAnswerLabelRepository = Repository<Client>;
     type ConcreteCommentThreadRepository = Repository<Client>;
+    type ConcreteCommentAttachmentRepository = Repository<Client>;
     type ConcreteFormLabelRepository = Repository<Client>;
     type ConcreteFormSubmissionRestrictionRepository = Repository<Client>;
     type ConcreteMessageThreadRepository = Repository<Client>;
@@ -136,6 +147,10 @@ impl<Client: DatabaseComponents + 'static, H: HealthCheckRepository + Send + Syn
     }
 
     fn comment_thread_repository(&self) -> &Self::ConcreteCommentThreadRepository {
+        &self.db
+    }
+
+    fn comment_attachment_repository(&self) -> &Self::ConcreteCommentAttachmentRepository {
         &self.db
     }
 

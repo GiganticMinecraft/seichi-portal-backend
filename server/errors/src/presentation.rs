@@ -12,11 +12,23 @@ pub enum PresentationError {
     QueryRejection { cause: String },
     #[error("Typed Header Rejection: {}", .cause)]
     TypedHeaderRejection { cause: String },
+    #[error("Multipart Rejection: {}", .cause)]
+    MultipartRejection { cause: String },
+    #[error("Payload Too Large: {}", .cause)]
+    PayloadTooLarge { cause: String },
 }
 
 impl From<JsonRejection> for PresentationError {
     fn from(value: JsonRejection) -> Self {
         PresentationError::JsonRejection {
+            cause: value.body_text(),
+        }
+    }
+}
+
+impl From<axum::extract::multipart::MultipartRejection> for PresentationError {
+    fn from(value: axum::extract::multipart::MultipartRejection) -> Self {
+        PresentationError::MultipartRejection {
             cause: value.body_text(),
         }
     }

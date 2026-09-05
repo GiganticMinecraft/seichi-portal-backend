@@ -8,6 +8,7 @@ use domain::{
             RedmineUserSnapshot, TemporaryAnswerAuthor,
         },
         comment::Comment,
+        comment_attachment::CommentAttachment,
         message::Message,
         models::{ActiveForm, ArchivedForm, FormId, FormLabel},
         question::{Question, QuestionId},
@@ -87,6 +88,7 @@ pub enum CommentAuthor {
 pub struct CommentWithAuthor {
     pub comment: Comment,
     pub commented_by: CommentAuthor,
+    pub attachments: Vec<CommentAttachment>,
 }
 
 pub struct CrossSearchComment {

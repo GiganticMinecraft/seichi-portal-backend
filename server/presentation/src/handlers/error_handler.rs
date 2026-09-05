@@ -415,6 +415,18 @@ fn handle_presentation_error(err: PresentationError) -> ApiError {
             cause,
             "UNAUTHORIZED",
         ),
+        PresentationError::MultipartRejection { cause } => problem_response(
+            StatusCode::BAD_REQUEST,
+            "Bad Request",
+            cause,
+            "INVALID_MULTIPART_REQUEST",
+        ),
+        PresentationError::PayloadTooLarge { cause } => problem_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "Payload Too Large",
+            cause,
+            "PAYLOAD_TOO_LARGE",
+        ),
     }
 }
 

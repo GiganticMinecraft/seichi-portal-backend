@@ -2,9 +2,9 @@ use crate::{
     external::discord_api::DiscordAPI,
     records::{
         ActiveFormRecord, AnswerLabelRecord, AnswerStatusHistoryRecord, AnswerTitleHistoryRecord,
-        ArchivedFormRecord, CommentHistoryRecord, CommentRecord, DiscordUserRecord,
-        FormAnswerRecord, FormLabelRecord, MessageHistoryRecord, MessageRecord, NotificationRecord,
-        NotificationSettingsRecord,
+        ArchivedFormRecord, CommentAttachmentRecord, CommentHistoryRecord, CommentRecord,
+        DiscordUserRecord, FormAnswerRecord, FormLabelRecord, MessageHistoryRecord, MessageRecord,
+        NotificationRecord, NotificationSettingsRecord,
     },
 };
 use async_trait::async_trait;
@@ -26,6 +26,7 @@ use domain::{
             AnswerStatusHistoryPagePosition, AnswerTitleHistoryPagePosition,
         },
         comment::{Comment, CommentHistoryPagePosition, CommentId, DeletedComment},
+        comment_attachment::CommentAttachment,
         message::{DeletedMessage, Message, MessageHistoryPagePosition, MessageId},
         models::{
             ActiveForm, ArchivedForm, ArchivedFormPagePosition, FormId, FormLabel, FormLabelId,
@@ -54,6 +55,7 @@ pub trait DatabaseComponents: Send + Sync {
     type ConcreteFormAnswerLabelDatabase: FormAnswerLabelDatabase;
     type ConcreteFormMessageDatabase: FormMessageDatabase;
     type ConcreteFormCommentDatabase: FormCommentDatabase;
+    type ConcreteFormCommentAttachmentDatabase: FormCommentAttachmentDatabase;
     type ConcreteFormLabelDatabase: FormLabelDatabase;
     type ConcreteFormSubmissionRestrictionDatabase: FormSubmissionRestrictionDatabase;
     type ConcreteUserDatabase: UserDatabase;
@@ -67,6 +69,7 @@ pub trait DatabaseComponents: Send + Sync {
     fn form_answer_label(&self) -> &Self::ConcreteFormAnswerLabelDatabase;
     fn form_message(&self) -> &Self::ConcreteFormMessageDatabase;
     fn form_comment(&self) -> &Self::ConcreteFormCommentDatabase;
+    fn form_comment_attachment(&self) -> &Self::ConcreteFormCommentAttachmentDatabase;
     fn form_label(&self) -> &Self::ConcreteFormLabelDatabase;
     fn form_submission_restriction(&self) -> &Self::ConcreteFormSubmissionRestrictionDatabase;
     fn user(&self) -> &Self::ConcreteUserDatabase;
@@ -267,6 +270,29 @@ pub trait FormCommentDatabase: Send + Sync {
         includes_deleted_history: bool,
     ) -> Result<Page<CommentHistoryRecord, CommentHistoryPagePosition>, InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait FormCommentAttachmentDatabase: Send + Sync {
+    async fn get_by_comment(
+        &self,
+        comment_id: CommentId,
+    ) -> Result<Vec<CommentAttachmentRecord>, InfraError>;
+    async fn get_by_answers(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<CommentAttachmentRecord>, InfraError>;
+    async fn get(
+        &self,
+        attachment_id: domain::form::comment_attachment::CommentAttachmentId,
+    ) -> Result<Option<CommentAttachmentRecord>, InfraError>;
+    async fn create_many(&self, attachments: Vec<CommentAttachment>) -> Result<(), Error>;
+    async fn delete(
+        &self,
+        attachment_id: domain::form::comment_attachment::CommentAttachmentId,
+    ) -> Result<(), Error>;
+    async fn delete_for_comment(&self, comment_id: CommentId) -> Result<(), Error>;
 }
 
 #[automock]

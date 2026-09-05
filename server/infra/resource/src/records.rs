@@ -37,6 +37,16 @@ pub struct ChoiceRecord {
     pub label: String,
 }
 
+pub struct CommentAttachmentRecord {
+    pub id: String,
+    pub answer_id: String,
+    pub comment_id: String,
+    pub file_name: String,
+    pub content_type: String,
+    pub size: u64,
+    pub created_at: DateTime<Utc>,
+}
+
 impl TryFrom<ChoiceRecord> for Choice {
     type Error = Error;
 

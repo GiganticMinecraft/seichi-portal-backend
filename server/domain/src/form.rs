@@ -1,5 +1,6 @@
 pub mod answer;
 pub mod comment;
+pub mod comment_attachment;
 pub mod comment_thread;
 pub mod label;
 pub mod message;

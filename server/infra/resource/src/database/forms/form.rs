@@ -906,6 +906,17 @@ async fn copy_active_form_to_archive(
 
     execute_typed_query!(
         txn,
+        r"INSERT INTO archived_form_answer_comment_attachments
+            (id, answer_id, comment_id, file_name, content_type, size, created_at)
+        SELECT a.id, a.answer_id, a.comment_id, a.file_name, a.content_type, a.size, a.created_at
+        FROM form_answer_comment_attachments a
+        INNER JOIN answers answer ON a.answer_id = answer.id
+        WHERE answer.form_id = ?",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_messages (id, related_answer_id, sender, body, timestamp)
         SELECT m.id, m.related_answer_id, m.sender, m.body, m.timestamp
         FROM messages m
@@ -1011,6 +1022,16 @@ async fn restore_archived_form_to_active(
         r"INSERT INTO form_answer_comments (id, answer_id, commented_by, content, timestamp)
         SELECT id, answer_id, commented_by, content, timestamp
         FROM archived_form_answer_comments
+        WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
+        r"INSERT INTO form_answer_comment_attachments
+            (id, answer_id, comment_id, file_name, content_type, size, created_at)
+        SELECT id, answer_id, comment_id, file_name, content_type, size, created_at
+        FROM archived_form_answer_comment_attachments
         WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
         &form_id,
     );

@@ -1,3 +1,4 @@
+use axum::extract::DefaultBodyLimit;
 use presentation::handlers::{
     global_discord_webhook_handler, notification_handler, search_handler, user_handler,
 };
@@ -189,6 +190,17 @@ pub fn authenticated_api_router() -> OpenApiRouter<RealInfrastructureRepository>
             comment_handler::update_form_comment,
             comment_handler::delete_form_comment_handler
         ))
+        .merge(
+            OpenApiRouter::new()
+                .routes(routes!(
+                    comment_handler::post_comment_attachments,
+                    comment_handler::get_comment_attachment,
+                    comment_handler::delete_comment_attachment
+                ))
+                .layer(DefaultBodyLimit::max(
+                    comment_handler::MAX_COMMENT_ATTACHMENT_REQUEST_SIZE,
+                )),
+        )
         .routes(routes!(
             user_handler::get_user_info,
             user_handler::patch_user_role

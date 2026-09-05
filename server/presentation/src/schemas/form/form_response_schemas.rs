@@ -8,6 +8,7 @@ use domain::form::{
         FormAnswerContent, RedmineUserSnapshot,
     },
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
+    comment_attachment::CommentAttachment as DomainCommentAttachment,
     message::{MessageHistoryAction, MessageHistoryEntry},
     models::{
         ActiveForm, AnswerResponseVisibility, AnswerSettings, DefaultAnswerTitle, FormDescription,
@@ -472,6 +473,28 @@ pub enum AnswerCommentSource {
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
+pub struct CommentAttachmentResponse {
+    #[schema(value_type = String, format = "uuid")]
+    id: String,
+    file_name: String,
+    content_type: String,
+    size: u64,
+    created_at: DateTime<Utc>,
+}
+
+impl From<DomainCommentAttachment> for CommentAttachmentResponse {
+    fn from(value: DomainCommentAttachment) -> Self {
+        Self {
+            id: value.id().to_string(),
+            file_name: value.file_name().to_string(),
+            content_type: value.content_type().to_string(),
+            size: *value.size(),
+            created_at: *value.created_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, utoipa::ToSchema)]
 pub struct AnswerComment {
     #[schema(value_type = String, format = "uuid")]
     id: CommentId,
@@ -484,6 +507,7 @@ pub struct AnswerComment {
     redmine_journal_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     redmine_author_snapshot: Option<RedmineUserSnapshotResponse>,
+    attachments: Vec<CommentAttachmentResponse>,
 }
 
 #[derive(Serialize, Debug, utoipa::ToSchema)]
@@ -684,6 +708,7 @@ impl From<CommentWithAuthor> for AnswerComment {
             commented_by,
             redmine_journal_id,
             redmine_author_snapshot,
+            attachments: val.attachments.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -1015,6 +1040,7 @@ mod tests {
                 None,
                 "Redmine commenter".to_string(),
             )),
+            attachments: vec![],
         }))
         .unwrap();
 

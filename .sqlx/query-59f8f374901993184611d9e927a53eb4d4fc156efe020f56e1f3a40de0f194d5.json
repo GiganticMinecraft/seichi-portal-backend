@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM form_answer_comment_attachments WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "59f8f374901993184611d9e927a53eb4d4fc156efe020f56e1f3a40de0f194d5"
+}

@@ -3,6 +3,7 @@ pub mod answer_entry_repository;
 pub mod answer_label_repository;
 pub mod answer_relation_repository;
 pub mod archived_form_repository;
+pub mod comment_attachment_repository;
 pub mod comment_thread_repository;
 pub mod form_label_repository;
 pub mod message_thread_repository;

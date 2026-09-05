@@ -51,6 +51,16 @@ pub enum UnprocessableEntity {
 }
 
 #[derive(utoipa::IntoResponses)]
+pub enum PayloadTooLarge {
+    #[response(
+        status = 413,
+        description = "The request payload is too large.",
+        content_type = "application/problem+json"
+    )]
+    PayloadTooLarge(ErrorResponse),
+}
+
+#[derive(utoipa::IntoResponses)]
 pub enum InternalServerError {
     #[response(
         status = 500,
