@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::search::models::{
     AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
-    NumberOfRecordsPerAggregate, UserSearchHit,
+    NumberOfRecordsPerAggregate, SearchIndex, UserSearchHit,
 };
 use domain::{
     account::models::{
@@ -43,6 +43,7 @@ use domain::{
 };
 use errors::{Error, infra::InfraError};
 use mockall::automock;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 #[async_trait]
@@ -386,6 +387,15 @@ pub trait SearchDatabase: Send + Sync {
     async fn sync_search_engine(
         &self,
         data: &[SearchableFieldsWithOperation],
+    ) -> Result<(), InfraError>;
+    async fn fetch_indexed_document_ids(
+        &self,
+        index: SearchIndex,
+    ) -> Result<HashSet<Uuid>, InfraError>;
+    async fn delete_search_documents(
+        &self,
+        index: SearchIndex,
+        ids: Vec<Uuid>,
     ) -> Result<(), InfraError>;
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError>;
     async fn initialize_search_engine(&self) -> Result<bool, InfraError>;

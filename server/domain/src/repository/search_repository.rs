@@ -1,12 +1,14 @@
 use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
+use std::collections::HashSet;
+use uuid::Uuid;
 
 use crate::{
     form::{answer::AnswerStatus, models::FormId},
     search::models::{
         AnswerLabelSearchHit, AnswerSearchHit, CommentSearchHit, FormLabelSearchHit, FormSearchHit,
-        NumberOfRecordsPerAggregate, SearchableFieldsWithOperation, UserSearchHit,
+        NumberOfRecordsPerAggregate, SearchIndex, SearchableFieldsWithOperation, UserSearchHit,
     },
 };
 
@@ -34,6 +36,22 @@ pub trait SearchRepository: Send + Sync + 'static {
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, Error>;
     async fn sync_search_engine(&self, data: &[SearchableFieldsWithOperation])
     -> Result<(), Error>;
+    /// `index` に存在するドキュメントの ID をすべて返す。
+    ///
+    /// 永続化側の ID 集合と突き合わせて、再同期で投入すべきドキュメントと
+    /// 取り残されたドキュメントを求めるために使う。
+    async fn fetch_indexed_document_ids(&self, index: SearchIndex) -> Result<HashSet<Uuid>, Error>;
+    /// `index` から `ids` のドキュメントを削除する。
+    ///
+    /// 削除対象は検索エンジンにしか存在しないドキュメントであり、
+    /// [`SearchableFields`] を組み立てられないため ID だけを受け取る。
+    ///
+    /// [`SearchableFields`]: crate::search::models::SearchableFields
+    async fn delete_search_documents(
+        &self,
+        index: SearchIndex,
+        ids: Vec<Uuid>,
+    ) -> Result<(), Error>;
     async fn fetch_search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, Error>;
     /// 検索インデックスを初期化し、既存の回答文書に再投影が必要かを返す。
     async fn initialize_search_engine(&self) -> Result<bool, Error>;
