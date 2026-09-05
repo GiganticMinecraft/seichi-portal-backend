@@ -73,7 +73,8 @@ impl PathItemExt for HttpMethod {
     }
 }
 
-/// re-export paste so users do not need to add the dependency.
+/// Re-export `pastey` under the legacy `paste` module path so downstream
+/// macro call sites remain unchanged.
 #[doc(hidden)]
 pub use paste::paste;
 

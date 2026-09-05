@@ -311,4 +311,13 @@ mod tests {
              openapi.rs の components(schemas(...)) に登録されているか確認してください: {unresolved:?}"
         );
     }
+
+    #[test]
+    fn versioned_router_collects_openapi_paths() {
+        let (_, openapi) = super::versioned_api_router().split_for_parts();
+        assert!(
+            !openapi.paths.paths.is_empty(),
+            "versioned OpenAPI router must collect annotated routes"
+        );
+    }
 }
