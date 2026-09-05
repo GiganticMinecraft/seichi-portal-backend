@@ -9,6 +9,7 @@ use domain::{
         FormLabel, FormLabelAssignment, FormLabelId, FormPagePosition, FormSettings, FormTitle,
         Question, QuestionSet, Visibility,
     },
+    form::service::DefaultAnswerTitleDomainService,
     pagination::{Page, PageLimit, PageRequest},
     repository::{
         form::{
@@ -465,6 +466,13 @@ impl<
                 .into());
             }
 
+            validate_template_key_update(
+                &current_questions,
+                questions.as_slice(),
+                current_form_read.answer_settings().default_answer_title(),
+                default_answer_title.as_ref(),
+            )?;
+
             if !self
                 .answer_entry_repository
                 .list_by_form(
@@ -920,16 +928,6 @@ fn validate_answered_form_question_update(
 
             updated_question
                 .and_then(|updated_question| {
-                    (current_question.template_key() == updated_question.template_key())
-                        .then_some(updated_question)
-                        .ok_or_else(|| DomainError::InvalidEntity {
-                            message: format!(
-                                "cannot change template_key for answered question {}",
-                                current_question.template_key().as_str()
-                            ),
-                        })
-                })
-                .and_then(|updated_question| {
                     (current_question.question_type() == updated_question.question_type())
                         .then_some((current_question, updated_question))
                         .ok_or_else(|| DomainError::InvalidEntity {
@@ -1028,6 +1026,69 @@ fn validate_answered_form_question_update(
     Ok(())
 }
 
+fn validate_template_key_update(
+    current_questions: &[Question],
+    updated_questions: &[UpsertQuestionInput],
+    current_default_answer_title: &DefaultAnswerTitle,
+    updated_default_answer_title: Option<&DefaultAnswerTitle>,
+) -> Result<(), Error> {
+    let updated_by_id = updated_questions
+        .iter()
+        .map(|question| {
+            (
+                question
+                    .original_id
+                    .unwrap_or_else(|| question.question.id())
+                    .into_inner(),
+                &question.question,
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    if let Some(current_question) = current_questions.iter().find(|current_question| {
+        updated_by_id
+            .get(&current_question.id().into_inner())
+            .is_some_and(|updated_question| {
+                current_question.template_key() != updated_question.template_key()
+                    && DefaultAnswerTitleDomainService::references_template_key(
+                        current_default_answer_title,
+                        current_question.template_key(),
+                    )
+            })
+    }) {
+        let old_key_is_still_referenced = updated_default_answer_title
+            .map(|title| {
+                DefaultAnswerTitleDomainService::references_template_key(
+                    title,
+                    current_question.template_key(),
+                )
+            })
+            .unwrap_or(false);
+
+        if old_key_is_still_referenced {
+            return Err(DomainError::InvalidEntity {
+                message: format!(
+                    "cannot change template_key {} while default_answer_title references it",
+                    current_question.template_key().as_str()
+                ),
+            }
+            .into());
+        }
+
+        if updated_default_answer_title.is_none() {
+            return Err(DomainError::InvalidEntity {
+                message: format!(
+                    "must update default_answer_title when changing template_key {}",
+                    current_question.template_key().as_str()
+                ),
+            }
+            .into());
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1102,6 +1163,63 @@ mod tests {
             )
             .unwrap()
         }
+    }
+
+    fn default_answer_title(title: Option<&str>) -> DefaultAnswerTitle {
+        DefaultAnswerTitle::new(title.map(|title| title.to_string().try_into().unwrap()))
+    }
+
+    #[test]
+    fn answered_question_template_key_changes_are_allowed() {
+        let question_id = QuestionId::from(Uuid::new_v4());
+        let current_questions = vec![text_question(question_id, 0, "old_key")];
+        let updated_questions = vec![UpsertQuestionInput {
+            original_id: Some(question_id),
+            question: text_question(QuestionId::from(Uuid::new_v4()), 0, "new_key"),
+        }];
+
+        assert!(
+            validate_answered_form_question_update(&current_questions, &updated_questions,).is_ok()
+        );
+    }
+
+    #[test]
+    fn template_key_change_requires_default_answer_title_update() {
+        let question_id = QuestionId::from(Uuid::new_v4());
+        let current_questions = vec![text_question(question_id, 0, "old_key")];
+        let updated_questions = vec![UpsertQuestionInput {
+            original_id: Some(question_id),
+            question: text_question(QuestionId::from(Uuid::new_v4()), 0, "new_key"),
+        }];
+        let current_title = default_answer_title(Some("Answer: $old_key"));
+
+        assert!(
+            validate_template_key_update(
+                &current_questions,
+                &updated_questions,
+                &current_title,
+                None,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_template_key_update(
+                &current_questions,
+                &updated_questions,
+                &current_title,
+                Some(&default_answer_title(Some("Answer: $old_key"))),
+            )
+            .is_err()
+        );
+        assert!(
+            validate_template_key_update(
+                &current_questions,
+                &updated_questions,
+                &current_title,
+                Some(&default_answer_title(Some("Answer: $new_key"))),
+            )
+            .is_ok()
+        );
     }
 
     #[tokio::test]

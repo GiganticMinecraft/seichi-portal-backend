@@ -6,11 +6,23 @@ use std::sync::OnceLock;
 use crate::form::{
     answer::{AnswerTitle, PostedAnswerContents},
     models::{DefaultAnswerTitle, FormTitle, Question},
+    question::TemplateKey,
 };
 
 pub struct DefaultAnswerTitleDomainService;
 
 impl DefaultAnswerTitleDomainService {
+    pub fn references_template_key(
+        default_answer_title: &DefaultAnswerTitle,
+        template_key: &TemplateKey,
+    ) -> bool {
+        default_answer_title.as_str().is_some_and(|title| {
+            template_placeholder_regex()
+                .captures_iter(title)
+                .any(|captures| &captures[1] == template_key.as_str())
+        })
+    }
+
     pub fn to_answer_title_from_questions(
         default_answer_title: DefaultAnswerTitle,
         form_title: &FormTitle,
@@ -276,6 +288,24 @@ mod tests {
             title,
             "Support for $username and $body by respondent: $form_name from $username"
         );
+    }
+
+    #[test]
+    fn references_exact_template_key_placeholders_only() {
+        let template_key = "body".try_into().unwrap();
+
+        assert!(DefaultAnswerTitleDomainService::references_template_key(
+            &DefaultAnswerTitle::new(Some("$body".to_string().try_into().unwrap())),
+            &template_key,
+        ));
+        assert!(!DefaultAnswerTitleDomainService::references_template_key(
+            &DefaultAnswerTitle::new(Some("$body_extra".to_string().try_into().unwrap())),
+            &template_key,
+        ));
+        assert!(!DefaultAnswerTitleDomainService::references_template_key(
+            &DefaultAnswerTitle::new(None),
+            &template_key,
+        ));
     }
 
     #[test]

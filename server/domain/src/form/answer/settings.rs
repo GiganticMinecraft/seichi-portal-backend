@@ -99,6 +99,10 @@ impl DefaultAnswerTitle {
     pub fn new(title: Option<NonEmptyString>) -> Self {
         Self(title)
     }
+
+    pub fn as_str(&self) -> Option<&str> {
+        self.0.as_ref().map(|value| value.as_str())
+    }
 }
 
 #[cfg_attr(test, derive(Arbitrary))]
