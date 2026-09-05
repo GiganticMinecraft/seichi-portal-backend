@@ -331,6 +331,10 @@ fn add_meilisearch_stats_auth(
     }
 }
 
+fn is_index_not_found(error: &MeilisearchError) -> bool {
+    matches!(error, MeilisearchError::Meilisearch(error) if error.error_code == ErrorCode::IndexNotFound)
+}
+
 fn ensure_meilisearch_task_succeeded(
     task: Task,
     allow_index_already_exists: bool,
@@ -612,7 +616,13 @@ impl SearchDatabase for ConnectionPool {
                 .with_offset(offset)
                 .with_limit(INDEXED_ID_FETCH_LIMIT);
 
-            let documents = query.execute::<IndexedDocumentId>().await?.results;
+            let documents = match query.execute::<IndexedDocumentId>().await {
+                Ok(documents) => documents.results,
+                // インデックスごと消えているときは投影済みのドキュメントも存在しないため、
+                // 空集合として扱って再同期に全件を投入させる (投入時にインデックスが作り直される)
+                Err(error) if is_index_not_found(&error) => return Ok(None),
+                Err(error) => return Err(error.into()),
+            };
             let next_offset =
                 (documents.len() == INDEXED_ID_FETCH_LIMIT).then(|| offset + documents.len());
 
