@@ -175,20 +175,24 @@ impl<
                 answer_id,
             )
             .await?;
-        let mut attachments = HashMap::new();
-        for comment in thread.comments() {
-            if comment.commented_by().is_some() {
-                attachments.insert(
-                    *comment.comment_id(),
-                    self.comment_attachment_repository
-                        .read(&thread, *comment.comment_id())
-                        .await?
-                        .into_iter()
-                        .map(|attachment| attachment.into_inner())
-                        .collect(),
-                );
-            }
-        }
+        let attachments = self
+            .comment_attachment_repository
+            .read_all(&[&thread])
+            .await?
+            .into_iter()
+            .map(|attachment| attachment.into_inner())
+            .filter(|attachment| {
+                thread
+                    .find_comment(*attachment.comment_id())
+                    .is_some_and(|comment| comment.commented_by().is_some())
+            })
+            .fold(HashMap::new(), |mut attachments, attachment| {
+                attachments
+                    .entry(*attachment.comment_id())
+                    .or_insert_with(Vec::new)
+                    .push(attachment);
+                attachments
+            });
         self.build_comments_with_authors(actor, thread.comments().to_vec(), attachments)
             .await
     }
@@ -462,7 +466,8 @@ mod tests {
         account::models::{Role, UserId},
         form::{
             answer::{
-                AnswerAuthor, AnswerPublication, AnswerSettings, AnswerTitle, AnswerVisibility,
+                AnswerAuthor, AnswerPublication, AnswerResponseVisibility, AnswerSettings,
+                AnswerTitle, AnswerVisibility,
             },
             comment::DeletedComment,
             models::{FormDescription, FormTitle, QuestionSet},
@@ -479,7 +484,9 @@ mod tests {
         FormUseCaseTestRepositories, InMemoryAnswerEntryRepository,
     };
 
-    struct ThreadRepository;
+    struct ThreadRepository {
+        comments: Vec<Comment>,
+    }
 
     #[async_trait]
     impl CommentThreadRepository for ThreadRepository {
@@ -496,7 +503,7 @@ mod tests {
             form: &Allowed<ActiveForm, Read>,
             answer: AnswerEntry,
         ) -> Result<Allowed<CommentThread, Read>, Error> {
-            form.comment_thread_with_comments(answer, Vec::new())
+            form.comment_thread_with_comments(answer, self.comments.clone())
                 .map_err(Into::into)
         }
 
@@ -582,7 +589,9 @@ mod tests {
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
         repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
-        let thread_repository = ThreadRepository;
+        let thread_repository = ThreadRepository {
+            comments: Vec::new(),
+        };
         let attachment_repository = MockCommentAttachmentRepository::new();
         let use_case = CommentUseCase {
             active_form_repository: &repositories.active_form_repository,
@@ -644,6 +653,108 @@ mod tests {
                 .delete_comment(&author, form_id, answer_id, CommentId::new())
                 .await,
             forbidden
+        );
+    }
+
+    #[tokio::test]
+    async fn get_comments_assigns_bulk_loaded_attachments_to_their_comments() {
+        let author = AccountUser::new(
+            "author".to_string(),
+            UserId::from(Uuid::new_v4()),
+            Role::Administrator,
+        );
+        let (form, answer) = {
+            let (form, answer) = private_form_and_answer(&author);
+            (
+                form.change_answer_settings(
+                    AnswerSettings::default()
+                        .change_answer_response_visibility(AnswerResponseVisibility::FULL),
+                ),
+                answer,
+            )
+        };
+        let form_id = *form.id();
+        let answer_id = *answer.id();
+        let first_comment_id = CommentId::new();
+        let second_comment_id = CommentId::new();
+        let first_comment = unsafe {
+            Comment::from_raw_parts(
+                answer_id,
+                first_comment_id,
+                CommentContent::new("first".to_string().try_into().unwrap()),
+                Utc::now(),
+                *author.id(),
+            )
+        };
+        let second_comment = unsafe {
+            Comment::from_raw_parts(
+                answer_id,
+                second_comment_id,
+                CommentContent::new("second".to_string().try_into().unwrap()),
+                Utc::now() + chrono::Duration::seconds(1),
+                *author.id(),
+            )
+        };
+        let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
+        repositories.answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
+        repositories.user_repository.save_user(author.clone());
+        let thread_repository = ThreadRepository {
+            comments: vec![first_comment, second_comment],
+        };
+        let first_attachment = CommentAttachment::new(
+            answer_id,
+            first_comment_id,
+            "first.txt".to_string(),
+            "text/plain".to_string(),
+            5,
+            Utc::now(),
+        )
+        .unwrap();
+        let second_attachment = CommentAttachment::new(
+            answer_id,
+            second_comment_id,
+            "second.txt".to_string(),
+            "text/plain".to_string(),
+            6,
+            Utc::now(),
+        )
+        .unwrap();
+        let mut attachment_repository = MockCommentAttachmentRepository::new();
+        attachment_repository
+            .expect_read_all()
+            .times(1)
+            .returning(move |threads| {
+                let thread = threads.first().unwrap();
+                Ok(vec![
+                    thread
+                        .authorize_comment_attachment_read(first_attachment.clone())
+                        .unwrap(),
+                    thread
+                        .authorize_comment_attachment_read(second_attachment.clone())
+                        .unwrap(),
+                ])
+            });
+        let use_case = CommentUseCase {
+            active_form_repository: &repositories.active_form_repository,
+            user_repository: &repositories.user_repository,
+            answer_entry_repository: &repositories.answer_entry_repository,
+            comment_thread_repository: &thread_repository,
+            comment_attachment_repository: &attachment_repository,
+            application_event_publisher: None,
+        };
+
+        let comments = use_case
+            .get_comments(&author, form_id, answer_id)
+            .await
+            .unwrap();
+
+        assert_eq!(comments.len(), 2);
+        assert_eq!(*comments[0].comment.comment_id(), first_comment_id);
+        assert_eq!(comments[0].attachments[0].file_name().as_str(), "first.txt");
+        assert_eq!(*comments[1].comment.comment_id(), second_comment_id);
+        assert_eq!(
+            comments[1].attachments[0].file_name().as_str(),
+            "second.txt"
         );
     }
 }

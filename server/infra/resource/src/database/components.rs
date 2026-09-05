@@ -279,6 +279,10 @@ pub trait FormCommentAttachmentDatabase: Send + Sync {
         &self,
         comment_id: CommentId,
     ) -> Result<Vec<CommentAttachmentRecord>, InfraError>;
+    async fn get_by_answers(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<CommentAttachmentRecord>, InfraError>;
     async fn get(
         &self,
         attachment_id: domain::form::comment_attachment::CommentAttachmentId,

@@ -4,7 +4,7 @@ use mockall::automock;
 
 use crate::{
     form::{
-        comment::{CommentId, DeletedComment},
+        comment::DeletedComment,
         comment_attachment::{CommentAttachment, CommentAttachmentBatch, CommentAttachmentId},
         comment_thread::CommentThread,
     },
@@ -19,11 +19,10 @@ use crate::{
 #[automock]
 #[async_trait]
 pub trait CommentAttachmentRepository: Send + Sync + 'static {
-    /// 指定コメントの添付メタデータを、親スレッドの読み取り認可付きで返します。
-    async fn read(
+    /// 指定した親スレッド群の添付メタデータを一括取得し、各親の読み取り認可付きで返します。
+    async fn read_all<'a>(
         &self,
-        comment_thread: &Allowed<CommentThread, Read>,
-        comment_id: CommentId,
+        comment_threads: &[&'a Allowed<CommentThread, Read>],
     ) -> Result<Vec<Allowed<CommentAttachment, Read>>, Error>;
 
     /// 添付 ID を指定してメタデータを取得します。

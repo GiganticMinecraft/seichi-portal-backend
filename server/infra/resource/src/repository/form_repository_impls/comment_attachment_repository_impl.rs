@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use domain::{
     form::{
-        comment::{CommentId, DeletedComment},
+        comment::DeletedComment,
         comment_attachment::{CommentAttachment, CommentAttachmentBatch, CommentAttachmentId},
         comment_thread::CommentThread,
     },
@@ -67,22 +67,45 @@ impl<Client> CommentAttachmentRepository for Repository<Client>
 where
     Client: DatabaseComponents + 'static,
 {
-    async fn read(
+    async fn read_all<'a>(
         &self,
-        comment_thread: &Allowed<CommentThread, Read>,
-        comment_id: CommentId,
+        comment_threads: &[&'a Allowed<CommentThread, Read>],
     ) -> Result<Vec<Allowed<CommentAttachment, Read>>, Error> {
+        if comment_threads.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let records = self
             .client
             .form_comment_attachment()
-            .get_by_comment(comment_id)
+            .get_by_answers(
+                comment_threads
+                    .iter()
+                    .map(|comment_thread| *comment_thread.answer_id())
+                    .collect(),
+            )
             .await?;
         records
             .into_iter()
-            .map(|record| {
-                comment_thread
-                    .authorize_comment_attachment_read(attachment_from_record(record)?)
-                    .map_err(Into::into)
+            .filter_map(|record| {
+                let attachment = match attachment_from_record(record) {
+                    Ok(attachment) => attachment,
+                    Err(error) => return Some(Err(error)),
+                };
+                let comment_thread = comment_threads
+                    .iter()
+                    .find(|comment_thread| comment_thread.answer_id() == attachment.answer_id())?;
+                if !comment_thread
+                    .find_comment(*attachment.comment_id())
+                    .is_some_and(|comment| comment.commented_by().is_some())
+                {
+                    return None;
+                }
+                Some(
+                    comment_thread
+                        .authorize_comment_attachment_read(attachment)
+                        .map_err(Into::into),
+                )
             })
             .collect()
     }

@@ -591,52 +591,65 @@ impl<
             .visible_answer_details(account_user, actor_ref, answers, &visible_answers_by_id)
             .await?;
 
-        let visible_comments: Vec<(FormId, Comment, Vec<CommentAttachment>)> =
-            stream::iter(comments)
-                .map(|comment| {
-                    let visible_answers_by_id = &visible_answers_by_id;
-
-                    async move {
-                        let Some(answer) = visible_answers_by_id.get(&comment.answer_id).cloned()
-                        else {
-                            return Ok::<_, Error>(None);
-                        };
-                        let form_id = *answer.form_id();
-                        let Some(thread) =
-                            self.comment_thread_for_answer(actor_ref, answer).await?
-                        else {
-                            return Ok::<_, Error>(None);
-                        };
-
-                        let Some(comment) = thread
-                            .comments()
-                            .iter()
-                            .find(|loaded| *loaded.comment_id() == comment.comment_id)
-                            .cloned()
-                        else {
-                            return Ok(None);
-                        };
-                        let attachments = if comment.commented_by().is_some() {
-                            match self.comment_attachment_repository {
-                                Some(repository) => repository
-                                    .read(&thread, *comment.comment_id())
-                                    .await?
-                                    .into_iter()
-                                    .map(|attachment| attachment.into_inner())
-                                    .collect(),
-                                None => Vec::new(),
-                            }
-                        } else {
-                            Vec::new()
-                        };
-
-                        Ok(Some((form_id, comment, attachments)))
-                    }
+        let comment_answer_ids = unique_answer_ids(comments.iter().map(|hit| hit.answer_id));
+        let comment_answers = comment_answer_ids
+            .into_iter()
+            .filter_map(|answer_id| visible_answers_by_id.get(&answer_id).cloned())
+            .collect::<Vec<_>>();
+        let visible_comment_threads: HashMap<AnswerId, (FormId, Allowed<CommentThread, Read>)> =
+            stream::iter(comment_answers)
+                .map(|answer| async move {
+                    let answer_id = *answer.id();
+                    let form_id = *answer.form_id();
+                    self.comment_thread_for_answer(actor_ref, answer)
+                        .await
+                        .map(|thread| thread.map(|thread| (answer_id, (form_id, thread))))
                 })
                 .buffered(SEARCH_DETAIL_FETCH_CONCURRENCY)
                 .try_filter_map(|visible| ready(Ok(visible)))
                 .try_collect()
                 .await?;
+
+        let comment_threads = visible_comment_threads
+            .values()
+            .map(|(_, thread)| thread)
+            .collect::<Vec<_>>();
+        let attachments_by_comment = match self.comment_attachment_repository {
+            Some(repository) => repository
+                .read_all(&comment_threads)
+                .await?
+                .into_iter()
+                .map(|attachment| attachment.into_inner())
+                .fold(HashMap::new(), |mut attachments, attachment| {
+                    attachments
+                        .entry(*attachment.comment_id())
+                        .or_insert_with(Vec::new)
+                        .push(attachment);
+                    attachments
+                }),
+            None => HashMap::new(),
+        };
+
+        let visible_comments: Vec<(FormId, Comment, Vec<CommentAttachment>)> = comments
+            .into_iter()
+            .filter_map(|hit| {
+                let (form_id, thread) = visible_comment_threads.get(&hit.answer_id)?;
+                let comment = thread
+                    .comments()
+                    .iter()
+                    .find(|loaded| *loaded.comment_id() == hit.comment_id)
+                    .cloned()?;
+                let attachments = if comment.commented_by().is_some() {
+                    attachments_by_comment
+                        .get(comment.comment_id())
+                        .cloned()
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                Some((*form_id, comment, attachments))
+            })
+            .collect();
         let visible_comments = self
             .cross_search_comments_with_authors(account_user, visible_comments)
             .await?;
@@ -2100,6 +2113,10 @@ mod tests {
                         comment_id: first_comment_id,
                         answer_id,
                     },
+                    CommentSearchHit {
+                        comment_id: first_comment_id,
+                        answer_id,
+                    },
                 ])
             });
 
@@ -2142,17 +2159,18 @@ mod tests {
         .unwrap();
         let mut attachment_repository = MockCommentAttachmentRepository::new();
         attachment_repository
-            .expect_read()
-            .returning(move |thread, comment_id| {
-                if comment_id == first_comment_id {
-                    Ok(vec![
+            .expect_read_all()
+            .times(1)
+            .returning(move |threads| {
+                Ok(if let Some(thread) = threads.first() {
+                    vec![
                         thread
                             .authorize_comment_attachment_read(attachment.clone())
                             .unwrap(),
-                    ])
+                    ]
                 } else {
-                    Ok(vec![])
-                }
+                    vec![]
+                })
             });
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -2182,7 +2200,10 @@ mod tests {
             .iter()
             .map(|comment| *comment.comment.comment.comment_id())
             .collect::<Vec<_>>();
-        assert_eq!(comment_ids, vec![second_comment_id, first_comment_id]);
+        assert_eq!(
+            comment_ids,
+            vec![second_comment_id, first_comment_id, first_comment_id]
+        );
 
         let first_comment = output
             .comments
@@ -2200,7 +2221,7 @@ mod tests {
             .iter()
             .map(|comment| comment.form_id)
             .collect::<Vec<_>>();
-        assert_eq!(form_ids, vec![form_id, form_id]);
+        assert_eq!(form_ids, vec![form_id, form_id, form_id]);
     }
 
     #[tokio::test]
