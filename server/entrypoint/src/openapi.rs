@@ -315,18 +315,62 @@ mod tests {
     #[test]
     fn versioned_router_collects_openapi_paths() {
         let (_, openapi) = super::versioned_api_router().split_for_parts();
-        let paths = openapi.paths.paths;
-        assert!(
-            paths.contains_key("/api/v1/forms"),
-            "versioned OpenAPI router must include /api/v1/forms"
-        );
-        assert!(
-            paths.contains_key("/api/v1/users/me"),
-            "versioned OpenAPI router must include /api/v1/users/me"
-        );
-        assert!(
-            paths.contains_key("/api/v1/notifications"),
-            "versioned OpenAPI router must include /api/v1/notifications"
-        );
+        let mut actual_paths = openapi
+            .paths
+            .paths
+            .keys()
+            .map(std::string::String::as_str)
+            .collect::<Vec<_>>();
+        actual_paths.sort_unstable();
+
+        let expected_paths = [
+            "/api/v1/archived-forms",
+            "/api/v1/archived-forms/{form_id}",
+            "/api/v1/archived-forms/{form_id}/restore",
+            "/api/v1/forms",
+            "/api/v1/forms/answers",
+            "/api/v1/forms/answers/{answer_id}/labels",
+            "/api/v1/forms/{form_id}",
+            "/api/v1/forms/{form_id}/answers",
+            "/api/v1/forms/{form_id}/answers/{answer_id}",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/comments",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/comments/history",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/comments/{comment_id}",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/messages",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/messages/history",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/messages/{message_id}",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/related-answers",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/related-answers/{related_answer_id}",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/status/history",
+            "/api/v1/forms/{form_id}/answers/{answer_id}/title/history",
+            "/api/v1/forms/{form_id}/archive",
+            "/api/v1/forms/{form_id}/temporary-answers",
+            "/api/v1/labels/answers",
+            "/api/v1/labels/answers/{label_id}",
+            "/api/v1/labels/forms",
+            "/api/v1/labels/forms/{label_id}",
+            "/api/v1/link-discord",
+            "/api/v1/notifications",
+            "/api/v1/notifications/read-all",
+            "/api/v1/notifications/settings/me",
+            "/api/v1/notifications/settings/{uuid}",
+            "/api/v1/notifications/{notification_id}/read",
+            "/api/v1/search",
+            "/api/v1/search/answers",
+            "/api/v1/search/users",
+            "/api/v1/session",
+            "/api/v1/settings/global-discord-webhook",
+            "/api/v1/user-groups",
+            "/api/v1/user-groups/{group_id}",
+            "/api/v1/user-groups/{group_id}/users",
+            "/api/v1/user-groups/{group_id}/users/{user_id}",
+            "/api/v1/users",
+            "/api/v1/users/me",
+            "/api/v1/users/{uuid}",
+            "/api/v1/users/{uuid}/form-submission-restriction",
+            "/api/v1/users/{uuid}/form-submission-restriction/history",
+            "/api/v1/users/{uuid}/minecraft-punishments",
+        ];
+        assert_eq!(actual_paths, expected_paths);
     }
 }
