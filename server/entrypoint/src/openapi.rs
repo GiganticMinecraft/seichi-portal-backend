@@ -315,9 +315,18 @@ mod tests {
     #[test]
     fn versioned_router_collects_openapi_paths() {
         let (_, openapi) = super::versioned_api_router().split_for_parts();
+        let paths = openapi.paths.paths;
         assert!(
-            !openapi.paths.paths.is_empty(),
-            "versioned OpenAPI router must collect annotated routes"
+            paths.contains_key("/api/v1/forms"),
+            "versioned OpenAPI router must include /api/v1/forms"
+        );
+        assert!(
+            paths.contains_key("/api/v1/users/me"),
+            "versioned OpenAPI router must include /api/v1/users/me"
+        );
+        assert!(
+            paths.contains_key("/api/v1/notifications"),
+            "versioned OpenAPI router must include /api/v1/notifications"
         );
     }
 }
