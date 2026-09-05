@@ -54,3 +54,6 @@ lapin = "4.10.0"
 utoipa = { version = "5.5.0", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+
+[patch.crates-io]
+utoipa-axum = { path = "vendor/utoipa-axum" }
