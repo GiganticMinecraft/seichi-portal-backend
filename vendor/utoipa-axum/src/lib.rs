@@ -76,7 +76,7 @@ impl PathItemExt for HttpMethod {
 /// Re-export `pastey` under the legacy `paste` module path so downstream
 /// macro call sites remain unchanged.
 #[doc(hidden)]
-pub use paste::paste;
+pub use paste::paste as paste;
 
 /// Collect axum handlers annotated with [`utoipa::path`] to [`router::UtoipaMethodRouter`].
 ///
