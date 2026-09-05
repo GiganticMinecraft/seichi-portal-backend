@@ -1608,7 +1608,7 @@ impl UserRepository for InMemoryUserRepository {
         &self,
         xbox_token: String,
         user: &AccountUser,
-        _expires: u32,
+        _lifetime: domain::account::models::UserSessionLifetime,
     ) -> Result<String, Error> {
         self.sessions
             .lock()

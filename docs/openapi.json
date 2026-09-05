@@ -8438,13 +8438,12 @@
       "SessionCreateSchema": {
         "type": "object",
         "required": [
-          "expires"
+          "expires_at"
         ],
         "properties": {
-          "expires": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

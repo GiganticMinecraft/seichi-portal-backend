@@ -1,7 +1,7 @@
 use domain::{
     account::models::{
         AccountUser, DiscordAccountLink, Role, UserGroup, UserGroupId, UserGroupName,
-        UserPagePosition,
+        UserPagePosition, UserSessionLifetime,
     },
     auth::Actor,
     pagination::{Page, PageRequest},
@@ -325,10 +325,10 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         &self,
         xbox_token: String,
         user: &AccountUser,
-        expires: u32,
+        lifetime: UserSessionLifetime,
     ) -> Result<String, Error> {
         self.repository
-            .start_user_session(xbox_token, user, expires)
+            .start_user_session(xbox_token, user, lifetime)
             .await
     }
 

@@ -1,3 +1,4 @@
+use chrono::{DateTime, TimeDelta, Utc};
 #[cfg(test)]
 use common::test_utils::arbitrary_uuid_v4;
 use derive_getters::Getters;
@@ -208,9 +209,31 @@ impl AuthorizationGuardDefinitions for UserGroup {
     }
 }
 
-#[derive(Deserialize)]
-pub struct UserSessionExpires {
-    pub expires: u32,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UserSessionLifetime(u32);
+
+impl UserSessionLifetime {
+    pub fn until(
+        expires_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+        maximum: TimeDelta,
+    ) -> Result<Self, errors::domain::DomainError> {
+        let maximum_expires_at = now
+            .checked_add_signed(maximum)
+            .ok_or(errors::domain::DomainError::InvalidSessionExpiration)?;
+        let effective_expires_at = expires_at.min(maximum_expires_at);
+        let seconds = (effective_expires_at - now).num_seconds();
+        let seconds = u32::try_from(seconds)
+            .ok()
+            .filter(|seconds| *seconds > 0)
+            .ok_or(errors::domain::DomainError::InvalidSessionExpiration)?;
+
+        Ok(Self(seconds))
+    }
+
+    pub fn into_seconds(self) -> u32 {
+        self.0
+    }
 }
 
 #[derive(DerivingVia, Debug, PartialEq, Eq)]
@@ -300,6 +323,33 @@ impl AuthorizationGuardDefinitions for DiscordAccountLink {
 mod tests {
     use super::*;
     use crate::form::answer::TemporaryAnswerAuthor;
+
+    #[test]
+    fn session_lifetime_uses_upstream_expiration_when_it_is_within_the_limit() {
+        let now = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+        let expires_at = now + TimeDelta::hours(1);
+
+        let lifetime = UserSessionLifetime::until(expires_at, now, TimeDelta::days(7)).unwrap();
+
+        assert_eq!(lifetime.into_seconds(), 60 * 60);
+    }
+
+    #[test]
+    fn session_lifetime_is_capped_by_the_server_limit() {
+        let now = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+        let expires_at = now + TimeDelta::days(30);
+
+        let lifetime = UserSessionLifetime::until(expires_at, now, TimeDelta::days(7)).unwrap();
+
+        assert_eq!(lifetime.into_seconds(), 7 * 24 * 60 * 60);
+    }
+
+    #[test]
+    fn session_lifetime_rejects_an_expired_deadline() {
+        let now = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+
+        assert!(UserSessionLifetime::until(now, now, TimeDelta::days(7)).is_err());
+    }
 
     fn user_id(seed: u128) -> UserId {
         UserId::from(Uuid::from_u128(seed))

@@ -1,7 +1,7 @@
 use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
 
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     http::{
         HeaderName, Method, StatusCode,
         header::{AUTHORIZATION, CONTENT_TYPE, LOCATION},
@@ -13,7 +13,10 @@ use axum::{
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
 use domain::search::models::SearchableFieldsWithOperation;
-use entrypoint::{logging, openapi, panic_hook, profiling, telemetry, turnstile::TurnstileConfig};
+use entrypoint::{
+    logging, openapi, panic_hook, profiling, session::SessionConfig, telemetry,
+    turnstile::TurnstileConfig,
+};
 use futures::join;
 use hyper::header::SET_COOKIE;
 use opentelemetry::trace::TracerProvider as _;
@@ -29,6 +32,7 @@ use presentation::handlers::search_handler::{
     wait_for_search_engine_initialization,
 };
 use presentation::rate_limit::{RateLimitState, middleware as rate_limit_middleware};
+use presentation::session::SessionPolicy;
 use presentation::turnstile::{TurnstileState, middleware as turnstile_middleware};
 use resource::rate_limit::ValkeyRateLimitStore;
 use resource::turnstile::TurnstileSiteverifyClient;
@@ -51,6 +55,7 @@ use utoipa_swagger_ui::SwaggerUi;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let turnstile_config = TurnstileConfig::from_environment()?;
+    let session_config = SessionConfig::from_environment()?;
     let tracer_provider = telemetry::init_tracer_provider();
 
     // SQL 文の出力 (bind 値を含みうる) はログへ出さない
@@ -114,7 +119,9 @@ async fn main() -> anyhow::Result<()> {
             anyhow::anyhow!("invalid Valkey rate-limit configuration: {error:?}")
         })?);
     let proxy_secret = std::env::var("SEICHI_PROXY_SECRET").ok();
-    let rate_limit_state = RateLimitState::new(rate_limit_store, proxy_secret);
+    let rate_limit_state = RateLimitState::new(rate_limit_store, proxy_secret.clone());
+    let session_policy =
+        SessionPolicy::new(session_config.maximum_lifetime_seconds(), proxy_secret);
     let turnstile_state = match turnstile_config {
         TurnstileConfig::Disabled => TurnstileState::disabled(),
         TurnstileConfig::Enabled {
@@ -225,6 +232,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(OtelInResponseLayer)
         // リクエストごとの OTel スパン開始。/health はトレース対象外
         .layer(OtelAxumLayer::default().filter(|path| !path.starts_with("/health")))
+        .layer(Extension(session_policy))
         .layer(
             CorsLayer::new()
                 .allow_methods([

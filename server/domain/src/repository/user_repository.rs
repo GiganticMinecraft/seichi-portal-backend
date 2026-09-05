@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::{
     account::models::{
         AccountUser, DiscordAccountLink, DiscordUser, UserGroup, UserGroupId, UserPagePosition,
+        UserSessionLifetime,
     },
     pagination::{Page, PageRequest},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
@@ -56,7 +57,7 @@ pub trait UserRepository: Send + Sync + 'static {
         &self,
         xbox_token: String,
         user: &AccountUser,
-        expires: u32,
+        lifetime: UserSessionLifetime,
     ) -> Result<String, Error>;
     async fn fetch_user_by_session_id(
         &self,
