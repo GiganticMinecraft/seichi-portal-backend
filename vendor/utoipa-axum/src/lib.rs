@@ -90,7 +90,7 @@ pub use paste::paste;
 /// # Panics
 ///
 /// Routes registered via [`routes`] macro or via `axum::routing::*` operations are bound to same
-/// rules where only one one HTTP method can can be registered once per call. This means that the
+/// rules where only one HTTP method can be registered once per call. This means that the
 /// following will produce runtime panic from axum code.
 ///
 /// ```rust,no_run
