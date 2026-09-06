@@ -9,14 +9,18 @@ use domain::{
     form::{
         answer::RedmineIssueId,
         question::QuestionType,
-        redmine_import::{RedmineImportTarget, RedmineIssueRelation, RedmineIssueRelationBatch},
+        redmine_import::{
+            RedmineImportResult, RedmineImportTarget, RedmineIssueRelation,
+            RedmineIssueRelationBatch,
+        },
     },
     types::authorization_guard::{Allowed, Read},
 };
 use futures::{StreamExt, stream};
 use redmine_importer::{
-    Config, EXCLUDED_TRACKERS, InquiryClassification, RedmineApi, TARGET_TRACKERS,
-    build_issue_input, classify_inquiry, unique_issue_relations,
+    AttachmentUploadCandidate, Config, EXCLUDED_TRACKERS, InquiryClassification, PortalApi,
+    PortalAttachmentUpload, RedmineApi, RedmineAttachmentAssociation, TARGET_TRACKERS,
+    build_issue_input, classify_inquiry, select_attachment_uploads, unique_issue_relations,
 };
 use resource::{database::connection::RedmineImportConnectionPool, repository::Repository};
 use usecase::redmine_import::{RedmineImportUseCase, prepare_issue, validate_question_value};
@@ -45,6 +49,7 @@ struct PreparedIssue {
     issue_id: RedmineIssueId,
     inquiry_classification: InquiryClassification,
     issue: domain::form::redmine_import::RedmineImportedIssue,
+    attachments: Vec<RedmineAttachmentAssociation>,
 }
 
 #[derive(Default)]
@@ -342,19 +347,23 @@ async fn run() -> Result<()> {
             continue;
         }
 
-        if let Some(attachments) = issue.attachments.as_ref()
-            && !attachments.is_empty()
-        {
-            let filenames = attachments
-                .iter()
-                .map(|attachment| format!("{}({})", attachment.filename, attachment.id))
-                .collect::<Vec<_>>()
-                .join(", ");
-            report.warning(format!(
-                "issue {} の添付本体は移行しません: {filenames}",
-                issue.id
-            ));
+        let attachment_result = match redmine_importer::associate_attachments_with_fallback(
+            &issue.journals,
+            &issue.attachments,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                report.error(format!(
+                    "issue {} の添付を検証できません: {error}",
+                    issue.id
+                ));
+                continue;
+            }
+        };
+        for warning in attachment_result.warnings {
+            report.warning(format!("issue {} の添付: {warning}", issue.id));
         }
+        let attachments = attachment_result.associations;
         let status = match config.status_for(&issue.status.name) {
             Ok(status) => status,
             Err(error) => {
@@ -428,6 +437,7 @@ async fn run() -> Result<()> {
             issue_id,
             inquiry_classification,
             issue: imported,
+            attachments,
         });
         *inquiry_counts.entry(inquiry_classification).or_insert(0) += 1;
     }
@@ -526,13 +536,46 @@ async fn run() -> Result<()> {
             }
         }
         Mode::Import => {
+            let portal_api = prepared_issues
+                .iter()
+                .any(|prepared| !prepared.attachments.is_empty())
+                .then(|| PortalApi::from_env(config.max_retries, config.retry_base_delay_ms))
+                .transpose()?;
             for prepared in prepared_issues {
-                let issue_id = prepared.issue_id.into_inner();
-                let result = usecase.import_issue(prepared.issue).await?;
+                let PreparedIssue {
+                    project_id,
+                    tracker_name,
+                    issue_id,
+                    inquiry_classification,
+                    issue,
+                    attachments,
+                } = prepared;
+                let issue_id = issue_id.into_inner();
+                let form_id = *issue.answer().form_id();
+                let imported_answer_id = *issue.answer().id();
+                let result = usecase.import_issue(issue).await?;
                 println!(
                     "IMPORT project={} issue={issue_id} tracker={:?} classification={:?} result={result:?}",
-                    prepared.project_id, prepared.tracker_name, prepared.inquiry_classification
+                    project_id, tracker_name, inquiry_classification
                 );
+                if !attachments.is_empty() {
+                    let portal_api = portal_api
+                        .as_ref()
+                        .expect("Portal API is initialized when an issue has attachments");
+                    let answer_id = match result {
+                        RedmineImportResult::Imported => imported_answer_id,
+                        RedmineImportResult::AlreadyImported => {
+                            portal_api.find_answer_id(form_id, issue_id).await?
+                        }
+                    };
+                    let uploaded =
+                        import_issue_attachments(&api, portal_api, form_id, answer_id, attachments)
+                            .await
+                            .with_context(|| {
+                                format!("issue {} の Portal コメント添付を移行できません", issue_id)
+                            })?;
+                    println!("IMPORT attachments issue={} uploaded={uploaded}", issue_id);
+                }
             }
             let result = usecase.import_answer_relations(relation_batch).await?;
             println!(
@@ -544,6 +587,75 @@ async fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn import_issue_attachments(
+    redmine_api: &RedmineApi,
+    portal_api: &PortalApi,
+    form_id: domain::form::models::FormId,
+    answer_id: domain::form::answer::AnswerId,
+    associations: Vec<RedmineAttachmentAssociation>,
+) -> Result<usize> {
+    let comments = portal_api.fetch_comments(form_id, answer_id).await?;
+    let candidates =
+        futures::stream::iter(associations.into_iter().map(|association| async move {
+            let downloaded = redmine_api
+                .download_attachment(&association.attachment)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Redmine attachment {} をダウンロードできません",
+                        association.attachment.id
+                    )
+                })?;
+            Ok::<_, anyhow::Error>(AttachmentUploadCandidate {
+                journal_id: association.journal_id,
+                attachment: association.attachment,
+                content_type: downloaded.content_type,
+                content: downloaded.content,
+            })
+        }))
+        .buffered(1)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
+    let uploads = select_attachment_uploads(&comments, candidates)?;
+    let upload_count = uploads.len();
+    let comment_ids_by_journal = comments
+        .iter()
+        .filter_map(|comment| {
+            comment
+                .redmine_journal_id
+                .map(|journal_id| (journal_id, comment.id.clone()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut uploads_by_comment = BTreeMap::new();
+    for upload in uploads {
+        let comment_id = comment_ids_by_journal
+            .get(&upload.journal_id)
+            .cloned()
+            .with_context(|| {
+                format!(
+                    "Redmine journal {} に対応する Portal comment がありません",
+                    upload.journal_id
+                )
+            })?;
+        uploads_by_comment
+            .entry(comment_id)
+            .or_insert_with(Vec::new)
+            .push(PortalAttachmentUpload {
+                file_name: upload.attachment.filename,
+                content_type: upload.content_type,
+                content: upload.content,
+            });
+    }
+    for (comment_id, uploads) in uploads_by_comment {
+        portal_api
+            .upload_attachments(form_id, answer_id, &comment_id, uploads)
+            .await?;
+    }
+    Ok(upload_count)
 }
 
 fn parse_args() -> Result<(Mode, PathBuf)> {

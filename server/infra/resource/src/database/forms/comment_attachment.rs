@@ -124,7 +124,13 @@ impl FormCommentAttachmentDatabase for ConnectionPool {
             Box::pin(async move {
                 sqlx::query!(
                     "SELECT id FROM form_answer_comments
-                     WHERE id = ? AND answer_id = ? FOR UPDATE",
+                     WHERE id = ? AND answer_id = ?
+                     UNION ALL
+                     SELECT comment_id AS id FROM redmine_imported_comments
+                     WHERE comment_id = ? AND answer_id = ?
+                     LIMIT 1",
+                    &comment_id,
+                    &answer_id,
                     &comment_id,
                     &answer_id,
                 )

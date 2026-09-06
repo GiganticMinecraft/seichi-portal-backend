@@ -8,13 +8,15 @@ use std::{
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Timelike, Utc};
 use domain::form::{
-    answer::{AnswerPublication, AnswerStatus, RedmineIssueId, RedmineUserSnapshot},
+    answer::{AnswerId, AnswerPublication, AnswerStatus, RedmineIssueId, RedmineUserSnapshot},
     models::FormId,
 };
-use reqwest::StatusCode;
+use reqwest::{StatusCode, header};
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::Value;
 use usecase::redmine_import::{RedmineIssueInput, RedmineJournalInput};
+
+use domain::form::comment_attachment::MAX_COMMENT_ATTACHMENT_SIZE;
 
 pub const PUBLIC_TRACKER_ID: i64 = 19;
 
@@ -808,13 +810,232 @@ pub fn unique_issue_relations(stubs: &[IssueStub]) -> Result<Vec<RedmineIssueRel
 }
 
 #[derive(Clone)]
-pub struct RedmineApi {
+enum ApiAuthorization {
+    RedmineApiKey(String),
+    PortalSession(String),
+}
+
+#[derive(Clone)]
+struct ApiClient {
     client: reqwest::Client,
     base_url: String,
-    api_key: String,
-    project_ids: Vec<i64>,
+    authorization: ApiAuthorization,
     max_retries: u32,
     retry_base_delay_ms: u64,
+}
+
+struct MultipartPart {
+    file_name: String,
+    content_type: String,
+    content: Vec<u8>,
+}
+
+impl ApiClient {
+    fn new(
+        base_url: String,
+        authorization: ApiAuthorization,
+        max_retries: u32,
+        retry_base_delay_ms: u64,
+    ) -> Result<Self> {
+        let base_url = base_url.trim_end_matches('/').to_owned();
+        if base_url.trim().is_empty() {
+            bail!("API base URL が空です");
+        }
+
+        Ok(Self {
+            client: reqwest::Client::builder()
+                .user_agent("seichi-portal-redmine-importer")
+                .timeout(Duration::from_secs(30))
+                .build()?,
+            base_url,
+            authorization,
+            max_retries,
+            retry_base_delay_ms,
+        })
+    }
+
+    fn url(&self, path: &str) -> String {
+        if path.starts_with("http://") || path.starts_with("https://") {
+            path.to_owned()
+        } else {
+            format!("{}{path}", self.base_url)
+        }
+    }
+
+    fn authorize(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match &self.authorization {
+            ApiAuthorization::RedmineApiKey(api_key) => {
+                request.header("X-Redmine-API-Key", api_key)
+            }
+            ApiAuthorization::PortalSession(session_id) => request.bearer_auth(session_id),
+        }
+    }
+
+    async fn get_response(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<reqwest::Response> {
+        let url = self.url(path);
+        let mut last_error = None;
+
+        for attempt in 0..=self.max_retries {
+            let response = self
+                .authorize(self.client.get(&url).query(query))
+                .send()
+                .await;
+
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    last_error = Some(format!("GET {path} に失敗しました: {error}"));
+                    if attempt == self.max_retries {
+                        break;
+                    }
+                    tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
+                    continue;
+                }
+            };
+
+            let status = response.status();
+            if status.is_success() {
+                return Ok(response);
+            }
+
+            let body = response.text().await.unwrap_or_default();
+            let message = format!(
+                "GET {path} が HTTP {} で失敗しました: {}",
+                status,
+                truncate_for_error(&body),
+            );
+            if !is_retryable_status(status) || attempt == self.max_retries {
+                bail!(message);
+            }
+            last_error = Some(message);
+            tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
+        }
+
+        bail!(last_error.unwrap_or_else(|| format!("GET {path} に失敗しました")))
+    }
+
+    async fn get_json<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<T> {
+        self.get_response(path, query)
+            .await?
+            .json::<T>()
+            .await
+            .with_context(|| format!("GET {path} の JSON が不正です"))
+    }
+
+    async fn get_bytes(&self, path: &str) -> Result<(String, Vec<u8>)> {
+        let mut response = self.get_response(path, &[]).await?;
+        if response
+            .content_length()
+            .is_some_and(|size| size > MAX_COMMENT_ATTACHMENT_SIZE)
+        {
+            bail!(
+                "Redmine attachment {} はサイズ上限 {} bytes を超えています",
+                path,
+                MAX_COMMENT_ATTACHMENT_SIZE
+            );
+        }
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .map(|value| {
+                value
+                    .to_str()
+                    .context("Redmine attachment の Content-Type が不正です")
+                    .map(str::to_owned)
+            })
+            .transpose()?
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "application/octet-stream".to_owned());
+        let capacity = response
+            .content_length()
+            .unwrap_or_default()
+            .min(MAX_COMMENT_ATTACHMENT_SIZE) as usize;
+        let mut content = Vec::with_capacity(capacity);
+        while let Some(chunk) = response.chunk().await? {
+            let next_size = content
+                .len()
+                .checked_add(chunk.len())
+                .context("Redmine attachment のサイズ計算がオーバーフローしました")?;
+            if next_size as u64 > MAX_COMMENT_ATTACHMENT_SIZE {
+                bail!(
+                    "Redmine attachment {} はサイズ上限 {} bytes を超えています",
+                    path,
+                    MAX_COMMENT_ATTACHMENT_SIZE
+                );
+            }
+            content.extend_from_slice(&chunk);
+        }
+        Ok((content_type, content))
+    }
+
+    async fn post_multipart(&self, path: &str, parts: &[MultipartPart]) -> Result<()> {
+        let mut last_error = None;
+        for attempt in 0..=self.max_retries {
+            let form = parts
+                .iter()
+                .try_fold(reqwest::multipart::Form::new(), |form, part| {
+                    let part = reqwest::multipart::Part::bytes(part.content.clone())
+                        .file_name(part.file_name.clone())
+                        .mime_str(&part.content_type)
+                        .context("Portal attachment の Content-Type が不正です")?;
+                    Ok::<_, anyhow::Error>(form.part("file", part))
+                })?;
+            let response = self
+                .authorize(self.client.post(self.url(path)).multipart(form))
+                .send()
+                .await;
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    last_error = Some(format!("POST {path} に失敗しました: {error}"));
+                    if attempt == self.max_retries {
+                        break;
+                    }
+                    tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
+                    continue;
+                }
+            };
+            if response.status().is_success() {
+                return Ok(());
+            }
+            let status = response.status();
+            let retry_after = response
+                .headers()
+                .get(header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+                .map(Duration::from_secs);
+            let body = response.text().await.unwrap_or_default();
+            let message = format!(
+                "POST {path} が HTTP {} で失敗しました: {}",
+                status,
+                truncate_for_error(&body)
+            );
+            if !is_retryable_status(status) || attempt == self.max_retries {
+                bail!(message);
+            }
+            last_error = Some(message);
+            tokio::time::sleep(
+                retry_after.unwrap_or_else(|| retry_delay(attempt, self.retry_base_delay_ms)),
+            )
+            .await;
+        }
+        bail!(last_error.unwrap_or_else(|| format!("POST {path} に失敗しました")))
+    }
+}
+
+#[derive(Clone)]
+pub struct RedmineApi {
+    http: ApiClient,
+    project_ids: Vec<i64>,
 }
 
 impl RedmineApi {
@@ -860,73 +1081,19 @@ impl RedmineApi {
         }
 
         Ok(Self {
-            client: reqwest::Client::builder()
-                .user_agent("seichi-portal-redmine-importer")
-                .timeout(Duration::from_secs(30))
-                .build()?,
-            base_url: base_url.trim_end_matches('/').to_string(),
-            api_key,
+            http: ApiClient::new(
+                base_url,
+                ApiAuthorization::RedmineApiKey(api_key),
+                max_retries,
+                retry_base_delay_ms,
+            )?,
             project_ids,
-            max_retries,
-            retry_base_delay_ms,
         })
     }
 
-    async fn get_json<T: DeserializeOwned>(
-        &self,
-        path: &str,
-        query: &[(&str, String)],
-    ) -> Result<T> {
-        let url = format!("{}{path}", self.base_url);
-        let mut last_error = None;
-
-        for attempt in 0..=self.max_retries {
-            let response = self
-                .client
-                .get(&url)
-                .header("X-Redmine-API-Key", &self.api_key)
-                .query(query)
-                .send()
-                .await;
-
-            let response = match response {
-                Ok(response) => response,
-                Err(error) => {
-                    last_error = Some(format!("Redmine GET {path} に失敗しました: {error}"));
-                    if attempt == self.max_retries {
-                        break;
-                    }
-                    tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
-                    continue;
-                }
-            };
-
-            let status = response.status();
-            if status.is_success() {
-                return response
-                    .json::<T>()
-                    .await
-                    .with_context(|| format!("Redmine GET {path} の JSON が不正です"));
-            }
-
-            let body = response.text().await.unwrap_or_default();
-            let message = format!(
-                "Redmine GET {path} が HTTP {} で失敗しました: {}",
-                status,
-                truncate_for_error(&body),
-            );
-            if !is_retryable_status(status) || attempt == self.max_retries {
-                bail!(message);
-            }
-            last_error = Some(message);
-            tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
-        }
-
-        bail!(last_error.unwrap_or_else(|| format!("Redmine GET {path} に失敗しました")))
-    }
-
     pub async fn fetch_issue_statuses(&self) -> Result<Vec<NamedId>> {
-        let response: IssueStatusesResponse = self.get_json("/issue_statuses.json", &[]).await?;
+        let response: IssueStatusesResponse =
+            self.http.get_json("/issue_statuses.json", &[]).await?;
         Ok(response.issue_statuses)
     }
 
@@ -940,6 +1107,7 @@ impl RedmineApi {
 
             loop {
                 let page: IssuePage = self
+                    .http
                     .get_json(
                         "/issues.json",
                         &[
@@ -1005,9 +1173,10 @@ impl RedmineApi {
     pub async fn fetch_issue(&self, issue_id: RedmineIssueId) -> Result<RedmineIssue> {
         let issue_id = issue_id.into_inner();
         let response: IssueResponse = self
+            .http
             .get_json(
                 &format!("/issues/{issue_id}.json"),
-                &[("include", "journals".to_string())],
+                &[("include", "journals,attachments".to_string())],
             )
             .await?;
         if response.issue.id != issue_id {
@@ -1018,6 +1187,275 @@ impl RedmineApi {
         }
         Ok(response.issue)
     }
+
+    pub async fn download_attachment(
+        &self,
+        attachment: &RedmineAttachment,
+    ) -> Result<DownloadedRedmineAttachment> {
+        if attachment.id <= 0 {
+            bail!("Redmine attachment ID が不正です: {}", attachment.id);
+        }
+        if attachment
+            .filesize
+            .is_some_and(|size| size > MAX_COMMENT_ATTACHMENT_SIZE)
+        {
+            bail!(
+                "Redmine attachment {} はサイズ上限 {} bytes を超えています",
+                attachment.id,
+                MAX_COMMENT_ATTACHMENT_SIZE
+            );
+        }
+        let path = redmine_attachment_path(
+            &self.http.base_url,
+            attachment.id,
+            attachment.content_url.as_deref(),
+        )?;
+        let (content_type, content) = self.http.get_bytes(&path).await?;
+        if attachment
+            .filesize
+            .is_some_and(|size| size != content.len() as u64)
+        {
+            bail!(
+                "Redmine attachment {} の metadata filesize と取得本体のサイズが一致しません",
+                attachment.id
+            );
+        }
+        Ok(DownloadedRedmineAttachment {
+            content_type,
+            content,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct PortalApi {
+    http: ApiClient,
+}
+
+impl PortalApi {
+    pub fn from_env(max_retries: u32, retry_base_delay_ms: u64) -> Result<Self> {
+        let base_url =
+            std::env::var("PORTAL_BASE_URL").context("PORTAL_BASE_URL が設定されていません")?;
+        let session_id = std::env::var("PORTAL_API_SESSION_ID")
+            .context("PORTAL_API_SESSION_ID が設定されていません")?;
+        Self::new(base_url, session_id, max_retries, retry_base_delay_ms)
+    }
+
+    pub fn new(
+        base_url: String,
+        session_id: String,
+        max_retries: u32,
+        retry_base_delay_ms: u64,
+    ) -> Result<Self> {
+        if base_url.trim().is_empty() {
+            bail!("Portal base URL が空です");
+        }
+        if session_id.trim().is_empty() {
+            bail!("Portal API session ID が空です");
+        }
+        Ok(Self {
+            http: ApiClient::new(
+                base_url,
+                ApiAuthorization::PortalSession(session_id),
+                max_retries,
+                retry_base_delay_ms,
+            )?,
+        })
+    }
+
+    pub async fn fetch_comments(
+        &self,
+        form_id: FormId,
+        answer_id: AnswerId,
+    ) -> Result<Vec<PortalComment>> {
+        self.http
+            .get_json(
+                &format!("/forms/{form_id}/answers/{answer_id}/comments"),
+                &[],
+            )
+            .await
+    }
+
+    pub async fn find_answer_id(&self, form_id: FormId, redmine_issue_id: i64) -> Result<AnswerId> {
+        let mut cursor: Option<String> = None;
+        let mut found = None;
+        loop {
+            let mut query = vec![("limit", "100".to_owned())];
+            if let Some(cursor_value) = &cursor {
+                query.push(("cursor", cursor_value.clone()));
+            }
+            let page: PortalAnswerListPage = self
+                .http
+                .get_json(&format!("/forms/{form_id}/answers"), &query)
+                .await?;
+            for answer in page.items {
+                if answer.redmine_issue_id != Some(redmine_issue_id) {
+                    continue;
+                }
+                let answer_id: AnswerId = answer.id.into();
+                if found.replace(answer_id).is_some() {
+                    bail!(
+                        "Portal に Redmine issue {} に対応する回答が複数あります",
+                        redmine_issue_id
+                    );
+                }
+            }
+            match page.next_cursor {
+                Some(next_cursor) => cursor = Some(next_cursor),
+                None => break,
+            }
+        }
+        found.with_context(|| {
+            format!(
+                "Portal に Redmine issue {} に対応する既存回答がありません",
+                redmine_issue_id
+            )
+        })
+    }
+
+    pub async fn upload_attachments(
+        &self,
+        form_id: FormId,
+        answer_id: AnswerId,
+        comment_id: &str,
+        uploads: Vec<PortalAttachmentUpload>,
+    ) -> Result<()> {
+        if uploads.is_empty() {
+            return Ok(());
+        }
+        let parts = uploads
+            .into_iter()
+            .map(|upload| MultipartPart {
+                file_name: upload.file_name,
+                content_type: upload.content_type,
+                content: upload.content,
+            })
+            .collect::<Vec<_>>();
+        self.http
+            .post_multipart(
+                &format!("/forms/{form_id}/answers/{answer_id}/comments/{comment_id}/attachments"),
+                &parts,
+            )
+            .await
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct PortalComment {
+    pub id: String,
+    pub redmine_journal_id: Option<i64>,
+    #[serde(default)]
+    pub attachments: Vec<PortalCommentAttachment>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct PortalCommentAttachment {
+    pub file_name: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct PortalAnswerListPage {
+    items: Vec<PortalAnswer>,
+    next_cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PortalAnswer {
+    id: uuid::Uuid,
+    redmine_issue_id: Option<i64>,
+}
+
+#[derive(Debug)]
+pub struct PortalAttachmentUpload {
+    pub file_name: String,
+    pub content_type: String,
+    pub content: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct DownloadedRedmineAttachment {
+    pub content_type: String,
+    pub content: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct AttachmentUploadCandidate {
+    pub journal_id: i64,
+    pub attachment: RedmineAttachment,
+    pub content_type: String,
+    pub content: Vec<u8>,
+}
+
+pub fn select_attachment_uploads(
+    comments: &[PortalComment],
+    candidates: Vec<AttachmentUploadCandidate>,
+) -> Result<Vec<AttachmentUploadCandidate>> {
+    let mut comments_by_journal = BTreeMap::new();
+    let mut existing_attachment_counts = BTreeMap::new();
+    for comment in comments {
+        let Some(journal_id) = comment.redmine_journal_id else {
+            continue;
+        };
+        if journal_id <= 0 {
+            bail!("Portal comment の Redmine journal ID が不正です: {journal_id}");
+        }
+        if comment.id.is_empty() || uuid::Uuid::parse_str(&comment.id).is_err() {
+            bail!("Portal comment ID が UUID ではありません: {:?}", comment.id);
+        }
+        if comments_by_journal.insert(journal_id, comment).is_some() {
+            bail!(
+                "Portal に同じ Redmine journal {} のコメントが複数あります",
+                journal_id
+            );
+        }
+        for attachment in &comment.attachments {
+            *existing_attachment_counts
+                .entry((journal_id, attachment.file_name.clone(), attachment.size))
+                .or_insert(0_usize) += 1;
+        }
+    }
+
+    let mut uploads = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        if !comments_by_journal.contains_key(&candidate.journal_id) {
+            bail!(
+                "Redmine journal {} に対応する Portal comment がありません",
+                candidate.journal_id
+            );
+        }
+        let size = candidate.content.len() as u64;
+        if size > MAX_COMMENT_ATTACHMENT_SIZE {
+            bail!(
+                "Redmine attachment {} はサイズ上限 {} bytes を超えています",
+                candidate.attachment.id,
+                MAX_COMMENT_ATTACHMENT_SIZE
+            );
+        }
+        if candidate
+            .attachment
+            .filesize
+            .is_some_and(|expected| expected != size)
+        {
+            bail!(
+                "Redmine attachment {} の metadata filesize と取得本体のサイズが一致しません",
+                candidate.attachment.id
+            );
+        }
+        let identity = (
+            candidate.journal_id,
+            candidate.attachment.filename.clone(),
+            size,
+        );
+        if let Some(existing_count) = existing_attachment_counts.get_mut(&identity)
+            && *existing_count > 0
+        {
+            *existing_count -= 1;
+            continue;
+        }
+        uploads.push(candidate);
+    }
+    Ok(uploads)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1040,8 +1478,7 @@ pub struct RedmineIssue {
     pub created_on: String,
     pub status: NamedId,
     pub journals: Vec<RedmineJournal>,
-    #[serde(default)]
-    pub attachments: Option<Vec<RedmineAttachment>>,
+    pub attachments: Vec<RedmineAttachment>,
     #[serde(default)]
     pub custom_fields: Vec<RedmineCustomField>,
 }
@@ -1052,7 +1489,7 @@ pub struct NamedId {
     pub name: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct RedmineUser {
     pub id: i64,
     pub name: String,
@@ -1064,12 +1501,312 @@ pub struct RedmineJournal {
     pub user: Option<RedmineUser>,
     pub notes: Option<String>,
     pub created_on: String,
+    #[serde(default)]
+    pub details: Vec<RedmineJournalDetail>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct RedmineAttachment {
     pub id: i64,
     pub filename: String,
+    #[serde(default)]
+    pub filesize: Option<u64>,
+    #[serde(default)]
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub content_url: Option<String>,
+    #[serde(default)]
+    pub author: Option<RedmineUser>,
+    #[serde(default)]
+    pub created_on: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct RedmineJournalDetail {
+    pub property: String,
+    pub name: String,
+    #[serde(default)]
+    pub new_value: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RedmineAttachmentAssociation {
+    pub journal_id: i64,
+    pub attachment: RedmineAttachment,
+}
+
+#[derive(Debug)]
+pub struct AttachmentAssociationResult {
+    pub associations: Vec<RedmineAttachmentAssociation>,
+    pub warnings: Vec<String>,
+}
+
+fn index_attachment_journal_candidates(
+    journals: &[RedmineJournal],
+) -> Result<BTreeMap<i64, Vec<i64>>> {
+    let mut attachment_journals = BTreeMap::new();
+    for journal in journals {
+        if journal.id <= 0 {
+            bail!("Redmine journal ID が不正です: {}", journal.id);
+        }
+        for detail in journal
+            .details
+            .iter()
+            .filter(|detail| detail.property == "attachment")
+        {
+            let attachment_id = detail.name.parse::<i64>().with_context(|| {
+                format!(
+                    "Redmine journal {} の attachment detail name が ID ではありません: {:?}",
+                    journal.id, detail.name
+                )
+            })?;
+            if attachment_id <= 0 {
+                bail!(
+                    "Redmine journal {} の attachment ID が不正です: {}",
+                    journal.id,
+                    attachment_id
+                );
+            }
+            let journal_ids = attachment_journals
+                .entry(attachment_id)
+                .or_insert_with(Vec::new);
+            if !journal_ids.contains(&journal.id) {
+                journal_ids.push(journal.id);
+            }
+        }
+    }
+    Ok(attachment_journals)
+}
+
+pub fn index_attachment_journals(journals: &[RedmineJournal]) -> Result<BTreeMap<i64, i64>> {
+    index_attachment_journal_candidates(journals)?
+        .into_iter()
+        .map(|(attachment_id, journal_ids)| {
+            let journal_id = *journal_ids.first().expect("journal IDs are non-empty");
+            if journal_ids.len() > 1 {
+                bail!(
+                    "Redmine attachment {} が複数の journal に紐づいています: {} と {}",
+                    attachment_id,
+                    journal_ids[0],
+                    journal_ids[1]
+                );
+            }
+            Ok((attachment_id, journal_id))
+        })
+        .collect()
+}
+
+pub fn associate_attachments_with_fallback(
+    journals: &[RedmineJournal],
+    attachments: &[RedmineAttachment],
+) -> Result<AttachmentAssociationResult> {
+    let attachment_journals = index_attachment_journal_candidates(journals)?;
+    let fallback_journal_ids = journals
+        .iter()
+        .filter(|journal| {
+            !journal
+                .notes
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        })
+        .map(|journal| journal.id)
+        .collect::<Vec<_>>();
+    let mut fallback_journal_index = 0;
+    let mut attachment_ids = BTreeSet::new();
+    let mut associations = Vec::with_capacity(attachments.len());
+    let mut warnings = Vec::new();
+
+    for attachment in attachments {
+        if attachment.id <= 0 {
+            bail!("Redmine attachment ID が不正です: {}", attachment.id);
+        }
+        if attachment.filename.is_empty() {
+            bail!("Redmine attachment {} の filename が空です", attachment.id);
+        }
+        if !attachment_ids.insert(attachment.id) {
+            bail!("Redmine attachment ID が重複しています: {}", attachment.id);
+        }
+
+        let candidate_journal_ids = attachment_journals
+            .get(&attachment.id)
+            .cloned()
+            .unwrap_or_default();
+        let non_empty_journal_ids = candidate_journal_ids
+            .iter()
+            .copied()
+            .filter(|journal_id| {
+                journals
+                    .iter()
+                    .find(|journal| journal.id == *journal_id)
+                    .is_some_and(|journal| {
+                        !journal
+                            .notes
+                            .as_deref()
+                            .unwrap_or_default()
+                            .trim()
+                            .is_empty()
+                    })
+            })
+            .collect::<Vec<_>>();
+        let (journal_id, used_fallback) = match non_empty_journal_ids.first().copied() {
+            Some(journal_id) => (journal_id, false),
+            None => match (!fallback_journal_ids.is_empty()).then(|| {
+                let journal_id =
+                    fallback_journal_ids[fallback_journal_index % fallback_journal_ids.len()];
+                fallback_journal_index += 1;
+                journal_id
+            }) {
+                Some(journal_id) => (journal_id, true),
+                None => {
+                    warnings.push(format!(
+                        "Redmine attachment {} は対応する notes 付き journal がないため Portal コメントへ移せません",
+                        attachment.id
+                    ));
+                    continue;
+                }
+            },
+        };
+
+        if used_fallback && candidate_journal_ids.is_empty() {
+            warnings.push(format!(
+                "Redmine attachment {} に journal detail がないため notes 付き journal {} へ順番にフォールバックします",
+                attachment.id, journal_id
+            ));
+        } else if used_fallback && candidate_journal_ids.len() > 1 {
+            warnings.push(format!(
+                "Redmine attachment {} が複数 journal ({}) に現れるため notes 付き journal {} へ順番にフォールバックします",
+                attachment.id,
+                candidate_journal_ids
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                journal_id
+            ));
+        } else if used_fallback && non_empty_journal_ids.is_empty() {
+            warnings.push(format!(
+                "Redmine attachment {} が notes の空の journal {} に紐づくため notes 付き journal {} へ順番にフォールバックします",
+                attachment.id, candidate_journal_ids[0], journal_id
+            ));
+        }
+
+        if let Some(detail_filename) = candidate_journal_ids
+            .iter()
+            .filter_map(|candidate_journal_id| {
+                journals
+                    .iter()
+                    .find(|journal| journal.id == *candidate_journal_id)
+            })
+            .flat_map(|journal| journal.details.iter())
+            .find(|detail| {
+                detail.property == "attachment" && detail.name == attachment.id.to_string()
+            })
+            .and_then(|detail| detail.new_value.as_deref())
+            && detail_filename != attachment.filename
+        {
+            warnings.push(format!(
+                "Redmine attachment {} の journal detail filename が一致しません: detail={detail_filename:?}, attachment={:?}",
+                attachment.id, attachment.filename
+            ));
+        }
+
+        associations.push(RedmineAttachmentAssociation {
+            journal_id,
+            attachment: attachment.clone(),
+        });
+    }
+
+    for (attachment_id, journal_ids) in &attachment_journals {
+        if !attachment_ids.contains(attachment_id) {
+            warnings.push(format!(
+                "Redmine journal {} が参照する attachment {} が issue detail の top-level attachments にありません",
+                journal_ids[0], attachment_id
+            ));
+        }
+    }
+
+    Ok(AttachmentAssociationResult {
+        associations,
+        warnings,
+    })
+}
+
+pub fn associate_attachments(
+    journals: &[RedmineJournal],
+    attachments: &[RedmineAttachment],
+) -> Result<Vec<RedmineAttachmentAssociation>> {
+    let attachment_journals = index_attachment_journals(journals)?;
+    let mut attachment_ids = BTreeSet::new();
+    let mut associations = Vec::with_capacity(attachments.len());
+    for attachment in attachments {
+        if attachment.id <= 0 {
+            bail!("Redmine attachment ID が不正です: {}", attachment.id);
+        }
+        if attachment.filename.is_empty() {
+            bail!("Redmine attachment {} の filename が空です", attachment.id);
+        }
+        if !attachment_ids.insert(attachment.id) {
+            bail!("Redmine attachment ID が重複しています: {}", attachment.id);
+        }
+        let Some(&journal_id) = attachment_journals.get(&attachment.id) else {
+            bail!(
+                "Redmine attachment {} に対応する journal detail がありません",
+                attachment.id
+            );
+        };
+        let journal = journals
+            .iter()
+            .find(|journal| journal.id == journal_id)
+            .expect("attachment journal index points to an existing journal");
+        if journal
+            .notes
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            bail!(
+                "Redmine attachment {} が notes の空の journal {} に紐づいています。Portal コメントを作れません",
+                attachment.id,
+                journal_id
+            );
+        }
+        if let Some(detail_filename) = journals
+            .iter()
+            .filter(|journal| journal.id == journal_id)
+            .flat_map(|journal| journal.details.iter())
+            .find(|detail| {
+                detail.property == "attachment" && detail.name == attachment.id.to_string()
+            })
+            .and_then(|detail| detail.new_value.as_deref())
+            && detail_filename != attachment.filename
+        {
+            bail!(
+                "Redmine attachment {} の journal detail filename が一致しません: detail={detail_filename:?}, attachment={:?}",
+                attachment.id,
+                attachment.filename
+            );
+        }
+        associations.push(RedmineAttachmentAssociation {
+            journal_id,
+            attachment: attachment.clone(),
+        });
+    }
+
+    let top_level_ids = attachment_ids;
+    if let Some((&attachment_id, &journal_id)) = attachment_journals
+        .iter()
+        .find(|(attachment_id, _)| !top_level_ids.contains(attachment_id))
+    {
+        bail!(
+            "Redmine journal {} が参照する attachment {} が issue detail の top-level attachments にありません",
+            journal_id,
+            attachment_id
+        );
+    }
+    Ok(associations)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -1148,6 +1885,26 @@ pub fn next_page_offset(
     } else {
         Ok(Some(next_offset))
     }
+}
+
+fn redmine_attachment_path(
+    base_url: &str,
+    attachment_id: i64,
+    content_url: Option<&str>,
+) -> Result<String> {
+    let Some(content_url) = content_url.filter(|url| !url.trim().is_empty()) else {
+        return Ok(format!("/attachments/download/{attachment_id}"));
+    };
+    let base_url = reqwest::Url::parse(base_url).context("Redmine base URL が不正です")?;
+    let content_url =
+        reqwest::Url::parse(content_url).context("Redmine attachment の URL が不正です")?;
+    if base_url.origin() != content_url.origin() {
+        bail!(
+            "Redmine attachment {} の URL が Redmine base URL と異なります",
+            attachment_id
+        );
+    }
+    Ok(content_url.to_string())
 }
 
 pub struct BuiltIssueInput {
@@ -1273,6 +2030,27 @@ mod tests {
     }
 
     #[test]
+    fn attachment_path_rejects_an_external_origin() {
+        assert_eq!(
+            redmine_attachment_path(
+                "https://redmine.example.test",
+                20,
+                Some("https://redmine.example.test/attachments/download/20/file.txt")
+            )
+            .unwrap(),
+            "https://redmine.example.test/attachments/download/20/file.txt"
+        );
+        assert!(
+            redmine_attachment_path(
+                "https://redmine.example.test",
+                20,
+                Some("https://attacker.example.test/file.txt")
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn issue_detail_requires_the_journals_field() {
         let payload = serde_json::json!({
             "id": 1,
@@ -1283,6 +2061,23 @@ mod tests {
             "author": { "id": 2, "name": "author" },
             "created_on": "2024-01-02T03:04:05Z",
             "status": { "id": 1, "name": "New" }
+        });
+
+        assert!(serde_json::from_value::<RedmineIssue>(payload).is_err());
+    }
+
+    #[test]
+    fn issue_detail_requires_the_attachments_field() {
+        let payload = serde_json::json!({
+            "id": 1,
+            "project": { "id": 1, "name": "project" },
+            "tracker": { "id": 1, "name": "不具合" },
+            "subject": "subject",
+            "description": null,
+            "author": { "id": 2, "name": "author" },
+            "created_on": "2024-01-02T03:04:05Z",
+            "status": { "id": 1, "name": "New" },
+            "journals": [],
         });
 
         assert!(serde_json::from_value::<RedmineIssue>(payload).is_err());
@@ -1317,6 +2112,7 @@ mod tests {
                     user: None,
                     notes: Some("   ".to_string()),
                     created_on: "not-a-date".to_string(),
+                    details: Vec::new(),
                 },
                 RedmineJournal {
                     id: 11,
@@ -1326,9 +2122,10 @@ mod tests {
                     }),
                     notes: Some("notes".to_string()),
                     created_on: "2024-01-02T03:04:06.654321Z".to_string(),
+                    details: Vec::new(),
                 },
             ],
-            attachments: Some(Vec::new()),
+            attachments: Vec::new(),
             custom_fields: Vec::new(),
         };
 
@@ -1477,7 +2274,7 @@ mod tests {
                 name: "新規".to_string(),
             },
             journals: Vec::new(),
-            attachments: None,
+            attachments: Vec::new(),
             custom_fields: vec![
                 RedmineCustomField {
                     id: 1,
@@ -1649,6 +2446,180 @@ mod tests {
             config
                 .validate_statuses(&statuses[..statuses.len() - 1])
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn attachment_details_are_associated_with_non_empty_journals() {
+        let journal = RedmineJournal {
+            id: 10,
+            user: None,
+            notes: Some("comment".to_owned()),
+            created_on: "2024-01-02T03:04:05Z".to_owned(),
+            details: vec![RedmineJournalDetail {
+                property: "attachment".to_owned(),
+                name: "20".to_owned(),
+                new_value: Some("file.txt".to_owned()),
+            }],
+        };
+        let attachment = RedmineAttachment {
+            id: 20,
+            filename: "file.txt".to_owned(),
+            filesize: Some(3),
+            content_type: Some("text/plain".to_owned()),
+            content_url: Some("https://example.test/file.txt".to_owned()),
+            author: None,
+            created_on: None,
+        };
+
+        let associations = associate_attachments(&[journal], &[attachment]).unwrap();
+        assert_eq!(associations.len(), 1);
+        assert_eq!(associations[0].journal_id, 10);
+        assert_eq!(associations[0].attachment.id, 20);
+    }
+
+    #[test]
+    fn attachment_association_rejects_empty_journals_and_unmapped_files() {
+        let empty_journal = RedmineJournal {
+            id: 10,
+            user: None,
+            notes: Some("  ".to_owned()),
+            created_on: "2024-01-02T03:04:05Z".to_owned(),
+            details: vec![RedmineJournalDetail {
+                property: "attachment".to_owned(),
+                name: "20".to_owned(),
+                new_value: None,
+            }],
+        };
+        let attachment = RedmineAttachment {
+            id: 20,
+            filename: "file.txt".to_owned(),
+            filesize: None,
+            content_type: None,
+            content_url: None,
+            author: None,
+            created_on: None,
+        };
+
+        assert!(associate_attachments(&[empty_journal], &[attachment]).is_err());
+        assert!(
+            associate_attachments(
+                &[],
+                &[RedmineAttachment {
+                    id: 20,
+                    filename: "file.txt".to_owned(),
+                    filesize: None,
+                    content_type: None,
+                    content_url: None,
+                    author: None,
+                    created_on: None,
+                },]
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn attachment_association_falls_back_across_non_empty_journals() {
+        let result = associate_attachments_with_fallback(
+            &[
+                RedmineJournal {
+                    id: 10,
+                    user: None,
+                    notes: Some("  ".to_owned()),
+                    created_on: "2024-01-02T03:04:05Z".to_owned(),
+                    details: Vec::new(),
+                },
+                RedmineJournal {
+                    id: 11,
+                    user: None,
+                    notes: Some("comment".to_owned()),
+                    created_on: "2024-01-02T03:04:06Z".to_owned(),
+                    details: Vec::new(),
+                },
+                RedmineJournal {
+                    id: 12,
+                    user: None,
+                    notes: Some("another comment".to_owned()),
+                    created_on: "2024-01-02T03:04:07Z".to_owned(),
+                    details: Vec::new(),
+                },
+            ],
+            &[
+                RedmineAttachment {
+                    id: 20,
+                    filename: "file.txt".to_owned(),
+                    filesize: None,
+                    content_type: None,
+                    content_url: None,
+                    author: None,
+                    created_on: None,
+                },
+                RedmineAttachment {
+                    id: 21,
+                    filename: "another.txt".to_owned(),
+                    filesize: None,
+                    content_type: None,
+                    content_url: None,
+                    author: None,
+                    created_on: None,
+                },
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(result.associations[0].journal_id, 11);
+        assert_eq!(result.associations[1].journal_id, 12);
+        assert_eq!(result.warnings.len(), 2);
+    }
+
+    #[test]
+    fn attachment_selection_skips_existing_files_but_keeps_distinct_source_files() {
+        let comments = vec![PortalComment {
+            id: "00000000-0000-0000-0000-000000000001".to_owned(),
+            redmine_journal_id: Some(10),
+            attachments: vec![
+                PortalCommentAttachment {
+                    file_name: "already.txt".to_owned(),
+                    size: 3,
+                },
+                PortalCommentAttachment {
+                    file_name: "same-name.txt".to_owned(),
+                    size: 3,
+                },
+            ],
+        }];
+        let candidate = |id: i64, filename: &str| AttachmentUploadCandidate {
+            journal_id: 10,
+            attachment: RedmineAttachment {
+                id,
+                filename: filename.to_owned(),
+                filesize: Some(3),
+                content_type: None,
+                content_url: None,
+                author: None,
+                created_on: None,
+            },
+            content_type: "text/plain".to_owned(),
+            content: b"abc".to_vec(),
+        };
+
+        let uploads = select_attachment_uploads(
+            &comments,
+            vec![
+                candidate(20, "already.txt"),
+                candidate(21, "same-name.txt"),
+                candidate(22, "same-name.txt"),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            uploads
+                .iter()
+                .map(|upload| upload.attachment.id)
+                .collect::<Vec<_>>(),
+            vec![22]
         );
     }
 }
