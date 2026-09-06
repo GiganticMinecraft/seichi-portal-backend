@@ -13,14 +13,9 @@ use uuid::Uuid;
 
 use crate::{
     database::components::{DatabaseComponents, FormCommentAttachmentDatabase},
+    object_storage::comment_attachment_object_key,
     repository::Repository,
 };
-
-const OBJECT_KEY_PREFIX: &str = "comment-attachments/";
-
-fn object_key(id: CommentAttachmentId) -> String {
-    format!("{OBJECT_KEY_PREFIX}{id}")
-}
 
 fn attachment_from_record(
     record: crate::records::CommentAttachmentRecord,
@@ -148,7 +143,7 @@ where
                 }
                 .into());
             }
-            let key = object_key(*attachment.id());
+            let key = comment_attachment_object_key(*attachment.id());
             stored_keys.push(key.clone());
             if let Err(error) = storage.put(&key, content, attachment.content_type()).await {
                 cleanup_objects(storage.as_ref(), &stored_keys).await;
@@ -170,7 +165,7 @@ where
 
     async fn delete(&self, attachment: Allowed<CommentAttachment, Delete>) -> Result<(), Error> {
         let attachment = attachment.into_inner();
-        let key = object_key(*attachment.id());
+        let key = comment_attachment_object_key(*attachment.id());
         let storage = self.object_storage.as_ref().ok_or_else(missing_storage)?;
         storage.delete(&key).await?;
         self.client
@@ -199,7 +194,10 @@ where
         if let Some(storage) = storage {
             let mut first_error = None;
             for attachment in &attachments {
-                if let Err(error) = storage.delete(&object_key(*attachment.id())).await {
+                if let Err(error) = storage
+                    .delete(&comment_attachment_object_key(*attachment.id()))
+                    .await
+                {
                     tracing::error!(
                         %error,
                         attachment_id = %attachment.id(),
@@ -228,7 +226,7 @@ where
     ) -> Result<Vec<u8>, Error> {
         let storage = self.object_storage.as_ref().ok_or_else(missing_storage)?;
         storage
-            .get(&object_key(*attachment.id()))
+            .get(&comment_attachment_object_key(*attachment.id()))
             .await
             .map_err(Into::into)
     }

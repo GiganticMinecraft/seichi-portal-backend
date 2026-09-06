@@ -245,8 +245,7 @@
         "content": { "source": "subject_and_description" }
       },
       "custom_field_content_template_key": "content",
-      "labels": [],
-      "archive_after_import": true
+      "labels": []
     }
   },
   "inquiry_mappings": {

@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use chrono::{DateTime, Utc};
+
 use errors::domain::DomainError;
 
 use crate::{
@@ -7,6 +9,7 @@ use crate::{
     form::{
         answer::{AnswerAuthor, AnswerEntry, AnswerLabelId, RedmineIssueId},
         comment::{Comment, CommentSource},
+        comment_attachment::MAX_COMMENT_ATTACHMENT_SIZE,
         models::FormId,
         question::QuestionSet,
     },
@@ -92,6 +95,124 @@ pub struct RedmineImportedIssue {
     answer: AnswerEntry,
     comments: Vec<Comment>,
     label_ids: Vec<AnswerLabelId>,
+}
+
+/// Redmine から取得したコメント添付の保存前データです。
+///
+/// 添付先の Portal comment ID は Redmine journal ID から Repository が解決するため、
+/// この型では外部側の journal ID とファイル本体だけを保持します。
+#[derive(Debug)]
+pub struct RedmineImportCommentAttachment {
+    journal_id: i64,
+    file_name: String,
+    content_type: String,
+    content: Vec<u8>,
+    created_at: DateTime<Utc>,
+}
+
+impl RedmineImportCommentAttachment {
+    pub fn new(
+        journal_id: i64,
+        file_name: String,
+        content_type: String,
+        content: Vec<u8>,
+        created_at: DateTime<Utc>,
+    ) -> Result<Self, DomainError> {
+        if journal_id <= 0 {
+            return Err(DomainError::InvalidEntity {
+                message: "Redmine journal ID must be positive".to_string(),
+            });
+        }
+        if content.len() as u64 > MAX_COMMENT_ATTACHMENT_SIZE {
+            return Err(DomainError::InvalidEntity {
+                message: format!(
+                    "Redmine comment attachment size must not exceed {MAX_COMMENT_ATTACHMENT_SIZE} bytes"
+                ),
+            });
+        }
+
+        Ok(Self {
+            journal_id,
+            file_name,
+            content_type,
+            content,
+            created_at,
+        })
+    }
+
+    pub fn journal_id(&self) -> i64 {
+        self.journal_id
+    }
+
+    pub fn file_name(&self) -> &str {
+        &self.file_name
+    }
+
+    pub fn content_type(&self) -> &str {
+        &self.content_type
+    }
+
+    pub fn content(&self) -> &[u8] {
+        &self.content
+    }
+
+    pub fn into_content(self) -> Vec<u8> {
+        self.content
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+}
+
+/// Redmine issue の添付を、その issue の imported comment へ保存する batch です。
+#[derive(Debug)]
+pub struct RedmineImportCommentAttachmentBatch {
+    issue_id: RedmineIssueId,
+    attachments: Vec<RedmineImportCommentAttachment>,
+}
+
+impl RedmineImportCommentAttachmentBatch {
+    pub fn new(issue_id: RedmineIssueId, attachments: Vec<RedmineImportCommentAttachment>) -> Self {
+        Self {
+            issue_id,
+            attachments,
+        }
+    }
+
+    pub fn issue_id(&self) -> RedmineIssueId {
+        self.issue_id
+    }
+
+    pub fn attachments(&self) -> &[RedmineImportCommentAttachment] {
+        &self.attachments
+    }
+
+    pub fn into_parts(self) -> (RedmineIssueId, Vec<RedmineImportCommentAttachment>) {
+        (self.issue_id, self.attachments)
+    }
+}
+
+impl AuthorizationRole for RedmineImportCommentAttachmentBatch {
+    type Role = SelfGuarded;
+}
+
+impl AuthorizationGuardDefinitions for RedmineImportCommentAttachmentBatch {
+    fn can_create(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::System)
+    }
+
+    fn can_read(&self, actor: &Actor) -> bool {
+        matches!(actor, Actor::System)
+    }
+
+    fn can_update(&self, _actor: &Actor) -> bool {
+        false
+    }
+
+    fn can_delete(&self, _actor: &Actor) -> bool {
+        false
+    }
 }
 
 impl RedmineImportedIssue {

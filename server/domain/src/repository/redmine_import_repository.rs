@@ -4,8 +4,9 @@ use mockall::automock;
 
 use crate::{
     form::redmine_import::{
-        RedmineImportAnswerRelationsResult, RedmineImportResult, RedmineImportTarget,
-        RedmineImportVerification, RedmineImportedIssue, RedmineIssueRelationBatch,
+        RedmineImportAnswerRelationsResult, RedmineImportCommentAttachmentBatch,
+        RedmineImportResult, RedmineImportTarget, RedmineImportVerification, RedmineImportedIssue,
+        RedmineIssueRelationBatch,
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read},
 };
@@ -33,6 +34,11 @@ pub trait RedmineImportRepository: Send + Sync + 'static {
         &self,
         issue: Allowed<RedmineImportedIssue, Create>,
     ) -> Result<RedmineImportResult, Error>;
+
+    async fn import_comment_attachments(
+        &self,
+        attachments: Allowed<RedmineImportCommentAttachmentBatch, Create>,
+    ) -> Result<usize, Error>;
 
     async fn import_answer_relations(
         &self,

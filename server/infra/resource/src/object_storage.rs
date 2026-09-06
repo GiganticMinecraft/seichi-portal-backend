@@ -1,7 +1,14 @@
 use async_trait::async_trait;
 use aws_sdk_s3::{Client, primitives::ByteStream};
+use domain::form::comment_attachment::CommentAttachmentId;
 use errors::infra::InfraError;
 use serde::Deserialize;
+
+const COMMENT_ATTACHMENT_OBJECT_KEY_PREFIX: &str = "comment-attachments/";
+
+pub(crate) fn comment_attachment_object_key(id: CommentAttachmentId) -> String {
+    format!("{COMMENT_ATTACHMENT_OBJECT_KEY_PREFIX}{id}")
+}
 
 #[async_trait]
 pub trait ObjectStorage: Send + Sync {

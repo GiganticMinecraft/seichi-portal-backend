@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT comment_id FROM redmine_imported_comments WHERE answer_id = ? AND redmine_journal_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "comment_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.redmine_imported_comments",
+            "name": "comment_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f5e13fee7c84245a15b4b8976a0a79f52a87cc888b68473342c0c695feb8f42a"
+}
