@@ -106,6 +106,7 @@ async fn run() -> Result<()> {
         (i64, Option<String>, InquiryClassification),
         Allowed<RedmineImportTarget, Read>,
     > = HashMap::new();
+    let mut project_target_cache: HashMap<i64, Allowed<RedmineImportTarget, Read>> = HashMap::new();
 
     for &(tracker_id, tracker_name) in TARGET_TRACKERS {
         let status_names = config
@@ -249,6 +250,104 @@ async fn run() -> Result<()> {
             }
         }
     }
+
+    for (&project_id, project_mapping) in &config.project_mappings {
+        let form_id = config.form_id_for_project(project_id)?;
+        let target = usecase
+            .find_target(
+                form_id,
+                &project_mapping.form.form_title,
+                &project_mapping.form.labels,
+            )
+            .await?
+            .with_context(|| {
+                format!(
+                    "project {project_id} ({:?}) の Portal form が見つかりません: id={}, title={:?}",
+                    config.project_name_for(project_id).unwrap_or("<unknown>"),
+                    project_mapping.form.form_id,
+                    project_mapping.form.form_title
+                )
+            });
+        let target = match target {
+            Ok(target) => target,
+            Err(error) => {
+                report.error(error.to_string());
+                continue;
+            }
+        };
+        let mapping = &project_mapping.form;
+        let mut question_keys = mapping
+            .question_mappings
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        question_keys.extend(mapping.custom_field_question_mappings.values().cloned());
+        if let Some(question) = target.questions().iter().find(|question| {
+            question.is_required() && !question_keys.contains(question.template_key().as_str())
+        }) {
+            report.error(format!(
+                "project {project_id} の必須 question {:?} に mapping がありません",
+                question.template_key()
+            ));
+        }
+        if let Some(template_key) = mapping.question_mappings.keys().find(|template_key| {
+            !target
+                .questions()
+                .iter()
+                .any(|question| question.template_key().as_str() == template_key.as_str())
+        }) {
+            report.error(format!(
+                "project {project_id} の question mapping がフォームに存在しません: {template_key:?}"
+            ));
+        }
+        match target.questions().iter().find(|question| {
+            question.template_key().as_str()
+                == mapping.custom_field_content_template_key.as_str()
+        }) {
+            None => report.error(format!(
+                "project {project_id} の custom field 本文 mapping がフォームに存在しません: {:?}",
+                mapping.custom_field_content_template_key
+            )),
+            Some(question) if question.question_type() != QuestionType::Text => report.error(
+                format!(
+                    "project {project_id} の custom field 本文 mapping は Text question でなければなりません: {:?}",
+                    mapping.custom_field_content_template_key
+                ),
+            ),
+            Some(_) => {}
+        }
+        for (field_id, template_key) in &mapping.custom_field_question_mappings {
+            match target.questions().iter().find(|question| {
+                question.template_key().as_str() == template_key.as_str()
+            }) {
+                None => report.error(format!(
+                    "project {project_id} の custom field {field_id} mapping がフォームに存在しません: {template_key:?}"
+                )),
+                Some(question)
+                    if !matches!(
+                        question.question_type(),
+                        QuestionType::Text
+                            | QuestionType::SingleChoice
+                            | QuestionType::MultipleChoice
+                    ) => report.error(format!(
+                        "project {project_id} の custom field {field_id} mapping の question type が不正です: {template_key:?}"
+                    )),
+                Some(_) => {}
+            }
+        }
+        for (template_key, source) in &mapping.question_mappings {
+            let redmine_importer::QuestionValueSource::Static { value } = source else {
+                continue;
+            };
+            if let Err(error) = validate_question_value(&target, template_key, value.clone()) {
+                report.error(format!(
+                    "project {project_id} の static question mapping が不正です: {error}"
+                ));
+            }
+        }
+        project_target_cache.insert(project_id, target);
+    }
+
     if !report.errors.is_empty() {
         report.print();
         bail!("Portal form/question の事前検証に失敗しました。DB は変更していません");
@@ -380,9 +479,12 @@ async fn run() -> Result<()> {
         } else {
             InquiryClassification::Generic
         };
-        let Some(target) =
-            target_cache.get(&(stub.tracker_id, status_target_key, inquiry_classification))
-        else {
+        let project_mapping = config.project_mapping_for(stub.project_id);
+        let target = match project_mapping {
+            Some(_) => project_target_cache.get(&stub.project_id),
+            None => target_cache.get(&(stub.tracker_id, status_target_key, inquiry_classification)),
+        };
+        let Some(target) = target else {
             report.error(format!(
                 "issue {} の status {:?} / classification {:?} に対応する Portal form/label target がありません",
                 issue.id, issue.status.name, inquiry_classification
@@ -390,9 +492,12 @@ async fn run() -> Result<()> {
             continue;
         };
 
-        let question_values_result = match inquiry_classification.special_route() {
-            Some(route) => config.question_values_for_inquiry(route, &issue),
-            None => config.question_values_for(stub.tracker_id, &issue),
+        let question_values_result = match project_mapping {
+            Some(_) => config.question_values_for_project(stub.project_id, &issue),
+            None => match inquiry_classification.special_route() {
+                Some(route) => config.question_values_for_inquiry(route, &issue),
+                None => config.question_values_for(stub.tracker_id, &issue),
+            },
         };
         let question_values = match question_values_result {
             Ok(question_values) => question_values,
@@ -536,11 +641,19 @@ async fn run() -> Result<()> {
             }
         }
         Mode::Import => {
-            let portal_api = prepared_issues
+            let archive_project_ids = config
+                .project_mappings
+                .iter()
+                .filter_map(|(project_id, mapping)| {
+                    mapping.archive_after_import.then_some(*project_id)
+                })
+                .collect::<Vec<_>>();
+            let portal_api = (prepared_issues
                 .iter()
                 .any(|prepared| !prepared.attachments.is_empty())
-                .then(|| PortalApi::from_env(config.max_retries, config.retry_base_delay_ms))
-                .transpose()?;
+                || !archive_project_ids.is_empty())
+            .then(|| PortalApi::from_env(config.max_retries, config.retry_base_delay_ms))
+            .transpose()?;
             for prepared in prepared_issues {
                 let PreparedIssue {
                     project_id,
@@ -583,6 +696,16 @@ async fn run() -> Result<()> {
                 result.inserted(),
                 result.already_exists()
             );
+            for project_id in archive_project_ids {
+                let portal_api = portal_api
+                    .as_ref()
+                    .expect("Portal API is initialized when a project is archived");
+                let form_id = config.form_id_for_project(project_id)?;
+                portal_api.archive_form(form_id).await.with_context(|| {
+                    format!("project {project_id} の移行先フォームをアーカイブできません")
+                })?;
+                println!("IMPORT archived project={} form={form_id}", project_id);
+            }
         }
     }
 

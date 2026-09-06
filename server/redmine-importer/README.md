@@ -58,6 +58,12 @@ Redmine の `連絡先` または `ID` custom field に有効な値がある場�
 名前を列挙します。複数 project を一度の実行で取得し、project ID は重複を許可しません。
 親 project を指定した場合も子 project の issue は自動では含めず、移行する子 project は個別に
 列挙します。`REDMINE_PROJECT_ID` 環境変数は使用しません。
+
+`project_mappings` に指定した project は tracker mapping より優先して、project 内の全 issue を
+同じ Portal form へ移します。`archive_after_import` が有効な project は、回答・journal・添付・
+関連の保存がすべて完了した後に Portal API で移行先 form をアーカイブします。アーカイブ対象の
+form は importer 起動時には active で、設定の `form_id` と `form_title` に一致している必要が
+あります。
 issue 詳細の取得は `detail_concurrency` 件まで並列化します。Redmine の負荷やレート制限に
 応じて設定値を調整できます。
 

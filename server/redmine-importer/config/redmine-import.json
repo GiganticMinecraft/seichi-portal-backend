@@ -5,7 +5,8 @@
     { "id": 5, "name": "一般閲覧用プロジェクト" },
     { "id": 6, "name": "アイデア提案用プロジェクト" },
     { "id": 8, "name": "整地鯖　建築チーム" },
-    { "id": 10, "name": "整地鯖 サーバ管理チーム" }
+    { "id": 10, "name": "整地鯖 サーバ管理チーム" },
+    { "id": 12, "name": "ニコニコ超会議2018" }
   ],
   "page_size": 100,
   "detail_concurrency": 8,
@@ -234,6 +235,18 @@
         "19": "reason"
       },
       "labels": ["移行元トラッカー: 不要保護報告"]
+    }
+  },
+  "project_mappings": {
+    "12": {
+      "form_id": "01a075ad-b74a-74b2-aa87-2817b12d4ec7",
+      "form_title": "ニコニコ超会議2018",
+      "question_mappings": {
+        "content": { "source": "subject_and_description" }
+      },
+      "custom_field_content_template_key": "content",
+      "labels": [],
+      "archive_after_import": true
     }
   },
   "inquiry_mappings": {

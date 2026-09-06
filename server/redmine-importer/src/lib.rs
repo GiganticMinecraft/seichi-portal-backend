@@ -62,6 +62,8 @@ pub struct Config {
     #[serde(default)]
     pub status_label_mappings: BTreeMap<i64, BTreeMap<String, String>>,
     pub tracker_mappings: BTreeMap<i64, TrackerMapping>,
+    #[serde(default)]
+    pub project_mappings: BTreeMap<i64, ProjectMapping>,
     pub inquiry_mappings: BTreeMap<InquiryRoute, FormMapping>,
     pub excluded_trackers: BTreeMap<i64, String>,
 }
@@ -87,6 +89,14 @@ pub struct FormMapping {
 }
 
 pub type TrackerMapping = FormMapping;
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProjectMapping {
+    #[serde(flatten)]
+    pub form: FormMapping,
+    #[serde(default)]
+    pub archive_after_import: bool,
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(rename_all = "snake_case")]
@@ -183,6 +193,15 @@ impl Config {
             if project.name.trim().is_empty() {
                 bail!("Redmine project {} の name は必須です", project.id);
             }
+        }
+
+        for (project_id, mapping) in &self.project_mappings {
+            if !project_ids.contains(project_id) {
+                bail!(
+                    "project_mappings に redmine_projects へ未登録の project ID が指定されています: {project_id}"
+                );
+            }
+            validate_form_mapping(&format!("project {project_id}"), &mapping.form)?;
         }
 
         if self.page_size == 0 || self.page_size > 100 {
@@ -349,6 +368,10 @@ impl Config {
         }
     }
 
+    pub fn project_mapping_for(&self, project_id: i64) -> Option<&ProjectMapping> {
+        self.project_mappings.get(&project_id)
+    }
+
     pub fn project_name_for(&self, project_id: i64) -> Result<&str> {
         self.redmine_projects
             .iter()
@@ -359,14 +382,21 @@ impl Config {
 
     pub fn form_id_for(&self, tracker_id: i64) -> Result<FormId> {
         let mapping = self.form_mapping_for(tracker_id, None)?;
-        uuid::Uuid::parse_str(&mapping.form_id)
-            .map(Into::into)
-            .with_context(|| {
-                format!(
-                    "tracker {tracker_id} の form_id が UUID ではありません: {:?}",
-                    mapping.form_id
-                )
-            })
+        parse_form_id(&mapping.form_id, &format!("tracker {tracker_id}"))
+    }
+
+    pub fn form_id_for_project(&self, project_id: i64) -> Result<FormId> {
+        let mapping = self
+            .project_mappings
+            .get(&project_id)
+            .with_context(|| format!("project {project_id} の mapping がありません"))?;
+        parse_form_id(&mapping.form.form_id, &format!("project {project_id}"))
+    }
+
+    pub fn should_archive_project(&self, project_id: i64) -> bool {
+        self.project_mappings
+            .get(&project_id)
+            .is_some_and(|mapping| mapping.archive_after_import)
     }
 
     pub fn form_id_for_inquiry(&self, route: InquiryRoute) -> Result<FormId> {
@@ -388,6 +418,18 @@ impl Config {
         issue: &RedmineIssue,
     ) -> Result<BTreeMap<String, String>> {
         self.question_values_for_mapping(self.form_mapping_for(tracker_id, None)?, issue)
+    }
+
+    pub fn question_values_for_project(
+        &self,
+        project_id: i64,
+        issue: &RedmineIssue,
+    ) -> Result<BTreeMap<String, String>> {
+        let mapping = self
+            .project_mappings
+            .get(&project_id)
+            .with_context(|| format!("project {project_id} の mapping がありません"))?;
+        self.question_values_for_mapping(&mapping.form, issue)
     }
 
     pub fn question_values_for_inquiry(
@@ -450,6 +492,12 @@ impl Config {
 
         Ok(values)
     }
+}
+
+fn parse_form_id(value: &str, context: &str) -> Result<FormId> {
+    uuid::Uuid::parse_str(value)
+        .map(Into::into)
+        .with_context(|| format!("{context} の form_id が UUID ではありません: {value:?}"))
 }
 
 fn validate_form_mapping(scope: &str, mapping: &FormMapping) -> Result<()> {
@@ -1030,6 +1078,52 @@ impl ApiClient {
         }
         bail!(last_error.unwrap_or_else(|| format!("POST {path} に失敗しました")))
     }
+
+    async fn post_empty(&self, path: &str) -> Result<()> {
+        let mut last_error = None;
+        for attempt in 0..=self.max_retries {
+            let response = self
+                .authorize(self.client.post(self.url(path)))
+                .send()
+                .await;
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    last_error = Some(format!("POST {path} に失敗しました: {error}"));
+                    if attempt == self.max_retries {
+                        break;
+                    }
+                    tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
+                    continue;
+                }
+            };
+            if response.status().is_success() {
+                return Ok(());
+            }
+            let status = response.status();
+            let retry_after = response
+                .headers()
+                .get(header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+                .map(Duration::from_secs);
+            let body = response.text().await.unwrap_or_default();
+            let message = format!(
+                "POST {path} が HTTP {} で失敗しました: {}",
+                status,
+                truncate_for_error(&body)
+            );
+            if !is_retryable_status(status) || attempt == self.max_retries {
+                bail!(message);
+            }
+            last_error = Some(message);
+            tokio::time::sleep(
+                retry_after.unwrap_or_else(|| retry_delay(attempt, self.retry_base_delay_ms)),
+            )
+            .await;
+        }
+        bail!(last_error.unwrap_or_else(|| format!("POST {path} に失敗しました")))
+    }
 }
 
 #[derive(Clone)]
@@ -1336,6 +1430,12 @@ impl PortalApi {
                 &format!("/forms/{form_id}/answers/{answer_id}/comments/{comment_id}/attachments"),
                 &parts,
             )
+            .await
+    }
+
+    pub async fn archive_form(&self, form_id: FormId) -> Result<()> {
+        self.http
+            .post_empty(&format!("/forms/{form_id}/archive"))
             .await
     }
 }
@@ -2246,6 +2346,21 @@ mod tests {
         );
         assert_eq!(publication_for_tracker(1), AnswerPublication::PRIVATE);
         assert_eq!(publication_for_tracker(19), AnswerPublication::PUBLIC);
+    }
+
+    #[test]
+    fn project_mapping_overrides_tracker_mapping_and_archives_after_import() {
+        let config: Config =
+            serde_json::from_str(include_str!("../config/redmine-import.json")).unwrap();
+
+        let mapping = config.project_mapping_for(12).unwrap();
+        assert_eq!(mapping.form.form_title, "ニコニコ超会議2018");
+        assert_eq!(
+            config.form_id_for_project(12).unwrap().to_string(),
+            "01a075ad-b74a-74b2-aa87-2817b12d4ec7"
+        );
+        assert!(config.should_archive_project(12));
+        assert!(config.project_mapping_for(3).is_none());
     }
 
     #[test]
