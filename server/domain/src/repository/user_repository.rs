@@ -47,7 +47,7 @@ pub trait UserRepository: Send + Sync + 'static {
         group: Allowed<UserGroup, Update>,
         user: Allowed<AccountUser, Update>,
     ) -> Result<(), Error>;
-    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<Option<AccountUser>, Error>;
+    async fn fetch_user_by_xbox_token(&self, token: String) -> Result<AccountUser, Error>;
     async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error>;
     async fn fetch_users_page(
         &self,

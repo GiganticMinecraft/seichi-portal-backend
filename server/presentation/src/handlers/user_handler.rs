@@ -18,7 +18,6 @@ use domain::{
 };
 use resource::repository::RealInfrastructureRepository;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use usecase::{
     form_submission_restriction::FormSubmissionRestrictionUseCase,
     minecraft_ban::MinecraftBanUseCase, user::UserUseCase,
@@ -906,12 +905,13 @@ pub async fn delete_form_submission_restriction(
     responses(
         (status = 201, description = "The request has succeeded and a new resource has been created as a result."),
         BadRequest,
-        Unauthorized,
+        SessionCreateUnauthorized,
         Forbidden,
-        NotFound,
+        SessionCreateProfileNotFound,
         UnprocessableEntity,
+        SessionCreateBadGateway,
         InternalServerError,
-        ServiceUnavailable,
+        SessionCreateServiceUnavailable,
     ),
     security(("bearer" = [])),
     tag = "Session"
@@ -946,33 +946,24 @@ pub async fn start_session(
     let TypedHeader(auth) = header.map_err_to_error().map_err(handle_error)?;
 
     let token = auth.token();
-    match user_use_case
+    let user = user_use_case
         .fetch_user_by_xbox_token(token.to_string())
         .await
-    {
-        Ok(Some(user)) => {
-            let session_id = user_use_case
-                .start_user_session(token.to_string(), &user, lifetime)
-                .await
-                .map_err(handle_error)?;
-            Ok((StatusCode::CREATED, [(
-                header::SET_COOKIE,
-                HeaderValue::from_str(
-                    format!(
-                        "__Host-Http-SEICHI_PORTAL_SESSION_ID={session_id}; Max-Age={lifetime_seconds}; Path=/; Secure; HttpOnly; SameSite=Lax"
-                    )
-                    .as_str(),
-                )
-                .unwrap(),
-            )]).into_response())
-        }
-        Ok(None) => Ok((
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "reason": "invalid token" })),
+        .map_err(handle_error)?;
+    let session_id = user_use_case
+        .start_user_session(token.to_string(), &user, lifetime)
+        .await
+        .map_err(handle_error)?;
+    Ok((StatusCode::CREATED, [(
+        header::SET_COOKIE,
+        HeaderValue::from_str(
+            format!(
+                "__Host-Http-SEICHI_PORTAL_SESSION_ID={session_id}; Max-Age={lifetime_seconds}; Path=/; Secure; HttpOnly; SameSite=Lax"
+            )
+            .as_str(),
         )
-            .into_response()),
-        Err(err) => Err(handle_error(err)),
-    }
+        .unwrap(),
+    )]).into_response())
 }
 
 #[utoipa::path(
