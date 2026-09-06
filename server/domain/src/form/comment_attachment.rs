@@ -132,10 +132,7 @@ impl AuthorizationRole for CommentAttachment {
 
 impl BelongsTo<CommentThread> for CommentAttachment {
     fn belongs_to(&self, parent: &CommentThread) -> bool {
-        self.answer_id == *parent.answer_id()
-            && parent
-                .find_comment(self.comment_id)
-                .is_some_and(|comment| comment.commented_by().is_some())
+        self.answer_id == *parent.answer_id() && parent.find_comment(self.comment_id).is_some()
     }
 }
 
@@ -217,9 +214,7 @@ impl AuthorizationRole for CommentAttachmentBatch {
 impl BelongsTo<CommentThread> for CommentAttachmentBatch {
     fn belongs_to(&self, parent: &CommentThread) -> bool {
         self.answer_id == *parent.answer_id()
-            && parent
-                .find_comment(self.comment_id)
-                .is_some_and(|comment| comment.commented_by().is_some())
+            && parent.find_comment(self.comment_id).is_some()
             && self
                 .attachments
                 .iter()
@@ -534,7 +529,7 @@ mod tests {
     }
 
     #[test]
-    fn attachment_cannot_be_authorized_for_an_imported_comment() {
+    fn administrator_can_authorize_attachment_for_an_imported_comment() {
         let answer_id = AnswerId::new();
         let comment_id = CommentId::new();
         let imported_comment = Comment::imported_from_redmine(
@@ -564,7 +559,7 @@ mod tests {
         assert!(
             administrator
                 .authorize_comment_attachment_create(attachment)
-                .is_err()
+                .is_ok()
         );
     }
 }

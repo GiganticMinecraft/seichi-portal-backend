@@ -181,11 +181,6 @@ impl<
             .await?
             .into_iter()
             .map(|attachment| attachment.into_inner())
-            .filter(|attachment| {
-                thread
-                    .find_comment(*attachment.comment_id())
-                    .is_some_and(|comment| comment.commented_by().is_some())
-            })
             .fold(HashMap::new(), |mut attachments, attachment| {
                 attachments
                     .entry(*attachment.comment_id())

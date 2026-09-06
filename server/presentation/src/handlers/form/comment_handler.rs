@@ -383,7 +383,7 @@ async fn parse_comment_attachment_uploads(
         if field.name() != Some("file") {
             return Err(multipart_error("multipart field must be named file"));
         }
-        if uploads.len() >= MAX_COMMENT_ATTACHMENTS_PER_COMMENT {
+        if uploads.len() > MAX_COMMENT_ATTACHMENTS_PER_COMMENT {
             return Err(multipart_error(format!(
                 "a comment must not have more than {MAX_COMMENT_ATTACHMENTS_PER_COMMENT} attachments"
             )));

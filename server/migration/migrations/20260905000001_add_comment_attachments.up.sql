@@ -9,9 +9,7 @@ CREATE TABLE IF NOT EXISTS form_answer_comment_attachments(
     INDEX idx_form_answer_comment_attachments_comment_id(comment_id),
     INDEX idx_form_answer_comment_attachments_answer_id(answer_id),
     FOREIGN KEY fk_form_answer_comment_attachments_answer_id(answer_id)
-        REFERENCES answers(id) ON DELETE CASCADE,
-    FOREIGN KEY fk_form_answer_comment_attachments_comment_id(comment_id)
-        REFERENCES form_answer_comments(id) ON DELETE CASCADE
+        REFERENCES answers(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS archived_form_answer_comment_attachments(
@@ -25,7 +23,5 @@ CREATE TABLE IF NOT EXISTS archived_form_answer_comment_attachments(
     INDEX idx_archived_form_answer_comment_attachments_comment_id(comment_id),
     INDEX idx_archived_form_answer_comment_attachments_answer_id(answer_id),
     FOREIGN KEY fk_archived_form_answer_comment_attachments_answer_id(answer_id)
-        REFERENCES archived_answers(id) ON DELETE CASCADE,
-    FOREIGN KEY fk_archived_form_answer_comment_attachments_comment_id(comment_id)
-        REFERENCES archived_form_answer_comments(id) ON DELETE CASCADE
+        REFERENCES archived_answers(id) ON DELETE CASCADE
 );

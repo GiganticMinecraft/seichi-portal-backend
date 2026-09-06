@@ -95,12 +95,6 @@ where
                 let comment_thread = comment_threads
                     .iter()
                     .find(|comment_thread| comment_thread.answer_id() == attachment.answer_id())?;
-                if !comment_thread
-                    .find_comment(*attachment.comment_id())
-                    .is_some_and(|comment| comment.commented_by().is_some())
-                {
-                    return None;
-                }
                 Some(
                     comment_thread
                         .authorize_comment_attachment_read(attachment)

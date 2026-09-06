@@ -1,0 +1,26 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT id FROM form_answer_comments\n                     WHERE id = ? AND answer_id = ?\n                     UNION ALL\n                     SELECT comment_id AS id FROM redmine_imported_comments\n                     WHERE comment_id = ? AND answer_id = ?\n                     LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "287cdf8b299235a98c5e27a8e6048a522d25faca76e484b35207275a61e544bc"
+}
