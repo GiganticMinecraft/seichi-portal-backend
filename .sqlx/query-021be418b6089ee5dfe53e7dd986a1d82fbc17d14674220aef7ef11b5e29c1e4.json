@@ -1,10 +1,26 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT file_name, size FROM form_answer_comment_attachments WHERE comment_id = ?",
+  "query": "SELECT comment_id, file_name, size\n                     FROM form_answer_comment_attachments\n                     WHERE answer_id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "comment_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_comment_attachments",
+            "name": "comment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "file_name",
         "type_info": {
           "type": "Blob",
@@ -20,7 +36,7 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "size",
         "type_info": {
           "type": "LongLong",
@@ -41,8 +57,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "9e2611b655f02ca586666c5d5416ab5f2a79f6bc1450fb972835c620d3e46901"
+  "hash": "021be418b6089ee5dfe53e7dd986a1d82fbc17d14674220aef7ef11b5e29c1e4"
 }

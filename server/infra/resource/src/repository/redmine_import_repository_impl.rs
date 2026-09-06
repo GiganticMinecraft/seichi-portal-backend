@@ -16,6 +16,7 @@ use domain::{
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Read},
 };
 use errors::{Error, infra::InfraError};
+use sqlx::{AssertSqlSafe, query};
 use uuid::Uuid;
 
 use crate::{
@@ -92,23 +93,27 @@ impl RedmineImportRepository for Repository<RedmineImportConnectionPool> {
             .client
             .read_write_transaction(|txn| {
                 Box::pin(async move {
-                    for item in &pending {
-                        sqlx::query!(
-                            r"INSERT INTO form_answer_comment_attachments
-                                (id, answer_id, comment_id, file_name, content_type, size, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            item.attachment.id().to_string(),
-                            item.attachment.answer_id().to_string(),
-                            item.attachment.comment_id().to_string(),
-                            item.attachment.file_name().as_str(),
-                            item.attachment.content_type(),
-                            item.attachment.size(),
-                            item.attachment.created_at(),
-                        )
-                        .execute(&mut **txn)
-                        .await
-                        .map_err(InfraError::from)?;
-                    }
+                    let placeholders = std::iter::repeat_n("(?, ?, ?, ?, ?, ?, ?)", pending.len())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let sql = format!(
+                        r"INSERT INTO form_answer_comment_attachments
+                            (id, answer_id, comment_id, file_name, content_type, size, created_at)
+                        VALUES {placeholders}"
+                    );
+                    let query = pending
+                        .iter()
+                        .fold(query(AssertSqlSafe(&*sql)), |query, item| {
+                            query
+                                .bind(item.attachment.id().to_string())
+                                .bind(item.attachment.answer_id().to_string())
+                                .bind(item.attachment.comment_id().to_string())
+                                .bind(item.attachment.file_name().as_str())
+                                .bind(item.attachment.content_type())
+                                .bind(*item.attachment.size())
+                                .bind(item.attachment.created_at())
+                        });
+                    query.execute(&mut **txn).await.map_err(InfraError::from)?;
                     Ok::<_, Error>(())
                 })
             })
@@ -177,25 +182,48 @@ async fn prepare_comment_attachments(
                 })?;
                 let answer_id: AnswerId = Uuid::parse_str(&issue_row.answer_id)?.into();
 
-                let mut comment_ids_by_journal = HashMap::new();
+                let comment_rows = sqlx::query!(
+                    "SELECT redmine_journal_id, comment_id
+                     FROM redmine_imported_comments
+                     WHERE answer_id = ?",
+                    answer_id.to_string(),
+                )
+                .fetch_all(&mut **txn)
+                .await?;
+                let comment_ids_by_journal = comment_rows
+                    .into_iter()
+                    .map(|row| {
+                        Ok::<_, InfraError>((
+                            row.redmine_journal_id,
+                            Uuid::parse_str(&row.comment_id)?.into(),
+                        ))
+                    })
+                    .collect::<Result<HashMap<_, CommentId>, _>>()?;
+
+                let existing_rows = sqlx::query!(
+                    "SELECT comment_id, file_name, size
+                     FROM form_answer_comment_attachments
+                     WHERE answer_id = ?",
+                    answer_id.to_string(),
+                )
+                .fetch_all(&mut **txn)
+                .await?;
                 let mut existing_counts = HashMap::new();
                 let mut existing_identities = HashMap::new();
+                for row in existing_rows {
+                    let comment_id: CommentId = Uuid::parse_str(&row.comment_id)?.into();
+                    *existing_counts.entry(comment_id).or_insert(0_usize) += 1;
+                    *existing_identities
+                        .entry((comment_id, row.file_name, row.size))
+                        .or_insert(0_usize) += 1;
+                }
                 let mut pending_counts: HashMap<CommentId, usize> = HashMap::new();
                 let mut pending = Vec::with_capacity(attachments.len());
 
                 for input in attachments {
-                    let comment_id = if let Some(comment_id) =
-                        comment_ids_by_journal.get(&input.journal_id())
-                    {
-                        *comment_id
-                    } else {
-                        let journal_row = sqlx::query!(
-                            "SELECT comment_id FROM redmine_imported_comments WHERE answer_id = ? AND redmine_journal_id = ?",
-                            answer_id.to_string(),
-                            input.journal_id(),
-                        )
-                        .fetch_optional(&mut **txn)
-                        .await?
+                    let comment_id = comment_ids_by_journal
+                        .get(&input.journal_id())
+                        .copied()
                         .ok_or_else(|| InfraError::Unexpected {
                             cause: format!(
                                 "Redmine issue {} の journal {} に対応する移行済みコメントが見つかりません",
@@ -203,23 +231,6 @@ async fn prepare_comment_attachments(
                                 input.journal_id()
                             ),
                         })?;
-                        let comment_id: CommentId = Uuid::parse_str(&journal_row.comment_id)?.into();
-                        comment_ids_by_journal.insert(input.journal_id(), comment_id);
-
-                        let existing_rows = sqlx::query!(
-                            "SELECT file_name, size FROM form_answer_comment_attachments WHERE comment_id = ?",
-                            comment_id.to_string(),
-                        )
-                        .fetch_all(&mut **txn)
-                        .await?;
-                        existing_counts.insert(comment_id, existing_rows.len());
-                        for row in existing_rows {
-                            *existing_identities
-                                .entry((comment_id, row.file_name, row.size))
-                                .or_insert(0_usize) += 1;
-                        }
-                        comment_id
-                    };
 
                     let size = u64::try_from(input.content().len()).map_err(|_| {
                         InfraError::Unexpected {
@@ -237,7 +248,8 @@ async fn prepare_comment_attachments(
                         continue;
                     }
 
-                    let new_count = existing_counts[&comment_id]
+                    let existing_count = existing_counts.get(&comment_id).copied().unwrap_or_default();
+                    let new_count = existing_count
                         + pending_counts.get(&comment_id).copied().unwrap_or_default()
                         + 1;
                     if new_count > MAX_COMMENT_ATTACHMENTS_PER_COMMENT {
@@ -247,7 +259,7 @@ async fn prepare_comment_attachments(
                             ),
                         });
                     }
-                    pending_counts.insert(comment_id, new_count - existing_counts[&comment_id]);
+                    pending_counts.insert(comment_id, new_count - existing_count);
 
                     let attachment = CommentAttachment::new(
                         answer_id,
