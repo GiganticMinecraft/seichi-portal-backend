@@ -8,9 +8,8 @@ Repository 境界を通します。通常の回答投稿で発生する通知や
 
 - `REDMINE_BASE_URL`: Redmine の URL
 - `REDMINE_API_KEY`: Readonly API key
-- `PORTAL_BASE_URL`: Portal API の URL（`/api/v1` を含む。コメント添付を移行する `import` で必要）
-- `PORTAL_API_SESSION_ID`: 管理者の Portal API セッション ID（`Authorization: Bearer` に使用）
 - `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST`, `MYSQL_PORT`: Portal DB
+- `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`: コメント添付を保存するオブジェクトストレージ
 
 設定ファイルは `REDMINE_IMPORT_CONFIG` で指定できます。未指定時はリポジトリ内の
 `server/redmine-importer/config/redmine-import.json`、Docker Image では
@@ -60,10 +59,8 @@ Redmine の `連絡先` または `ID` custom field に有効な値がある場�
 列挙します。`REDMINE_PROJECT_ID` 環境変数は使用しません。
 
 `project_mappings` に指定した project は tracker mapping より優先して、project 内の全 issue を
-同じ Portal form へ移します。`archive_after_import` が有効な project は、回答・journal・添付・
-関連の保存がすべて完了した後に Portal API で移行先 form をアーカイブします。アーカイブ対象の
-form は importer 起動時には active で、設定の `form_id` と `form_title` に一致している必要が
-あります。
+同じ Portal form へ移します。移行後の form のアーカイブは importer の対象外なので、必要に応じて
+手動で実行します。
 issue 詳細の取得は `detail_concurrency` 件まで並列化します。Redmine の負荷やレート制限に
 応じて設定値を調整できます。
 
@@ -82,10 +79,8 @@ cargo run -p redmine-importer -- import
 照合します。`verify` は同じ照合を行い、`import` は issue ごとに回答・Redmine 参照・
 journal コメント・label を一つの transaction で保存します。その後、Redmine issue detail の
 `attachments` と journal の `details` にある `property=attachment` / `name=<attachment id>`
-の対応を使って、各添付本体を Redmine から取得し、対応する Portal コメントの既存添付 API
-へ管理者セッションで送信します。同じ issue の同一 payload は再実行時にスキップし、異なる
-payload が既に保存されている場合は停止します。既存回答を再利用する再実行では、保存済みの
-Redmine issue ID から Portal の回答 ID を解決してから添付を追加します。
+の対応を使って、各添付本体を Redmine から取得し、Portal のオブジェクトストレージと DB へ
+直接保存します。同じ issue の同一 payload は再実行時にスキップします。
 
 issue 一覧の `relations` も実行全体で重複除去し、両端が移行対象 tracker の関連だけを、全 issue
 の保存後に `answer_relations` へ保存します。Portal の関連は対称なモデルであるため Redmine の
@@ -96,10 +91,10 @@ relation type は保持しません。対象外 tracker や設定外 project へ
 ない top-level attachment、複数 journal に現れる attachment detail、空 notes journal に
 付いた attachment は、チケット内の notes 付きコメントへ順番にフォールバックし、警告を
 出力します。チケットに notes 付きコメントがない場合は、Redmine由来の移行用コメントを
-生成して添付します。添付本体の取得・Portal への送信に失敗した場合は移行を停止します。
-既存添付の判定には、Portal コメントの Redmine journal ID、
+生成して添付します。添付本体の取得・オブジェクトストレージまたは DB への保存に失敗した
+場合は移行を停止します。既存添付の判定には、移行済みコメントの Redmine journal ID、
 ファイル名、サイズを使います。Redmine の `content_type` metadata ではなく、ダウンロード
 レスポンスの `Content-Type` を使い、ヘッダーがなければ `application/octet-stream` とします。
-添付本体のサイズは Portal API と同じ 50 MiB 以下でなければなりません。Redmine の custom
+添付本体のサイズは 50 MiB 以下でなければなりません。Redmine の custom
 field は、設定された個別質問または本文へ保存します。
 Portal の既存 timestamp 列が秒精度のため、Redmine の日時に含まれる小数秒は切り捨てます。

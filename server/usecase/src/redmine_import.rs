@@ -7,7 +7,8 @@ use domain::{
         answer::{AnswerEntry, AnswerPublication, AnswerStatus, AnswerTitle},
         comment::{Comment, CommentContent},
         redmine_import::{
-            RedmineImportAnswerRelationsResult, RedmineImportResult, RedmineImportTarget,
+            RedmineImportAnswerRelationsResult, RedmineImportCommentAttachment,
+            RedmineImportCommentAttachmentBatch, RedmineImportResult, RedmineImportTarget,
             RedmineImportVerification, RedmineImportedIssue, RedmineIssueRelationBatch,
         },
     },
@@ -152,6 +153,19 @@ where
         let relations =
             AuthorizationGuard::<_, Create>::from(relations).try_create(Actor::System)?;
         self.repository.import_answer_relations(relations).await
+    }
+
+    pub async fn import_comment_attachments(
+        &self,
+        issue_id: domain::form::answer::RedmineIssueId,
+        attachments: Vec<RedmineImportCommentAttachment>,
+    ) -> Result<usize, Error> {
+        let attachments = RedmineImportCommentAttachmentBatch::new(issue_id, attachments);
+        let attachments =
+            AuthorizationGuard::<_, Create>::from(attachments).try_create(Actor::System)?;
+        self.repository
+            .import_comment_attachments(attachments)
+            .await
     }
 }
 

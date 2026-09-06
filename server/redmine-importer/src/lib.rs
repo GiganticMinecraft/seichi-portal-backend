@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Timelike, Utc};
 use domain::form::{
-    answer::{AnswerId, AnswerPublication, AnswerStatus, RedmineIssueId, RedmineUserSnapshot},
+    answer::{AnswerPublication, AnswerStatus, RedmineIssueId, RedmineUserSnapshot},
     models::FormId,
 };
 use reqwest::{StatusCode, header};
@@ -94,8 +94,6 @@ pub type TrackerMapping = FormMapping;
 pub struct ProjectMapping {
     #[serde(flatten)]
     pub form: FormMapping,
-    #[serde(default)]
-    pub archive_after_import: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -391,12 +389,6 @@ impl Config {
             .get(&project_id)
             .with_context(|| format!("project {project_id} の mapping がありません"))?;
         parse_form_id(&mapping.form.form_id, &format!("project {project_id}"))
-    }
-
-    pub fn should_archive_project(&self, project_id: i64) -> bool {
-        self.project_mappings
-            .get(&project_id)
-            .is_some_and(|mapping| mapping.archive_after_import)
     }
 
     pub fn form_id_for_inquiry(&self, route: InquiryRoute) -> Result<FormId> {
@@ -860,7 +852,6 @@ pub fn unique_issue_relations(stubs: &[IssueStub]) -> Result<Vec<RedmineIssueRel
 #[derive(Clone)]
 enum ApiAuthorization {
     RedmineApiKey(String),
-    PortalSession(String),
 }
 
 #[derive(Clone)]
@@ -870,12 +861,6 @@ struct ApiClient {
     authorization: ApiAuthorization,
     max_retries: u32,
     retry_base_delay_ms: u64,
-}
-
-struct MultipartPart {
-    file_name: String,
-    content_type: String,
-    content: Vec<u8>,
 }
 
 impl ApiClient {
@@ -915,7 +900,6 @@ impl ApiClient {
             ApiAuthorization::RedmineApiKey(api_key) => {
                 request.header("X-Redmine-API-Key", api_key)
             }
-            ApiAuthorization::PortalSession(session_id) => request.bearer_auth(session_id),
         }
     }
 
@@ -1022,107 +1006,6 @@ impl ApiClient {
             content.extend_from_slice(&chunk);
         }
         Ok((content_type, content))
-    }
-
-    async fn post_multipart(&self, path: &str, parts: &[MultipartPart]) -> Result<()> {
-        let mut last_error = None;
-        for attempt in 0..=self.max_retries {
-            let form = parts
-                .iter()
-                .try_fold(reqwest::multipart::Form::new(), |form, part| {
-                    let part = reqwest::multipart::Part::bytes(part.content.clone())
-                        .file_name(part.file_name.clone())
-                        .mime_str(&part.content_type)
-                        .context("Portal attachment の Content-Type が不正です")?;
-                    Ok::<_, anyhow::Error>(form.part("file", part))
-                })?;
-            let response = self
-                .authorize(self.client.post(self.url(path)).multipart(form))
-                .send()
-                .await;
-            let response = match response {
-                Ok(response) => response,
-                Err(error) => {
-                    last_error = Some(format!("POST {path} に失敗しました: {error}"));
-                    if attempt == self.max_retries {
-                        break;
-                    }
-                    tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
-                    continue;
-                }
-            };
-            if response.status().is_success() {
-                return Ok(());
-            }
-            let status = response.status();
-            let retry_after = response
-                .headers()
-                .get(header::RETRY_AFTER)
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.parse::<u64>().ok())
-                .map(Duration::from_secs);
-            let body = response.text().await.unwrap_or_default();
-            let message = format!(
-                "POST {path} が HTTP {} で失敗しました: {}",
-                status,
-                truncate_for_error(&body)
-            );
-            if !is_retryable_status(status) || attempt == self.max_retries {
-                bail!(message);
-            }
-            last_error = Some(message);
-            tokio::time::sleep(
-                retry_after.unwrap_or_else(|| retry_delay(attempt, self.retry_base_delay_ms)),
-            )
-            .await;
-        }
-        bail!(last_error.unwrap_or_else(|| format!("POST {path} に失敗しました")))
-    }
-
-    async fn post_empty(&self, path: &str) -> Result<()> {
-        let mut last_error = None;
-        for attempt in 0..=self.max_retries {
-            let response = self
-                .authorize(self.client.post(self.url(path)))
-                .send()
-                .await;
-            let response = match response {
-                Ok(response) => response,
-                Err(error) => {
-                    last_error = Some(format!("POST {path} に失敗しました: {error}"));
-                    if attempt == self.max_retries {
-                        break;
-                    }
-                    tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
-                    continue;
-                }
-            };
-            if response.status().is_success() {
-                return Ok(());
-            }
-            let status = response.status();
-            let retry_after = response
-                .headers()
-                .get(header::RETRY_AFTER)
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.parse::<u64>().ok())
-                .map(Duration::from_secs);
-            let body = response.text().await.unwrap_or_default();
-            let message = format!(
-                "POST {path} が HTTP {} で失敗しました: {}",
-                status,
-                truncate_for_error(&body)
-            );
-            if !is_retryable_status(status) || attempt == self.max_retries {
-                bail!(message);
-            }
-            last_error = Some(message);
-            tokio::time::sleep(
-                retry_after.unwrap_or_else(|| retry_delay(attempt, self.retry_base_delay_ms)),
-            )
-            .await;
-        }
-        bail!(last_error.unwrap_or_else(|| format!("POST {path} に失敗しました")))
     }
 }
 
@@ -1321,241 +1204,10 @@ impl RedmineApi {
     }
 }
 
-#[derive(Clone)]
-pub struct PortalApi {
-    http: ApiClient,
-}
-
-impl PortalApi {
-    pub fn from_env(max_retries: u32, retry_base_delay_ms: u64) -> Result<Self> {
-        let base_url =
-            std::env::var("PORTAL_BASE_URL").context("PORTAL_BASE_URL が設定されていません")?;
-        let session_id = std::env::var("PORTAL_API_SESSION_ID")
-            .context("PORTAL_API_SESSION_ID が設定されていません")?;
-        Self::new(base_url, session_id, max_retries, retry_base_delay_ms)
-    }
-
-    pub fn new(
-        base_url: String,
-        session_id: String,
-        max_retries: u32,
-        retry_base_delay_ms: u64,
-    ) -> Result<Self> {
-        if base_url.trim().is_empty() {
-            bail!("Portal base URL が空です");
-        }
-        if session_id.trim().is_empty() {
-            bail!("Portal API session ID が空です");
-        }
-        Ok(Self {
-            http: ApiClient::new(
-                base_url,
-                ApiAuthorization::PortalSession(session_id),
-                max_retries,
-                retry_base_delay_ms,
-            )?,
-        })
-    }
-
-    pub async fn fetch_comments(
-        &self,
-        form_id: FormId,
-        answer_id: AnswerId,
-    ) -> Result<Vec<PortalComment>> {
-        self.http
-            .get_json(
-                &format!("/forms/{form_id}/answers/{answer_id}/comments"),
-                &[],
-            )
-            .await
-    }
-
-    pub async fn find_answer_id(&self, form_id: FormId, redmine_issue_id: i64) -> Result<AnswerId> {
-        let mut cursor: Option<String> = None;
-        let mut found = None;
-        loop {
-            let mut query = vec![("limit", "100".to_owned())];
-            if let Some(cursor_value) = &cursor {
-                query.push(("cursor", cursor_value.clone()));
-            }
-            let page: PortalAnswerListPage = self
-                .http
-                .get_json(&format!("/forms/{form_id}/answers"), &query)
-                .await?;
-            for answer in page.items {
-                if answer.redmine_issue_id != Some(redmine_issue_id) {
-                    continue;
-                }
-                let answer_id: AnswerId = answer.id.into();
-                if found.replace(answer_id).is_some() {
-                    bail!(
-                        "Portal に Redmine issue {} に対応する回答が複数あります",
-                        redmine_issue_id
-                    );
-                }
-            }
-            match page.next_cursor {
-                Some(next_cursor) => cursor = Some(next_cursor),
-                None => break,
-            }
-        }
-        found.with_context(|| {
-            format!(
-                "Portal に Redmine issue {} に対応する既存回答がありません",
-                redmine_issue_id
-            )
-        })
-    }
-
-    pub async fn upload_attachments(
-        &self,
-        form_id: FormId,
-        answer_id: AnswerId,
-        comment_id: &str,
-        uploads: Vec<PortalAttachmentUpload>,
-    ) -> Result<()> {
-        if uploads.is_empty() {
-            return Ok(());
-        }
-        let parts = uploads
-            .into_iter()
-            .map(|upload| MultipartPart {
-                file_name: upload.file_name,
-                content_type: upload.content_type,
-                content: upload.content,
-            })
-            .collect::<Vec<_>>();
-        self.http
-            .post_multipart(
-                &format!("/forms/{form_id}/answers/{answer_id}/comments/{comment_id}/attachments"),
-                &parts,
-            )
-            .await
-    }
-
-    pub async fn archive_form(&self, form_id: FormId) -> Result<()> {
-        self.http
-            .post_empty(&format!("/forms/{form_id}/archive"))
-            .await
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct PortalComment {
-    pub id: String,
-    pub redmine_journal_id: Option<i64>,
-    #[serde(default)]
-    pub attachments: Vec<PortalCommentAttachment>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct PortalCommentAttachment {
-    pub file_name: String,
-    pub size: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct PortalAnswerListPage {
-    items: Vec<PortalAnswer>,
-    next_cursor: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PortalAnswer {
-    id: uuid::Uuid,
-    redmine_issue_id: Option<i64>,
-}
-
-#[derive(Debug)]
-pub struct PortalAttachmentUpload {
-    pub file_name: String,
-    pub content_type: String,
-    pub content: Vec<u8>,
-}
-
 #[derive(Debug)]
 pub struct DownloadedRedmineAttachment {
     pub content_type: String,
     pub content: Vec<u8>,
-}
-
-#[derive(Debug)]
-pub struct AttachmentUploadCandidate {
-    pub journal_id: i64,
-    pub attachment: RedmineAttachment,
-    pub content_type: String,
-    pub content: Vec<u8>,
-}
-
-pub fn select_attachment_uploads(
-    comments: &[PortalComment],
-    candidates: Vec<AttachmentUploadCandidate>,
-) -> Result<Vec<AttachmentUploadCandidate>> {
-    let mut comments_by_journal = BTreeMap::new();
-    let mut existing_attachment_counts = BTreeMap::new();
-    for comment in comments {
-        let Some(journal_id) = comment.redmine_journal_id else {
-            continue;
-        };
-        if journal_id <= 0 {
-            bail!("Portal comment の Redmine journal ID が不正です: {journal_id}");
-        }
-        if comment.id.is_empty() || uuid::Uuid::parse_str(&comment.id).is_err() {
-            bail!("Portal comment ID が UUID ではありません: {:?}", comment.id);
-        }
-        if comments_by_journal.insert(journal_id, comment).is_some() {
-            bail!(
-                "Portal に同じ Redmine journal {} のコメントが複数あります",
-                journal_id
-            );
-        }
-        for attachment in &comment.attachments {
-            *existing_attachment_counts
-                .entry((journal_id, attachment.file_name.clone(), attachment.size))
-                .or_insert(0_usize) += 1;
-        }
-    }
-
-    let mut uploads = Vec::with_capacity(candidates.len());
-    for candidate in candidates {
-        if !comments_by_journal.contains_key(&candidate.journal_id) {
-            bail!(
-                "Redmine journal {} に対応する Portal comment がありません",
-                candidate.journal_id
-            );
-        }
-        let size = candidate.content.len() as u64;
-        if size > MAX_COMMENT_ATTACHMENT_SIZE {
-            bail!(
-                "Redmine attachment {} はサイズ上限 {} bytes を超えています",
-                candidate.attachment.id,
-                MAX_COMMENT_ATTACHMENT_SIZE
-            );
-        }
-        if candidate
-            .attachment
-            .filesize
-            .is_some_and(|expected| expected != size)
-        {
-            bail!(
-                "Redmine attachment {} の metadata filesize と取得本体のサイズが一致しません",
-                candidate.attachment.id
-            );
-        }
-        let identity = (
-            candidate.journal_id,
-            candidate.attachment.filename.clone(),
-            size,
-        );
-        if let Some(existing_count) = existing_attachment_counts.get_mut(&identity)
-            && *existing_count > 0
-        {
-            *existing_count -= 1;
-            continue;
-        }
-        uploads.push(candidate);
-    }
-    Ok(uploads)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2135,7 +1787,7 @@ fn positive_redmine_user_id(id: i64, role: &str) -> Result<i64> {
     Ok(id)
 }
 
-fn parse_timestamp(value: &str, field: &str) -> Result<DateTime<Utc>> {
+pub fn parse_timestamp(value: &str, field: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .with_context(|| format!("Redmine {field} の日時が不正です: {value:?}"))
         .map(|timestamp| timestamp.with_timezone(&Utc))
@@ -2412,7 +2064,7 @@ mod tests {
     }
 
     #[test]
-    fn project_mapping_overrides_tracker_mapping_and_archives_after_import() {
+    fn project_mapping_overrides_tracker_mapping() {
         let config: Config =
             serde_json::from_str(include_str!("../config/redmine-import.json")).unwrap();
 
@@ -2422,7 +2074,6 @@ mod tests {
             config.form_id_for_project(12).unwrap().to_string(),
             "01a075ad-b74a-74b2-aa87-2817b12d4ec7"
         );
-        assert!(config.should_archive_project(12));
         assert!(config.project_mapping_for(3).is_none());
     }
 
@@ -2763,7 +2414,8 @@ mod tests {
             created_on: None,
         };
 
-        let result = associate_attachments_with_fallback(&[], &[attachment.clone()]).unwrap();
+        let result =
+            associate_attachments_with_fallback(&[], std::slice::from_ref(&attachment)).unwrap();
 
         assert_eq!(
             result.associations[0].journal_id,
@@ -2773,56 +2425,6 @@ mod tests {
         assert_eq!(
             orphan_attachment_comment_content(3840, &attachment),
             "[Redmine importer] Redmine issue 3840 の添付ファイル 20 を移行しました。\nファイル名: file.txt"
-        );
-    }
-
-    #[test]
-    fn attachment_selection_skips_existing_files_but_keeps_distinct_source_files() {
-        let comments = vec![PortalComment {
-            id: "00000000-0000-0000-0000-000000000001".to_owned(),
-            redmine_journal_id: Some(10),
-            attachments: vec![
-                PortalCommentAttachment {
-                    file_name: "already.txt".to_owned(),
-                    size: 3,
-                },
-                PortalCommentAttachment {
-                    file_name: "same-name.txt".to_owned(),
-                    size: 3,
-                },
-            ],
-        }];
-        let candidate = |id: i64, filename: &str| AttachmentUploadCandidate {
-            journal_id: 10,
-            attachment: RedmineAttachment {
-                id,
-                filename: filename.to_owned(),
-                filesize: Some(3),
-                content_type: None,
-                content_url: None,
-                author: None,
-                created_on: None,
-            },
-            content_type: "text/plain".to_owned(),
-            content: b"abc".to_vec(),
-        };
-
-        let uploads = select_attachment_uploads(
-            &comments,
-            vec![
-                candidate(20, "already.txt"),
-                candidate(21, "same-name.txt"),
-                candidate(22, "same-name.txt"),
-            ],
-        )
-        .unwrap();
-
-        assert_eq!(
-            uploads
-                .iter()
-                .map(|upload| upload.attachment.id)
-                .collect::<Vec<_>>(),
-            vec![22]
         );
     }
 }
