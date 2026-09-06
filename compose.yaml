@@ -115,6 +115,23 @@ services:
       - "5672:5672"
       - "15672:15672"
     restart: always
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: garage
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-GKseichiportal}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-seichi-portal-local-secret-key}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-seichi-portal}
+    ports:
+      - "3900:3900"
+    volumes:
+      - ./docker/garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    networks:
+      - seichi_portal
+    restart: always
   # ローカル観測検証環境。OTLP receiver + Tempo + Loki + Prometheus + Grafana がこれ 1 つで立つ。
   # 通常の開発では不要なため observability プロファイル指定時のみ起動する (makers up-observability)。
   # backend は OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 を設定して起動し、
@@ -155,3 +172,5 @@ volumes:
   cargo_registry:
   cargo_git:
   cargo_target:
+  garage_meta:
+  garage_data:

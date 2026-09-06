@@ -67,6 +67,8 @@ cp .env.example .env
 seichi-portal-backend> makers up
 ```
 
+`compose.yaml` にはコメント添付の保存先として、ローカル用の Garage も含まれています。`.env` に `.env.example` の S3 設定を含めた状態で `docker compose up -d` を実行すると、コメント添付をそのまま試せます。Garage のデータは `garage_meta` と `garage_data` の named volume に保存されます。
+
 `sqlx` の typed query を追加または変更した場合は、DB 起動後に `server/` で `.sqlx/` メタデータを更新してください。
 この PR 時点では `.sqlx/` が空でも構いませんが、将来の typed query 導入に備えて運用を固定しています。
 
