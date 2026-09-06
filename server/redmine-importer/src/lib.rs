@@ -12,7 +12,7 @@ use domain::form::{
     models::FormId,
 };
 use reqwest::{StatusCode, header};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::Value;
 use usecase::redmine_import::{RedmineIssueInput, RedmineJournalInput};
 
@@ -1124,52 +1124,6 @@ impl ApiClient {
         }
         bail!(last_error.unwrap_or_else(|| format!("POST {path} に失敗しました")))
     }
-
-    async fn post_json<T: Serialize>(&self, path: &str, body: &T) -> Result<()> {
-        let mut last_error = None;
-        for attempt in 0..=self.max_retries {
-            let response = self
-                .authorize(self.client.post(self.url(path)).json(body))
-                .send()
-                .await;
-            let response = match response {
-                Ok(response) => response,
-                Err(error) => {
-                    last_error = Some(format!("POST {path} に失敗しました: {error}"));
-                    if attempt == self.max_retries {
-                        break;
-                    }
-                    tokio::time::sleep(retry_delay(attempt, self.retry_base_delay_ms)).await;
-                    continue;
-                }
-            };
-            if response.status().is_success() {
-                return Ok(());
-            }
-            let status = response.status();
-            let retry_after = response
-                .headers()
-                .get(header::RETRY_AFTER)
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.parse::<u64>().ok())
-                .map(Duration::from_secs);
-            let body = response.text().await.unwrap_or_default();
-            let message = format!(
-                "POST {path} が HTTP {} で失敗しました: {}",
-                status,
-                truncate_for_error(&body)
-            );
-            if !is_retryable_status(status) || attempt == self.max_retries {
-                bail!(message);
-            }
-            last_error = Some(message);
-            tokio::time::sleep(
-                retry_after.unwrap_or_else(|| retry_delay(attempt, self.retry_base_delay_ms)),
-            )
-            .await;
-        }
-        bail!(last_error.unwrap_or_else(|| format!("POST {path} に失敗しました")))
-    }
 }
 
 #[derive(Clone)]
@@ -1416,31 +1370,6 @@ impl PortalApi {
             .await
     }
 
-    pub async fn find_or_create_comment(
-        &self,
-        form_id: FormId,
-        answer_id: AnswerId,
-        content: &str,
-    ) -> Result<PortalComment> {
-        let path = format!("/forms/{form_id}/answers/{answer_id}/comments");
-        let comments = self.fetch_comments(form_id, answer_id).await?;
-        if let Some(comment) = comments
-            .into_iter()
-            .find(|comment| comment.content == content)
-        {
-            return Ok(comment);
-        }
-
-        self.http
-            .post_json(&path, &serde_json::json!({ "content": content }))
-            .await?;
-        self.fetch_comments(form_id, answer_id)
-            .await?
-            .into_iter()
-            .find(|comment| comment.content == content)
-            .with_context(|| format!("Portal に移行用コメントを作成できません: {content:?}"))
-    }
-
     pub async fn find_answer_id(&self, form_id: FormId, redmine_issue_id: i64) -> Result<AnswerId> {
         let mut cursor: Option<String> = None;
         let mut found = None;
@@ -1515,7 +1444,6 @@ impl PortalApi {
 pub struct PortalComment {
     pub id: String,
     pub redmine_journal_id: Option<i64>,
-    pub content: String,
     #[serde(default)]
     pub attachments: Vec<PortalCommentAttachment>,
 }
@@ -1553,7 +1481,7 @@ pub struct DownloadedRedmineAttachment {
 
 #[derive(Debug)]
 pub struct AttachmentUploadCandidate {
-    pub journal_id: Option<i64>,
+    pub journal_id: i64,
     pub attachment: RedmineAttachment,
     pub content_type: String,
     pub content: Vec<u8>,
@@ -1590,16 +1518,10 @@ pub fn select_attachment_uploads(
 
     let mut uploads = Vec::with_capacity(candidates.len());
     for candidate in candidates {
-        let journal_id = candidate.journal_id.with_context(|| {
-            format!(
-                "Redmine attachment {} は移行用コメントに直接添付してください",
-                candidate.attachment.id
-            )
-        })?;
-        if !comments_by_journal.contains_key(&journal_id) {
+        if !comments_by_journal.contains_key(&candidate.journal_id) {
             bail!(
                 "Redmine journal {} に対応する Portal comment がありません",
-                journal_id
+                candidate.journal_id
             );
         }
         let size = candidate.content.len() as u64;
@@ -1620,7 +1542,11 @@ pub fn select_attachment_uploads(
                 candidate.attachment.id
             );
         }
-        let identity = (journal_id, candidate.attachment.filename.clone(), size);
+        let identity = (
+            candidate.journal_id,
+            candidate.attachment.filename.clone(),
+            size,
+        );
         if let Some(existing_count) = existing_attachment_counts.get_mut(&identity)
             && *existing_count > 0
         {
@@ -1702,6 +1628,21 @@ pub fn orphan_attachment_comment_content(issue_id: i64, attachment: &RedmineAtta
     )
 }
 
+/// Redmine の journal に紐づかない添付を、移行専用の Imported comment として保存する
+/// ときに使う外部 ID です。通常の Redmine journal ID と衝突しにくい値域を使い、同じ
+/// attachment ID から常に同じ値を作ることで再実行時の照合も可能にします。
+pub fn orphan_attachment_journal_id(attachment_id: i64) -> Result<i64> {
+    if attachment_id <= 0 {
+        bail!("Redmine attachment ID が不正です: {attachment_id}");
+    }
+    i64::MAX
+        .checked_sub(attachment_id)
+        .filter(|journal_id| *journal_id > 0)
+        .with_context(|| {
+            format!("Redmine attachment {attachment_id} の移行用 journal ID を作れません")
+        })
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct RedmineJournalDetail {
     pub property: String,
@@ -1712,7 +1653,7 @@ pub struct RedmineJournalDetail {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RedmineAttachmentAssociation {
-    pub journal_id: Option<i64>,
+    pub journal_id: i64,
     pub attachment: RedmineAttachment,
 }
 
@@ -1832,20 +1773,21 @@ pub fn associate_attachments_with_fallback(
             })
             .collect::<Vec<_>>();
         let (journal_id, used_fallback) = match non_empty_journal_ids.first().copied() {
-            Some(journal_id) => (Some(journal_id), false),
+            Some(journal_id) => (journal_id, false),
             None => match (!fallback_journal_ids.is_empty()).then(|| {
                 let journal_id =
                     fallback_journal_ids[fallback_journal_index % fallback_journal_ids.len()];
                 fallback_journal_index += 1;
                 journal_id
             }) {
-                Some(journal_id) => (Some(journal_id), true),
+                Some(journal_id) => (journal_id, true),
                 None => {
+                    let journal_id = orphan_attachment_journal_id(attachment.id)?;
                     warnings.push(format!(
                         "Redmine attachment {} は対応する notes 付き journal がないため移行用 Portal コメントへ添付します",
                         attachment.id
                     ));
-                    (None, false)
+                    (journal_id, false)
                 }
             },
         };
@@ -1854,7 +1796,7 @@ pub fn associate_attachments_with_fallback(
             warnings.push(format!(
                 "Redmine attachment {} に journal detail がないため notes 付き journal {} へ順番にフォールバックします",
                 attachment.id,
-                journal_id.expect("fallback journal is present")
+                journal_id
             ));
         } else if used_fallback && candidate_journal_ids.len() > 1 {
             warnings.push(format!(
@@ -1865,14 +1807,14 @@ pub fn associate_attachments_with_fallback(
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(", "),
-                journal_id.expect("fallback journal is present")
+                journal_id
             ));
         } else if used_fallback && non_empty_journal_ids.is_empty() {
             warnings.push(format!(
                 "Redmine attachment {} が notes の空の journal {} に紐づくため notes 付き journal {} へ順番にフォールバックします",
                 attachment.id,
                 candidate_journal_ids[0],
-                journal_id.expect("fallback journal is present")
+                journal_id
             ));
         }
 
@@ -1974,7 +1916,7 @@ pub fn associate_attachments(
             );
         }
         associations.push(RedmineAttachmentAssociation {
-            journal_id: Some(journal_id),
+            journal_id,
             attachment: attachment.clone(),
         });
     }
@@ -2100,6 +2042,7 @@ pub fn build_issue_input(
     issue: RedmineIssue,
     status: AnswerStatus,
     question_values: BTreeMap<String, String>,
+    attachment_associations: &[RedmineAttachmentAssociation],
 ) -> Result<BuiltIssueInput> {
     let issue_id = RedmineIssueId::try_new(issue.id)?;
     let author_display_name = redmine_author_display_name(&issue.author.name, &issue.custom_fields);
@@ -2109,7 +2052,7 @@ pub fn build_issue_input(
     )?;
     let created_at = parse_timestamp(&issue.created_on, "issue created_on")?;
     let mut skipped_empty_journal_ids = Vec::new();
-    let journals = issue
+    let mut journals = issue
         .journals
         .into_iter()
         .filter_map(|mut journal| {
@@ -2132,6 +2075,41 @@ pub fn build_issue_input(
             RedmineJournalInput::new(journal.id, author, notes, created_at).map_err(Into::into)
         })
         .collect::<Result<Vec<_>>>()?;
+
+    for association in attachment_associations {
+        let synthetic_journal_id = orphan_attachment_journal_id(association.attachment.id)?;
+        if association.journal_id != synthetic_journal_id {
+            continue;
+        }
+        let attachment_author = association
+            .attachment
+            .author
+            .clone()
+            .unwrap_or_else(|| issue.author.clone());
+        let author = RedmineUserSnapshot::try_new(
+            Some(positive_redmine_user_id(
+                attachment_author.id,
+                "attachment author",
+            )?),
+            attachment_author.name,
+        )?;
+        let created_at = association
+            .attachment
+            .created_on
+            .as_deref()
+            .map(|value| parse_timestamp(value, "attachment created_on"))
+            .transpose()?
+            .unwrap_or(created_at);
+        journals.push(
+            RedmineJournalInput::new(
+                synthetic_journal_id,
+                author,
+                orphan_attachment_comment_content(issue.id, &association.attachment),
+                created_at,
+            )
+            .map_err(anyhow::Error::from)?,
+        );
+    }
 
     let input = RedmineIssueInput::new(
         issue_id,
@@ -2313,7 +2291,8 @@ mod tests {
             custom_fields: Vec::new(),
         };
 
-        let built = build_issue_input(issue, AnswerStatus::IN_PROGRESS, BTreeMap::new()).unwrap();
+        let built =
+            build_issue_input(issue, AnswerStatus::IN_PROGRESS, BTreeMap::new(), &[]).unwrap();
 
         assert_eq!(built.skipped_empty_journal_ids, vec![10]);
         assert_eq!(
@@ -2673,7 +2652,7 @@ mod tests {
 
         let associations = associate_attachments(&[journal], &[attachment]).unwrap();
         assert_eq!(associations.len(), 1);
-        assert_eq!(associations[0].journal_id, Some(10));
+        assert_eq!(associations[0].journal_id, 10);
         assert_eq!(associations[0].attachment.id, 20);
     }
 
@@ -2767,8 +2746,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result.associations[0].journal_id, Some(11));
-        assert_eq!(result.associations[1].journal_id, Some(12));
+        assert_eq!(result.associations[0].journal_id, 11);
+        assert_eq!(result.associations[1].journal_id, 12);
         assert_eq!(result.warnings.len(), 2);
     }
 
@@ -2786,7 +2765,10 @@ mod tests {
 
         let result = associate_attachments_with_fallback(&[], &[attachment.clone()]).unwrap();
 
-        assert_eq!(result.associations[0].journal_id, None);
+        assert_eq!(
+            result.associations[0].journal_id,
+            orphan_attachment_journal_id(20).unwrap()
+        );
         assert!(result.warnings[0].contains("移行用 Portal コメント"));
         assert_eq!(
             orphan_attachment_comment_content(3840, &attachment),
@@ -2799,7 +2781,6 @@ mod tests {
         let comments = vec![PortalComment {
             id: "00000000-0000-0000-0000-000000000001".to_owned(),
             redmine_journal_id: Some(10),
-            content: "comment".to_owned(),
             attachments: vec![
                 PortalCommentAttachment {
                     file_name: "already.txt".to_owned(),
@@ -2812,7 +2793,7 @@ mod tests {
             ],
         }];
         let candidate = |id: i64, filename: &str| AttachmentUploadCandidate {
-            journal_id: Some(10),
+            journal_id: 10,
             attachment: RedmineAttachment {
                 id,
                 filename: filename.to_owned(),

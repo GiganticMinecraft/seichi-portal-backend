@@ -506,7 +506,7 @@ async fn run() -> Result<()> {
                 continue;
             }
         };
-        let built = match build_issue_input(issue, status, question_values) {
+        let built = match build_issue_input(issue, status, question_values, &attachments) {
             Ok(built) => built,
             Err(error) => {
                 report.error(format!(
@@ -681,18 +681,12 @@ async fn run() -> Result<()> {
                             portal_api.find_answer_id(form_id, issue_id).await?
                         }
                     };
-                    let uploaded = import_issue_attachments(
-                        &api,
-                        portal_api,
-                        form_id,
-                        answer_id,
-                        issue_id,
-                        attachments,
-                    )
-                    .await
-                    .with_context(|| {
-                        format!("issue {} の Portal コメント添付を移行できません", issue_id)
-                    })?;
+                    let uploaded =
+                        import_issue_attachments(&api, portal_api, form_id, answer_id, attachments)
+                            .await
+                            .with_context(|| {
+                                format!("issue {} の Portal コメント添付を移行できません", issue_id)
+                            })?;
                     println!("IMPORT attachments issue={} uploaded={uploaded}", issue_id);
                 }
             }
@@ -723,7 +717,6 @@ async fn import_issue_attachments(
     portal_api: &PortalApi,
     form_id: domain::form::models::FormId,
     answer_id: domain::form::answer::AnswerId,
-    issue_id: i64,
     associations: Vec<RedmineAttachmentAssociation>,
 ) -> Result<usize> {
     let comments = portal_api.fetch_comments(form_id, answer_id).await?;
@@ -750,11 +743,8 @@ async fn import_issue_attachments(
         .await
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
-    let (journal_candidates, orphan_candidates) = candidates
-        .into_iter()
-        .partition::<Vec<_>, _>(|candidate| candidate.journal_id.is_some());
-    let uploads = select_attachment_uploads(&comments, journal_candidates)?;
-    let mut upload_count = uploads.len();
+    let uploads = select_attachment_uploads(&comments, candidates)?;
+    let upload_count = uploads.len();
     let comment_ids_by_journal = comments
         .iter()
         .filter_map(|comment| {
@@ -765,16 +755,13 @@ async fn import_issue_attachments(
         .collect::<BTreeMap<_, _>>();
     let mut uploads_by_comment = BTreeMap::new();
     for upload in uploads {
-        let journal_id = upload
-            .journal_id
-            .expect("select_attachment_uploads returns journal-bound candidates");
         let comment_id = comment_ids_by_journal
-            .get(&journal_id)
+            .get(&upload.journal_id)
             .cloned()
             .with_context(|| {
                 format!(
                     "Redmine journal {} に対応する Portal comment がありません",
-                    journal_id
+                    upload.journal_id
                 )
             })?;
         uploads_by_comment
@@ -790,36 +777,6 @@ async fn import_issue_attachments(
         portal_api
             .upload_attachments(form_id, answer_id, &comment_id, uploads)
             .await?;
-    }
-
-    for candidate in orphan_candidates {
-        let content =
-            redmine_importer::orphan_attachment_comment_content(issue_id, &candidate.attachment);
-        let comment = portal_api
-            .find_or_create_comment(form_id, answer_id, &content)
-            .await?;
-        if comment.id.is_empty() || uuid::Uuid::parse_str(&comment.id).is_err() {
-            bail!("Portal comment ID が UUID ではありません: {:?}", comment.id);
-        }
-        if comment.attachments.iter().any(|attachment| {
-            attachment.file_name == candidate.attachment.filename
-                && attachment.size == candidate.content.len() as u64
-        }) {
-            continue;
-        }
-        portal_api
-            .upload_attachments(
-                form_id,
-                answer_id,
-                &comment.id,
-                vec![PortalAttachmentUpload {
-                    file_name: candidate.attachment.filename,
-                    content_type: candidate.content_type,
-                    content: candidate.content,
-                }],
-            )
-            .await?;
-        upload_count += 1;
     }
     Ok(upload_count)
 }
