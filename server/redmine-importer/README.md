@@ -95,8 +95,9 @@ relation type は保持しません。対象外 tracker や設定外 project へ
 添付ファイルは notes が空でない対応 journal の Portal コメントへ移します。添付 detail が
 ない top-level attachment、複数 journal に現れる attachment detail、空 notes journal に
 付いた attachment は、チケット内の notes 付きコメントへ順番にフォールバックし、警告を
-出力します。チケットに notes 付きコメントがない場合は添付を移せないため警告してスキップ
-します。添付本体の取得・Portal への送信に失敗した場合は移行を停止します。既存添付の判定には、Portal コメントの Redmine journal ID、
+出力します。チケットに notes 付きコメントがない場合は、重複しない移行用 Portal コメントを
+APIで作成して添付します。添付本体の取得・Portal への送信に失敗した場合は移行を停止します。
+既存添付の判定には、Portal コメントの Redmine journal ID、
 ファイル名、サイズを使います。Redmine の `content_type` metadata ではなく、ダウンロード
 レスポンスの `Content-Type` を使い、ヘッダーがなければ `application/octet-stream` とします。
 添付本体のサイズは Portal API と同じ 50 MiB 以下でなければなりません。Redmine の custom
