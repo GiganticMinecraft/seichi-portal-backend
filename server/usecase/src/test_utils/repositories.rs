@@ -1567,8 +1567,8 @@ impl UserRepository for InMemoryUserRepository {
         Ok(())
     }
 
-    async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<Option<AccountUser>, Error> {
-        Ok(None)
+    async fn fetch_user_by_xbox_token(&self, _token: String) -> Result<AccountUser, Error> {
+        Err(errors::infra::InfraError::MinecraftProfileNotFound.into())
     }
 
     async fn fetch_all_users(&self) -> Result<Vec<AuthorizationGuard<AccountUser, Read>>, Error> {

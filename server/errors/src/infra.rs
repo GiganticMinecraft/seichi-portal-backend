@@ -36,6 +36,16 @@ pub enum InfraError {
     },
     #[error("Reqwest Error: {}", .cause)]
     Reqwest { cause: String },
+    #[error("Minecraft profile was not found.")]
+    MinecraftProfileNotFound,
+    #[error("Minecraft access token was rejected.")]
+    MinecraftTokenInvalid,
+    #[error("Minecraft profile service returned HTTP status {status}.")]
+    MinecraftProfileHttp { status: u16 },
+    #[error("Minecraft profile request failed.")]
+    MinecraftProfileRequestFailed,
+    #[error("Minecraft profile response was invalid.")]
+    MinecraftProfileInvalidResponse,
     #[error("MeiliSearch Error: {}", .cause)]
     MeiliSearch { cause: String },
     #[error("SerdeJson Error: {}", .cause)]
@@ -83,6 +93,21 @@ impl PartialEq for InfraError {
             }
             Self::Reqwest { cause: left } => {
                 matches!(other, Self::Reqwest { cause: right } if left == right)
+            }
+            Self::MinecraftProfileNotFound => {
+                matches!(other, Self::MinecraftProfileNotFound)
+            }
+            Self::MinecraftTokenInvalid => {
+                matches!(other, Self::MinecraftTokenInvalid)
+            }
+            Self::MinecraftProfileHttp { status: left } => {
+                matches!(other, Self::MinecraftProfileHttp { status: right } if left == right)
+            }
+            Self::MinecraftProfileRequestFailed => {
+                matches!(other, Self::MinecraftProfileRequestFailed)
+            }
+            Self::MinecraftProfileInvalidResponse => {
+                matches!(other, Self::MinecraftProfileInvalidResponse)
             }
             Self::MeiliSearch { cause: left } => {
                 matches!(other, Self::MeiliSearch { cause: right } if left == right)

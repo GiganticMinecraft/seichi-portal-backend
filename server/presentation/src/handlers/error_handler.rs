@@ -324,6 +324,61 @@ fn handle_infra_error(err: InfraError) -> ApiError {
                 "INTERNAL_SERVER_ERROR",
             )
         }
+        InfraError::MinecraftProfileNotFound => problem_response(
+            StatusCode::NOT_FOUND,
+            "Not Found",
+            "Minecraft profile was not found.",
+            "MINECRAFT_PROFILE_NOT_FOUND",
+        ),
+        InfraError::MinecraftTokenInvalid => problem_response(
+            StatusCode::UNAUTHORIZED,
+            "Unauthorized",
+            "Minecraft access token is invalid.",
+            "MINECRAFT_TOKEN_INVALID",
+        ),
+        InfraError::MinecraftProfileHttp { status } => {
+            if (500..=599).contains(&status) {
+                tracing::error!(
+                    upstream_status = status,
+                    "Minecraft profile service is unavailable"
+                );
+                problem_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Service Unavailable",
+                    "Minecraft profile service is temporarily unavailable.",
+                    "MINECRAFT_PROFILE_SERVICE_UNAVAILABLE",
+                )
+            } else {
+                tracing::error!(
+                    upstream_status = status,
+                    "Minecraft profile service returned an HTTP error"
+                );
+                problem_response(
+                    StatusCode::BAD_GATEWAY,
+                    "Bad Gateway",
+                    "Minecraft profile service returned an unexpected HTTP response.",
+                    "MINECRAFT_PROFILE_UPSTREAM_ERROR",
+                )
+            }
+        }
+        InfraError::MinecraftProfileRequestFailed => {
+            tracing::error!("Minecraft profile request failed");
+            problem_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Service Unavailable",
+                "Could not communicate with Minecraft profile service.",
+                "MINECRAFT_PROFILE_REQUEST_FAILED",
+            )
+        }
+        InfraError::MinecraftProfileInvalidResponse => {
+            tracing::error!("Minecraft profile service returned an invalid response");
+            problem_response(
+                StatusCode::BAD_GATEWAY,
+                "Bad Gateway",
+                "Minecraft profile service returned an invalid response.",
+                "MINECRAFT_PROFILE_INVALID_RESPONSE",
+            )
+        }
         InfraError::MeiliSearch { cause } => {
             tracing::error!("MeiliSearch Error: {}", cause);
             problem_response(
@@ -520,5 +575,51 @@ mod tests {
             problem["detail"],
             "Search service is temporarily unavailable."
         );
+    }
+
+    #[tokio::test]
+    async fn minecraft_profile_errors_keep_distinct_public_codes() {
+        let cases = [
+            (
+                InfraError::MinecraftProfileNotFound,
+                StatusCode::NOT_FOUND,
+                "MINECRAFT_PROFILE_NOT_FOUND",
+            ),
+            (
+                InfraError::MinecraftTokenInvalid,
+                StatusCode::UNAUTHORIZED,
+                "MINECRAFT_TOKEN_INVALID",
+            ),
+            (
+                InfraError::MinecraftProfileHttp { status: 500 },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "MINECRAFT_PROFILE_SERVICE_UNAVAILABLE",
+            ),
+            (
+                InfraError::MinecraftProfileHttp { status: 429 },
+                StatusCode::BAD_GATEWAY,
+                "MINECRAFT_PROFILE_UPSTREAM_ERROR",
+            ),
+            (
+                InfraError::MinecraftProfileRequestFailed,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "MINECRAFT_PROFILE_REQUEST_FAILED",
+            ),
+            (
+                InfraError::MinecraftProfileInvalidResponse,
+                StatusCode::BAD_GATEWAY,
+                "MINECRAFT_PROFILE_INVALID_RESPONSE",
+            ),
+        ];
+
+        for (error, status, error_code) in cases {
+            let response = handle_error(error.into()).into_response();
+            assert_eq!(response.status(), status);
+
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(problem["status"], status.as_u16());
+            assert_eq!(problem["errorCode"], error_code);
+        }
     }
 }

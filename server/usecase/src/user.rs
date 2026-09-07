@@ -289,36 +289,23 @@ impl<R: UserRepository> UserUseCase<'_, R> {
         Ok(Page::new(users, next))
     }
 
-    pub async fn fetch_user_by_xbox_token(
-        &self,
-        token: String,
-    ) -> Result<Option<AccountUser>, Error> {
-        let fetched_user = self.repository.fetch_user_by_xbox_token(token).await?;
+    pub async fn fetch_user_by_xbox_token(&self, token: String) -> Result<AccountUser, Error> {
+        let user = self.repository.fetch_user_by_xbox_token(token).await?;
+        let user_ref = Actor::from(user.clone());
+        let user_id = user.id().into_inner();
 
-        match fetched_user {
-            Some(user) => {
-                let user_ref = Actor::from(user.clone());
-                self.repository
-                    .upsert_user(
-                        AuthorizationGuard::<_, Create>::from(user.to_owned())
-                            .try_create(user_ref.clone())?,
-                    )
-                    .await?;
-                // NOTE: リクエスト時点では token しかわからないので
-                //  token で検索したユーザーが操作者であるとする
-                self.repository
-                    .find_by(user.id().into_inner())
-                    .await?
-                    .map(|guard| {
-                        guard
-                            .try_read(user_ref.clone())
-                            .map(|user| user.into_inner())
-                    })
-                    .transpose()
-                    .map_err(Into::into)
-            }
-            None => Ok(None),
-        }
+        self.repository
+            .upsert_user(AuthorizationGuard::<_, Create>::from(user).try_create(user_ref.clone())?)
+            .await?;
+        // NOTE: リクエスト時点では token しかわからないので
+        //  token で検索したユーザーが操作者であるとする
+        self.repository
+            .find_by(user_id)
+            .await?
+            .ok_or(Error::from(UseCaseError::UserNotFound))?
+            .try_read(user_ref)
+            .map(|user| user.into_inner())
+            .map_err(Into::into)
     }
 
     pub async fn start_user_session(
@@ -404,6 +391,8 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 #[cfg(test)]
 mod tests {
     use domain::account::models::{Role, UserId};
+    use domain::repository::user_repository::MockUserRepository;
+    use errors::infra::InfraError;
     use errors::usecase::UseCaseError;
     use types::non_empty_string::NonEmptyString;
 
@@ -416,6 +405,25 @@ mod tests {
 
     fn group_name(name: &str) -> UserGroupName {
         UserGroupName::new(NonEmptyString::try_new(name.to_string()).unwrap())
+    }
+
+    #[tokio::test]
+    async fn fetch_user_by_xbox_token_propagates_profile_fetch_errors() {
+        let mut repository = MockUserRepository::new();
+        repository
+            .expect_fetch_user_by_xbox_token()
+            .once()
+            .returning(|_| Err(InfraError::MinecraftProfileNotFound.into()));
+        let usecase = UserUseCase {
+            repository: &repository,
+        };
+
+        assert_eq!(
+            usecase
+                .fetch_user_by_xbox_token("test-token".to_string())
+                .await,
+            Err(InfraError::MinecraftProfileNotFound.into())
+        );
     }
 
     #[tokio::test]

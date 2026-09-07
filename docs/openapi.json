@@ -5190,6 +5190,28 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "invalid_authorization_header": {
+                    "summary": "Authorization header is invalid",
+                    "value": {
+                      "detail": "Invalid authorization header.",
+                      "errorCode": "UNAUTHORIZED",
+                      "status": 401,
+                      "title": "Unauthorized",
+                      "type": "about:blank"
+                    }
+                  },
+                  "invalid_minecraft_token": {
+                    "summary": "Minecraft access token is invalid",
+                    "value": {
+                      "detail": "Minecraft access token is invalid.",
+                      "errorCode": "MINECRAFT_TOKEN_INVALID",
+                      "status": 401,
+                      "title": "Unauthorized",
+                      "type": "about:blank"
+                    }
+                  }
                 }
               }
             }
@@ -5205,11 +5227,18 @@
             }
           },
           "404": {
-            "description": "The server cannot find the requested resource.",
+            "description": "The Minecraft profile endpoint reported that no profile was found.",
             "content": {
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "detail": "Minecraft profile was not found.",
+                  "errorCode": "MINECRAFT_PROFILE_NOT_FOUND",
+                  "status": 404,
+                  "title": "Not Found",
+                  "type": "about:blank"
                 }
               }
             }
@@ -5234,12 +5263,66 @@
               }
             }
           },
-          "503": {
-            "description": "The server is temporarily unable to handle the request.",
+          "502": {
+            "description": "The Minecraft profile service returned an invalid or unexpected response.",
             "content": {
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "invalid_upstream_response": {
+                    "summary": "Minecraft profile service returned an invalid response",
+                    "value": {
+                      "detail": "Minecraft profile service returned an invalid response.",
+                      "errorCode": "MINECRAFT_PROFILE_INVALID_RESPONSE",
+                      "status": 502,
+                      "title": "Bad Gateway",
+                      "type": "about:blank"
+                    }
+                  },
+                  "upstream_http_error": {
+                    "summary": "Minecraft profile service returned an HTTP error",
+                    "value": {
+                      "detail": "Minecraft profile service returned an unexpected HTTP response.",
+                      "errorCode": "MINECRAFT_PROFILE_UPSTREAM_ERROR",
+                      "status": 502,
+                      "title": "Bad Gateway",
+                      "type": "about:blank"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Minecraft profile service could not be reached or is temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "profile_request_failed": {
+                    "summary": "Minecraft profile service could not be reached",
+                    "value": {
+                      "detail": "Could not communicate with Minecraft profile service.",
+                      "errorCode": "MINECRAFT_PROFILE_REQUEST_FAILED",
+                      "status": 503,
+                      "title": "Service Unavailable",
+                      "type": "about:blank"
+                    }
+                  },
+                  "upstream_service_unavailable": {
+                    "summary": "Minecraft profile service returned a server error",
+                    "value": {
+                      "detail": "Minecraft profile service is temporarily unavailable.",
+                      "errorCode": "MINECRAFT_PROFILE_SERVICE_UNAVAILABLE",
+                      "status": 503,
+                      "title": "Service Unavailable",
+                      "type": "about:blank"
+                    }
+                  }
                 }
               }
             }
