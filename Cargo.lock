@@ -1691,7 +1691,7 @@ dependencies = [
  "lapin",
  "meilisearch-sdk",
  "redis",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
  "reqwest-middleware",
  "serde_json",
  "serenity",
@@ -3249,7 +3249,7 @@ dependencies = [
  "bytes",
  "http 1.4.2",
  "opentelemetry",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
 ]
 
 [[package]]
@@ -3264,7 +3264,7 @@ dependencies = [
  "opentelemetry-proto",
  "opentelemetry_sdk",
  "prost",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
  "thiserror 2.0.20",
 ]
 
@@ -3678,7 +3678,7 @@ dependencies = [
  "object 0.39.1",
  "once_cell",
  "prost",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
  "serde_json",
  "smallvec",
  "spin 0.12.2",
@@ -3909,7 +3909,7 @@ dependencies = [
  "chrono",
  "domain",
  "futures",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
  "resource",
  "serde",
  "serde_json",
@@ -4007,11 +4007,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
+checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "futures-channel",
  "futures-core",
@@ -4055,7 +4055,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http 1.4.2",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
  "serde",
  "thiserror 2.0.20",
  "tower-service",
@@ -4073,7 +4073,7 @@ dependencies = [
  "http 1.4.2",
  "matchit",
  "opentelemetry",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
  "reqwest-middleware",
  "tracing",
  "tracing-opentelemetry",
@@ -4106,7 +4106,7 @@ dependencies = [
  "mockall",
  "redis",
  "regex",
- "reqwest 0.13.4",
+ "reqwest 0.13.5",
  "reqwest-middleware",
  "reqwest-tracing",
  "serde",
