@@ -116,7 +116,7 @@ services:
       - "15672:15672"
     restart: always
   garage:
-    image: dxflrs/garage:v2.4.0
+    image: dxflrs/garage:v2.4.1
     container_name: garage
     command: ["/garage", "server", "--single-node", "--default-bucket"]
     environment:
