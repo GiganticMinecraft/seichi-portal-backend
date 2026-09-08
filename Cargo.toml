@@ -51,7 +51,7 @@ redis = { version = "1.7.0", features = ["tokio-comp"] }
 meilisearch-sdk = "0.33.0"
 serenity = "0.12.5"
 lapin = "4.10.0"
-aws-sdk-s3 = "1.145.0"
+aws-sdk-s3 = "1.146.0"
 utoipa = { version = "5.5.0", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
