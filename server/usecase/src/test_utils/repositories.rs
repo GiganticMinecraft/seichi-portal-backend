@@ -551,6 +551,7 @@ mod answer_entry_repository_tests {
             AnswerEntry::from_raw_parts(
                 Uuid::from_u128(id).into(),
                 *form.id(),
+                *form.revision().id(),
                 AnswerAuthor::AuthenticatedUser(Uuid::from_u128(id + 100).into()),
                 timestamp,
                 AnswerTitle::default(),
@@ -570,6 +571,7 @@ mod answer_entry_repository_tests {
             AnswerEntry::from_raw_parts_with_status_and_redmine_reference(
                 Uuid::from_u128(id).into(),
                 *form.id(),
+                *form.revision().id(),
                 AnswerAuthor::AuthenticatedUser(Uuid::from_u128(id + 100).into()),
                 timestamp,
                 AnswerTitle::default(),

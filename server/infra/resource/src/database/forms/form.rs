@@ -86,6 +86,7 @@ struct ArchivedFormQueryRow {
 #[derive(sqlx::FromRow)]
 struct AnswerQueryRow {
     form_id: String,
+    form_revision_id: String,
     answer_id: String,
     title: Option<String>,
     publication: String,
@@ -269,11 +270,21 @@ async fn build_active_form_record(
     label_ids: Vec<FormLabelId>,
     questions_table: &str,
     choices_table: &str,
+    revisions_table: &str,
 ) -> Result<ActiveFormRecord, InfraError> {
     let form_id = FormId::from(Uuid::parse_str(&row.id)?);
+    let revision_sql = format!(
+        "SELECT id FROM {revisions_table} WHERE form_id = ? ORDER BY revision_number DESC LIMIT 1"
+    );
+    let revision_id = sqlx::query(AssertSqlSafe(&*revision_sql))
+        .bind(&row.id)
+        .fetch_one(&mut **txn)
+        .await?
+        .try_get("id")?;
 
     Ok(ActiveFormRecord {
         id: row.id,
+        revision_id,
         title: row.title,
         description: row.description,
         created_at: row.created_at,
@@ -320,6 +331,7 @@ async fn active_form_record_from_row(
         label_ids,
         "form_questions",
         "form_choices",
+        "form_revisions",
     )
     .await
 }
@@ -412,6 +424,7 @@ async fn build_archived_form_record(
     label_ids: Vec<FormLabelId>,
     questions_table: &str,
     choices_table: &str,
+    revisions_table: &str,
 ) -> Result<ArchivedFormRecord, InfraError> {
     let form = build_active_form_record(
         txn,
@@ -420,6 +433,7 @@ async fn build_archived_form_record(
         label_ids,
         questions_table,
         choices_table,
+        revisions_table,
     )
     .await?;
 
@@ -461,6 +475,7 @@ async fn archived_form_record_from_row(
         label_ids,
         "archived_form_questions",
         "archived_form_choices",
+        "archived_form_revisions",
     )
     .await
 }
@@ -478,7 +493,7 @@ async fn fetch_answer_entries_page(
     // Repeated query parameters require dynamic IN clauses. SQL fragments are kept static and
     // every value from the filter is bound separately to preserve SQL injection protection.
     let mut query_builder = QueryBuilder::<MySql>::new(
-        r"SELECT answers.form_id, answers.id AS answer_id, answers.title, answers.publication,
+        r"SELECT answers.form_id, answers.form_revision_id, answers.id AS answer_id, answers.title, answers.publication,
             answers.status,
             answers.author_type, answers.user, users.name AS user_name, users.role AS user_role,
             answers.temporary_user_id, temporary_users.name AS temporary_user_name,
@@ -616,6 +631,7 @@ fn answer_record_from_row(row: AnswerQueryRow) -> Result<FormAnswerRecord, Infra
         )?,
         timestamp: row.timestamp,
         form_id: row.form_id,
+        form_revision_id: row.form_revision_id,
         title: row.title,
         publication: row.publication,
         status: row.status,
@@ -848,6 +864,38 @@ async fn copy_active_form_to_archive(
 
     execute_typed_query!(
         txn,
+        r"INSERT INTO archived_form_revisions (id, form_id, revision_number, created_at)
+        SELECT id, form_id, revision_number, created_at
+        FROM form_revisions WHERE form_id = ?",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
+        r"INSERT INTO archived_form_revision_questions
+        (form_revision_id, question_id, template_key, position, title, description,
+         question_type, is_required)
+        SELECT q.form_revision_id, q.question_id, q.template_key, q.position, q.title,
+            q.description, q.question_type, q.is_required
+        FROM form_revision_questions q
+        INNER JOIN form_revisions r ON r.id = q.form_revision_id
+        WHERE r.form_id = ?",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
+        r"INSERT INTO archived_form_revision_choices
+        (form_revision_id, id, question_id, position, label)
+        SELECT c.form_revision_id, c.id, c.question_id, c.position, c.label
+        FROM form_revision_choices c
+        INNER JOIN form_revisions r ON r.id = c.form_revision_id
+        WHERE r.form_id = ?",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
         r"INSERT INTO archived_form_questions
         (question_id, form_id, template_key, position, title, description, question_type, is_required)
         SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
@@ -877,17 +925,17 @@ async fn copy_active_form_to_archive(
     execute_typed_query!(
         txn,
         r"INSERT INTO archived_answers
-        (id, form_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
+        (id, form_id, form_revision_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
          title, publication, status, timestamp)
-        SELECT id, form_id, author_type, user, temporary_user_id, redmine_user_id,
+        SELECT id, form_id, form_revision_id, author_type, user, temporary_user_id, redmine_user_id,
             redmine_author_name, title, publication, status, timestamp FROM answers WHERE form_id = ?",
         &form_id,
     );
 
     execute_typed_query!(
         txn,
-        r"INSERT INTO archived_real_answers (id, answer_id, question_id, answer)
-        SELECT r.id, r.answer_id, r.question_id, r.answer
+        r"INSERT INTO archived_real_answers (id, answer_id, form_revision_id, question_id, answer)
+        SELECT r.id, r.answer_id, r.form_revision_id, r.question_id, r.answer
         FROM real_answers r
         INNER JOIN answers a ON r.answer_id = a.id
         WHERE a.form_id = ?",
@@ -942,6 +990,7 @@ async fn copy_active_form_to_archive(
         &form_id,
     );
 
+    execute_typed_query!(txn, "DELETE FROM answers WHERE form_id = ?", &form_id);
     execute_typed_query!(txn, "DELETE FROM form_meta_data WHERE id = ?", form_id);
 
     Ok(())
@@ -971,6 +1020,38 @@ async fn restore_archived_form_to_active(
 
     execute_typed_query!(
         txn,
+        r"INSERT INTO form_revisions (id, form_id, revision_number, created_at)
+        SELECT id, form_id, revision_number, created_at
+        FROM archived_form_revisions WHERE form_id = ?",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
+        r"INSERT INTO form_revision_questions
+        (form_revision_id, question_id, template_key, position, title, description,
+         question_type, is_required)
+        SELECT q.form_revision_id, q.question_id, q.template_key, q.position, q.title,
+            q.description, q.question_type, q.is_required
+        FROM archived_form_revision_questions q
+        INNER JOIN archived_form_revisions r ON r.id = q.form_revision_id
+        WHERE r.form_id = ?",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
+        r"INSERT INTO form_revision_choices
+        (form_revision_id, id, question_id, position, label)
+        SELECT c.form_revision_id, c.id, c.question_id, c.position, c.label
+        FROM archived_form_revision_choices c
+        INNER JOIN archived_form_revisions r ON r.id = c.form_revision_id
+        WHERE r.form_id = ?",
+        &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
         r"INSERT INTO form_questions
         (question_id, form_id, template_key, position, title, description, question_type, is_required)
         SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
@@ -980,8 +1061,8 @@ async fn restore_archived_form_to_active(
 
     execute_typed_query!(
         txn,
-        r"INSERT INTO form_choices (question_id, position, label)
-        SELECT question_id, position, label
+        r"INSERT INTO form_choices (id, question_id, position, label)
+        SELECT id, question_id, position, label
         FROM archived_form_choices
         WHERE question_id IN (
             SELECT question_id FROM archived_form_questions WHERE form_id = ?
@@ -1001,17 +1082,17 @@ async fn restore_archived_form_to_active(
     execute_typed_query!(
         txn,
         r"INSERT INTO answers
-        (id, form_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
+        (id, form_id, form_revision_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,
          title, publication, status, timestamp)
-        SELECT id, form_id, author_type, user, temporary_user_id, redmine_user_id,
+        SELECT id, form_id, form_revision_id, author_type, user, temporary_user_id, redmine_user_id,
             redmine_author_name, title, publication, status, timestamp FROM archived_answers WHERE form_id = ?",
         &form_id,
     );
 
     execute_typed_query!(
         txn,
-        r"INSERT INTO real_answers (id, answer_id, question_id, answer)
-        SELECT id, answer_id, question_id, answer
+        r"INSERT INTO real_answers (id, answer_id, form_revision_id, question_id, answer)
+        SELECT id, answer_id, form_revision_id, question_id, answer
         FROM archived_real_answers
         WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
         &form_id,
@@ -1059,6 +1140,12 @@ async fn restore_archived_form_to_active(
         FROM archived_label_settings_for_form_answers
         WHERE answer_id IN (SELECT id FROM archived_answers WHERE form_id = ?)",
         &form_id,
+    );
+
+    execute_typed_query!(
+        txn,
+        "DELETE FROM archived_answers WHERE form_id = ?",
+        &form_id
     );
 
     execute_typed_query!(
@@ -1139,6 +1226,7 @@ impl FormDatabase for ConnectionPool {
             Box::pin(async move {
                 insert_form_root(txn, &form, &user).await?;
                 sync_questions(txn, &form).await?;
+                persist_form_revision(txn, &form).await?;
                 sync_label_ids(txn, &form).await?;
                 sync_form_group_restrictions(txn, &form).await?;
                 Ok::<_, InfraError>(())
@@ -1224,6 +1312,7 @@ impl FormDatabase for ConnectionPool {
                             l,
                             "form_questions",
                             "form_choices",
+                            "form_revisions",
                         )
                         .await?;
                         Ok(Some((record, (rows, restrictions, labels, txn))))
@@ -1293,6 +1382,7 @@ impl FormDatabase for ConnectionPool {
                             l,
                             "form_questions",
                             "form_choices",
+                            "form_revisions",
                         )
                         .await?;
                         Ok(Some((record, (rows, restrictions, labels, txn))))
@@ -1465,6 +1555,7 @@ impl FormDatabase for ConnectionPool {
                             l,
                             "archived_form_questions",
                             "archived_form_choices",
+                            "archived_form_revisions",
                         )
                         .await?;
                         Ok(Some((record, (rows, restrictions, labels, txn))))
@@ -1597,8 +1688,10 @@ impl FormDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
+                ensure_expected_form_revision(txn, &form).await?;
                 update_form_root(txn, &form, &updated_by).await?;
                 sync_questions(txn, &form).await?;
+                persist_form_revision(txn, &form).await?;
                 sync_label_ids(txn, &form).await?;
                 sync_form_group_restrictions(txn, &form).await?;
                 Ok::<_, InfraError>(())
@@ -1647,6 +1740,50 @@ impl FormDatabase for ConnectionPool {
         })
         .await
     }
+}
+
+async fn ensure_expected_form_revision(
+    txn: &mut DatabaseTransaction,
+    form: &ActiveForm,
+) -> Result<(), InfraError> {
+    let form_id = form.id().to_string();
+    let expected_revision_id = form
+        .expected_revision_id()
+        .as_ref()
+        .ok_or_else(|| InfraError::Unexpected {
+            cause: format!("persisted form {form_id} is missing its expected revision"),
+        })?
+        .to_string();
+
+    sqlx::query_scalar!(
+        "SELECT id FROM form_meta_data WHERE id = ? FOR UPDATE",
+        form_id,
+    )
+    .fetch_optional(&mut **txn)
+    .await?
+    .ok_or_else(|| InfraError::FormNotFound {
+        id: form.id().into_inner(),
+    })?;
+
+    let current_revision_id = sqlx::query_scalar!(
+        r"SELECT id FROM form_revisions
+        WHERE form_id = ?
+        ORDER BY revision_number DESC
+        LIMIT 1",
+        form_id,
+    )
+    .fetch_optional(&mut **txn)
+    .await?;
+
+    if current_revision_id.as_deref() != Some(expected_revision_id.as_str()) {
+        return Err(InfraError::Unexpected {
+            cause: format!(
+                "form {form_id} was updated from revision {expected_revision_id} before this update"
+            ),
+        });
+    }
+
+    Ok(())
 }
 
 async fn sync_label_ids(
@@ -1765,6 +1902,66 @@ async fn sync_questions(
         desired.iter().map(|q| (q.id(), q)).collect();
 
     sync_choices(conn, &assigned_questions).await
+}
+
+async fn persist_form_revision(
+    txn: &mut DatabaseTransaction,
+    form: &ActiveForm,
+) -> Result<(), InfraError> {
+    let revision_id = form.revision().id().to_string();
+    let form_id = form.id().to_string();
+    let already_persisted = sqlx::query_scalar!(
+        r#"SELECT EXISTS(
+            SELECT 1 FROM form_revisions WHERE id = ?
+        ) AS `exists!: bool`"#,
+        revision_id,
+    )
+    .fetch_one(&mut **txn)
+    .await?;
+
+    if already_persisted {
+        return Ok(());
+    }
+
+    sqlx::query!(
+        r"INSERT INTO form_revisions (id, form_id, revision_number)
+        SELECT ?, ?, COALESCE(MAX(revision_number), 0) + 1
+        FROM form_revisions
+        WHERE form_id = ?",
+        revision_id,
+        form_id,
+        form_id,
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query!(
+        r"INSERT INTO form_revision_questions
+        (form_revision_id, question_id, template_key, position, title, description,
+         question_type, is_required)
+        SELECT ?, question_id, template_key, position, title, description, question_type,
+            is_required
+        FROM form_questions
+        WHERE form_id = ?",
+        revision_id,
+        form_id,
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    sqlx::query!(
+        r"INSERT INTO form_revision_choices (form_revision_id, id, question_id, position, label)
+        SELECT ?, c.id, c.question_id, c.position, c.label
+        FROM form_choices c
+        INNER JOIN form_questions q ON q.question_id = c.question_id
+        WHERE q.form_id = ?",
+        revision_id,
+        form_id,
+    )
+    .execute(&mut **txn)
+    .await?;
+
+    Ok(())
 }
 
 async fn fetch_question_ids(

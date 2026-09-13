@@ -472,6 +472,7 @@ mod tests {
             AnswerEntry::from_raw_parts(
                 answer_id,
                 *form.id(),
+                *form.revision().id(),
                 AnswerAuthor::AuthenticatedUser(UserId::from(Uuid::new_v4())),
                 Utc::now(),
                 AnswerTitle::new(None),
