@@ -164,18 +164,14 @@ impl<
             .into_inner()
             .map(|title| title.into_inner())
             .unwrap_or_else(|| format!("「{form_title}」への回答"));
-        let questions = form.questions().as_slice();
         let answer_fields = answer_entry
             .contents()
             .iter()
             .map(|content| {
-                let question_title = questions
-                    .iter()
-                    .find(|question| question.id() == content.question_id)
-                    .map(|question| question.title().to_owned().into_inner())
-                    .unwrap_or_else(|| "不明な質問".to_string());
-
-                DiscordAnswerWebhookField::new(question_title, content.answer.clone())
+                DiscordAnswerWebhookField::new(
+                    content.question_title().as_str().to_owned(),
+                    content.answer.clone(),
+                )
             })
             .collect::<Vec<_>>();
         let fields = [
@@ -694,19 +690,16 @@ fn answer_submitted_event(
     form: &Allowed<ActiveForm, Read>,
     answer: &Allowed<AnswerEntry, Create>,
 ) -> ApplicationEvent {
-    let questions = form.questions().as_slice();
     let title = answer
         .title()
         .to_owned()
         .into_inner()
         .map(|title| EventDetail::new("回答タイトル", title.into_inner()));
     let contents = answer.contents().iter().map(|content| {
-        let question_title = questions
-            .iter()
-            .find(|question| question.id() == content.question_id)
-            .map(|question| question.title().as_str().to_owned())
-            .unwrap_or_else(|| "不明な質問".to_string());
-        EventDetail::new(question_title, content.answer.to_owned())
+        EventDetail::new(
+            content.question_title().as_str().to_owned(),
+            content.answer.to_owned(),
+        )
     });
 
     ApplicationEvent::AnswerSubmitted {

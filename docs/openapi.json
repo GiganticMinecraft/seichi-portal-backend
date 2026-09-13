@@ -7128,6 +7128,7 @@
         "type": "object",
         "required": [
           "question_id",
+          "question_title",
           "answer"
         ],
         "properties": {
@@ -7137,6 +7138,9 @@
           "question_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "question_title": {
+            "type": "string"
           }
         }
       },

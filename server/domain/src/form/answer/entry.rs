@@ -11,7 +11,7 @@ use crate::{
     form::{
         answer::{
             AnswerAuthor, AnswerStatus, AnswerStatusHistoryEntry, AnswerTitle,
-            AnswerTitleHistoryEntry, FormAnswerContent, PostedAnswerContents,
+            AnswerTitleHistoryEntry, AnsweredQuestionContent, PostedAnswerContents,
             RedmineImportedAnswerReference, RedmineUserSnapshot,
         },
         models::{ActiveForm, ArchivedForm, FormId, FormRevisionId},
@@ -105,7 +105,7 @@ pub struct AnswerEntry {
     title: AnswerTitle,
     publication: AnswerPublication,
     status: AnswerStatus,
-    contents: Vec<FormAnswerContent>,
+    contents: Vec<AnsweredQuestionContent>,
     redmine_reference: Option<RedmineImportedAnswerReference>,
 }
 
@@ -124,7 +124,7 @@ impl AnswerEntry {
         timestamp: DateTime<Utc>,
         title: AnswerTitle,
         publication: AnswerPublication,
-        contents: Vec<FormAnswerContent>,
+        contents: Vec<AnsweredQuestionContent>,
     ) -> Self {
         unsafe {
             Self::from_raw_parts_with_status_and_redmine_reference(
@@ -156,7 +156,7 @@ impl AnswerEntry {
         timestamp: DateTime<Utc>,
         title: AnswerTitle,
         publication: AnswerPublication,
-        contents: Vec<FormAnswerContent>,
+        contents: Vec<AnsweredQuestionContent>,
         redmine_reference: Option<RedmineImportedAnswerReference>,
     ) -> Self {
         unsafe {
@@ -190,7 +190,7 @@ impl AnswerEntry {
         title: AnswerTitle,
         publication: AnswerPublication,
         status: AnswerStatus,
-        contents: Vec<FormAnswerContent>,
+        contents: Vec<AnsweredQuestionContent>,
         redmine_reference: Option<RedmineImportedAnswerReference>,
     ) -> Self {
         Self {

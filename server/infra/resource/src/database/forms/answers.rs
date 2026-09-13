@@ -158,7 +158,12 @@ where
     }
 
     let sql = format!(
-        "SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})",
+        "SELECT real_answers.id, real_answers.question_id, questions.title AS question_title, real_answers.answer, real_answers.answer_id \
+         FROM real_answers \
+         INNER JOIN form_revision_questions questions \
+            ON questions.form_revision_id = real_answers.form_revision_id \
+            AND questions.question_id = real_answers.question_id \
+         WHERE real_answers.answer_id IN ({})",
         std::iter::repeat_n("?", answer_ids.len()).join(", ")
     );
 
@@ -176,6 +181,7 @@ where
                 FormAnswerContentRecord {
                     id: row.try_get("id")?,
                     question_id: row.try_get("question_id")?,
+                    question_title: row.try_get("question_title")?,
                     answer: row.try_get("answer")?,
                 },
             ))
@@ -410,7 +416,13 @@ impl FormAnswerDatabase for ConnectionPool {
                 .await?;
 
                 let contents = sqlx::query!(
-                    r"SELECT id, question_id, answer FROM real_answers WHERE answer_id = ?",
+                    r"SELECT real_answers.id, real_answers.question_id,
+                        questions.title AS question_title, real_answers.answer
+                    FROM real_answers
+                    INNER JOIN form_revision_questions questions
+                        ON questions.form_revision_id = real_answers.form_revision_id
+                        AND questions.question_id = real_answers.question_id
+                    WHERE real_answers.answer_id = ?",
                     answer_id.into_inner().to_string(),
                 )
                 .fetch_all(&mut **txn)
@@ -422,6 +434,7 @@ impl FormAnswerDatabase for ConnectionPool {
                         Ok::<_, InfraError>(FormAnswerContentRecord {
                             id: rs.id,
                             question_id: rs.question_id,
+                            question_title: rs.question_title,
                             answer: rs.answer,
                         })
                     })

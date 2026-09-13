@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
+use types::non_empty_string::NonEmptyString;
 
 use crate::form::{
     models::{FormRevision, FormRevisionId},
@@ -17,15 +18,62 @@ pub struct FormAnswerContent {
     pub answer: String,
 }
 
+/// 回答と、その回答時点で表示されていた質問タイトルです。
+///
+/// 質問が後から変更・削除されても、回答の意味を復元できるように質問リビジョンの
+/// タイトルを回答内容と組にして扱います。
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub struct AnsweredQuestionContent {
+    pub id: FormAnswerContentId,
+    pub question_id: QuestionId,
+    pub answer: String,
+    question_title: NonEmptyString,
+}
+
+impl AnsweredQuestionContent {
+    fn new(content: FormAnswerContent, question_title: NonEmptyString) -> Self {
+        Self {
+            id: content.id,
+            question_id: content.question_id,
+            answer: content.answer,
+            question_title,
+        }
+    }
+
+    /// 永続層から回答内容を復元します。
+    ///
+    /// # Safety
+    ///
+    /// `question_title` が、この回答の `question_id` と回答のフォームリビジョンに
+    /// 対応するタイトルであることを、呼び出し元が保証しなければなりません。
+    pub unsafe fn from_raw_parts(
+        id: FormAnswerContentId,
+        question_id: QuestionId,
+        answer: String,
+        question_title: NonEmptyString,
+    ) -> Self {
+        Self {
+            id,
+            question_id,
+            answer,
+            question_title,
+        }
+    }
+
+    pub fn question_title(&self) -> &NonEmptyString {
+        &self.question_title
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PostedAnswerContents {
     revision_id: FormRevisionId,
-    contents: Vec<FormAnswerContent>,
+    contents: Vec<AnsweredQuestionContent>,
 }
 
 impl PostedAnswerContents {
     #[cfg(test)]
-    pub(crate) fn for_test(contents: Vec<FormAnswerContent>) -> Self {
+    pub(crate) fn for_test(contents: Vec<AnsweredQuestionContent>) -> Self {
         Self {
             revision_id: FormRevisionId::new(),
             contents,
@@ -82,6 +130,24 @@ impl PostedAnswerContents {
             });
         }
 
+        let contents = contents
+            .into_iter()
+            .map(|content| {
+                let question = questions_by_id.get(&content.question_id).ok_or_else(|| {
+                    DomainError::InvalidEntity {
+                        message: format!(
+                            "question {} does not belong to the form",
+                            content.question_id
+                        ),
+                    }
+                })?;
+                Ok(AnsweredQuestionContent::new(
+                    content,
+                    question.title().clone(),
+                ))
+            })
+            .collect::<Result<Vec<_>, DomainError>>()?;
+
         Ok(Self {
             revision_id: *revision.id(),
             contents,
@@ -92,11 +158,11 @@ impl PostedAnswerContents {
         self.revision_id
     }
 
-    pub fn as_slice(&self) -> &[FormAnswerContent] {
+    pub fn as_slice(&self) -> &[AnsweredQuestionContent] {
         &self.contents
     }
 
-    pub fn into_inner(self) -> Vec<FormAnswerContent> {
+    pub fn into_inner(self) -> Vec<AnsweredQuestionContent> {
         self.contents
     }
 }
@@ -351,8 +417,20 @@ mod tests {
         let posted_answers =
             PostedAnswerContents::try_new(&revision(questions), answers.clone()).unwrap();
 
-        assert_eq!(posted_answers.as_slice(), answers.as_slice());
-        assert_eq!(posted_answers.into_inner(), answers);
+        assert_eq!(posted_answers.as_slice().len(), answers.len());
+        for (posted, answer) in posted_answers.as_slice().iter().zip(&answers) {
+            assert_eq!(posted.id, answer.id);
+            assert_eq!(posted.question_id, answer.question_id);
+            assert_eq!(posted.answer, answer.answer);
+        }
+        assert_eq!(
+            posted_answers
+                .as_slice()
+                .iter()
+                .map(|answer| answer.question_title().as_str())
+                .collect::<Vec<_>>(),
+            vec!["Name", "Role", "Tags"]
+        );
     }
 
     #[test]

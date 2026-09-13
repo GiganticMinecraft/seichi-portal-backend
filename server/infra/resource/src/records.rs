@@ -9,7 +9,7 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerEntry, AnswerLabel, AnswerPublication, AnswerStatus, AnswerTitle,
-            FormAnswerContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
+            AnsweredQuestionContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
         },
         comment::{Comment, CommentContent},
         message::{Message, MessageBody},
@@ -241,23 +241,32 @@ impl TryFrom<ArchivedFormRecord> for ArchivedForm {
 pub struct FormAnswerContentRecord {
     pub id: String,
     pub question_id: String,
+    pub question_title: String,
     pub answer: String,
 }
 
-impl TryFrom<FormAnswerContentRecord> for FormAnswerContent {
-    type Error = InfraError;
+impl TryFrom<FormAnswerContentRecord> for AnsweredQuestionContent {
+    type Error = Error;
 
     fn try_from(
         FormAnswerContentRecord {
             id,
             question_id,
+            question_title,
             answer,
         }: FormAnswerContentRecord,
     ) -> Result<Self, Self::Error> {
-        Ok(FormAnswerContent {
-            id: Uuid::parse_str(&id)?.into(),
-            question_id: Uuid::parse_str(&question_id)?.into(),
-            answer,
+        Ok(unsafe {
+            AnsweredQuestionContent::from_raw_parts(
+                Uuid::parse_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                Uuid::parse_str(&question_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                answer,
+                question_title.try_into()?,
+            )
         })
     }
 }

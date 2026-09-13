@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, question_id, answer FROM real_answers WHERE answer_id = ?",
+  "query": "SELECT real_answers.id, real_answers.question_id,\n                        questions.title AS question_title, real_answers.answer\n                    FROM real_answers\n                    INNER JOIN form_revision_questions questions\n                        ON questions.form_revision_id = real_answers.form_revision_id\n                        AND questions.question_id = real_answers.question_id\n                    WHERE real_answers.answer_id = ?",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,22 @@
       },
       {
         "ordinal": 2,
+        "name": "question_title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 262140
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_revision_questions",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "answer",
         "type_info": {
           "type": "Blob",
@@ -58,8 +74,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "5ca0f73519d38f1aac86dfee1d4d5517b35298ee16c2970ccdc60f7193b9c80b"
+  "hash": "a3edfb3e064bbc4c050927cf522ba590ca55e9603cff33febb330a7e4d92a071"
 }

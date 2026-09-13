@@ -12,7 +12,9 @@ pub use author::{
     TemporaryAnswerAuthor, TemporaryAnswerAuthorId,
 };
 pub(crate) use content::parse_multiple_choice_answer;
-pub use content::{FormAnswerContent, FormAnswerContentId, PostedAnswerContents};
+pub use content::{
+    AnsweredQuestionContent, FormAnswerContent, FormAnswerContentId, PostedAnswerContents,
+};
 pub use entry::{
     AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, ArchivedAnswerEntry,
 };

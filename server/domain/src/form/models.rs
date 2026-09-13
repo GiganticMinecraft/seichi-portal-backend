@@ -543,6 +543,41 @@ mod tests {
     }
 
     #[test]
+    fn posted_answer_keeps_the_question_title_from_its_revision() {
+        let form = sample_form();
+        let question_id = form.questions().as_slice()[0].id().to_owned();
+        let posted_answers = sample_posted_answers(&form);
+        let changed = form.change_questions(
+            QuestionSet::try_new(
+                NonEmptyVec::try_new(vec![unsafe {
+                    Question::from_raw_parts(
+                        question_id,
+                        "body".to_string().try_into().unwrap(),
+                        0,
+                        "Updated body".to_string().try_into().unwrap(),
+                        None,
+                        QuestionType::Text,
+                        None,
+                        true,
+                    )
+                    .unwrap()
+                }])
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            posted_answers.as_slice()[0].question_title().as_str(),
+            "Body"
+        );
+        assert_eq!(
+            changed.questions().as_slice()[0].title().as_str(),
+            "Updated body"
+        );
+    }
+
+    #[test]
     fn question_request_order_alone_does_not_create_a_revision() {
         let questions = vec![
             Question::new_text(

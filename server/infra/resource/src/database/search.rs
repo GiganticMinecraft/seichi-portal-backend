@@ -863,11 +863,14 @@ mod tests {
                 AnswerTitle::new(None),
                 domain::form::answer::AnswerPublication::PUBLIC,
                 AnswerStatus::COMPLETED,
-                vec![domain::form::answer::FormAnswerContent {
-                    id: content_id,
-                    question_id,
-                    answer: "本文".to_string(),
-                }],
+                vec![
+                    domain::form::answer::AnsweredQuestionContent::from_raw_parts(
+                        content_id,
+                        question_id,
+                        "本文".to_string(),
+                        "質問".to_string().try_into().unwrap(),
+                    ),
+                ],
                 None,
             )
         };
