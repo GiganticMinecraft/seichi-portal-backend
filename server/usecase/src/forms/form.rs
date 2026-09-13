@@ -446,7 +446,7 @@ impl<
             .get(form_id)
             .await?
             .ok_or(Error::from(FormNotFound))?;
-        let current_form_read = current_form.try_read(actor_user.clone())?;
+        let current_form_read = current_form.clone().try_read(actor_user.clone())?;
         let form_before_update = current_form_read.value().clone();
         let current_questions = current_form_read.questions().as_slice().to_vec();
 
@@ -503,13 +503,6 @@ impl<
             None => None,
         };
 
-        let current_form = self
-            .active_form_repository
-            .get(form_id)
-            .await?
-            .ok_or(Error::from(FormNotFound))?;
-
-        let current_form_read = current_form.clone().try_read(actor_user.clone())?;
         let current_answer_settings = current_form_read.answer_settings();
         let updated_answer_settings = current_answer_settings.clone().try_change_audience(
             allow_temporary_answers.unwrap_or(current_answer_settings.allow_temporary_answers()),
@@ -915,27 +908,19 @@ fn validate_answered_form_question_update(
     if let Some(error) = current_questions
         .iter()
         .map(|current_question| (current_question.id().into_inner(), current_question))
-        .find_map(|(current_id, current_question)| {
-            let updated_question =
-                updated_by_id
-                    .get(&current_id)
-                    .ok_or_else(|| DomainError::InvalidEntity {
-                        message: format!(
-                            "cannot delete question {} from a form that already has answers",
-                            current_question.template_key().as_str()
-                        ),
-                    });
-
-            updated_question
-                .and_then(|updated_question| {
-                    (current_question.question_type() == updated_question.question_type())
-                        .then_some((current_question, updated_question))
-                        .ok_or_else(|| DomainError::InvalidEntity {
-                            message: format!(
-                                "cannot change question_type for answered question {}",
-                                current_question.template_key().as_str()
-                            ),
-                        })
+        .filter_map(|(current_id, current_question)| {
+            updated_by_id
+                .get(&current_id)
+                .map(|updated_question| (current_question, *updated_question))
+        })
+        .find_map(|(current_question, updated_question)| {
+            (current_question.question_type() == updated_question.question_type())
+                .then_some((current_question, updated_question))
+                .ok_or_else(|| DomainError::InvalidEntity {
+                    message: format!(
+                        "cannot change question_type for answered question {}",
+                        current_question.template_key().as_str()
+                    ),
                 })
                 .and_then(|(current_question, updated_question)| {
                     let current_choice_ids = current_question
@@ -1045,16 +1030,17 @@ fn validate_template_key_update(
         })
         .collect::<HashMap<_, _>>();
 
-    if let Some(current_question) = current_questions.iter().find(|current_question| {
-        updated_by_id
+    for current_question in current_questions.iter().filter(|current_question| {
+        let changed_or_removed = updated_by_id
             .get(&current_question.id().into_inner())
-            .is_some_and(|updated_question| {
+            .is_none_or(|updated_question| {
                 current_question.template_key() != updated_question.template_key()
-                    && DefaultAnswerTitleDomainService::references_template_key(
-                        current_default_answer_title,
-                        current_question.template_key(),
-                    )
-            })
+            });
+        changed_or_removed
+            && DefaultAnswerTitleDomainService::references_template_key(
+                current_default_answer_title,
+                current_question.template_key(),
+            )
     }) {
         let old_key_is_still_referenced = updated_default_answer_title
             .map(|title| {
@@ -1068,7 +1054,7 @@ fn validate_template_key_update(
         if old_key_is_still_referenced {
             return Err(DomainError::InvalidEntity {
                 message: format!(
-                    "cannot change template_key {} while default_answer_title references it",
+                    "cannot remove or change question {} while default_answer_title references it",
                     current_question.template_key().as_str()
                 ),
             }
@@ -1078,7 +1064,7 @@ fn validate_template_key_update(
         if updated_default_answer_title.is_none() {
             return Err(DomainError::InvalidEntity {
                 message: format!(
-                    "must update default_answer_title when changing template_key {}",
+                    "must update default_answer_title when removing or changing question {}",
                     current_question.template_key().as_str()
                 ),
             }
@@ -1097,7 +1083,8 @@ mod tests {
         account::models::{AccountUser, Role},
         form::{
             models::{
-                ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormSettings, FormTitle,
+                ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormRevision,
+                FormSettings, FormTitle,
             },
             question::{QuestionId, QuestionSet, QuestionType},
         },
@@ -1143,7 +1130,8 @@ mod tests {
                 FormMeta::new(),
                 FormSettings::new(),
                 AnswerSettings::default(),
-                questions,
+                FormRevision::new(questions),
+                None,
                 FormLabelAssignment::empty(),
             )
         }
@@ -1184,6 +1172,108 @@ mod tests {
     }
 
     #[test]
+    fn answered_questions_can_be_removed() {
+        let removed_id = QuestionId::from(Uuid::new_v4());
+        let retained_id = QuestionId::from(Uuid::new_v4());
+        let current_questions = vec![
+            text_question(removed_id, 0, "removed"),
+            text_question(retained_id, 1, "retained"),
+        ];
+        let updated_questions = vec![UpsertQuestionInput {
+            original_id: Some(retained_id),
+            question: text_question(QuestionId::from(Uuid::new_v4()), 0, "retained"),
+        }];
+
+        assert!(
+            validate_answered_form_question_update(&current_questions, &updated_questions).is_ok()
+        );
+    }
+
+    #[test]
+    fn answered_question_type_changes_remain_rejected() {
+        let question_id = QuestionId::from(Uuid::new_v4());
+        let current_questions = vec![text_question(question_id, 0, "body")];
+        let updated_questions = vec![UpsertQuestionInput {
+            original_id: Some(question_id),
+            question: Question::new_single_choice(
+                "body".try_into().unwrap(),
+                0,
+                "Body".to_string().try_into().unwrap(),
+                None,
+                NonEmptyVec::try_new(vec![domain::form::question::Choice::new(
+                    None,
+                    0,
+                    "Yes".to_string().try_into().unwrap(),
+                )])
+                .unwrap(),
+                true,
+            )
+            .unwrap(),
+        }];
+
+        assert!(
+            validate_answered_form_question_update(&current_questions, &updated_questions).is_err()
+        );
+    }
+
+    #[test]
+    fn deleting_a_choice_from_an_answered_question_remains_rejected() {
+        let question_id = QuestionId::from(Uuid::new_v4());
+        let current_question = unsafe {
+            Question::from_raw_parts(
+                question_id,
+                "role".try_into().unwrap(),
+                0,
+                "Role".to_string().try_into().unwrap(),
+                None,
+                QuestionType::SingleChoice,
+                Some(
+                    NonEmptyVec::try_new(vec![
+                        domain::form::question::Choice::new(
+                            Some(1.into()),
+                            0,
+                            "Admin".to_string().try_into().unwrap(),
+                        ),
+                        domain::form::question::Choice::new(
+                            Some(2.into()),
+                            1,
+                            "User".to_string().try_into().unwrap(),
+                        ),
+                    ])
+                    .unwrap(),
+                ),
+                true,
+            )
+            .unwrap()
+        };
+        let updated_question = Question::new_single_choice(
+            "role".try_into().unwrap(),
+            0,
+            "Role".to_string().try_into().unwrap(),
+            None,
+            NonEmptyVec::try_new(vec![domain::form::question::Choice::new(
+                Some(1.into()),
+                0,
+                "Admin".to_string().try_into().unwrap(),
+            )])
+            .unwrap(),
+            true,
+        )
+        .unwrap();
+
+        assert!(
+            validate_answered_form_question_update(
+                &[current_question],
+                &[UpsertQuestionInput {
+                    original_id: Some(question_id),
+                    question: updated_question,
+                }],
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn template_key_change_requires_default_answer_title_update() {
         let question_id = QuestionId::from(Uuid::new_v4());
         let current_questions = vec![text_question(question_id, 0, "old_key")];
@@ -1219,6 +1309,66 @@ mod tests {
                 Some(&default_answer_title(Some("Answer: $new_key"))),
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn question_removal_requires_updating_a_referencing_default_answer_title() {
+        let removed_id = QuestionId::from(Uuid::new_v4());
+        let retained_id = QuestionId::from(Uuid::new_v4());
+        let current_questions = vec![
+            text_question(removed_id, 0, "removed"),
+            text_question(retained_id, 1, "retained"),
+        ];
+        let updated_questions = vec![UpsertQuestionInput {
+            original_id: Some(retained_id),
+            question: text_question(QuestionId::from(Uuid::new_v4()), 0, "retained"),
+        }];
+        let current_title = default_answer_title(Some("Answer: $removed"));
+
+        assert!(
+            validate_template_key_update(
+                &current_questions,
+                &updated_questions,
+                &current_title,
+                None,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_template_key_update(
+                &current_questions,
+                &updated_questions,
+                &current_title,
+                Some(&default_answer_title(Some("Answer: $retained"))),
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn all_removed_question_references_are_checked_in_the_updated_default_title() {
+        let first_id = QuestionId::from(Uuid::new_v4());
+        let second_id = QuestionId::from(Uuid::new_v4());
+        let retained_id = QuestionId::from(Uuid::new_v4());
+        let current_questions = vec![
+            text_question(first_id, 0, "first"),
+            text_question(second_id, 1, "second"),
+            text_question(retained_id, 2, "retained"),
+        ];
+        let updated_questions = vec![UpsertQuestionInput {
+            original_id: Some(retained_id),
+            question: text_question(QuestionId::from(Uuid::new_v4()), 0, "retained"),
+        }];
+
+        assert!(
+            validate_template_key_update(
+                &current_questions,
+                &updated_questions,
+                &default_answer_title(Some("$first $second")),
+                Some(&default_answer_title(Some("$second"))),
+            )
+            .is_err()
         );
     }
 

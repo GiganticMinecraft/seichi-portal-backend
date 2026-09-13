@@ -230,6 +230,7 @@ mod tests {
             AnswerEntry::from_raw_parts(
                 answer_id,
                 form_id,
+                *form.revision().id(),
                 AnswerAuthor::AuthenticatedUser(*answer_author.id()),
                 Utc::now(),
                 AnswerTitle::new(Some("Detailed answer".to_string().try_into().unwrap())),

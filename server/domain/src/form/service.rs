@@ -83,10 +83,18 @@ mod tests {
     use crate::form::answer::FormAnswerContentId;
     use crate::form::{
         answer::FormAnswerContent,
-        question::{QuestionId, QuestionType},
+        models::FormRevision,
+        question::{QuestionId, QuestionSet, QuestionType},
     };
+    use types::non_empty_vec::NonEmptyVec;
     fn question_id(seed: &str) -> QuestionId {
         Uuid::parse_str(seed).unwrap().into()
+    }
+
+    fn revision(questions: &[Question]) -> FormRevision {
+        FormRevision::new(
+            QuestionSet::try_new(NonEmptyVec::try_new(questions.to_vec()).unwrap()).unwrap(),
+        )
     }
 
     #[test]
@@ -139,7 +147,7 @@ mod tests {
             ]
         };
         let answers = PostedAnswerContents::try_new(
-            questions.as_slice(),
+            &revision(&questions),
             vec![
                 FormAnswerContent {
                     id: FormAnswerContentId::new(),
@@ -225,7 +233,7 @@ mod tests {
             question(second_id, "second", 1),
         ];
         let answers = PostedAnswerContents::try_new(
-            &questions,
+            &revision(&questions),
             vec![
                 FormAnswerContent {
                     id: FormAnswerContentId::new(),
@@ -252,7 +260,7 @@ mod tests {
         let question_id = question_id("00000000-0000-7000-8000-000000000013");
         let questions = vec![question(question_id, "body", 0)];
         let answers = PostedAnswerContents::try_new(
-            &questions,
+            &revision(&questions),
             vec![FormAnswerContent {
                 id: FormAnswerContentId::new(),
                 question_id,
@@ -313,7 +321,7 @@ mod tests {
         let question_id = question_id("00000000-0000-7000-8000-000000000021");
         let questions = vec![question(question_id, "body", 0)];
         let answers = PostedAnswerContents::try_new(
-            &questions,
+            &revision(&questions),
             vec![FormAnswerContent {
                 id: FormAnswerContentId::new(),
                 question_id,
@@ -337,7 +345,7 @@ mod tests {
             question(unanswered_id, "unanswered", 1),
         ];
         let answers = PostedAnswerContents::try_new(
-            &questions,
+            &revision(&questions),
             vec![FormAnswerContent {
                 id: FormAnswerContentId::new(),
                 question_id: answered_id,

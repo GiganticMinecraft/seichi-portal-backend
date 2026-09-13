@@ -857,6 +857,7 @@ mod tests {
             AnswerEntry::from_raw_parts_with_status_and_redmine_reference(
                 answer_id,
                 Uuid::from_u128(4).into(),
+                Uuid::from_u128(6).into(),
                 AnswerAuthor::AuthenticatedUser(Uuid::from_u128(5).into()),
                 chrono::Utc::now(),
                 AnswerTitle::new(None),

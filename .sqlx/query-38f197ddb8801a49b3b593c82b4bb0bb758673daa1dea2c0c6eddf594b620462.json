@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT question_id FROM form_questions WHERE form_id = ? AND question_id = ?",
+  "query": "SELECT q.question_id\n            FROM form_revision_questions q\n            INNER JOIN form_revisions r ON r.id = q.form_revision_id\n            WHERE r.form_id = ? AND q.form_revision_id = ? AND q.question_id = ?",
   "describe": {
     "columns": [
       {
@@ -14,18 +14,18 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_questions",
+            "table": "seichi_portal.form_revision_questions",
             "name": "question_id"
           }
         }
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       false
     ]
   },
-  "hash": "705a1615979e81f0687688fc749324c5d0521690c2e3345a2d7d17e601bf89f9"
+  "hash": "38f197ddb8801a49b3b593c82b4bb0bb758673daa1dea2c0c6eddf594b620462"
 }

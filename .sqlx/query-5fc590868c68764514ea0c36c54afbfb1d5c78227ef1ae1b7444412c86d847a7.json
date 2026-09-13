@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO real_answers\n            (id, answer_id, form_revision_id, question_id, answer)\n            VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "5fc590868c68764514ea0c36c54afbfb1d5c78227ef1ae1b7444412c86d847a7"
+}

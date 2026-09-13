@@ -282,6 +282,40 @@ impl QuestionSet {
 }
 
 impl Question {
+    pub fn validate_answer(&self, answer: &str) -> Result<(), DomainError> {
+        match self {
+            Self::Text(_) => Ok(()),
+            Self::SingleChoice(question) => question
+                .choices()
+                .iter()
+                .any(|choice| choice.label.as_str() == answer)
+                .then_some(())
+                .ok_or_else(|| DomainError::InvalidEntity {
+                    message: format!(
+                        "answer for question {} must match one of the available choices",
+                        self.template_key().as_str()
+                    ),
+                }),
+            Self::MultipleChoice(question) => {
+                let values = crate::form::answer::parse_multiple_choice_answer(answer);
+                (!values.is_empty()
+                    && values.iter().all(|value| {
+                        question
+                            .choices()
+                            .iter()
+                            .any(|choice| choice.label.as_str() == value)
+                    }))
+                .then_some(())
+                .ok_or_else(|| DomainError::InvalidEntity {
+                    message: format!(
+                        "answer for question {} must reference only existing choices",
+                        self.template_key().as_str()
+                    ),
+                })
+            }
+        }
+    }
+
     pub fn new_text(
         template_key: TemplateKey,
         position: u16,

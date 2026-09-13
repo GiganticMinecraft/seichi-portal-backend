@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_revisions (id, form_id, revision_number)\n        SELECT ?, ?, COALESCE(MAX(revision_number), 0) + 1\n        FROM form_revisions\n        WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a0ea08893646813eefeffc6d7700fb0836c6b8864b43ed41eacf1c67bc098751"
+}

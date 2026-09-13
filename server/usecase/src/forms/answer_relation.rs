@@ -260,7 +260,7 @@ mod tests {
             *form.id(),
             AnswerAuthor::AuthenticatedUser(*author.id()),
             AnswerTitle::new(None),
-            PostedAnswerContents::try_new(form.questions().as_slice(), vec![]).unwrap(),
+            PostedAnswerContents::try_new(form.revision(), vec![]).unwrap(),
         )
     }
 

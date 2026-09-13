@@ -37,6 +37,24 @@ use crate::{
 };
 
 pub type FormId = types::Id<ActiveForm>;
+pub type FormRevisionId = types::Id<FormRevision>;
+
+/// 回答時点の質問集合を識別する、変更されないフォームリビジョンです。
+#[cfg_attr(test, derive(Arbitrary))]
+#[derive(UnsafeFromRawParts, Serialize, Deserialize, Getters, Clone, Debug, PartialEq)]
+pub struct FormRevision {
+    id: FormRevisionId,
+    questions: QuestionSet,
+}
+
+impl FormRevision {
+    pub fn new(questions: QuestionSet) -> Self {
+        Self {
+            id: FormRevisionId::new(),
+            questions,
+        }
+    }
+}
 
 /// 永続化済みのフォーム状態から、フォーム本体の閲覧可否を再評価します。
 ///
@@ -151,7 +169,9 @@ pub struct ActiveForm {
     settings: FormSettings,
     #[serde(default)]
     answer_settings: AnswerSettings,
-    questions: QuestionSet,
+    revision: FormRevision,
+    #[serde(skip)]
+    expected_revision_id: Option<FormRevisionId>,
     #[serde(default)]
     label_ids: FormLabelAssignment,
 }
@@ -165,7 +185,8 @@ impl ActiveForm {
             metadata: FormMeta::new(),
             settings: FormSettings::new(),
             answer_settings: AnswerSettings::default(),
-            questions,
+            revision: FormRevision::new(questions),
+            expected_revision_id: None,
             label_ids: FormLabelAssignment::empty(),
         }
     }
@@ -192,8 +213,19 @@ impl ActiveForm {
         }
     }
 
+    pub fn questions(&self) -> &QuestionSet {
+        self.revision.questions()
+    }
+
     pub fn change_questions(self, questions: QuestionSet) -> Self {
-        Self { questions, ..self }
+        if question_definitions_equal(self.questions(), &questions) {
+            return self;
+        }
+
+        Self {
+            revision: FormRevision::new(questions),
+            ..self
+        }
     }
 
     pub fn replace_label_ids(self, label_ids: FormLabelAssignment) -> Self {
@@ -234,6 +266,44 @@ impl ActiveForm {
     pub fn archive(self, archived_at: DateTime<Utc>, archived_by: UserId) -> ArchivedForm {
         ArchivedForm::new(self, archived_at, archived_by)
     }
+}
+
+fn question_definitions_equal(left: &QuestionSet, right: &QuestionSet) -> bool {
+    if left.as_slice().len() != right.as_slice().len() {
+        return false;
+    }
+
+    let mut left = left.iter().collect::<Vec<_>>();
+    let mut right = right.iter().collect::<Vec<_>>();
+    left.sort_by_key(|question| question.position());
+    right.sort_by_key(|question| question.position());
+    left.into_iter()
+        .zip(right)
+        .all(|(left, right)| question_definition_equal(left, right))
+}
+
+fn question_definition_equal(left: &Question, right: &Question) -> bool {
+    let mut left_choices = left
+        .choices()
+        .map(|choices| choices.iter().collect::<Vec<_>>());
+    let mut right_choices = right
+        .choices()
+        .map(|choices| choices.iter().collect::<Vec<_>>());
+    if let Some(choices) = &mut left_choices {
+        choices.sort_by_key(|choice| choice.position);
+    }
+    if let Some(choices) = &mut right_choices {
+        choices.sort_by_key(|choice| choice.position);
+    }
+
+    left.id() == right.id()
+        && left.template_key() == right.template_key()
+        && left.position() == right.position()
+        && left.title() == right.title()
+        && left.description() == right.description()
+        && left.question_type() == right.question_type()
+        && left.is_required() == right.is_required()
+        && left_choices == right_choices
 }
 
 impl Allowed<ActiveForm, Read> {
@@ -445,6 +515,69 @@ mod tests {
         )
     }
 
+    #[test]
+    fn changing_questions_creates_a_new_revision_only_when_the_definition_changes() {
+        let form = sample_form();
+        let original_revision_id = *form.revision().id();
+
+        let unchanged = form.clone().change_questions(form.questions().clone());
+        assert_eq!(*unchanged.revision().id(), original_revision_id);
+
+        let changed = form.change_questions(
+            QuestionSet::try_new(
+                NonEmptyVec::try_new(vec![
+                    Question::new_text(
+                        "updated_body".try_into().unwrap(),
+                        0,
+                        "Updated body".to_string().try_into().unwrap(),
+                        None,
+                        true,
+                    )
+                    .unwrap(),
+                ])
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+        assert_ne!(*changed.revision().id(), original_revision_id);
+    }
+
+    #[test]
+    fn question_request_order_alone_does_not_create_a_revision() {
+        let questions = vec![
+            Question::new_text(
+                "first".try_into().unwrap(),
+                0,
+                "First".to_string().try_into().unwrap(),
+                None,
+                true,
+            )
+            .unwrap(),
+            Question::new_text(
+                "second".try_into().unwrap(),
+                1,
+                "Second".to_string().try_into().unwrap(),
+                None,
+                true,
+            )
+            .unwrap(),
+        ];
+        let form = ActiveForm::new(
+            FormTitle::new("Form".to_string().try_into().unwrap()),
+            FormDescription::new(String::new()),
+            QuestionSet::try_new(NonEmptyVec::try_new(questions.clone()).unwrap()).unwrap(),
+        );
+        let revision_id = *form.revision().id();
+        let reordered = form.change_questions(
+            QuestionSet::try_new(
+                NonEmptyVec::try_new(questions.into_iter().rev().collect()).unwrap(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(*reordered.revision().id(), revision_id);
+    }
+
     fn active_user(role: Role) -> AccountUser {
         AccountUser::new("user".to_string(), UserId::from(Uuid::new_v4()), role)
     }
@@ -469,7 +602,7 @@ mod tests {
 
     fn sample_posted_answers(form: &ActiveForm) -> PostedAnswerContents {
         PostedAnswerContents::try_new(
-            form.questions().as_slice(),
+            form.revision(),
             vec![FormAnswerContent {
                 id: FormAnswerContentId::new(),
                 question_id: (*form.questions().as_slice()[0].id()).into(),
@@ -525,6 +658,7 @@ mod tests {
             AnswerTitle::new(None),
             sample_posted_answers(&form),
         );
+        assert_eq!(entry.form_revision_id(), form.revision().id());
 
         let private_answer_read_by_author =
             public_form_read_by(form.clone(), Actor::from(answer_author)).read_entry(entry.clone());

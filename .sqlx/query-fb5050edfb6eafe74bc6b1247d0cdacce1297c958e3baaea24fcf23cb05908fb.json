@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_form_revision_questions\n        (form_revision_id, question_id, template_key, position, title, description,\n         question_type, is_required)\n        SELECT q.form_revision_id, q.question_id, q.template_key, q.position, q.title,\n            q.description, q.question_type, q.is_required\n        FROM form_revision_questions q\n        INNER JOIN form_revisions r ON r.id = q.form_revision_id\n        WHERE r.form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "fb5050edfb6eafe74bc6b1247d0cdacce1297c958e3baaea24fcf23cb05908fb"
+}
