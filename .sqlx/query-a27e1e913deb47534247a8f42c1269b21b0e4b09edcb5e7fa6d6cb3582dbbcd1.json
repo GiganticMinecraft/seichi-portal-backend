@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM answers WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a27e1e913deb47534247a8f42c1269b21b0e4b09edcb5e7fa6d6cb3582dbbcd1"
+}

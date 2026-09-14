@@ -164,18 +164,14 @@ impl<
             .into_inner()
             .map(|title| title.into_inner())
             .unwrap_or_else(|| format!("「{form_title}」への回答"));
-        let questions = form.questions().as_slice();
         let answer_fields = answer_entry
             .contents()
             .iter()
             .map(|content| {
-                let question_title = questions
-                    .iter()
-                    .find(|question| question.id() == content.question_id)
-                    .map(|question| question.title().to_owned().into_inner())
-                    .unwrap_or_else(|| "不明な質問".to_string());
-
-                DiscordAnswerWebhookField::new(question_title, content.answer.clone())
+                DiscordAnswerWebhookField::new(
+                    content.question_title().as_str().to_owned(),
+                    content.answer.clone(),
+                )
             })
             .collect::<Vec<_>>();
         let fields = [
@@ -222,7 +218,7 @@ impl<
             .ok_or(FormNotFound)?;
         let form = form_guard.try_read(actor.clone())?;
         let questions = form.value().questions().as_slice().to_vec();
-        let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
+        let posted_answers = PostedAnswerContents::try_new(form.revision(), answers)?;
         let submitter = super::submission::authorize_form_submission(
             user.clone(),
             self.form_submission_restriction_repository,
@@ -292,7 +288,7 @@ impl<
             .ok_or(FormNotFound)?;
         let form = form_guard.try_read(actor.clone())?;
         let questions = form.value().questions().as_slice().to_vec();
-        let posted_answers = PostedAnswerContents::try_new(&questions, answers)?;
+        let posted_answers = PostedAnswerContents::try_new(form.revision(), answers)?;
 
         let title = DefaultAnswerTitleDomainService::to_answer_title_from_questions(
             form.value()
@@ -694,19 +690,16 @@ fn answer_submitted_event(
     form: &Allowed<ActiveForm, Read>,
     answer: &Allowed<AnswerEntry, Create>,
 ) -> ApplicationEvent {
-    let questions = form.questions().as_slice();
     let title = answer
         .title()
         .to_owned()
         .into_inner()
         .map(|title| EventDetail::new("回答タイトル", title.into_inner()));
     let contents = answer.contents().iter().map(|content| {
-        let question_title = questions
-            .iter()
-            .find(|question| question.id() == content.question_id)
-            .map(|question| question.title().as_str().to_owned())
-            .unwrap_or_else(|| "不明な質問".to_string());
-        EventDetail::new(question_title, content.answer.to_owned())
+        EventDetail::new(
+            content.question_title().as_str().to_owned(),
+            content.answer.to_owned(),
+        )
     });
 
     ApplicationEvent::AnswerSubmitted {
@@ -1113,8 +1106,7 @@ mod tests {
             form_id,
             AnswerAuthor::AuthenticatedUser(*author.id()),
             AnswerTitle::default(),
-            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
-                .unwrap(),
+            PostedAnswerContents::try_new(form.revision(), vec![answer_to(&form)]).unwrap(),
         );
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
@@ -1167,8 +1159,7 @@ mod tests {
             form_id,
             AnswerAuthor::AuthenticatedUser(*author.id()),
             AnswerTitle::default(),
-            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
-                .unwrap(),
+            PostedAnswerContents::try_new(form.revision(), vec![answer_to(&form)]).unwrap(),
         );
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
@@ -1219,8 +1210,7 @@ mod tests {
             form_id,
             AnswerAuthor::AuthenticatedUser(*author.id()),
             AnswerTitle::default(),
-            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
-                .unwrap(),
+            PostedAnswerContents::try_new(form.revision(), vec![answer_to(&form)]).unwrap(),
         );
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);
@@ -1281,8 +1271,7 @@ mod tests {
             form_id,
             AnswerAuthor::AuthenticatedUser(*author.id()),
             AnswerTitle::default(),
-            PostedAnswerContents::try_new(form.questions().as_slice(), vec![answer_to(&form)])
-                .unwrap(),
+            PostedAnswerContents::try_new(form.revision(), vec![answer_to(&form)]).unwrap(),
         );
         let answer_id = *answer.id();
         let mut repositories = FormUseCaseTestRepositories::with_active_forms(vec![form]);

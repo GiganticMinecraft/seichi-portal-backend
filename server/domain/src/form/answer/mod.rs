@@ -11,7 +11,10 @@ pub use author::{
     AnswerAuthor, RedmineImportedAnswerReference, RedmineIssueId, RedmineUserSnapshot,
     TemporaryAnswerAuthor, TemporaryAnswerAuthorId,
 };
-pub use content::{FormAnswerContent, FormAnswerContentId, PostedAnswerContents};
+pub(crate) use content::parse_multiple_choice_answer;
+pub use content::{
+    AnsweredQuestionContent, FormAnswerContent, FormAnswerContentId, PostedAnswerContents,
+};
 pub use entry::{
     AnswerEntry, AnswerId, AnswerPagePosition, AnswerPublication, ArchivedAnswerEntry,
 };

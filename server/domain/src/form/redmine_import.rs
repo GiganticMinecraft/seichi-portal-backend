@@ -10,8 +10,7 @@ use crate::{
         answer::{AnswerAuthor, AnswerEntry, AnswerLabelId, RedmineIssueId},
         comment::{Comment, CommentSource},
         comment_attachment::MAX_COMMENT_ATTACHMENT_SIZE,
-        models::FormId,
-        question::QuestionSet,
+        models::{FormId, FormRevision},
     },
     types::authorization_guard::{AuthorizationGuardDefinitions, AuthorizationRole, SelfGuarded},
 };
@@ -24,14 +23,14 @@ use crate::{
 #[derive(Clone, Debug, PartialEq)]
 pub struct RedmineImportTarget {
     form_id: FormId,
-    questions: QuestionSet,
+    revision: FormRevision,
     label_ids: Vec<AnswerLabelId>,
 }
 
 impl RedmineImportTarget {
     pub fn try_new(
         form_id: FormId,
-        questions: QuestionSet,
+        revision: FormRevision,
         label_ids: Vec<AnswerLabelId>,
     ) -> Result<Self, DomainError> {
         let mut unique_label_ids = HashSet::with_capacity(label_ids.len());
@@ -46,7 +45,7 @@ impl RedmineImportTarget {
 
         Ok(Self {
             form_id,
-            questions,
+            revision,
             label_ids,
         })
     }
@@ -55,8 +54,12 @@ impl RedmineImportTarget {
         &self.form_id
     }
 
-    pub fn questions(&self) -> &QuestionSet {
-        &self.questions
+    pub fn revision(&self) -> &FormRevision {
+        &self.revision
+    }
+
+    pub fn questions(&self) -> &crate::form::question::QuestionSet {
+        self.revision.questions()
     }
 
     pub fn label_ids(&self) -> &[AnswerLabelId] {

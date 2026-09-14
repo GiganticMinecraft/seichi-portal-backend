@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_answers\n        (id, form_id, form_revision_id, author_type, user, temporary_user_id, redmine_user_id, redmine_author_name,\n         title, publication, status, timestamp)\n        SELECT id, form_id, form_revision_id, author_type, user, temporary_user_id, redmine_user_id,\n            redmine_author_name, title, publication, status, timestamp FROM answers WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "0db8af729f542fa84020034e719983ac552ef71e9ea271d944e51ca33512b5a4"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_revision_choices (form_revision_id, id, question_id, position, label)\n        SELECT ?, c.id, c.question_id, c.position, c.label\n        FROM form_choices c\n        INNER JOIN form_questions q ON q.question_id = c.question_id\n        WHERE q.form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b75161bf9b851d9972e35e8ccaabf50c0eae0866e3b344af7bd1d5e6ac681a82"
+}

@@ -11,10 +11,10 @@ use crate::{
     form::{
         answer::{
             AnswerAuthor, AnswerStatus, AnswerStatusHistoryEntry, AnswerTitle,
-            AnswerTitleHistoryEntry, FormAnswerContent, PostedAnswerContents,
+            AnswerTitleHistoryEntry, AnsweredQuestionContent, PostedAnswerContents,
             RedmineImportedAnswerReference, RedmineUserSnapshot,
         },
-        models::{ActiveForm, ArchivedForm, FormId},
+        models::{ActiveForm, ArchivedForm, FormId, FormRevisionId},
     },
     types::authorization_guard::{
         Allowed, AuthorizationRole, BelongsTo, Create, GuardedBy, ParentGuarded, Read, Update,
@@ -99,12 +99,13 @@ impl AnswerPagePosition {
 pub struct AnswerEntry {
     id: AnswerId,
     form_id: FormId,
+    form_revision_id: FormRevisionId,
     author: AnswerAuthor,
     timestamp: DateTime<Utc>,
     title: AnswerTitle,
     publication: AnswerPublication,
     status: AnswerStatus,
-    contents: Vec<FormAnswerContent>,
+    contents: Vec<AnsweredQuestionContent>,
     redmine_reference: Option<RedmineImportedAnswerReference>,
 }
 
@@ -118,16 +119,18 @@ impl AnswerEntry {
     pub unsafe fn from_raw_parts(
         id: AnswerId,
         form_id: FormId,
+        form_revision_id: FormRevisionId,
         author: AnswerAuthor,
         timestamp: DateTime<Utc>,
         title: AnswerTitle,
         publication: AnswerPublication,
-        contents: Vec<FormAnswerContent>,
+        contents: Vec<AnsweredQuestionContent>,
     ) -> Self {
         unsafe {
             Self::from_raw_parts_with_status_and_redmine_reference(
                 id,
                 form_id,
+                form_revision_id,
                 author,
                 timestamp,
                 title,
@@ -148,17 +151,19 @@ impl AnswerEntry {
     pub unsafe fn from_raw_parts_with_redmine_reference(
         id: AnswerId,
         form_id: FormId,
+        form_revision_id: FormRevisionId,
         author: AnswerAuthor,
         timestamp: DateTime<Utc>,
         title: AnswerTitle,
         publication: AnswerPublication,
-        contents: Vec<FormAnswerContent>,
+        contents: Vec<AnsweredQuestionContent>,
         redmine_reference: Option<RedmineImportedAnswerReference>,
     ) -> Self {
         unsafe {
             Self::from_raw_parts_with_status_and_redmine_reference(
                 id,
                 form_id,
+                form_revision_id,
                 author,
                 timestamp,
                 title,
@@ -179,17 +184,19 @@ impl AnswerEntry {
     pub unsafe fn from_raw_parts_with_status_and_redmine_reference(
         id: AnswerId,
         form_id: FormId,
+        form_revision_id: FormRevisionId,
         author: AnswerAuthor,
         timestamp: DateTime<Utc>,
         title: AnswerTitle,
         publication: AnswerPublication,
         status: AnswerStatus,
-        contents: Vec<FormAnswerContent>,
+        contents: Vec<AnsweredQuestionContent>,
         redmine_reference: Option<RedmineImportedAnswerReference>,
     ) -> Self {
         Self {
             id,
             form_id,
+            form_revision_id,
             author,
             timestamp,
             title,
@@ -207,9 +214,11 @@ impl AnswerEntry {
         title: AnswerTitle,
         contents: PostedAnswerContents,
     ) -> Self {
+        let form_revision_id = contents.revision_id();
         Self {
             id: AnswerId::new(),
             form_id,
+            form_revision_id,
             author,
             timestamp: Utc::now(),
             title,
@@ -244,10 +253,12 @@ impl AnswerEntry {
         author.validate()?;
 
         let id = AnswerId::new();
+        let form_revision_id = contents.revision_id();
 
         Ok(Self {
             id,
             form_id,
+            form_revision_id,
             author: AnswerAuthor::ImportedFromRedmine(author),
             timestamp,
             title,
@@ -381,7 +392,7 @@ mod tests {
                 "contact".to_string(),
             )),
             AnswerTitle::default(),
-            PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
+            PostedAnswerContents::for_test(Vec::new()),
         )
     }
 

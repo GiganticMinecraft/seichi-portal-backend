@@ -119,8 +119,8 @@ mod tests {
         account::models::{AccountUser, Role, UserGroup, UserGroupName},
         form::{
             answer::{
-                AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle, FormAnswerContent,
-                FormAnswerContentId,
+                AnswerAuthor, AnswerEntry, AnswerId, AnswerLabel, AnswerTitle,
+                AnsweredQuestionContent, FormAnswerContentId,
             },
             comment::{Comment, CommentContent, CommentId},
             models::{
@@ -230,15 +230,17 @@ mod tests {
             AnswerEntry::from_raw_parts(
                 answer_id,
                 form_id,
+                *form.revision().id(),
                 AnswerAuthor::AuthenticatedUser(*answer_author.id()),
                 Utc::now(),
                 AnswerTitle::new(Some("Detailed answer".to_string().try_into().unwrap())),
                 domain::form::answer::AnswerPublication::PUBLIC,
-                vec![FormAnswerContent {
-                    id: FormAnswerContentId::from(Uuid::from_u128(4)),
+                vec![AnsweredQuestionContent::from_raw_parts(
+                    FormAnswerContentId::from(Uuid::from_u128(4)),
                     question_id,
-                    answer: "answer content".to_string(),
-                }],
+                    "answer content".to_string(),
+                    "Question title".to_string().try_into().unwrap(),
+                )],
             )
         };
         let comment_id = CommentId::from(Uuid::from_u128(5));

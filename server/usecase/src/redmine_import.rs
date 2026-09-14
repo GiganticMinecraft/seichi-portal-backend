@@ -209,10 +209,8 @@ pub fn prepare_issue(
             .map_or(u16::MAX, |question| question.position())
     });
     let title = AnswerTitle::new(Some(NonEmptyString::try_new(input_title)?));
-    let contents = domain::form::answer::PostedAnswerContents::try_new(
-        target.questions().as_slice(),
-        contents,
-    )?;
+    let contents =
+        domain::form::answer::PostedAnswerContents::try_new(target.revision(), contents)?;
     let answer = AnswerEntry::import_from_redmine(
         *target.form_id(),
         issue_id,
@@ -259,16 +257,7 @@ pub fn validate_question_value(
         .ok_or_else(|| DomainError::InvalidEntity {
             message: format!("question mapping does not match form: {template_key}"),
         })?;
-    let content = domain::form::answer::FormAnswerContent {
-        id: domain::form::answer::FormAnswerContentId::new(),
-        question_id: question.id(),
-        answer,
-    };
-    domain::form::answer::PostedAnswerContents::try_new(
-        std::slice::from_ref(question),
-        vec![content],
-    )?;
-    Ok(())
+    question.validate_answer(&answer).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -278,7 +267,7 @@ mod tests {
     use domain::{
         form::{
             answer::{AnswerAuthor, RedmineIssueId, RedmineUserSnapshot},
-            models::FormId,
+            models::{FormId, FormRevision},
             question::{Question, QuestionSet},
         },
         types::authorization_guard::AuthorizationGuard,
@@ -296,7 +285,9 @@ mod tests {
         .unwrap();
         let target = RedmineImportTarget::try_new(
             FormId::new(),
-            QuestionSet::try_new(NonEmptyVec::try_new(vec![question]).unwrap()).unwrap(),
+            FormRevision::new(
+                QuestionSet::try_new(NonEmptyVec::try_new(vec![question]).unwrap()).unwrap(),
+            ),
             Vec::new(),
         )
         .unwrap();

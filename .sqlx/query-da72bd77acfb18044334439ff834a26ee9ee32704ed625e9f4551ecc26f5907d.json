@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO archived_form_revisions (id, form_id, revision_number, created_at)\n        SELECT id, form_id, revision_number, created_at\n        FROM form_revisions WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "da72bd77acfb18044334439ff834a26ee9ee32704ed625e9f4551ecc26f5907d"
+}

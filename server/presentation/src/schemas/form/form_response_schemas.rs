@@ -5,7 +5,7 @@ use domain::form::{
     answer::{
         AnswerLabel, AnswerPublication as DomainAnswerPublication, AnswerReference,
         AnswerStatus as DomainAnswerStatus, AnswerStatusHistoryEntry, AnswerTitleHistoryEntry,
-        FormAnswerContent, RedmineUserSnapshot,
+        AnsweredQuestionContent, RedmineUserSnapshot,
     },
     comment::{CommentHistoryAction, CommentHistoryEntry, CommentId},
     comment_attachment::CommentAttachment as DomainCommentAttachment,
@@ -451,13 +451,15 @@ impl From<AccountUser> for User {
 pub struct AnswerContent {
     #[schema(value_type = String, format = "uuid")]
     question_id: String,
+    question_title: String,
     answer: String,
 }
 
 impl AnswerContent {
-    pub fn from_ref(val: &FormAnswerContent) -> Self {
+    pub fn from_ref(val: &AnsweredQuestionContent) -> Self {
         AnswerContent {
             question_id: val.question_id.into_inner().to_string(),
+            question_title: val.question_title().as_str().to_owned(),
             answer: val.answer.to_string(),
         }
     }
@@ -960,7 +962,7 @@ mod tests {
     }
 
     #[test]
-    fn restricted_answer_response_contains_only_resource_ids_and_answer_values() {
+    fn restricted_answer_response_contains_answer_time_question_title() {
         let answer = PublishedAnswerEntry {
             id: AnswerId::from(Uuid::from_u128(1)),
             author: PublishedAnswerAuthor::Anonymous,
@@ -968,10 +970,13 @@ mod tests {
             title: AnswerTitle::new(Some("management title".to_string().try_into().unwrap())),
             publication: DomainAnswerPublication::PRIVATE,
             status: DomainAnswerStatus::COMPLETED,
-            contents: vec![FormAnswerContent {
-                id: Uuid::from_u128(3).into(),
-                question_id: Uuid::from_u128(4).into(),
-                answer: "input value".to_string(),
+            contents: vec![unsafe {
+                AnsweredQuestionContent::from_raw_parts(
+                    Uuid::from_u128(3).into(),
+                    Uuid::from_u128(4).into(),
+                    "input value".to_string(),
+                    "original title".to_string().try_into().unwrap(),
+                )
             }],
             redmine_reference: None,
         };
@@ -989,6 +994,7 @@ mod tests {
         assert!(serialized.get("form_id").is_some());
         assert!(serialized.get("answers").is_some());
         assert_eq!(serialized["answers"][0]["answer"], "input value");
+        assert_eq!(serialized["answers"][0]["question_title"], "original title");
         for hidden in [
             "author",
             "timestamp",

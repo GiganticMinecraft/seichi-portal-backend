@@ -1672,7 +1672,7 @@ mod tests {
                 AnswerAuthor::AuthenticatedUser(*answer_author.id()),
                 AnswerTitle::default(),
                 PostedAnswerContents::try_new(
-                    form.questions().as_slice(),
+                    form.revision(),
                     vec![FormAnswerContent {
                         id: FormAnswerContentId::from(Uuid::new_v4()),
                         question_id: question_id.into(),
@@ -1803,7 +1803,7 @@ mod tests {
             AnswerAuthor::AuthenticatedUser(Uuid::from_u128(999).into()),
             AnswerTitle::default(),
             PostedAnswerContents::try_new(
-                form.questions().as_slice(),
+                form.revision(),
                 vec![FormAnswerContent {
                     id: FormAnswerContentId::from(Uuid::new_v4()),
                     question_id: question_id.into(),
@@ -1941,7 +1941,7 @@ mod tests {
         let question_id = *form.questions().as_slice()[0].id();
         let answer_contents = || {
             PostedAnswerContents::try_new(
-                form.questions().as_slice(),
+                form.revision(),
                 vec![FormAnswerContent {
                     id: FormAnswerContentId::from(Uuid::new_v4()),
                     question_id: question_id.into(),
@@ -2046,7 +2046,7 @@ mod tests {
             AnswerAuthor::AuthenticatedUser(*actor.id()),
             AnswerTitle::default(),
             PostedAnswerContents::try_new(
-                form.questions().as_slice(),
+                form.revision(),
                 vec![FormAnswerContent {
                     id: FormAnswerContentId::from(Uuid::new_v4()),
                     question_id: question_id.into(),
@@ -2254,7 +2254,7 @@ mod tests {
                 AnswerAuthor::AuthenticatedUser(answer_author_id),
                 AnswerTitle::default(),
                 PostedAnswerContents::try_new(
-                    form.questions().as_slice(),
+                    form.revision(),
                     vec![FormAnswerContent {
                         id: FormAnswerContentId::from(Uuid::new_v4()),
                         question_id: (*form.questions().as_slice()[0].id()).into(),
@@ -2434,7 +2434,7 @@ mod tests {
             AnswerAuthor::AuthenticatedUser(*actor.id()),
             AnswerTitle::default(),
             PostedAnswerContents::try_new(
-                form.questions().as_slice(),
+                form.revision(),
                 vec![FormAnswerContent {
                     id: FormAnswerContentId::new(),
                     question_id: (*form.questions().as_slice()[0].id()).into(),

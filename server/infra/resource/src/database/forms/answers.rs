@@ -158,7 +158,12 @@ where
     }
 
     let sql = format!(
-        "SELECT id, question_id, answer, answer_id FROM real_answers WHERE answer_id IN ({})",
+        "SELECT real_answers.id, real_answers.question_id, questions.title AS question_title, real_answers.answer, real_answers.answer_id \
+         FROM real_answers \
+         INNER JOIN form_revision_questions questions \
+            ON questions.form_revision_id = real_answers.form_revision_id \
+            AND questions.question_id = real_answers.question_id \
+         WHERE real_answers.answer_id IN ({})",
         std::iter::repeat_n("?", answer_ids.len()).join(", ")
     );
 
@@ -176,6 +181,7 @@ where
                 FormAnswerContentRecord {
                     id: row.try_get("id")?,
                     question_id: row.try_get("question_id")?,
+                    question_title: row.try_get("question_title")?,
                     answer: row.try_get("answer")?,
                 },
             ))
@@ -296,6 +302,7 @@ impl FormAnswerDatabase for ConnectionPool {
     async fn post_answer(&self, answer: &AnswerEntry, form_id: FormId) -> Result<(), InfraError> {
         let answer_id = answer.id().to_owned().into_inner().to_string();
         let form_id = form_id.into_inner().to_string();
+        let form_revision_id = answer.form_revision_id().to_string();
         let (author_type, user_id, temporary_user_id, redmine_user_id, redmine_author_name) =
             answer_author_columns(answer);
         let redmine_issue_id = validated_redmine_issue_id(answer)?;
@@ -312,6 +319,7 @@ impl FormAnswerDatabase for ConnectionPool {
                 (
                     content.id.to_owned().into_inner().to_string(),
                     answer_id.clone(),
+                    form_revision_id.clone(),
                     content.question_id.to_owned().into_inner().to_string(),
                     content.answer.to_owned(),
                 )
@@ -334,11 +342,12 @@ impl FormAnswerDatabase for ConnectionPool {
                 }
 
                 sqlx::query!(
-                    r"INSERT INTO answers (id, form_id, author_type, user, temporary_user_id,
+                    r"INSERT INTO answers (id, form_id, form_revision_id, author_type, user, temporary_user_id,
                         redmine_user_id, redmine_author_name, title, publication, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     answer_id,
                     form_id,
+                    form_revision_id,
                     author_type,
                     user_id,
                     temporary_user_id,
@@ -363,13 +372,13 @@ impl FormAnswerDatabase for ConnectionPool {
 
                 if !contents.is_empty() {
                     let sql = format!(
-                        "INSERT INTO real_answers (id, answer_id, question_id, answer) VALUES {}",
-                        std::iter::repeat_n("(?, ?, ?, ?)", contents.len()).join(", ")
+                        "INSERT INTO real_answers (id, answer_id, form_revision_id, question_id, answer) VALUES {}",
+                        std::iter::repeat_n("(?, ?, ?, ?, ?)", contents.len()).join(", ")
                     );
                     contents
                         .into_iter()
-                        .flat_map(|(id, answer_id, question_id, answer)| {
-                            [id, answer_id, question_id, answer]
+                        .flat_map(|(id, answer_id, form_revision_id, question_id, answer)| {
+                            [id, answer_id, form_revision_id, question_id, answer]
                         })
                         .fold(query(AssertSqlSafe(&*sql)), |query, value| query.bind(value))
                         .execute(&mut **txn)
@@ -389,7 +398,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let answer_query_result_opt = sqlx::query!(
-                    r"SELECT form_id, answers.id AS answer_id, title, publication, status, author_type, user,
+                    r"SELECT form_id, form_revision_id, answers.id AS answer_id, title, publication, status, author_type, user,
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
@@ -407,7 +416,13 @@ impl FormAnswerDatabase for ConnectionPool {
                 .await?;
 
                 let contents = sqlx::query!(
-                    r"SELECT id, question_id, answer FROM real_answers WHERE answer_id = ?",
+                    r"SELECT real_answers.id, real_answers.question_id,
+                        questions.title AS question_title, real_answers.answer
+                    FROM real_answers
+                    INNER JOIN form_revision_questions questions
+                        ON questions.form_revision_id = real_answers.form_revision_id
+                        AND questions.question_id = real_answers.question_id
+                    WHERE real_answers.answer_id = ?",
                     answer_id.into_inner().to_string(),
                 )
                 .fetch_all(&mut **txn)
@@ -419,6 +434,7 @@ impl FormAnswerDatabase for ConnectionPool {
                         Ok::<_, InfraError>(FormAnswerContentRecord {
                             id: rs.id,
                             question_id: rs.question_id,
+                            question_title: rs.question_title,
                             answer: rs.answer,
                         })
                     })
@@ -441,6 +457,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             )?,
                             timestamp: rs.timestamp,
                             form_id: rs.form_id,
+                            form_revision_id: rs.form_revision_id,
                             title: rs.title,
                             publication: rs.publication,
                             status: rs.status,
@@ -479,7 +496,7 @@ impl FormAnswerDatabase for ConnectionPool {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
                 let sql = format!(
-                    "SELECT form_id, answers.id AS answer_id, title, publication, status, author_type, user,
+                    "SELECT form_id, form_revision_id, answers.id AS answer_id, title, publication, status, author_type, user,
                         users.name AS user_name, users.role AS user_role,
                         temporary_user_id, temporary_users.name AS temporary_user_name,
                         temporary_users.contact_text AS temporary_user_contact_text,
@@ -510,6 +527,7 @@ impl FormAnswerDatabase for ConnectionPool {
                             author: author_from_row(&rs)?,
                             timestamp: rs.try_get("timestamp")?,
                             form_id: rs.try_get("form_id")?,
+                            form_revision_id: rs.try_get("form_revision_id")?,
                             title: rs.try_get("title")?,
                             publication: rs.try_get("publication")?,
                             status: rs.try_get("status")?,

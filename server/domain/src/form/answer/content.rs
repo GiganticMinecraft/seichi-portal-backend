@@ -2,8 +2,12 @@ use std::collections::{BTreeSet, HashMap};
 
 use errors::domain::DomainError;
 use serde::{Deserialize, Serialize};
+use types::non_empty_string::NonEmptyString;
 
-use crate::form::question::{Question, QuestionId};
+use crate::form::{
+    models::{FormRevision, FormRevisionId},
+    question::QuestionId,
+};
 
 pub type FormAnswerContentId = types::Id<FormAnswerContent>;
 
@@ -14,14 +18,73 @@ pub struct FormAnswerContent {
     pub answer: String,
 }
 
+/// 回答と、その回答時点で表示されていた質問タイトルです。
+///
+/// 質問が後から変更・削除されても、回答の意味を復元できるように質問リビジョンの
+/// タイトルを回答内容と組にして扱います。
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub struct AnsweredQuestionContent {
+    pub id: FormAnswerContentId,
+    pub question_id: QuestionId,
+    pub answer: String,
+    question_title: NonEmptyString,
+}
+
+impl AnsweredQuestionContent {
+    fn new(content: FormAnswerContent, question_title: NonEmptyString) -> Self {
+        Self {
+            id: content.id,
+            question_id: content.question_id,
+            answer: content.answer,
+            question_title,
+        }
+    }
+
+    /// 永続層から回答内容を復元します。
+    ///
+    /// # Safety
+    ///
+    /// `question_title` が、この回答の `question_id` と回答のフォームリビジョンに
+    /// 対応するタイトルであることを、呼び出し元が保証しなければなりません。
+    pub unsafe fn from_raw_parts(
+        id: FormAnswerContentId,
+        question_id: QuestionId,
+        answer: String,
+        question_title: NonEmptyString,
+    ) -> Self {
+        Self {
+            id,
+            question_id,
+            answer,
+            question_title,
+        }
+    }
+
+    pub fn question_title(&self) -> &NonEmptyString {
+        &self.question_title
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct PostedAnswerContents(Vec<FormAnswerContent>);
+pub struct PostedAnswerContents {
+    revision_id: FormRevisionId,
+    contents: Vec<AnsweredQuestionContent>,
+}
 
 impl PostedAnswerContents {
+    #[cfg(test)]
+    pub(crate) fn for_test(contents: Vec<AnsweredQuestionContent>) -> Self {
+        Self {
+            revision_id: FormRevisionId::new(),
+            contents,
+        }
+    }
+
     pub fn try_new(
-        questions: &[Question],
+        revision: &FormRevision,
         contents: Vec<FormAnswerContent>,
     ) -> Result<Self, DomainError> {
+        let questions = revision.questions().as_slice();
         let questions_by_id = questions
             .iter()
             .map(|question| (question.id(), question))
@@ -48,37 +111,7 @@ impl PostedAnswerContents {
             });
 
             question
-                .and_then(|question| match question {
-                    Question::Text(_) => Ok(()),
-                    Question::SingleChoice(choice_question) => choice_question
-                        .choices()
-                        .iter()
-                        .any(|choice| choice.label.as_str() == answer.answer.as_str())
-                        .then_some(())
-                        .ok_or_else(|| DomainError::InvalidEntity {
-                            message: format!(
-                                "answer for question {} must match one of the available choices",
-                                question.template_key().as_str()
-                            ),
-                        }),
-                    Question::MultipleChoice(choice_question) => {
-                        let values = parse_multiple_choice_answer(&answer.answer);
-                        (!values.is_empty()
-                            && values.iter().all(|value| {
-                                choice_question
-                                    .choices()
-                                    .iter()
-                                    .any(|choice| choice.label.as_str() == value.as_str())
-                            }))
-                        .then_some(())
-                        .ok_or_else(|| DomainError::InvalidEntity {
-                            message: format!(
-                                "answer for question {} must reference only existing choices",
-                                question.template_key().as_str()
-                            ),
-                        })
-                    }
-                })
+                .and_then(|question| question.validate_answer(&answer.answer))
                 .err()
         }) {
             return Err(error);
@@ -97,19 +130,44 @@ impl PostedAnswerContents {
             });
         }
 
-        Ok(Self(contents))
+        let contents = contents
+            .into_iter()
+            .map(|content| {
+                let question = questions_by_id.get(&content.question_id).ok_or_else(|| {
+                    DomainError::InvalidEntity {
+                        message: format!(
+                            "question {} does not belong to the form",
+                            content.question_id
+                        ),
+                    }
+                })?;
+                Ok(AnsweredQuestionContent::new(
+                    content,
+                    question.title().clone(),
+                ))
+            })
+            .collect::<Result<Vec<_>, DomainError>>()?;
+
+        Ok(Self {
+            revision_id: *revision.id(),
+            contents,
+        })
     }
 
-    pub fn as_slice(&self) -> &[FormAnswerContent] {
-        &self.0
+    pub fn revision_id(&self) -> FormRevisionId {
+        self.revision_id
     }
 
-    pub fn into_inner(self) -> Vec<FormAnswerContent> {
-        self.0
+    pub fn as_slice(&self) -> &[AnsweredQuestionContent] {
+        &self.contents
+    }
+
+    pub fn into_inner(self) -> Vec<AnsweredQuestionContent> {
+        self.contents
     }
 }
 
-fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
+pub(crate) fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
     let trimmed = answer.trim();
     if trimmed.starts_with('[')
         && trimmed.ends_with(']')
@@ -133,7 +191,10 @@ fn parse_multiple_choice_answer(answer: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::form::question::{Choice, QuestionType};
+    use crate::form::{
+        models::FormRevision,
+        question::{Choice, Question, QuestionType},
+    };
     use types::non_empty_vec::NonEmptyVec;
     use uuid::Uuid;
 
@@ -203,6 +264,13 @@ mod tests {
         }
     }
 
+    fn revision(questions: Vec<Question>) -> FormRevision {
+        FormRevision::new(
+            crate::form::question::QuestionSet::try_new(NonEmptyVec::try_new(questions).unwrap())
+                .unwrap(),
+        )
+    }
+
     #[test]
     fn posted_answer_contents_rejects_duplicate_question_ids() {
         let questions = vec![text_question()];
@@ -219,7 +287,7 @@ mod tests {
             },
         ];
 
-        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+        assert!(PostedAnswerContents::try_new(&revision(questions), answers).is_err());
     }
 
     #[test]
@@ -231,7 +299,7 @@ mod tests {
             answer: "Alice".to_string(),
         }];
 
-        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+        assert!(PostedAnswerContents::try_new(&revision(questions), answers).is_err());
     }
 
     #[test]
@@ -250,7 +318,7 @@ mod tests {
             },
         ];
 
-        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+        assert!(PostedAnswerContents::try_new(&revision(questions), answers).is_err());
     }
 
     #[test]
@@ -278,7 +346,7 @@ mod tests {
             },
         ];
 
-        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+        assert!(PostedAnswerContents::try_new(&revision(questions), answers).is_err());
     }
 
     #[test]
@@ -306,7 +374,7 @@ mod tests {
             },
         ];
 
-        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+        assert!(PostedAnswerContents::try_new(&revision(questions), answers).is_err());
     }
 
     #[test]
@@ -318,7 +386,7 @@ mod tests {
             answer: "Alice".to_string(),
         }];
 
-        assert!(PostedAnswerContents::try_new(&questions, answers).is_err());
+        assert!(PostedAnswerContents::try_new(&revision(questions), answers).is_err());
     }
 
     #[test]
@@ -346,10 +414,23 @@ mod tests {
             },
         ];
 
-        let posted_answers = PostedAnswerContents::try_new(&questions, answers.clone()).unwrap();
+        let posted_answers =
+            PostedAnswerContents::try_new(&revision(questions), answers.clone()).unwrap();
 
-        assert_eq!(posted_answers.as_slice(), answers.as_slice());
-        assert_eq!(posted_answers.into_inner(), answers);
+        assert_eq!(posted_answers.as_slice().len(), answers.len());
+        for (posted, answer) in posted_answers.as_slice().iter().zip(&answers) {
+            assert_eq!(posted.id, answer.id);
+            assert_eq!(posted.question_id, answer.question_id);
+            assert_eq!(posted.answer, answer.answer);
+        }
+        assert_eq!(
+            posted_answers
+                .as_slice()
+                .iter()
+                .map(|answer| answer.question_title().as_str())
+                .collect::<Vec<_>>(),
+            vec!["Name", "Role", "Tags"]
+        );
     }
 
     #[test]

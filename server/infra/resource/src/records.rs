@@ -9,7 +9,7 @@ use domain::{
     form::{
         answer::{
             AnswerAuthor, AnswerEntry, AnswerLabel, AnswerPublication, AnswerStatus, AnswerTitle,
-            FormAnswerContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
+            AnsweredQuestionContent, RedmineImportedAnswerReference, RedmineUserSnapshot,
         },
         comment::{Comment, CommentContent},
         message::{Message, MessageBody},
@@ -17,7 +17,7 @@ use domain::{
             ActiveForm, AllowedUserGroups, AnswerAcceptancePeriod, AnswerAuthorPublicationPolicy,
             AnswerSettings, ArchivedForm, DefaultAnswerTitle, DiscordWebhookUrl, FormDescription,
             FormId, FormLabel, FormLabelAssignment, FormLabelId, FormLabelName, FormMeta,
-            FormSettings, FormTitle, QuestionSet,
+            FormRevision, FormRevisionId, FormSettings, FormTitle, QuestionSet,
         },
         question::{Choice, Question, QuestionType},
     },
@@ -122,6 +122,7 @@ impl TryFrom<QuestionRecord> for Question {
 
 pub struct ActiveFormRecord {
     pub id: String,
+    pub revision_id: String,
     pub title: String,
     pub description: String,
     pub created_at: DateTime<Utc>,
@@ -147,6 +148,7 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
     fn try_from(
         ActiveFormRecord {
             id,
+            revision_id,
             title,
             description,
             created_at,
@@ -187,6 +189,8 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
         .change_author_publication_policy(
             AnswerAuthorPublicationPolicy::from_hide_author(hide_author),
         );
+        let revision_id =
+            FormRevisionId::from(Uuid::parse_str(&revision_id).map_err(Into::<InfraError>::into)?);
 
         Ok(unsafe {
             ActiveForm::from_raw_parts(
@@ -204,7 +208,8 @@ impl TryFrom<ActiveFormRecord> for ActiveForm {
                     AllowedUserGroups::new(allowed_group_ids),
                 ),
                 answer_settings,
-                QuestionSet::try_new(questions)?,
+                FormRevision::from_raw_parts(revision_id, QuestionSet::try_new(questions)?),
+                Some(revision_id),
                 FormLabelAssignment::try_new(label_ids)?,
             )
         })
@@ -236,23 +241,32 @@ impl TryFrom<ArchivedFormRecord> for ArchivedForm {
 pub struct FormAnswerContentRecord {
     pub id: String,
     pub question_id: String,
+    pub question_title: String,
     pub answer: String,
 }
 
-impl TryFrom<FormAnswerContentRecord> for FormAnswerContent {
-    type Error = InfraError;
+impl TryFrom<FormAnswerContentRecord> for AnsweredQuestionContent {
+    type Error = Error;
 
     fn try_from(
         FormAnswerContentRecord {
             id,
             question_id,
+            question_title,
             answer,
         }: FormAnswerContentRecord,
     ) -> Result<Self, Self::Error> {
-        Ok(FormAnswerContent {
-            id: Uuid::parse_str(&id)?.into(),
-            question_id: Uuid::parse_str(&question_id)?.into(),
-            answer,
+        Ok(unsafe {
+            AnsweredQuestionContent::from_raw_parts(
+                Uuid::parse_str(&id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                Uuid::parse_str(&question_id)
+                    .map_err(Into::<InfraError>::into)?
+                    .into(),
+                answer,
+                question_title.try_into()?,
+            )
         })
     }
 }
@@ -392,6 +406,7 @@ pub struct FormAnswerRecord {
     pub author: AnswerAuthorRecord,
     pub timestamp: DateTime<Utc>,
     pub form_id: String,
+    pub form_revision_id: String,
     pub title: Option<String>,
     pub publication: String,
     pub status: String,
@@ -415,6 +430,7 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
             author,
             timestamp,
             form_id,
+            form_revision_id,
             title,
             publication,
             status,
@@ -456,6 +472,9 @@ impl TryFrom<FormAnswerRecord> for AnswerEntry {
                 AnswerEntry::from_raw_parts_with_status_and_redmine_reference(
                     answer_id,
                     FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?),
+                    FormRevisionId::from(
+                        Uuid::from_str(&form_revision_id).map_err(Into::<InfraError>::into)?,
+                    ),
                     author,
                     timestamp,
                     AnswerTitle::new(title.map(TryInto::try_into).transpose()?),

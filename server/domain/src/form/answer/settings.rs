@@ -575,7 +575,7 @@ mod tests {
             FormId::new(),
             author,
             AnswerTitle::new(None),
-            PostedAnswerContents::try_new(&[], Vec::new()).unwrap(),
+            PostedAnswerContents::for_test(Vec::new()),
         )
     }
 

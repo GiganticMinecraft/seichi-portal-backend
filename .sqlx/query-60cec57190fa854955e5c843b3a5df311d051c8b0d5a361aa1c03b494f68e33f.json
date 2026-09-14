@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_revision_questions\n        (form_revision_id, question_id, template_key, position, title, description,\n         question_type, is_required)\n        SELECT ?, question_id, template_key, position, title, description, question_type,\n            is_required\n        FROM form_questions\n        WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "60cec57190fa854955e5c843b3a5df311d051c8b0d5a361aa1c03b494f68e33f"
+}

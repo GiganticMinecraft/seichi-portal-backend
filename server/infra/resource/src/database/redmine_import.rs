@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::form::{
     answer::{AnswerAuthor, AnswerLabelId, AnswerReference, AnswerRelation},
+    models::{FormRevision, FormRevisionId},
     question::QuestionSet,
     redmine_import::{
         RedmineImportAnswerRelationsResult, RedmineImportResult, RedmineImportTarget,
@@ -120,6 +121,16 @@ async fn find_target_in_transaction(
         return Ok(None);
     }
 
+    let revision_id = sqlx::query_scalar!(
+        r"SELECT id FROM form_revisions
+        WHERE form_id = ?
+        ORDER BY revision_number DESC
+        LIMIT 1",
+        &form_row.id,
+    )
+    .fetch_one(&mut **txn)
+    .await?;
+
     let form_id = FormIdParts::parse(&form_row.id)?;
     let question_rows = sqlx::query!(
         r"SELECT question_id, form_id, template_key, position, title, description,
@@ -224,7 +235,14 @@ async fn find_target_in_transaction(
         label_ids.push(parse_answer_label_id(&row.id)?);
     }
 
-    RedmineImportTarget::try_new(form_id.0, questions, label_ids)
+    let revision = unsafe {
+        FormRevision::from_raw_parts(
+            FormRevisionId::from(Uuid::from_str(&revision_id)?),
+            questions,
+        )
+    };
+
+    RedmineImportTarget::try_new(form_id.0, revision, label_ids)
         .map(Some)
         .map_err(|error| InfraError::Unexpected {
             cause: format!("invalid Redmine import target: {error}"),
@@ -605,6 +623,7 @@ async fn import_issue_in_transaction(
     let (answer, comments, label_ids) = issue.into_parts();
     let answer_id = answer.id().into_inner().to_string();
     let form_id = answer.form_id().into_inner().to_string();
+    let form_revision_id = answer.form_revision_id().to_string();
     let reference = answer
         .redmine_reference()
         .ok_or_else(|| InfraError::Unexpected {
@@ -641,8 +660,12 @@ async fn import_issue_in_transaction(
     for content in answer.contents() {
         let question_id = content.question_id.to_string();
         let question = sqlx::query!(
-            "SELECT question_id FROM form_questions WHERE form_id = ? AND question_id = ?",
+            r"SELECT q.question_id
+            FROM form_revision_questions q
+            INNER JOIN form_revisions r ON r.id = q.form_revision_id
+            WHERE r.form_id = ? AND q.form_revision_id = ? AND q.question_id = ?",
             form_id,
+            form_revision_id,
             question_id,
         )
         .fetch_optional(&mut **txn)
@@ -690,11 +713,12 @@ async fn import_issue_in_transaction(
 
     sqlx::query!(
         r"INSERT INTO answers
-            (id, form_id, author_type, redmine_user_id, redmine_author_name, title,
+            (id, form_id, form_revision_id, author_type, redmine_user_id, redmine_author_name, title,
              publication, status, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         answer_id,
         form_id,
+        form_revision_id,
         author_type,
         redmine_user_id,
         redmine_author_name,
@@ -716,9 +740,12 @@ async fn import_issue_in_transaction(
 
     for content in answer.contents() {
         sqlx::query!(
-            "INSERT INTO real_answers (id, answer_id, question_id, answer) VALUES (?, ?, ?, ?)",
+            r"INSERT INTO real_answers
+            (id, answer_id, form_revision_id, question_id, answer)
+            VALUES (?, ?, ?, ?, ?)",
             content.id.into_inner().to_string(),
             answer_id,
+            form_revision_id,
             content.question_id.into_inner().to_string(),
             content.answer,
         )

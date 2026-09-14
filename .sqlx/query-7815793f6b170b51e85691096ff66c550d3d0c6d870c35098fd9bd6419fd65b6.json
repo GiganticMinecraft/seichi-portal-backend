@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO form_revision_choices\n        (form_revision_id, id, question_id, position, label)\n        SELECT c.form_revision_id, c.id, c.question_id, c.position, c.label\n        FROM archived_form_revision_choices c\n        INNER JOIN archived_form_revisions r ON r.id = c.form_revision_id\n        WHERE r.form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "7815793f6b170b51e85691096ff66c550d3d0c6d870c35098fd9bd6419fd65b6"
+}

@@ -4,7 +4,7 @@ use domain::{
     form::{
         answer::{
             AnswerEntry, AnswerId, AnswerLabel, AnswerPublication, AnswerResponseVisibility,
-            AnswerStatus, AnswerTitle, FormAnswerContent, RedmineImportedAnswerReference,
+            AnswerStatus, AnswerTitle, AnsweredQuestionContent, RedmineImportedAnswerReference,
             RedmineUserSnapshot, TemporaryAnswerAuthor,
         },
         comment::Comment,
@@ -29,7 +29,7 @@ pub struct PublishedAnswerEntry {
     pub title: AnswerTitle,
     pub publication: AnswerPublication,
     pub status: AnswerStatus,
-    pub contents: Vec<FormAnswerContent>,
+    pub contents: Vec<AnsweredQuestionContent>,
     pub redmine_reference: Option<RedmineImportedAnswerReference>,
 }
 
