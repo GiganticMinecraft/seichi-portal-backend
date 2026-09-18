@@ -484,7 +484,7 @@ impl<
                 .items()
                 .is_empty()
             {
-                validate_answered_form_question_update(&current_questions, questions.as_slice())?;
+                validate_answered_question_choice_ids(&current_questions, questions.as_slice())?;
             }
         }
 
@@ -884,7 +884,7 @@ fn question_details(questions: &[Question]) -> impl Iterator<Item = EventDetail>
     })
 }
 
-fn validate_answered_form_question_update(
+fn validate_answered_question_choice_ids(
     current_questions: &[Question],
     updated_questions: &[UpsertQuestionInput],
 ) -> Result<(), Error> {
@@ -892,123 +892,49 @@ fn validate_answered_form_question_update(
         .iter()
         .map(|question| (question.id().into_inner(), question))
         .collect::<HashMap<_, _>>();
-    let updated_by_id = updated_questions
+    updated_questions
         .iter()
-        .map(|question| {
-            (
-                question
-                    .original_id
-                    .unwrap_or_else(|| question.question.id())
-                    .into_inner(),
-                &question.question,
-            )
-        })
-        .collect::<HashMap<_, _>>();
+        .try_for_each(|updated_question| {
+            let current_choice_ids = match updated_question.original_id {
+                Some(updated_id) => current_by_id
+                    .get(&updated_id.into_inner())
+                    .ok_or_else(|| DomainError::InvalidEntity {
+                        message: format!(
+                            "question id {} does not belong to the form",
+                            updated_id.into_inner()
+                        ),
+                    })?
+                    .choices()
+                    .into_iter()
+                    .flat_map(|choices| {
+                        choices
+                            .iter()
+                            .filter_map(|choice| choice.id.map(|id| id.into_inner()))
+                    })
+                    .collect::<BTreeSet<_>>(),
+                None => BTreeSet::new(),
+            };
 
-    if let Some(error) = current_questions
-        .iter()
-        .map(|current_question| (current_question.id().into_inner(), current_question))
-        .filter_map(|(current_id, current_question)| {
-            updated_by_id
-                .get(&current_id)
-                .map(|updated_question| (current_question, *updated_question))
-        })
-        .find_map(|(current_question, updated_question)| {
-            (current_question.question_type() == updated_question.question_type())
-                .then_some((current_question, updated_question))
-                .ok_or_else(|| DomainError::InvalidEntity {
+            updated_question
+                .question
+                .choices()
+                .into_iter()
+                .flat_map(|choices| {
+                    choices
+                        .iter()
+                        .filter_map(|choice| choice.id.map(|id| id.into_inner()))
+                })
+                .find(|choice_id| !current_choice_ids.contains(choice_id))
+                .map(|choice_id| DomainError::InvalidEntity {
                     message: format!(
-                        "cannot change question_type for answered question {}",
-                        current_question.template_key().as_str()
+                        "cannot reuse choice id {} for answered question {}",
+                        choice_id,
+                        updated_question.question.template_key().as_str()
                     ),
                 })
-                .and_then(|(current_question, updated_question)| {
-                    let current_choice_ids = current_question
-                        .choices()
-                        .into_iter()
-                        .flat_map(|choices| {
-                            choices
-                                .iter()
-                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
-                        })
-                        .collect::<BTreeSet<_>>();
-                    let updated_choice_ids = updated_question
-                        .choices()
-                        .into_iter()
-                        .flat_map(|choices| {
-                            choices
-                                .iter()
-                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
-                        })
-                        .collect::<BTreeSet<_>>();
-
-                    current_choice_ids
-                        .into_iter()
-                        .find(|choice_id| !updated_choice_ids.contains(choice_id))
-                        .map(|choice_id| DomainError::InvalidEntity {
-                            message: format!(
-                                "cannot delete choice {} from answered question {}",
-                                choice_id,
-                                current_question.template_key().as_str()
-                            ),
-                        })
-                        .map_or(Ok(()), Err)
-                })
-                .err()
+                .map_or(Ok(()), Err)
         })
-    {
-        return Err(error.into());
-    }
-
-    if let Some(error) = updated_questions
-        .iter()
-        .filter_map(|updated_question| {
-            updated_question
-                .original_id
-                .map(|id| (id.into_inner(), &updated_question.question))
-        })
-        .find_map(|(updated_id, updated_question)| {
-            current_by_id
-                .get(&updated_id)
-                .ok_or_else(|| DomainError::InvalidEntity {
-                    message: format!("question id {} does not belong to the form", updated_id),
-                })
-                .and_then(|current_question| {
-                    let current_choice_ids = current_question
-                        .choices()
-                        .into_iter()
-                        .flat_map(|choices| {
-                            choices
-                                .iter()
-                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
-                        })
-                        .collect::<BTreeSet<_>>();
-
-                    updated_question
-                        .choices()
-                        .into_iter()
-                        .flat_map(|choices| {
-                            choices
-                                .iter()
-                                .filter_map(|choice| choice.id.map(|id| id.into_inner()))
-                        })
-                        .find(|choice_id| !current_choice_ids.contains(choice_id))
-                        .map(|choice_id| DomainError::InvalidEntity {
-                            message: format!(
-                                "cannot regenerate choice id {} for answered question {}",
-                                choice_id,
-                                updated_question.template_key().as_str()
-                            ),
-                        })
-                        .map_or(Ok(()), Err)
-                })
-                .err()
-        })
-    {
-        return Err(error.into());
-    }
-
-    Ok(())
+        .map_err(Into::into)
 }
 
 fn validate_template_key_update(
@@ -1167,7 +1093,7 @@ mod tests {
         }];
 
         assert!(
-            validate_answered_form_question_update(&current_questions, &updated_questions,).is_ok()
+            validate_answered_question_choice_ids(&current_questions, &updated_questions,).is_ok()
         );
     }
 
@@ -1185,17 +1111,17 @@ mod tests {
         }];
 
         assert!(
-            validate_answered_form_question_update(&current_questions, &updated_questions).is_ok()
+            validate_answered_question_choice_ids(&current_questions, &updated_questions).is_ok()
         );
     }
 
     #[test]
-    fn answered_question_type_changes_remain_rejected() {
+    fn answered_question_type_changes_are_allowed() {
         let question_id = QuestionId::from(Uuid::new_v4());
         let current_questions = vec![text_question(question_id, 0, "body")];
         let updated_questions = vec![UpsertQuestionInput {
             original_id: Some(question_id),
-            question: Question::new_single_choice(
+            question: Question::new_multiple_choice(
                 "body".try_into().unwrap(),
                 0,
                 "Body".to_string().try_into().unwrap(),
@@ -1212,12 +1138,12 @@ mod tests {
         }];
 
         assert!(
-            validate_answered_form_question_update(&current_questions, &updated_questions).is_err()
+            validate_answered_question_choice_ids(&current_questions, &updated_questions).is_ok()
         );
     }
 
     #[test]
-    fn deleting_a_choice_from_an_answered_question_remains_rejected() {
+    fn deleting_a_choice_from_an_answered_question_is_allowed() {
         let question_id = QuestionId::from(Uuid::new_v4());
         let current_question = unsafe {
             Question::from_raw_parts(
@@ -1262,10 +1188,60 @@ mod tests {
         .unwrap();
 
         assert!(
-            validate_answered_form_question_update(
+            validate_answered_question_choice_ids(
                 &[current_question],
                 &[UpsertQuestionInput {
                     original_id: Some(question_id),
+                    question: updated_question,
+                }],
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn reusing_a_choice_id_for_a_new_question_is_rejected() {
+        let question_id = QuestionId::from(Uuid::new_v4());
+        let current_question = unsafe {
+            Question::from_raw_parts(
+                question_id,
+                "role".try_into().unwrap(),
+                0,
+                "Role".to_string().try_into().unwrap(),
+                None,
+                QuestionType::SingleChoice,
+                Some(
+                    NonEmptyVec::try_new(vec![domain::form::question::Choice::new(
+                        Some(1.into()),
+                        0,
+                        "Admin".to_string().try_into().unwrap(),
+                    )])
+                    .unwrap(),
+                ),
+                true,
+            )
+            .unwrap()
+        };
+        let updated_question = Question::new_single_choice(
+            "other_role".try_into().unwrap(),
+            1,
+            "Other role".to_string().try_into().unwrap(),
+            None,
+            NonEmptyVec::try_new(vec![domain::form::question::Choice::new(
+                Some(1.into()),
+                0,
+                "Admin".to_string().try_into().unwrap(),
+            )])
+            .unwrap(),
+            true,
+        )
+        .unwrap();
+
+        assert!(
+            validate_answered_question_choice_ids(
+                &[current_question],
+                &[UpsertQuestionInput {
+                    original_id: None,
                     question: updated_question,
                 }],
             )
