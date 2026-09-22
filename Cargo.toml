@@ -9,7 +9,6 @@ members = [
     "server/infra/resource",
     "server/migration",
     "server/presentation",
-    "server/redmine-importer",
     "server/types",
     "server/usecase",
 ]
