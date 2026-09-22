@@ -685,9 +685,14 @@ pub struct DiscordUserRecord {
     pub username: String,
 }
 
-impl From<DiscordUserRecord> for DiscordUser {
-    fn from(DiscordUserRecord { user_id, username }: DiscordUserRecord) -> Self {
-        DiscordUser::new(DiscordUserId::new(user_id), DiscordUserName::new(username))
+impl TryFrom<DiscordUserRecord> for DiscordUser {
+    type Error = Error;
+
+    fn try_from(DiscordUserRecord { user_id, username }: DiscordUserRecord) -> Result<Self, Error> {
+        Ok(DiscordUser::new(
+            DiscordUserId::new(user_id)?,
+            DiscordUserName::new(username),
+        ))
     }
 }
 

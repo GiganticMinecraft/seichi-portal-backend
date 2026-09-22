@@ -4,6 +4,7 @@ use common::test_utils::arbitrary_uuid_v4;
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use domain_derive::UnsafeFromRawParts;
+use errors::domain::DomainError;
 #[cfg(test)]
 use proptest::strategy::Strategy;
 #[cfg(test)]
@@ -237,19 +238,23 @@ impl UserSessionLifetime {
 }
 
 #[derive(DerivingVia, Debug, PartialEq, Eq)]
-#[deriving(From, Into, IntoInner, Clone)]
+#[deriving(Into, IntoInner, Clone)]
 pub struct DiscordUserId(String);
 
 impl DiscordUserId {
-    pub fn new(user_id: String) -> Self {
-        // NOTE: Discord のユーザー id は 17桁または18桁である
-        //  ref: https://support.discord.com/hc/ja/articles/4407571667351
-        assert!(
-            user_id.len() == 17 || user_id.len() == 18,
-            "Discord user id must be 17 or 18 characters long"
-        );
+    pub fn new(user_id: String) -> Result<Self, DomainError> {
+        // Snowflake は HTTP API では文字列で返される最大 64 bit の符号なし整数。
+        // ref: https://discord.com/developers/docs/reference#snowflakes
+        if user_id.len() > 20
+            || !user_id.bytes().all(|byte| byte.is_ascii_digit())
+            || !matches!(user_id.parse::<u64>(), Ok(1..))
+        {
+            return Err(DomainError::InvalidEntity {
+                message: "Invalid Discord user id".to_string(),
+            });
+        }
 
-        Self(user_id)
+        Ok(Self(user_id))
     }
 }
 
@@ -436,7 +441,7 @@ mod tests {
         let link = DiscordAccountLink::new(
             linked_user_id,
             DiscordUser::new(
-                DiscordUserId::new("12345678901234567".to_string()),
+                DiscordUserId::new("12345678901234567".to_string()).unwrap(),
                 DiscordUserName::new("discord_user".to_string()),
             ),
         );
@@ -464,7 +469,7 @@ mod tests {
         let link = DiscordAccountLink::new(
             user_id(1),
             DiscordUser::new(
-                DiscordUserId::new("12345678901234567".to_string()),
+                DiscordUserId::new("12345678901234567".to_string()).unwrap(),
                 DiscordUserName::new("discord_user".to_string()),
             ),
         );
@@ -477,26 +482,36 @@ mod tests {
     }
 
     #[test]
-    fn discord_user_id_allows_17_or_18_characters() {
-        assert_eq!(
-            DiscordUserId::new("12345678901234567".to_string()),
-            DiscordUserId("12345678901234567".to_string())
-        );
-        assert_eq!(
-            DiscordUserId::new("123456789012345678".to_string()),
-            DiscordUserId("123456789012345678".to_string())
-        );
+    fn discord_user_id_accepts_snowflakes() {
+        for value in [
+            "1",
+            "12345678901234567",
+            "123456789012345678",
+            "1234567890123456789",
+            "18446744073709551615",
+        ] {
+            assert_eq!(
+                DiscordUserId::new(value.to_string()).unwrap().into_inner(),
+                value
+            );
+        }
     }
 
     #[test]
-    #[should_panic(expected = "Discord user id must be 17 or 18 characters long")]
-    fn discord_user_id_rejects_16_characters() {
-        DiscordUserId::new("1234567890123456".to_string());
-    }
-
-    #[test]
-    #[should_panic(expected = "Discord user id must be 17 or 18 characters long")]
-    fn discord_user_id_rejects_19_characters() {
-        DiscordUserId::new("1234567890123456789".to_string());
+    fn discord_user_id_rejects_invalid_snowflakes_without_panicking() {
+        for value in [
+            "",
+            "0",
+            "18446744073709551616",
+            "123456789012345678901",
+            "000000000000000000001",
+            "1234567890123456a",
+            "+12345678901234567",
+            "-12345678901234567",
+            " 12345678901234567",
+            "１２３４５６７８９０１２３４５６７",
+        ] {
+            assert!(DiscordUserId::new(value.to_string()).is_err(), "{value}");
+        }
     }
 }

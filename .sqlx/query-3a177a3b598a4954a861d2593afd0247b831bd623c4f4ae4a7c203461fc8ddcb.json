@@ -10,7 +10,7 @@
           "type": "VarString",
           "flags": "NOT_NULL | UNIQUE_KEY | NO_DEFAULT_VALUE",
           "collation": 224,
-          "max_size": 72
+          "max_size": 80
         },
         "origin": {
           "Table": {
