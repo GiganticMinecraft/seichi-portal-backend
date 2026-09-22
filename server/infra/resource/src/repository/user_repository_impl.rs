@@ -325,30 +325,30 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
         &self,
         user: &Allowed<AccountUser, Read>,
     ) -> Result<Option<DiscordUser>, Error> {
-        Ok(self
-            .client
+        self.client
             .user()
             .fetch_discord_user(user.value())
             .await?
-            .map(Into::into))
+            .map(TryInto::try_into)
+            .transpose()
     }
 
     async fn fetch_discord_user_by_token(
         &self,
         token: String,
     ) -> Result<Option<DiscordUser>, Error> {
-        Ok(self
-            .client
+        self.client
             .discord_api()
             .fetch_user(token)
             .await
             .ok()
             .map(|schema| {
-                DiscordUser::new(
-                    DiscordUserId::new(schema.id),
+                Ok(DiscordUser::new(
+                    DiscordUserId::new(schema.id)?,
                     DiscordUserName::new(schema.username),
-                )
-            }))
+                ))
+            })
+            .transpose()
     }
 
     async fn size(&self) -> Result<u32, Error> {
