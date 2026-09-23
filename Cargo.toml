@@ -30,7 +30,7 @@ sqlx = { version = "0.9.0", features = ["runtime-tokio", "tls-rustls-ring", "mys
 tracing = "0.1.44"
 mockall = "0.15.0"
 envy = "0.4.2"
-test-case = "3.3.1"
+test-case = "3.4.0"
 strum = "0.28.0"
 strum_macros = "0.28.0"
 proptest = "1.11.0"
