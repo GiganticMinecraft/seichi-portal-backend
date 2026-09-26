@@ -24,7 +24,7 @@ resource = { path = "../infra/resource" }
 tokio = { workspace = true }
 tower-http = { version = "0.7.1", features = ["catch-panic", "cors"] }
 tracing = { workspace = true }
-tracing-opentelemetry = "0.33.0"
+tracing-opentelemetry = "0.34.0"
 tracing-subscriber = { version = "0.3.23", features = ["std", "registry", "env-filter"] }
 serde_json = { workspace = true }
 futures = { workspace = true }
