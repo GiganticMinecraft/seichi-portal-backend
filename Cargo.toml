@@ -52,5 +52,5 @@ serenity = "0.12.5"
 lapin = "4.12.0"
 aws-sdk-s3 = "1.150.0"
 utoipa = { version = "5.5.0", features = ["axum_extras", "chrono", "uuid"] }
-utoipa-axum = "0.2"
+utoipa-axum = "0.3.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
