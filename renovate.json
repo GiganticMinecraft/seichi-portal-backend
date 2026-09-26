@@ -14,6 +14,32 @@
       "rangeStrategy": "bump"
     },
     {
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "opentelemetry",
+        "opentelemetry_sdk",
+        "opentelemetry-otlp",
+        "tracing-opentelemetry",
+        "reqwest-tracing",
+        "json-subscriber",
+        "axum-tracing-opentelemetry"
+      ],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "utoipa",
+        "utoipa-axum",
+        "utoipa-swagger-ui"
+      ],
+      "groupName": "Utoipa"
+    },
+    {
       "matchPackageNames": [
         "mariadb"
       ],
