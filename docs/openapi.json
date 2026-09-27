@@ -1841,7 +1841,6 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -2520,7 +2519,6 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -3173,7 +3171,6 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -3288,7 +3285,6 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -5411,7 +5407,6 @@
         "operationId": "get_global_discord_webhook",
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -5474,9 +5469,7 @@
           "required": true
         },
         "responses": {
-          "204": {
-            "description": ""
-          },
+          "204": {},
           "400": {
             "description": "The server could not understand the request due to invalid syntax.",
             "content": {
@@ -6526,10 +6519,10 @@
                 "schema": {
                   "oneOf": [
                     {
-                      "type": "null"
+                      "$ref": "#/components/schemas/FormSubmissionRestrictionResponse"
                     },
                     {
-                      "$ref": "#/components/schemas/FormSubmissionRestrictionResponse"
+                      "type": "null"
                     }
                   ]
                 }
@@ -7077,10 +7070,10 @@
           "commented_by": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/User"
               },
               {
-                "$ref": "#/components/schemas/User"
+                "type": "null"
               }
             ]
           },
@@ -7094,10 +7087,10 @@
           "redmine_author_snapshot": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/RedmineUserSnapshotResponse"
               },
               {
-                "$ref": "#/components/schemas/RedmineUserSnapshotResponse"
+                "type": "null"
               }
             ]
           },
@@ -7206,10 +7199,10 @@
           "name": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/NonEmptyString"
               },
               {
-                "$ref": "#/components/schemas/NonEmptyString"
+                "type": "null"
               }
             ]
           }
@@ -7676,10 +7669,10 @@
           "content": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/NonEmptyString"
               },
               {
-                "$ref": "#/components/schemas/NonEmptyString"
+                "type": "null"
               }
             ]
           }
@@ -7764,10 +7757,10 @@
           "restriction": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/ErrorRestriction"
               },
               {
-                "$ref": "#/components/schemas/ErrorRestriction"
+                "type": "null"
               }
             ]
           },
@@ -7879,10 +7872,10 @@
           "settings": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/FormSettingsSchema"
               },
               {
-                "$ref": "#/components/schemas/FormSettingsSchema"
+                "type": "null"
               }
             ]
           },
@@ -7923,10 +7916,10 @@
           "name": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/NonEmptyString"
               },
               {
-                "$ref": "#/components/schemas/NonEmptyString"
+                "type": "null"
               }
             ]
           }
@@ -8062,10 +8055,10 @@
           "answer_settings": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/AnswerSettingsSchema"
               },
               {
-                "$ref": "#/components/schemas/AnswerSettingsSchema"
+                "type": "null"
               }
             ]
           },
@@ -8218,10 +8211,10 @@
           "settings": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/FormSettingsSchema"
               },
               {
-                "$ref": "#/components/schemas/FormSettingsSchema"
+                "type": "null"
               }
             ]
           },
