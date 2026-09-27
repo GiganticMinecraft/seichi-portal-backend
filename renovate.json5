@@ -37,7 +37,10 @@
         "utoipa-axum",
         "utoipa-swagger-ui"
       ],
-      "groupName": "Utoipa"
+      "groupName": "Utoipa",
+      // Renovate は同じグループ内でも major と minor の更新を分けるため、
+      // 関連するクレートを互換性のあるバージョンへまとめて更新する。
+      "separateMajorMinor": false
     },
     {
       "matchPackageNames": [
