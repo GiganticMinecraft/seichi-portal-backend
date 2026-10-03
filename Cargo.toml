@@ -19,7 +19,7 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.53.2", features = ["full"] }
 axum = { version = "0.8.9", features = ["multipart"] }
 axum-extra = { version = "0.12.6", features = ["query", "typed-header"] }
 serde = { version = "1.0.229", features = ["derive"] }
