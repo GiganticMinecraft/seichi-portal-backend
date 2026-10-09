@@ -7,7 +7,9 @@ default-run = "entrypoint"
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
-axum-tracing-opentelemetry = "0.39.1"
+# リクエストのスパンを INFO にし、info で絞った stdout ログ側からも見えるようにする
+# (ログ行に trace_id を付けるため。既定の TRACE だとログのレイヤーから見えない)
+axum-tracing-opentelemetry = { version = "0.39.1", features = ["tracing_level_info"] }
 common = { path = "../common" }
 hyper = { version = "1.12.0", features = ["full"] }
 json-subscriber = { version = "0.3.0", features = ["tracing-opentelemetry-0-33"] }

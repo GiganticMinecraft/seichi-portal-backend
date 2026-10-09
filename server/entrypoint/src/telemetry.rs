@@ -13,9 +13,12 @@ use axum::{
 };
 use common::trace_flow;
 use tokio::runtime::Handle;
-use tracing::{Level, Span};
+use tracing::{Level, Metadata, Span, subscriber::Interest};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use tracing_subscriber::filter::{LevelFilter, Targets};
+use tracing_subscriber::{
+    filter::{LevelFilter, Targets},
+    layer::{Context, Filter},
+};
 
 const SERVICE_NAME: &str = "seichi-portal-backend";
 
@@ -138,6 +141,41 @@ pub fn otel_span_filter() -> Targets {
         .with_target("domain", Level::INFO)
         .with_target("resource", Level::INFO)
         .with_target("resource::repository", LevelFilter::OFF)
+}
+
+/// stdout へのログ出力レイヤーに掛けるフィルター ([`log_span_filter`] で作る)。
+///
+/// - [`otel_span_filter`] で Tempo へ送らないスパン (repository 層など) をログ側からも見えなくする。
+///   json-subscriber はイベントの直近の親スパンからしか trace_id を取らないため、送らないスパンの
+///   中で出たログは trace_id を失う。per-layer filter で隠したスパンは飛ばされ、直近の祖先
+///   (= 送られるスパン) が親として扱われるので、ログには常に Tempo にあるスパンの ID が付く。
+///   イベント自体は通常どおり EnvFilter の判断に従う。
+/// - コールサイトの判定を常に `Interest::sometimes` にし、イベントごとに per-layer filter の判定を
+///   やり直させる。tracing-subscriber 0.3.23 では、`log::log_enabled!` (LogTracer 経由) などで
+///   どのレイヤーも無効と答えた問い合わせの判定結果がスレッドローカルに残り、次のイベントの
+///   コールサイトが `Interest::always` だと判定がやり直されずに、その残りで捨てられてしまう
+///   (sqlx がクエリごとに問い合わせるため、DB を使ったリクエストのアクセスログが消えていた)。
+pub struct LogSpanFilter {
+    exported: Targets,
+}
+
+pub fn log_span_filter() -> LogSpanFilter {
+    LogSpanFilter {
+        exported: otel_span_filter(),
+    }
+}
+
+impl<S> Filter<S> for LogSpanFilter {
+    fn enabled(&self, metadata: &Metadata<'_>, _: &Context<'_, S>) -> bool {
+        !metadata.is_span()
+            || self
+                .exported
+                .would_enable(metadata.target(), metadata.level())
+    }
+
+    fn callsite_enabled(&self, _: &'static Metadata<'static>) -> Interest {
+        Interest::sometimes()
+    }
 }
 
 /// HTTP リクエストごとに、トレースへ流れの種類を付け、trace ID 付きのアクセスログを 1 行出す。

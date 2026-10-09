@@ -1,5 +1,9 @@
 use tracing::Subscriber;
-use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::{
+    EnvFilter, Layer, filter::FilterExt, fmt::MakeWriter, registry::LookupSpan,
+};
+
+use crate::telemetry;
 
 /// stdout ログを JSON にするかどうかを判定します。
 ///
@@ -9,6 +13,50 @@ pub fn json_logs_enabled(env_name: &str, log_format: Option<&str>) -> bool {
     match log_format {
         Some(format) => format.eq_ignore_ascii_case("json"),
         None => env_name != "local",
+    }
+}
+
+/// stdout へログを出すレイヤーを作ります。
+///
+/// - `RUST_LOG` (未設定なら `info`) でイベントを絞り、SQL 文 (bind 値を含みうる) は出さない
+/// - OTel へ送らないスパンはログ側からも隠す ([`telemetry::log_span_filter`])
+///
+/// `Option<Layer>` ではなく `Box<dyn Layer>` で返すこと。tracing-subscriber 0.3 の
+/// `Option<L>` は `on_register_dispatch` を中の Layer へ渡さないため、json-subscriber が
+/// Dispatch を受け取れず、`openTelemetry.traceId` を一切出力しなくなる。
+pub fn stdout_log_layer<S>(json: bool, rust_log: Option<&str>) -> Box<dyn Layer<S> + Send + Sync>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    stdout_log_layer_with_writer(json, rust_log, std::io::stdout)
+}
+
+/// [`stdout_log_layer`] の出力先を差し替えられる版 (テスト用)。
+pub fn stdout_log_layer_with_writer<S, W>(
+    json: bool,
+    rust_log: Option<&str>,
+    writer: W,
+) -> Box<dyn Layer<S> + Send + Sync>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    W: for<'w> MakeWriter<'w> + Send + Sync + 'static,
+{
+    let filter = || {
+        EnvFilter::new(rust_log.unwrap_or("info"))
+            .add_directive("sqlx::query=off".parse().expect("directive must be valid"))
+            .and(telemetry::log_span_filter())
+    };
+
+    if json {
+        json_log_layer()
+            .with_writer(writer)
+            .with_filter(filter())
+            .boxed()
+    } else {
+        tracing_subscriber::fmt::layer()
+            .with_writer(writer)
+            .with_filter(filter())
+            .boxed()
     }
 }
 
@@ -136,5 +184,68 @@ mod tests {
             .as_str()
             .expect("spanId must be present");
         assert_eq!(span_id.len(), 16);
+    }
+
+    /// 本番と同じ組み立て (Option で包んだ OTel レイヤー + Box の stdout レイヤー + グローバルではない
+    /// Dispatch 経由の登録) で、OTel へ送らないスパン (repository 層) の中で出たログにも、
+    /// 送られる直近の祖先スパンの trace_id が付くこと
+    #[test]
+    fn log_inside_unexported_span_carries_trace_id_of_exported_ancestor() {
+        use tracing_subscriber::{EnvFilter, filter::FilterExt, layer::Layer};
+
+        use crate::telemetry::{log_span_filter, otel_span_filter};
+
+        let capture = Capture::default();
+        let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder().build();
+        let stdout_layer = json_log_layer()
+            .with_writer(capture.clone())
+            .with_filter(EnvFilter::new("info").and(log_span_filter()))
+            .boxed();
+        let subscriber = tracing_subscriber::registry()
+            .with(Some(
+                tracing_opentelemetry::layer()
+                    .with_tracer(provider.tracer("test"))
+                    .with_filter(otel_span_filter()),
+            ))
+            .with(stdout_layer);
+
+        tracing::subscriber::with_default(subscriber, || {
+            // axum-tracing-opentelemetry (tracing_level_info) が作るリクエストのスパン
+            let request = tracing::info_span!(target: "otel::tracing", "GET /api/v1/forms");
+            let _request = request.enter();
+            let repository =
+                tracing::info_span!(target: "resource::repository::form_repository_impl", "list");
+            let _repository = repository.enter();
+            tracing::error!(target: "resource::repository::form_repository_impl", "boom");
+        });
+
+        let json = captured_json(&capture);
+        assert_eq!(json["message"], "boom", "イベント自体は出力される");
+        let trace_id = json["openTelemetry"]["traceId"]
+            .as_str()
+            .expect("送らないスパンの中でも traceId が付く");
+        assert_ne!(trace_id, "0".repeat(32));
+    }
+
+    /// `Option` で包むと json-subscriber に Dispatch が渡らず trace_id が消える
+    /// (tracing-subscriber 0.3 の挙動)。stdout_log_layer が Box を返す理由の回帰テスト
+    #[test]
+    fn option_wrapped_json_layer_loses_trace_id() {
+        let capture = Capture::default();
+        let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder().build();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")))
+            .with(Some(json_log_layer().with_writer(capture.clone())));
+
+        tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!("request");
+            let _guard = span.enter();
+            info!("with trace");
+        });
+
+        assert!(
+            captured_json(&capture).get("openTelemetry").is_none(),
+            "この前提が変わったら stdout_log_layer の Box をやめてよい"
+        );
     }
 }
