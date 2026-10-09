@@ -3204,6 +3204,7 @@ dependencies = [
  "portable-atomic",
  "rand 0.9.5",
  "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -3471,6 +3472,7 @@ dependencies = [
  "futures",
  "itertools 0.15.0",
  "opentelemetry",
+ "opentelemetry_sdk",
  "resource",
  "serde",
  "serde_json",
@@ -3478,6 +3480,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-opentelemetry",
+ "tracing-subscriber",
  "types",
  "usecase",
  "utoipa",
@@ -5615,11 +5618,13 @@ dependencies = [
  "errors",
  "futures",
  "opentelemetry",
+ "opentelemetry_sdk",
  "resource",
  "serde_json",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
+ "tracing-subscriber",
  "types",
  "uuid",
 ]
