@@ -46,16 +46,14 @@ jobs:
   rustfmt:
     name: rustfmt check
     runs-on: ubuntu-latest
-    env:
-      RUST_VERSION: "$(grep -oP '(?<=channel = \").*(?=\")' rust-toolchain.toml)"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: echo "RUST_VERSION=$(sed -n 's/channel = "\(.*\)\"/\1/p' rust-toolchain.toml)" >> $GITHUB_ENV
       - name: Setup rust toolchain
         uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          target: ${{ matrix.cross-target }}
           components: rustfmt
       - name: Rustfmt check
         run: cargo fmt --all -- --check
