@@ -28,4 +28,6 @@ utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 
 [dev-dependencies]
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
 tower = { version = "0.5.3", features = ["util"] }
+tracing-subscriber = { version = "0.3.23", features = ["std", "registry"] }

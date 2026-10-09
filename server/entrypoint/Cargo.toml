@@ -40,6 +40,9 @@ utoipa-swagger-ui = { workspace = true }
 [package.metadata.cargo-udeps.ignore]
 development = ["cargo-husky"]
 
+[dev-dependencies]
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
+
 [dev-dependencies.cargo-husky]
 version = "1.5.0"
 default-features = false # Disable features which are enabled by default
