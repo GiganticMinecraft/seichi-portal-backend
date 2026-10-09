@@ -12,7 +12,7 @@ use axum::{
 };
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
-use domain::search::models::SearchableFieldsWithOperation;
+use domain::search::models::SearchSyncEvent;
 use entrypoint::{
     logging, openapi, panic_hook, profiling, session::SessionConfig, telemetry,
     turnstile::TurnstileConfig,
@@ -57,7 +57,7 @@ use utoipa_swagger_ui::SwaggerUi;
 async fn main() -> anyhow::Result<()> {
     let turnstile_config = TurnstileConfig::from_environment()?;
     let session_config = SessionConfig::from_environment()?;
-    let tracer_provider = telemetry::init_tracer_provider();
+    let telemetry_providers = telemetry::init_providers();
 
     // SQL 文の出力 (bind 値を含みうる) はログへ出さない
     let stdout_log_filter = || {
@@ -83,8 +83,9 @@ async fn main() -> anyhow::Result<()> {
     };
 
     tracing_subscriber::registry()
-        .with(tracer_provider.as_ref().map(|provider| {
-            tracing_opentelemetry::layer().with_tracer(provider.tracer("seichi-portal-backend"))
+        .with(telemetry_providers.as_ref().map(|providers| {
+            tracing_opentelemetry::layer()
+                .with_tracer(providers.tracer_provider.tracer("seichi-portal-backend"))
         }))
         .with(json_log_layer)
         .with(pretty_log_layer)
@@ -99,9 +100,15 @@ async fn main() -> anyhow::Result<()> {
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
 
+    // コールバック型のメトリクスはハンドルを drop すると外れうるため、プロセス終了まで保持する
+    let _observable_metrics = (
+        conn.register_pool_metrics(),
+        telemetry::register_runtime_metrics(tokio::runtime::Handle::current()),
+    );
+
     let mut discord_connection = resource::outgoing::connection::ConnectionPool::new().await;
 
-    let (sender, receiver) = mpsc::channel::<SearchableFieldsWithOperation>(100);
+    let (sender, receiver) = mpsc::channel::<SearchSyncEvent>(100);
 
     let messaging_conn = resource::messaging::connection::MessagingConnectionPool::new(sender);
 
@@ -327,12 +334,12 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     }
 
-    if let Some(provider) = tracer_provider {
-        // provider.shutdown() は残りのスパンを blocking export するため専用スレッドで行う
+    if let Some(providers) = telemetry_providers {
+        // shutdown() は残りのスパンとメトリクスを blocking export するため専用スレッドで行う
         tokio::task::spawn_blocking(move || {
-            if let Err(error) = provider.shutdown() {
-                info!("failed to shutdown OpenTelemetry tracer provider: {error}");
-            }
+            providers.shutdown().into_iter().for_each(|error| {
+                info!("failed to shutdown OpenTelemetry {error}");
+            });
         })
         .await?;
     }

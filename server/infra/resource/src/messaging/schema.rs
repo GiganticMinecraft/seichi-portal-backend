@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use chrono::{DateTime, Utc};
 use domain::{
     form::answer::AnswerStatus,
     search::models::{
@@ -34,6 +35,9 @@ pub enum Operation {
 pub struct Source {
     #[serde(default)]
     pub table: Option<String>,
+    /// 変更が MariaDB でコミットされた時刻 (UNIX epoch ミリ秒)
+    #[serde(default)]
+    pub ts_ms: Option<i64>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -49,7 +53,35 @@ pub struct Payload {
     pub after: Value,
 }
 
+impl Operation {
+    /// Debezium の `op` そのままの表記 (`c` / `u` / `d` / `r`)。メトリクスやスパンの属性に使う。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "c",
+            Self::Update => "u",
+            Self::Delete => "d",
+            Self::Read => "r",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 impl Payload {
+    /// 変更元のテーブル名。ハートビートなどテーブルを持たないイベントでは `None`。
+    pub fn table(&self) -> Option<&str> {
+        self.source
+            .as_ref()
+            .and_then(|source| source.table.as_deref())
+    }
+
+    /// 変更が MariaDB でコミットされた時刻。
+    pub fn source_committed_at(&self) -> Option<DateTime<Utc>> {
+        self.source
+            .as_ref()
+            .and_then(|source| source.ts_ms)
+            .and_then(DateTime::from_timestamp_millis)
+    }
+
     fn try_into_actual_data_fields(
         table_name: &str,
         value: Value,

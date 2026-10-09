@@ -6,6 +6,7 @@ use crate::{
     },
     user_reference_resolver::resolve_user_references,
 };
+use chrono::Utc;
 use domain::repository::form::answer_entry_repository::{AnswerEntryRepository, AnswerListFilter};
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_attachment_repository::CommentAttachmentRepository;
@@ -32,8 +33,8 @@ use domain::{
     search::models::{
         AnswerSearchHit, AnswerTitleSearchDocument, FormAnswerComments, FormMetaData,
         LabelForFormAnswers, LabelForForms, NumberOfRecords, NumberOfRecordsPerAggregate,
-        Operation, RealAnswers, SearchIndex, SearchableFields, SearchableFieldsWithOperation,
-        UserSearchHit, Users,
+        Operation, RealAnswers, SearchIndex, SearchSyncEvent, SearchableFields,
+        SearchableFieldsWithOperation, UserSearchHit, Users,
     },
     types::authorization_guard::{
         Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Read,
@@ -41,15 +42,19 @@ use domain::{
 };
 use errors::{Error, domain::DomainError};
 use futures::{StreamExt, TryStreamExt, stream, try_join};
+use opentelemetry::global;
 use std::{
     collections::{HashMap, HashSet},
     future::ready,
     iter::once,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::sync::{mpsc::Receiver, watch};
 use tokio::time;
 use tracing::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+use crate::search_metrics::{SEARCH_SYNC_METRICS, SyncOutcome};
 use uuid::Uuid;
 
 const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
@@ -666,7 +671,7 @@ impl<
 
     pub async fn start_sync(
         &self,
-        receiver: Receiver<SearchableFieldsWithOperation>,
+        receiver: Receiver<SearchSyncEvent>,
         mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
         let mut receiver = receiver;
@@ -681,27 +686,63 @@ impl<
                 _ = shutdown_status.changed() => return Ok(()),
                 pending = receiver.recv() => pending,
             };
-            let Some(pending) = pending else {
+            let Some(SearchSyncEvent {
+                fields: pending,
+                source_committed_at,
+                trace_context,
+            }) = pending
+            else {
                 return Ok(());
             };
+            let index = pending.0.index().as_str();
+            let parent =
+                global::get_text_map_propagator(|propagator| propagator.extract(&trace_context));
 
             loop {
                 if *shutdown_status.borrow() {
                     return Ok(());
                 }
 
+                // CDC consumer の cdc.process スパンを親にして、MariaDB の変更から
+                // 検索エンジンへの反映までを 1 本のトレースにつなぐ。
+                // キャリアが空 (CDC 以外の経路) の場合はルートスパンになる
+                let span = tracing::info_span!(
+                    parent: None,
+                    "search_engine.sync",
+                    search.index = index,
+                    otel.status_code = tracing::field::Empty,
+                );
+                // 親の設定に失敗してもトレースが分かれるだけで同期には影響しないため無視する
+                let _ = span.set_parent(parent.clone());
+                let started_at = Instant::now();
+
                 let result = tokio::select! {
                     biased;
                     _ = shutdown_status.changed() => return Ok(()),
                     result = self.search_repository
                         .sync_search_engine(std::slice::from_ref(&pending))
-                        // CDC consumer からチャンネル越しに受け取るため trace context はなく、
-                        // 同期 1 件ごとに新しいルートスパンを作る
-                        .instrument(tracing::info_span!(parent: None, "search_engine.sync")) => result,
+                        .instrument(span.clone()) => result,
                 };
+                let outcome = if result.is_ok() {
+                    SyncOutcome::Success
+                } else {
+                    span.record("otel.status_code", "ERROR");
+                    SyncOutcome::Error
+                };
+                SEARCH_SYNC_METRICS.record_sync_attempt(
+                    index,
+                    outcome,
+                    started_at.elapsed().as_secs_f64(),
+                );
 
                 match result {
-                    Ok(()) => break,
+                    Ok(()) => {
+                        if let Some(committed_at) = source_committed_at {
+                            let lag = (Utc::now() - committed_at).as_seconds_f64().max(0.0);
+                            SEARCH_SYNC_METRICS.record_sync_lag(index, lag);
+                        }
+                        break;
+                    }
                     Err(error) => {
                         tracing::warn!(
                             error = %error,
@@ -824,6 +865,7 @@ impl<
         let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
         let repository_records = self.repository_records().await?;
         let out_of_sync_indexes = search_engine_records.out_of_sync_indexes(&repository_records);
+        SEARCH_SYNC_METRICS.record_out_of_sync_indexes(out_of_sync_indexes.len());
 
         if out_of_sync_indexes.is_empty() {
             return Ok(None);
@@ -1246,14 +1288,14 @@ mod tests {
         }
     }
 
-    fn user_search_event(id: Uuid) -> SearchableFieldsWithOperation {
-        (
+    fn user_search_event(id: Uuid) -> SearchSyncEvent {
+        SearchSyncEvent::new((
             SearchableFields::Users(Users {
                 id,
                 name: id.to_string(),
             }),
             Operation::Update,
-        )
+        ))
     }
 
     fn user_id_from_search_event(data: &[SearchableFieldsWithOperation]) -> Uuid {

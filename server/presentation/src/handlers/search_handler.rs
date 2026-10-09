@@ -9,8 +9,7 @@ use axum::{
     response::IntoResponse,
 };
 use domain::{
-    account::models::AccountUser, repository::Repositories,
-    search::models::SearchableFieldsWithOperation,
+    account::models::AccountUser, repository::Repositories, search::models::SearchSyncEvent,
 };
 use errors::{Error, ErrorExtra, presentation::PresentationError};
 use resource::repository::RealInfrastructureRepository;
@@ -256,7 +255,7 @@ pub async fn search_answers(
 
 pub async fn start_sync(
     repository: RealInfrastructureRepository,
-    receiver: Receiver<SearchableFieldsWithOperation>,
+    receiver: Receiver<SearchSyncEvent>,
     shutdown_status: watch::Receiver<bool>,
     search_engine_initialization: watch::Receiver<SearchEngineInitializationStatus>,
 ) -> Result<(), Error> {
