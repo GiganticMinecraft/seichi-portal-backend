@@ -6,9 +6,11 @@ use crate::form::{
     models::{FormDescription, FormId, FormLabelId, FormTitle},
     question::QuestionId,
 };
+use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use deriving_via::DerivingVia;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use types::natural_f32::NonNegativeF32;
 use uuid::Uuid;
 #[derive(Debug)]
@@ -58,6 +60,32 @@ impl SearchableFields {
 }
 
 pub type SearchableFieldsWithOperation = (SearchableFields, Operation);
+
+/// CDC で受け取り、検索エンジンへ反映する 1 件分の変更。
+///
+/// CDC consumer から同期タスクへチャンネル越しに渡すため、
+/// 反映までの遅延計測とトレースの引き継ぎに使う情報も一緒に運ぶ。
+#[derive(Debug)]
+pub struct SearchSyncEvent {
+    pub fields: SearchableFieldsWithOperation,
+    /// 変更が MariaDB でコミットされた時刻 (Debezium の `source.ts_ms`)。
+    /// 取得できないイベントでは `None`。
+    pub source_committed_at: Option<DateTime<Utc>>,
+    /// 受信処理のトレースを同期処理へ引き継ぐための W3C Trace Context キャリア。
+    /// domain を OpenTelemetry に依存させないよう、ヘッダ形式の文字列で持つ。
+    pub trace_context: HashMap<String, String>,
+}
+
+impl SearchSyncEvent {
+    /// 遅延計測とトレースの引き継ぎ情報を持たない同期イベントを作る。
+    pub fn new(fields: SearchableFieldsWithOperation) -> Self {
+        Self {
+            fields,
+            source_committed_at: None,
+            trace_context: HashMap::new(),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FormMetaData {

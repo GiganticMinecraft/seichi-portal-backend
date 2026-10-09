@@ -1,6 +1,7 @@
 use std::{fmt::Debug, future::Future, pin::Pin, time::Duration};
 
 use async_trait::async_trait;
+use opentelemetry::{KeyValue, global, metrics::ObservableGauge};
 use redis::Client;
 use sqlx::{Connection, MySql, mysql::MySqlPoolOptions};
 
@@ -55,6 +56,57 @@ impl ConnectionPool {
             meilisearch_client: meilisearch_sdk::client::Client::new(host, api_key.to_owned())
                 .unwrap_or_else(|_| panic!("Cannot establish connect to MeiliSearch.")),
         }
+    }
+
+    /// DB コネクションプールの使用状況をメトリクスとして登録する。
+    ///
+    /// global meter provider を設定した後に呼ぶこと。返り値を drop するとコールバックが外れうるため、
+    /// プロセス終了まで保持する。属性名は OpenTelemetry の database client semantic conventions に合わせる。
+    pub fn register_pool_metrics(&self) -> Vec<ObservableGauge<u64>> {
+        let pools = [
+            ("portal", self.rdb_pool.clone()),
+            ("minecraft_bans", self.minecraft_bans_pool.clone()),
+        ];
+        let meter = global::meter("seichi-portal-backend");
+        let count_pools = pools.clone();
+
+        vec![
+            meter
+                .u64_observable_gauge("db.client.connection.count")
+                .with_description("状態ごとのコネクション数")
+                .with_unit("{connection}")
+                .with_callback(move |observer| {
+                    count_pools.iter().for_each(|(name, pool)| {
+                        let idle = pool.num_idle() as u64;
+                        let used = u64::from(pool.size()).saturating_sub(idle);
+                        [("idle", idle), ("used", used)]
+                            .into_iter()
+                            .for_each(|(state, count)| {
+                                observer.observe(
+                                    count,
+                                    &[
+                                        KeyValue::new("db.client.connection.pool.name", *name),
+                                        KeyValue::new("db.client.connection.state", state),
+                                    ],
+                                );
+                            });
+                    });
+                })
+                .build(),
+            meter
+                .u64_observable_gauge("db.client.connection.max")
+                .with_description("プールが開けるコネクション数の上限")
+                .with_unit("{connection}")
+                .with_callback(move |observer| {
+                    pools.iter().for_each(|(name, pool)| {
+                        observer.observe(
+                            u64::from(pool.options().get_max_connections()),
+                            &[KeyValue::new("db.client.connection.pool.name", *name)],
+                        );
+                    });
+                })
+                .build(),
+        ]
     }
 
     pub async fn ping_db(&self) -> bool {
