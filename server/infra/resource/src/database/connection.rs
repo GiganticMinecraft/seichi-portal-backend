@@ -1,9 +1,12 @@
-use std::{fmt::Debug, future::Future, pin::Pin, time::Duration};
+use std::{fmt::Debug, future::Future, pin::Pin, str::FromStr, time::Duration};
 
 use async_trait::async_trait;
 use opentelemetry::{KeyValue, global, metrics::ObservableGauge};
 use redis::Client;
-use sqlx::{Connection, MySql, mysql::MySqlPoolOptions};
+use sqlx::{
+    ConnectOptions, Connection, MySql,
+    mysql::{MySqlConnectOptions, MySqlPoolOptions},
+};
 
 use crate::database::{
     components::DatabaseComponents,
@@ -35,18 +38,31 @@ impl ConnectionPool {
         format!("mysql://{user}:{password}@{host}:{port}/{database}")
     }
 
+    /// SQL 文のログ出力は止める。
+    ///
+    /// stdout のログでは元々 `sqlx::query` を出していない (bind 値を含みうるため)。そのうえ sqlx は
+    /// クエリごとに `log::log_enabled!` / `tracing::enabled!` で出力要否を問い合わせ、tracing-subscriber
+    /// 0.3 の per-layer filter ではその問い合わせの判定が残って直後のログが捨てられることがあるため
+    /// (`entrypoint::telemetry::LogSpanFilter` を参照)、問い合わせ自体をしないようにする。
+    /// クエリの所要時間は database 層のクライアントスパンで Tempo に残る。
+    fn connect_options(url: &str) -> MySqlConnectOptions {
+        MySqlConnectOptions::from_str(url)
+            .unwrap_or_else(|_| panic!("Invalid MySQL connection URL."))
+            .disable_statement_logging()
+    }
+
     pub async fn new() -> Self {
         let database_url = Self::database_url();
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
 
         let rdb_pool = MySqlPoolOptions::new()
-            .connect(&database_url)
+            .connect_with(Self::connect_options(&database_url))
             .await
             .unwrap_or_else(|_| panic!("Cannot establish portal database connection."));
         let minecraft_bans_database_url = std::env::var("MINECRAFT_BANS_DATABASE_URL")
             .unwrap_or_else(|_| panic!("MINECRAFT_BANS_DATABASE_URL is not set."));
         let minecraft_bans_pool = MySqlPoolOptions::new()
-            .connect(&minecraft_bans_database_url)
+            .connect_with(Self::connect_options(&minecraft_bans_database_url))
             .await
             .unwrap_or_else(|_| panic!("Cannot establish Minecraft bans database connection."));
 

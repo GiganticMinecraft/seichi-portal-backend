@@ -1,9 +1,10 @@
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 
-use common::config::FRONTEND;
+use common::{config::FRONTEND, trace_flow};
 use domain::{
     auth::Actor, repository::global_discord_webhook_repository::GlobalDiscordWebhookRepository,
 };
+use opentelemetry::global;
 use resource::{
     outgoing::discord_webhook_sender::{
         DiscordWebhookField, DiscordWebhookMessage, DiscordWebhookSender,
@@ -14,7 +15,8 @@ use tokio::{
     sync::broadcast::{self, error::RecvError},
     task::JoinHandle,
 };
-use tracing::warn;
+use tracing::{Instrument, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use usecase::application_event::{
     AnswerSubmissionActor, ApplicationActor, ApplicationEvent, ApplicationEventPublisher,
     EventDetail,
@@ -22,7 +24,15 @@ use usecase::application_event::{
 
 const EVENT_CHANNEL_CAPACITY: usize = 256;
 
-static EVENT_CHANNEL: LazyLock<broadcast::Sender<ApplicationEvent>> = LazyLock::new(|| {
+/// 通知ワーカーへ渡すイベント。発生元リクエストの trace context を W3C 形式で一緒に運び、
+/// 通知の配信を発生元のトレースの子としてつなぐ。
+#[derive(Clone, Debug)]
+struct TracedEvent {
+    event: ApplicationEvent,
+    trace_context: HashMap<String, String>,
+}
+
+static EVENT_CHANNEL: LazyLock<broadcast::Sender<TracedEvent>> = LazyLock::new(|| {
     let (sender, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
     sender
 });
@@ -35,7 +45,20 @@ impl ApplicationEventPublisher for GlobalApplicationEventPublisher {
     ///
     /// チャネル容量を超えたイベントは receiver 側で lag として検出し、worker が警告する。
     fn publish(&self, event: ApplicationEvent) {
-        if EVENT_CHANNEL.send(event).is_err() {
+        // Span::current().context() は OTel に送らないスパン (otel_span_filter で除外したもの)
+        // の中だと空のコンテキストを返すため、context activation が保つ OTel の現在コンテキスト
+        // (= 送られる直近のスパン) を使う
+        let mut trace_context = HashMap::new();
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&opentelemetry::Context::current(), &mut trace_context)
+        });
+        if EVENT_CHANNEL
+            .send(TracedEvent {
+                event,
+                trace_context,
+            })
+            .is_err()
+        {
             warn!("application event could not be delivered to the Discord webhook worker");
         }
     }
@@ -44,7 +67,7 @@ impl ApplicationEventPublisher for GlobalApplicationEventPublisher {
 pub(crate) static APPLICATION_EVENT_PUBLISHER: GlobalApplicationEventPublisher =
     GlobalApplicationEventPublisher;
 
-fn subscribe() -> broadcast::Receiver<ApplicationEvent> {
+fn subscribe() -> broadcast::Receiver<TracedEvent> {
     EVENT_CHANNEL.subscribe()
 }
 
@@ -66,14 +89,26 @@ pub fn start_global_discord_webhook_worker(
                 Err(RecvError::Closed) => break,
             };
 
-            handle_event(&repository, &sender, &frontend_url, event).await;
+            // 発生元リクエストのトレースの子にする。発生元が無い (キャリアが空) 場合はルートになる
+            let span = tracing::info_span!(
+                parent: None,
+                "discord_webhook.notify",
+                seichi_portal.flow = trace_flow::NOTIFICATION,
+                notification.operation = operation_name(&event.event),
+            );
+            let parent = global::get_text_map_propagator(|propagator| {
+                propagator.extract(&event.trace_context)
+            });
+            // 親の設定に失敗してもトレースが分かれるだけで通知には影響しないため無視する
+            let _ = span.set_parent(parent);
+
+            handle_event(&repository, &sender, &frontend_url, event.event)
+                .instrument(span)
+                .await;
         }
     })
 }
 
-/// イベント発生元とはチャンネル越しに分離されているため、通知 1 件ごとに
-/// 新しいルートスパンを作る。
-#[tracing::instrument(name = "discord_webhook.notify", parent = None, skip_all)]
 async fn handle_event(
     repository: &RealInfrastructureRepository,
     sender: &DiscordWebhookSender,

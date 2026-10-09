@@ -59,36 +59,21 @@ async fn main() -> anyhow::Result<()> {
     let session_config = SessionConfig::from_environment()?;
     let telemetry_providers = telemetry::init_providers();
 
-    // SQL 文の出力 (bind 値を含みうる) はログへ出さない
-    let stdout_log_filter = || {
-        tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
-        )
-        .add_directive("sqlx::query=off".parse().expect("directive must be valid"))
-    };
-    let json_logs_enabled = logging::json_logs_enabled(
-        ENV.name.as_str(),
-        std::env::var("LOG_FORMAT").ok().as_deref(),
+    let stdout_log_layer = logging::stdout_log_layer(
+        logging::json_logs_enabled(
+            ENV.name.as_str(),
+            std::env::var("LOG_FORMAT").ok().as_deref(),
+        ),
+        std::env::var("RUST_LOG").ok().as_deref(),
     );
-    let (json_log_layer, pretty_log_layer) = if json_logs_enabled {
-        (
-            Some(logging::json_log_layer().with_filter(stdout_log_filter())),
-            None,
-        )
-    } else {
-        (
-            None,
-            Some(tracing_subscriber::fmt::layer().with_filter(stdout_log_filter())),
-        )
-    };
 
     tracing_subscriber::registry()
         .with(telemetry_providers.as_ref().map(|providers| {
             tracing_opentelemetry::layer()
                 .with_tracer(providers.tracer_provider.tracer("seichi-portal-backend"))
+                .with_filter(telemetry::otel_span_filter())
         }))
-        .with(json_log_layer)
-        .with(pretty_log_layer)
+        .with(stdout_log_layer)
         .init();
     panic_hook::install();
 
@@ -243,6 +228,8 @@ async fn main() -> anyhow::Result<()> {
         .fallback(not_found_handler)
         // handler 内 panic で 500 を返し、コネクションを維持する
         .layer(CatchPanicLayer::new())
+        // 流れの種類の属性と trace ID 付きアクセスログ (OtelAxumLayer より内側に置く)
+        .layer(middleware::from_fn(telemetry::record_request))
         // レスポンスヘッダーへの trace context 挿入 (OtelAxumLayer より内側に置く)
         .layer(OtelInResponseLayer)
         // リクエストごとの OTel スパン開始。/health はトレース対象外

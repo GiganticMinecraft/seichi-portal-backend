@@ -4,7 +4,21 @@ use opentelemetry_sdk::{
     Resource, metrics::SdkMeterProvider, propagation::TraceContextPropagator,
     trace::SdkTracerProvider,
 };
+use std::time::Instant;
+
+use axum::{
+    extract::{MatchedPath, Request},
+    middleware::Next,
+    response::Response,
+};
+use common::trace_flow;
 use tokio::runtime::Handle;
+use tracing::{Level, Metadata, Span, subscriber::Interest};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_subscriber::{
+    filter::{LevelFilter, Targets},
+    layer::{Context, Filter},
+};
 
 const SERVICE_NAME: &str = "seichi-portal-backend";
 
@@ -103,6 +117,100 @@ fn resource() -> Resource {
         .build()
 }
 
+/// OpenTelemetry へ送るスパンを、トレースとして意味のあるものに絞るフィルタ。
+///
+/// 許可リスト方式で、次だけを Tempo へ送る。
+/// - HTTP サーバースパン (axum-tracing-opentelemetry。target `otel::tracing`)
+/// - 外部 HTTP 呼び出し (reqwest-tracing)
+/// - このワークスペースのクレートが作るスパン
+///
+/// lapin / serenity / h2 / hyper などライブラリ内部のスパン (`Connection`、`io_loop`、
+/// `Prioritize::queue_frame` など) は、親を持たないルートスパンとして大量に出てトレース検索を
+/// 埋めるため送らない。
+///
+/// `resource::repository` は database 層へ委譲するだけのものが多く、同名スパンが二重に
+/// ネストする (`list` → `list` → `mariadb`) ため送らない。除外したスパンの子は、
+/// 送られる直近の祖先 (ハンドラーやユースケース) にぶら下がる。
+pub fn otel_span_filter() -> Targets {
+    Targets::new()
+        .with_target("otel::tracing", Level::TRACE)
+        .with_target("reqwest_tracing", Level::TRACE)
+        .with_target("entrypoint", Level::INFO)
+        .with_target("presentation", Level::INFO)
+        .with_target("usecase", Level::INFO)
+        .with_target("domain", Level::INFO)
+        .with_target("resource", Level::INFO)
+        .with_target("resource::repository", LevelFilter::OFF)
+}
+
+/// stdout へのログ出力レイヤーに掛けるフィルター ([`log_span_filter`] で作る)。
+///
+/// - [`otel_span_filter`] で Tempo へ送らないスパン (repository 層など) をログ側からも見えなくする。
+///   json-subscriber はイベントの直近の親スパンからしか trace_id を取らないため、送らないスパンの
+///   中で出たログは trace_id を失う。per-layer filter で隠したスパンは飛ばされ、直近の祖先
+///   (= 送られるスパン) が親として扱われるので、ログには常に Tempo にあるスパンの ID が付く。
+///   イベント自体は通常どおり EnvFilter の判断に従う。
+/// - コールサイトの判定を常に `Interest::sometimes` にし、イベントごとに per-layer filter の判定を
+///   やり直させる。tracing-subscriber 0.3.23 では、`log::log_enabled!` (LogTracer 経由) などで
+///   どのレイヤーも無効と答えた問い合わせの判定結果がスレッドローカルに残り、次のイベントの
+///   コールサイトが `Interest::always` だと判定がやり直されずに、その残りで捨てられてしまう
+///   (sqlx がクエリごとに問い合わせるため、DB を使ったリクエストのアクセスログが消えていた)。
+pub struct LogSpanFilter {
+    exported: Targets,
+}
+
+pub fn log_span_filter() -> LogSpanFilter {
+    LogSpanFilter {
+        exported: otel_span_filter(),
+    }
+}
+
+impl<S> Filter<S> for LogSpanFilter {
+    fn enabled(&self, metadata: &Metadata<'_>, _: &Context<'_, S>) -> bool {
+        !metadata.is_span()
+            || self
+                .exported
+                .would_enable(metadata.target(), metadata.level())
+    }
+
+    fn callsite_enabled(&self, _: &'static Metadata<'static>) -> Interest {
+        Interest::sometimes()
+    }
+}
+
+/// HTTP リクエストごとに、トレースへ流れの種類を付け、trace ID 付きのアクセスログを 1 行出す。
+///
+/// `OtelAxumLayer` の内側に置くこと。そうすると現在のスパンが HTTP サーバースパンになり、
+/// JSON ログに `openTelemetry.traceId` が付いて Loki → Tempo の相互リンクに使える。
+/// probe (`/health`) はトレースもログも出さない。
+pub async fn record_request(request: Request, next: Next) -> Response {
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or_else(|| "unmatched".to_owned(), |path| path.as_str().to_owned());
+    if route.starts_with("/health") {
+        return next.run(request).await;
+    }
+
+    Span::current().set_attribute(trace_flow::ATTRIBUTE, trace_flow::USER);
+    let method = request.method().clone();
+    let started_at = Instant::now();
+
+    let response = next.run(request).await;
+    let status_code = response.status().as_u16();
+    let duration_ms = started_at.elapsed().as_secs_f64() * 1000.0;
+
+    tracing::info!(
+        target: "entrypoint::access",
+        method = %method,
+        route = %route,
+        status = status_code,
+        duration_ms,
+        "request completed",
+    );
+    response
+}
+
 /// tokio ランタイムの飽和を見るためのメトリクスを登録します。
 ///
 /// `tokio_unstable` を要求しない stable API の値だけを使います。
@@ -145,7 +253,34 @@ pub fn register_runtime_metrics(handle: Handle) -> Vec<ObservableGauge<u64>> {
 
 #[cfg(test)]
 mod tests {
-    use super::init_providers;
+    use super::{init_providers, otel_span_filter};
+    use tracing::Level;
+
+    #[test]
+    fn otel_span_filter_keeps_application_spans_and_drops_library_internals() {
+        let filter = otel_span_filter();
+        let enabled = |target: &str| filter.would_enable(target, &Level::INFO);
+
+        assert!(enabled("otel::tracing"), "HTTP サーバースパン");
+        assert!(
+            enabled("reqwest_tracing::reqwest_otel_span_builder"),
+            "外部 HTTP 呼び出し"
+        );
+        assert!(enabled("presentation::api::global_discord_webhook"));
+        assert!(enabled("usecase::search"));
+        assert!(enabled("resource::messaging::connection"));
+        assert!(enabled("resource::database::forms::form"));
+
+        assert!(
+            !enabled("resource::repository::form_repository_impls::form_repository_impl"),
+            "database 層と二重になるため送らない"
+        );
+        assert!(!enabled("lapin::channel"));
+        assert!(!enabled("serenity::gateway::shard"));
+        assert!(!enabled("h2::proto::streams::prioritize"));
+        assert!(!enabled("hyper::client"));
+        assert!(!enabled("sqlx::query"));
+    }
 
     /// 環境変数の設定はプロセス全体に影響するため、
     /// 競合しないよう 1 つのテストで順に検証する。

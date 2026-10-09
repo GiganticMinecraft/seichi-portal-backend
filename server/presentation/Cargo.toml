@@ -13,6 +13,8 @@ resource = { path = "../infra/resource" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+opentelemetry = { workspace = true }
+tracing-opentelemetry = { workspace = true }
 usecase = { path = "../usecase" }
 types = { path = "../types" }
 uuid = { workspace = true }

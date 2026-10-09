@@ -8,9 +8,17 @@ use axum_extra::{
 use domain::repository::Repositories;
 use domain::{account::models::AccountUser, auth::Actor};
 use resource::repository::RealInfrastructureRepository;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use usecase::user::UserUseCase;
 
 use crate::handlers::error_handler::ApiError;
+
+/// 現在の HTTP サーバースパンに利用者の権限を付ける。
+/// 遅い・失敗したリクエストを権限 (管理者 / 一般 / 未ログイン) で絞り込むために使う。
+fn record_user_roles(roles: &str) {
+    Span::current().set_attribute("user.roles", roles.to_owned());
+}
 
 fn unauthorized_response(detail: &str) -> ApiError {
     ApiError::unauthorized(detail)
@@ -47,6 +55,7 @@ pub async fn auth(
         .map_err(|_| unauthorized_response("Authorization header is missing."))?;
 
     let user = resolve_user(&repository, auth.token()).await?;
+    record_user_roles(&user.role().to_string());
 
     request.extensions_mut().insert(user);
 
@@ -65,9 +74,11 @@ pub async fn optional_auth(
     match auth {
         Ok(auth) => {
             let user = resolve_user(&repository, auth.token()).await?;
+            record_user_roles(&user.role().to_string());
             request.extensions_mut().insert(Actor::AccountUser(user));
         }
         Err(_) => {
+            record_user_roles("ANONYMOUS");
             request.extensions_mut().insert(Actor::Anonymous);
         }
     }
