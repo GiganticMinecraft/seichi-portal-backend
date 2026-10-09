@@ -1583,6 +1583,87 @@ mod tests {
         );
     }
 
+    /// 定期チェックは、呼び出し元のスパンの中で動いても独立したトレースになり、
+    /// 結果 (乖離したインデックス数・再同期中か) と流れの種類をスパンに残す
+    #[tokio::test]
+    async fn resync_step_is_recorded_as_an_independent_scheduled_trace() {
+        use opentelemetry::trace::{SpanId, TracerProvider as _};
+        use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
+        use tracing::Instrument as _;
+        use tracing_subscriber::layer::SubscriberExt as _;
+
+        let exporter = InMemorySpanExporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_simple_exporter(exporter.clone())
+            .build();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_fetch_search_engine_stats()
+            .returning(|| Ok(NumberOfRecordsPerAggregate::default()));
+        let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
+        let active_form_repository = InMemoryActiveFormRepository::default();
+        let form_label_repository = InMemoryFormLabelRepository;
+        let user_repository = InMemoryUserRepository::default();
+        let answer_entry_repository = InMemoryAnswerEntryRepository::default();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_thread_repository: &comment_thread_repository,
+            comment_attachment_repository: None,
+        };
+
+        use_case
+            .resync_search_engine_step(None)
+            .instrument(tracing::info_span!("caller"))
+            .await
+            .unwrap();
+
+        provider.force_flush().expect("flush must succeed");
+        let spans = exporter
+            .get_finished_spans()
+            .expect("spans must be exported");
+        let span = |name: &str| {
+            spans
+                .iter()
+                .find(|span| span.name == name)
+                .unwrap_or_else(|| panic!("span {name} must be exported"))
+        };
+        let watch = span("search_engine.watch_out_of_sync");
+        let attribute = |key: &str| {
+            watch
+                .attributes
+                .iter()
+                .find(|kv| kv.key.as_str() == key)
+                .map(|kv| kv.value.to_string())
+        };
+
+        assert_eq!(watch.parent_span_id, SpanId::INVALID);
+        assert_ne!(
+            watch.span_context.trace_id(),
+            span("caller").span_context.trace_id()
+        );
+        assert_eq!(
+            attribute("seichi_portal.flow").as_deref(),
+            Some(trace_flow::SCHEDULED)
+        );
+        assert_eq!(
+            attribute("search.out_of_sync_indexes").as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            attribute("search.resync_in_progress").as_deref(),
+            Some("false")
+        );
+    }
+
     #[tokio::test]
     async fn start_sync_returns_when_receiver_is_closed() {
         let search_repository = MockSearchRepository::new();

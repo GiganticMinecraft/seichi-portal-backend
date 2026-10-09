@@ -4,7 +4,7 @@ use common::{config::FRONTEND, trace_flow};
 use domain::{
     auth::Actor, repository::global_discord_webhook_repository::GlobalDiscordWebhookRepository,
 };
-use opentelemetry::global;
+use opentelemetry::{global, propagation::TextMapPropagator};
 use resource::{
     outgoing::discord_webhook_sender::{
         DiscordWebhookField, DiscordWebhookMessage, DiscordWebhookSender,
@@ -32,6 +32,37 @@ struct TracedEvent {
     trace_context: HashMap<String, String>,
 }
 
+/// 現在のトレースコンテキストを W3C 形式のキャリアにする。
+///
+/// Span::current().context() は OTel に送らないスパン (otel_span_filter で除外したもの)
+/// の中だと空のコンテキストを返すため、context activation が保つ OTel の現在コンテキスト
+/// (= 送られる直近のスパン) を使う
+fn current_trace_context(propagator: &dyn TextMapPropagator) -> HashMap<String, String> {
+    let mut trace_context = HashMap::new();
+    propagator.inject_context(&opentelemetry::Context::current(), &mut trace_context);
+    trace_context
+}
+
+impl TracedEvent {
+    /// 通知 1 件を配信するスパンを作る。発生元リクエストのトレースの子にし、
+    /// 発生元が無い (キャリアが空) 場合はルートになる
+    fn notify_span(&self, propagator: &dyn TextMapPropagator) -> tracing::Span {
+        let span = tracing::info_span!(
+            parent: None,
+            "discord_webhook.notify",
+            seichi_portal.flow = trace_flow::NOTIFICATION,
+            notification.operation = operation_name(&self.event),
+        );
+        // extract() は現在のコンテキストを土台にするため、キャリアが空だとワーカー側で
+        // たまたま有効なコンテキストの子になってしまう。空のコンテキストから取り出す
+        let parent =
+            propagator.extract_with_context(&opentelemetry::Context::new(), &self.trace_context);
+        // 親の設定に失敗してもトレースが分かれるだけで通知には影響しないため無視する
+        let _ = span.set_parent(parent);
+        span
+    }
+}
+
 static EVENT_CHANNEL: LazyLock<broadcast::Sender<TracedEvent>> = LazyLock::new(|| {
     let (sender, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
     sender
@@ -45,20 +76,11 @@ impl ApplicationEventPublisher for GlobalApplicationEventPublisher {
     ///
     /// チャネル容量を超えたイベントは receiver 側で lag として検出し、worker が警告する。
     fn publish(&self, event: ApplicationEvent) {
-        // Span::current().context() は OTel に送らないスパン (otel_span_filter で除外したもの)
-        // の中だと空のコンテキストを返すため、context activation が保つ OTel の現在コンテキスト
-        // (= 送られる直近のスパン) を使う
-        let mut trace_context = HashMap::new();
-        global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&opentelemetry::Context::current(), &mut trace_context)
-        });
-        if EVENT_CHANNEL
-            .send(TracedEvent {
-                event,
-                trace_context,
-            })
-            .is_err()
-        {
+        let traced = TracedEvent {
+            event,
+            trace_context: global::get_text_map_propagator(current_trace_context),
+        };
+        if EVENT_CHANNEL.send(traced).is_err() {
             warn!("application event could not be delivered to the Discord webhook worker");
         }
     }
@@ -89,18 +111,7 @@ pub fn start_global_discord_webhook_worker(
                 Err(RecvError::Closed) => break,
             };
 
-            // 発生元リクエストのトレースの子にする。発生元が無い (キャリアが空) 場合はルートになる
-            let span = tracing::info_span!(
-                parent: None,
-                "discord_webhook.notify",
-                seichi_portal.flow = trace_flow::NOTIFICATION,
-                notification.operation = operation_name(&event.event),
-            );
-            let parent = global::get_text_map_propagator(|propagator| {
-                propagator.extract(&event.trace_context)
-            });
-            // 親の設定に失敗してもトレースが分かれるだけで通知には影響しないため無視する
-            let _ = span.set_parent(parent);
+            let span = global::get_text_map_propagator(|propagator| event.notify_span(propagator));
 
             handle_event(&repository, &sender, &frontend_url, event.event)
                 .instrument(span)
@@ -555,5 +566,107 @@ mod tests {
             message.title,
             "「（タイトルなし）」の対応ステータスが変更されました"
         );
+    }
+
+    mod tracing_context {
+        use opentelemetry::trace::{SpanId, TracerProvider as _};
+        use opentelemetry_sdk::{
+            propagation::TraceContextPropagator,
+            trace::{InMemorySpanExporter, SdkTracerProvider, SpanData},
+        };
+        use tracing_subscriber::layer::SubscriberExt as _;
+
+        use super::*;
+
+        fn event() -> ApplicationEvent {
+            ApplicationEvent::FormRestored {
+                actor: ApplicationActor {
+                    display_name: "administrator".to_string(),
+                    account_id: None,
+                },
+                form_id: "form-id".to_string(),
+                form_title: "Form".to_string(),
+            }
+        }
+
+        /// テスト内で作ったスパンを OTel のスパンとして受け取る
+        fn record(f: impl FnOnce(&TraceContextPropagator)) -> Vec<SpanData> {
+            let exporter = InMemorySpanExporter::default();
+            let provider = SdkTracerProvider::builder()
+                .with_simple_exporter(exporter.clone())
+                .build();
+            let subscriber = tracing_subscriber::registry()
+                .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+            tracing::subscriber::with_default(subscriber, || f(&TraceContextPropagator::new()));
+            provider.force_flush().expect("flush must succeed");
+            exporter
+                .get_finished_spans()
+                .expect("spans must be exported")
+        }
+
+        fn find<'a>(spans: &'a [SpanData], name: &str) -> &'a SpanData {
+            spans
+                .iter()
+                .find(|span| span.name == name)
+                .unwrap_or_else(|| panic!("span {name} must be exported"))
+        }
+
+        fn attribute(span: &SpanData, key: &str) -> Option<String> {
+            span.attributes
+                .iter()
+                .find(|kv| kv.key.as_str() == key)
+                .map(|kv| kv.value.to_string())
+        }
+
+        #[test]
+        fn notification_span_is_a_child_of_the_publishing_request() {
+            let spans = record(|propagator| {
+                let traced = tracing::info_span!("POST /api/v1/forms").in_scope(|| TracedEvent {
+                    event: event(),
+                    trace_context: current_trace_context(propagator),
+                });
+                // 通知はリクエストが終わった後にワーカーで配信される
+                traced.notify_span(propagator).in_scope(|| {});
+            });
+
+            let request = find(&spans, "POST /api/v1/forms");
+            let notify = find(&spans, "discord_webhook.notify");
+            assert_eq!(
+                notify.span_context.trace_id(),
+                request.span_context.trace_id(),
+                "発生元リクエストと同じトレースになる"
+            );
+            assert_eq!(notify.parent_span_id, request.span_context.span_id());
+            assert_eq!(
+                attribute(notify, "seichi_portal.flow").as_deref(),
+                Some(trace_flow::NOTIFICATION)
+            );
+            assert_eq!(
+                attribute(notify, "notification.operation").as_deref(),
+                Some("form_restored")
+            );
+        }
+
+        #[test]
+        fn notification_without_publishing_context_becomes_a_root_span() {
+            let spans = record(|propagator| {
+                let traced = TracedEvent {
+                    event: event(),
+                    trace_context: current_trace_context(propagator),
+                };
+                assert!(traced.trace_context.is_empty());
+                // ワーカーのタスク内で別のスパンに入っていても、その子にはならない
+                tracing::info_span!("worker").in_scope(|| {
+                    traced.notify_span(propagator).in_scope(|| {});
+                });
+            });
+
+            let notify = find(&spans, "discord_webhook.notify");
+            assert_eq!(notify.parent_span_id, SpanId::INVALID);
+            assert_ne!(
+                notify.span_context.trace_id(),
+                find(&spans, "worker").span_context.trace_id()
+            );
+        }
     }
 }

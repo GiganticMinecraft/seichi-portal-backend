@@ -322,4 +322,138 @@ mod tests {
             std::env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
         }
     }
+
+    /// HTTP リクエストを 1 本流し、OTel のスパンと stdout のログを受け取る
+    mod record_request_middleware {
+        use std::{
+            io,
+            sync::{Arc, Mutex},
+        };
+
+        use axum::{Router, middleware, routing::get};
+        use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
+        use common::trace_flow;
+        use opentelemetry::trace::TracerProvider as _;
+        use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider, SpanData};
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        use tracing_subscriber::{Layer as _, fmt::MakeWriter, layer::SubscriberExt as _};
+
+        use crate::{
+            logging::stdout_log_layer_with_writer,
+            telemetry::{otel_span_filter, record_request},
+        };
+
+        #[derive(Clone, Default)]
+        struct Capture(Arc<Mutex<Vec<u8>>>);
+
+        impl io::Write for Capture {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        impl<'a> MakeWriter<'a> for Capture {
+            type Writer = Capture;
+
+            fn make_writer(&'a self) -> Capture {
+                self.clone()
+            }
+        }
+
+        async fn request(path: &str) -> (Vec<SpanData>, Vec<serde_json::Value>) {
+            let exporter = InMemorySpanExporter::default();
+            let provider = SdkTracerProvider::builder()
+                .with_simple_exporter(exporter.clone())
+                .build();
+            let logs = Capture::default();
+            let subscriber = tracing_subscriber::registry()
+                .with(Some(
+                    tracing_opentelemetry::layer()
+                        .with_tracer(provider.tracer("test"))
+                        .with_filter(otel_span_filter()),
+                ))
+                .with(stdout_log_layer_with_writer(true, None, logs.clone()));
+            let _guard = tracing::subscriber::set_default(subscriber);
+
+            // main.rs と同じく record_request を OtelAxumLayer の内側に置く
+            let app = Router::new()
+                .route("/api/v1/forms/{id}", get(|| async { "ok" }))
+                .route("/health", get(|| async { "ok" }))
+                .layer(middleware::from_fn(record_request))
+                .layer(OtelAxumLayer::default());
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+            let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+            stream
+                .write_all(
+                    format!("GET {path} HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let mut response = Vec::new();
+            stream.read_to_end(&mut response).await.unwrap();
+            assert!(
+                response.starts_with(b"HTTP/1.1 200"),
+                "request must succeed"
+            );
+            server.abort();
+
+            provider.force_flush().expect("flush must succeed");
+            let spans = exporter
+                .get_finished_spans()
+                .expect("spans must be exported");
+            let logs = String::from_utf8(logs.0.lock().unwrap().clone())
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).expect("log line must be JSON"))
+                .filter(|line: &serde_json::Value| line["target"] == "entrypoint::access")
+                .collect();
+            (spans, logs)
+        }
+
+        #[tokio::test]
+        async fn marks_request_as_user_flow_and_logs_with_its_trace_id() {
+            let (spans, logs) = request("/api/v1/forms/0198c6b3").await;
+
+            let server = spans
+                .iter()
+                .find(|span| span.name == "GET /api/v1/forms/{id}")
+                .expect("HTTP サーバースパンが送られる");
+            let flow = server
+                .attributes
+                .iter()
+                .find(|kv| kv.key.as_str() == trace_flow::ATTRIBUTE)
+                .map(|kv| kv.value.to_string());
+            assert_eq!(flow.as_deref(), Some(trace_flow::USER));
+
+            assert_eq!(logs.len(), 1, "リクエストごとにアクセスログを 1 行出す");
+            let log = &logs[0];
+            assert_eq!(
+                log["route"], "/api/v1/forms/{id}",
+                "パスのパラメーターは出さない"
+            );
+            assert_eq!(log["method"], "GET");
+            assert_eq!(log["status"], 200);
+            assert!(log["duration_ms"].is_number());
+            assert_eq!(
+                log["openTelemetry"]["traceId"],
+                server.span_context.trace_id().to_string(),
+                "ログから Tempo のトレースへ辿れる"
+            );
+        }
+
+        #[tokio::test]
+        async fn does_not_log_health_checks() {
+            let (_, logs) = request("/health").await;
+            assert!(logs.is_empty());
+        }
+    }
 }
