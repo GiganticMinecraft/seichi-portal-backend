@@ -86,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
         .with(telemetry_providers.as_ref().map(|providers| {
             tracing_opentelemetry::layer()
                 .with_tracer(providers.tracer_provider.tracer("seichi-portal-backend"))
+                .with_filter(telemetry::otel_span_filter())
         }))
         .with(json_log_layer)
         .with(pretty_log_layer)
@@ -243,6 +244,8 @@ async fn main() -> anyhow::Result<()> {
         .fallback(not_found_handler)
         // handler 内 panic で 500 を返し、コネクションを維持する
         .layer(CatchPanicLayer::new())
+        // 流れの種類の属性と trace ID 付きアクセスログ (OtelAxumLayer より内側に置く)
+        .layer(middleware::from_fn(telemetry::record_request))
         // レスポンスヘッダーへの trace context 挿入 (OtelAxumLayer より内側に置く)
         .layer(OtelInResponseLayer)
         // リクエストごとの OTel スパン開始。/health はトレース対象外

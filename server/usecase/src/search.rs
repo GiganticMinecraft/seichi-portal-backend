@@ -7,6 +7,7 @@ use crate::{
     user_reference_resolver::resolve_user_references,
 };
 use chrono::Utc;
+use common::trace_flow;
 use domain::repository::form::answer_entry_repository::{AnswerEntryRepository, AnswerListFilter};
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_attachment_repository::CommentAttachmentRepository;
@@ -709,6 +710,7 @@ impl<
                 let span = tracing::info_span!(
                     parent: None,
                     "search_engine.sync",
+                    seichi_portal.flow = trace_flow::CDC,
                     search.index = index,
                     otel.status_code = tracing::field::Empty,
                 );
@@ -828,7 +830,19 @@ impl<
     /// 途中経過を [`ResyncPass`] として返して次の呼び出しで再開する。
     ///
     /// 定期実行タスクのため、実行ごとに新しいルートスパンを作る。
-    #[tracing::instrument(name = "search_engine.watch_out_of_sync", parent = None, skip_all)]
+    ///
+    /// 毎分ルートスパンができるが、意味があるのは乖離を見つけて再同期したときだけなので、
+    /// `search.out_of_sync_indexes` / `search.resync_in_progress` で絞り込めるようにする。
+    #[tracing::instrument(
+        name = "search_engine.watch_out_of_sync",
+        parent = None,
+        skip_all,
+        fields(
+            seichi_portal.flow = trace_flow::SCHEDULED,
+            search.out_of_sync_indexes = tracing::field::Empty,
+            search.resync_in_progress = tracing::field::Empty,
+        )
+    )]
     async fn resync_search_engine_step(
         &self,
         pass: Option<ResyncPass>,
@@ -837,6 +851,7 @@ impl<
             Some(pass) => Some(pass),
             None => self.start_resync_pass().await?,
         };
+        tracing::Span::current().record("search.resync_in_progress", started.is_some());
         let Some(mut pass) = started else {
             return Ok(None);
         };
@@ -866,6 +881,7 @@ impl<
         let repository_records = self.repository_records().await?;
         let out_of_sync_indexes = search_engine_records.out_of_sync_indexes(&repository_records);
         SEARCH_SYNC_METRICS.record_out_of_sync_indexes(out_of_sync_indexes.len());
+        tracing::Span::current().record("search.out_of_sync_indexes", out_of_sync_indexes.len());
 
         if out_of_sync_indexes.is_empty() {
             return Ok(None);

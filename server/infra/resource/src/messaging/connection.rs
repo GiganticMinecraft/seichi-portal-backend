@@ -7,6 +7,7 @@ use std::{
 };
 
 use chrono::Utc;
+use common::trace_flow;
 use domain::search::models::SearchSyncEvent;
 use errors::infra::InfraError;
 use futures::StreamExt;
@@ -168,6 +169,7 @@ impl MessagingConnectionPool {
             parent: None,
             "cdc.process",
             otel.kind = "consumer",
+            seichi_portal.flow = trace_flow::CDC,
             otel.status_code = field::Empty,
             messaging.system = "rabbitmq",
             messaging.operation.type = "process",
