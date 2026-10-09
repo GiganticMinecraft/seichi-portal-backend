@@ -153,7 +153,12 @@ impl ConnectionPool {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "mariadb"))]
+    // Alloy (k8s-monitoring) の set_semconv_span_name は DB の client span の名前を
+    // db.operation.name から付け直す。付けないと span 名が "mariadb" だけになり区別できない
+    #[tracing::instrument(
+        skip_all,
+        fields(otel.kind = "client", db.system = "mariadb", db.operation.name = "read_only_transaction")
+    )]
     pub async fn read_only_transaction<F, T, E>(&self, callback: F) -> Result<T, InfraError>
     where
         F: for<'c> FnOnce(
@@ -185,7 +190,10 @@ impl ConnectionPool {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "mariadb"))]
+    #[tracing::instrument(
+        skip_all,
+        fields(otel.kind = "client", db.system = "mariadb", db.operation.name = "read_write_transaction")
+    )]
     pub async fn read_write_transaction<F, T, E>(&self, callback: F) -> Result<T, E>
     where
         F: for<'c> FnOnce(

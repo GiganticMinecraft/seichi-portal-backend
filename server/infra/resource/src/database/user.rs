@@ -480,7 +480,7 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis", db.operation.name = "start_user_session"))]
     async fn start_user_session(
         &self,
         xbox_token: String,
@@ -502,7 +502,7 @@ impl UserDatabase for ConnectionPool {
         Ok(session_id)
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis", db.operation.name = "fetch_user_by_session_id"))]
     async fn fetch_user_by_session_id(
         &self,
         session_id: String,
@@ -518,7 +518,7 @@ impl UserDatabase for ConnectionPool {
         self.find_by(cached_user.id().into_inner()).await
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis", db.operation.name = "end_user_session"))]
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError> {
         let mut redis_connection = redis_connection().await;
 

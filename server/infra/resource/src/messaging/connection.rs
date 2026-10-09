@@ -173,6 +173,9 @@ impl MessagingConnectionPool {
             otel.status_code = field::Empty,
             messaging.system = "rabbitmq",
             messaging.operation.type = "process",
+            // Alloy (k8s-monitoring) の set_semconv_span_name が span 名を
+            // 「messaging.operation.name 宛先」に付け直すため、宛先名だけにならないよう付ける
+            messaging.operation.name = "process",
             messaging.destination.name = %RABBITMQ.routing_key,
             messaging.message.body.size = delivery.data.len(),
             db.collection.name = field::Empty,

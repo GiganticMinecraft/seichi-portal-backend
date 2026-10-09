@@ -315,6 +315,11 @@ pub trait FormLabelDatabase: Send + Sync {
         &self,
         form_id: FormId,
     ) -> Result<Vec<FormLabelRecord>, InfraError>;
+    /// 複数フォームのラベルを (フォーム ID, ラベル) の組で返す
+    async fn fetch_labels_by_form_ids(
+        &self,
+        form_ids: Vec<FormId>,
+    ) -> Result<Vec<(String, FormLabelRecord)>, InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
 
