@@ -222,7 +222,46 @@ impl ActiveFormRepository for InMemoryActiveFormRepository {
 }
 
 #[derive(Default)]
-pub(crate) struct InMemoryFormLabelRepository;
+pub(crate) struct InMemoryFormLabelRepository {
+    labels_by_form: Mutex<HashMap<FormId, Vec<FormLabel>>>,
+    /// フォーム単位の取得 (fetch_labels_by_form_id) が呼ばれた回数
+    single_form_fetches: Mutex<usize>,
+    /// まとめての取得 (fetch_labels_by_form_ids) が呼ばれた回数
+    batch_fetches: Mutex<usize>,
+}
+
+impl InMemoryFormLabelRepository {
+    pub(crate) fn set_labels(&self, form_id: FormId, labels: Vec<FormLabel>) {
+        self.labels_by_form.lock().unwrap().insert(form_id, labels);
+    }
+
+    pub(crate) fn single_form_fetches(&self) -> usize {
+        *self.single_form_fetches.lock().unwrap()
+    }
+
+    pub(crate) fn batch_fetches(&self) -> usize {
+        *self.batch_fetches.lock().unwrap()
+    }
+
+    fn labels_of(&self, form_id: &FormId) -> Vec<AuthorizationGuard<FormLabel, Read>> {
+        self.labels_by_form
+            .lock()
+            .unwrap()
+            .get(form_id)
+            .map(|labels| {
+                labels
+                    .iter()
+                    .map(|label| {
+                        // FormLabel は Clone を持たないため、保存済みの値から作り直して返す
+                        AuthorizationGuard::from(unsafe {
+                            FormLabel::from_raw_parts(*label.id(), label.name().clone())
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
 
 #[async_trait]
 impl FormLabelRepository for InMemoryFormLabelRepository {
@@ -268,9 +307,24 @@ impl FormLabelRepository for InMemoryFormLabelRepository {
 
     async fn fetch_labels_by_form_id(
         &self,
-        _form_id: FormId,
+        form_id: FormId,
     ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error> {
-        Ok(vec![])
+        *self.single_form_fetches.lock().unwrap() += 1;
+        Ok(self.labels_of(&form_id))
+    }
+
+    async fn fetch_labels_by_form_ids(
+        &self,
+        form_ids: Vec<FormId>,
+    ) -> Result<HashMap<FormId, Vec<AuthorizationGuard<FormLabel, Read>>>, Error> {
+        *self.batch_fetches.lock().unwrap() += 1;
+        Ok(form_ids
+            .into_iter()
+            .map(|form_id| {
+                let labels = self.labels_of(&form_id);
+                (form_id, labels)
+            })
+            .collect())
     }
 
     async fn size(&self) -> Result<u32, Error> {

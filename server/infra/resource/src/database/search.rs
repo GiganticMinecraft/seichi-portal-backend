@@ -359,7 +359,7 @@ fn ensure_meilisearch_task_succeeded(
 
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "users"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "users"))]
     async fn search_users(&self, query: &str) -> Result<Vec<UserSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -377,7 +377,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "form_meta_data"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "form_meta_data"))]
     async fn search_forms(&self, query: &str) -> Result<Vec<FormSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -395,7 +395,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "label_for_forms"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "label_for_forms"))]
     async fn search_labels_for_forms(
         &self,
         query: &str,
@@ -416,7 +416,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "label_for_form_answers"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "label_for_form_answers"))]
     async fn search_labels_for_answers(
         &self,
         query: &str,
@@ -437,7 +437,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search"))]
     async fn search_answers(
         &self,
         query: &str,
@@ -478,7 +478,7 @@ impl SearchDatabase for ConnectionPool {
         ))
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.collection.name = "form_answer_comments"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "form_answer_comments"))]
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError> {
         Ok(self
             .meilisearch_client
@@ -497,7 +497,7 @@ impl SearchDatabase for ConnectionPool {
             .collect_vec())
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "sync_search_engine"))]
     async fn sync_search_engine(
         &self,
         data: &[SearchableFieldsWithOperation],
@@ -596,7 +596,7 @@ impl SearchDatabase for ConnectionPool {
             .await
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "fetch_indexed_document_ids"))]
     async fn fetch_indexed_document_ids(
         &self,
         index: SearchIndex,
@@ -636,7 +636,7 @@ impl SearchDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "delete_search_documents"))]
     async fn delete_search_documents(
         &self,
         index: SearchIndex,
@@ -650,7 +650,7 @@ impl SearchDatabase for ConnectionPool {
             .await
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search_engine_stats"))]
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError> {
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
 
@@ -668,7 +668,7 @@ impl SearchDatabase for ConnectionPool {
         )
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "initialize_search_engine"))]
     async fn initialize_search_engine(&self) -> Result<bool, InfraError> {
         let futures = SearchIndex::ALL
             .into_iter()

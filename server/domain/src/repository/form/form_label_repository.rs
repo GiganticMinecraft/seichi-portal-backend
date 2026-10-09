@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use errors::Error;
 use mockall::automock;
@@ -30,5 +32,12 @@ pub trait FormLabelRepository: Send + Sync + 'static {
         &self,
         form_id: FormId,
     ) -> Result<Vec<AuthorizationGuard<FormLabel, Read>>, Error>;
+    /// 複数フォームのラベルを 1 回のクエリでまとめて取得する。
+    ///
+    /// 戻り値には `form_ids` のすべてのフォームがキーとして含まれ、ラベルがないフォームは空になる。
+    async fn fetch_labels_by_form_ids(
+        &self,
+        form_ids: Vec<FormId>,
+    ) -> Result<HashMap<FormId, Vec<AuthorizationGuard<FormLabel, Read>>>, Error>;
     async fn size(&self) -> Result<u32, Error>;
 }

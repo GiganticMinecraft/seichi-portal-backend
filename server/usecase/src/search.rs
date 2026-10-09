@@ -1271,7 +1271,7 @@ mod tests {
             Self {
                 active_form_repository: InMemoryActiveFormRepository::default(),
                 form_answer_label_repository: MockAnswerLabelRepository::new(),
-                form_label_repository: InMemoryFormLabelRepository,
+                form_label_repository: InMemoryFormLabelRepository::default(),
                 user_repository: InMemoryUserRepository::default(),
                 answer_entry_repository: InMemoryAnswerEntryRepository::default(),
                 comment_thread_repository: MockCommentThreadRepository::new(),
@@ -1447,7 +1447,7 @@ mod tests {
         user_repository.save_user(indexed_user.clone());
         user_repository.save_user(missing_user.clone());
         let active_form_repository = InMemoryActiveFormRepository::default();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -1520,7 +1520,7 @@ mod tests {
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(missing_user.clone());
         let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -1560,7 +1560,7 @@ mod tests {
 
         let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
         let active_form_repository = InMemoryActiveFormRepository::default();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let use_case = SearchUseCase {
@@ -1606,7 +1606,7 @@ mod tests {
             .returning(|| Ok(NumberOfRecordsPerAggregate::default()));
         let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
         let active_form_repository = InMemoryActiveFormRepository::default();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let use_case = SearchUseCase {
@@ -1753,7 +1753,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let comment_repository = MockCommentThreadRepository::new();
@@ -1862,7 +1862,7 @@ mod tests {
             .expect_get_labels_for_answers_by_answer_id()
             .times(3)
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(answer_author.clone());
         let mut answer_entry_repository = MockAnswerEntryRepository::new();
@@ -1962,7 +1962,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
         let comment_repository = MockCommentThreadRepository::new();
@@ -2001,7 +2001,7 @@ mod tests {
         let search_repository = MockSearchRepository::new();
         let active_form_repository = InMemoryActiveFormRepository::default();
         let answer_label_repository = MockAnswerLabelRepository::new();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let comment_repository = MockCommentThreadRepository::new();
@@ -2039,7 +2039,7 @@ mod tests {
         let search_repository = MockSearchRepository::new();
         let active_form_repository = InMemoryActiveFormRepository::new(vec![unreadable_form]);
         let answer_label_repository = MockAnswerLabelRepository::new();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let comment_repository = MockCommentThreadRepository::new();
@@ -2138,7 +2138,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let answer_entry_repository =
@@ -2265,7 +2265,7 @@ mod tests {
             .expect_get_labels_for_answers_by_answer_id()
             .times(2)
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let mut answer_entry_repository = MockAnswerEntryRepository::new();
@@ -2498,7 +2498,7 @@ mod tests {
         let active_form_repository =
             InMemoryActiveFormRepository::new(vec![form_a, form_b, unreadable_form]);
         let answer_label_repository = MockAnswerLabelRepository::new();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![
@@ -2616,7 +2616,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
