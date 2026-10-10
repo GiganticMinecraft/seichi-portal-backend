@@ -2166,8 +2166,14 @@ async fn sync_choices(
         })
         .collect();
 
-    let existing_choice_owners = fetch_existing_choices(txn, &question_ids).await?;
-    let existing_ids: BTreeSet<i32> = existing_choice_owners.keys().copied().collect();
+    let existing_choices = fetch_existing_choices(txn, &question_ids).await?;
+    let max_desired_position = desired_choices
+        .iter()
+        .map(|(_, choice)| choice.position)
+        .max();
+    temporarily_relocate_existing_choices(txn, &existing_choices, max_desired_position).await?;
+
+    let existing_ids: BTreeSet<i32> = existing_choices.keys().copied().collect();
 
     let (to_upsert, to_insert): (Vec<(QuestionId, &_)>, Vec<(QuestionId, &_)>) =
         desired_choices.iter().copied().partition(
@@ -2213,9 +2219,11 @@ async fn sync_choices(
 async fn fetch_existing_choices(
     txn: &mut MySqlConnection,
     question_ids: &[QuestionId],
-) -> Result<BTreeMap<i32, QuestionId>, InfraError> {
+) -> Result<BTreeMap<i32, ExistingChoiceRow>, InfraError> {
+    // 質問 ID の数に応じて IN 句のプレースホルダー数が変わるため、
+    // typed query マクロでは記述できない。
     let sql = format!(
-        "SELECT id, question_id FROM form_choices WHERE question_id IN ({})",
+        "SELECT id, question_id, position FROM form_choices WHERE question_id IN ({})",
         std::iter::repeat_n("?", question_ids.len()).join(", ")
     );
 
@@ -2229,12 +2237,73 @@ async fn fetch_existing_choices(
 
     rows.into_iter()
         .map(|row| {
+            let question_id = Uuid::parse_str(&row.try_get::<String, _>("question_id")?)?.into();
             Ok::<_, InfraError>((
                 row.try_get("id")?,
-                Uuid::parse_str(&row.try_get::<String, _>("question_id")?)?.into(),
+                ExistingChoiceRow {
+                    question_id,
+                    position: row.try_get("position")?,
+                },
             ))
         })
         .collect()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ExistingChoiceRow {
+    question_id: QuestionId,
+    position: u16,
+}
+
+async fn temporarily_relocate_existing_choices(
+    txn: &mut MySqlConnection,
+    existing_choices: &BTreeMap<i32, ExistingChoiceRow>,
+    max_desired_position: Option<u16>,
+) -> Result<(), InfraError> {
+    let Some(max_existing_position) = existing_choices
+        .values()
+        .map(|choice| choice.position)
+        .max()
+    else {
+        return Ok(());
+    };
+
+    let max_position = max_desired_position.map_or(max_existing_position, |position| {
+        max_existing_position.max(position)
+    });
+    let position_offset = max_position
+        .checked_add(1)
+        .ok_or_else(|| InfraError::Unexpected {
+            cause: "temporary choice position overflow".to_string(),
+        })?;
+    max_existing_position
+        .checked_add(position_offset)
+        .ok_or_else(|| InfraError::Unexpected {
+            cause: "temporary choice position overflow".to_string(),
+        })?;
+
+    let question_ids = existing_choices
+        .values()
+        .map(|choice| choice.question_id)
+        .unique()
+        .collect_vec();
+
+    // 質問 ID の数に応じて IN 句のプレースホルダー数が変わるため、
+    // typed query マクロでは記述できない。
+    let sql = format!(
+        "UPDATE form_choices SET position = position + ? WHERE question_id IN ({})",
+        std::iter::repeat_n("?", question_ids.len()).join(", ")
+    );
+    question_ids
+        .iter()
+        .fold(
+            query(AssertSqlSafe(&*sql)).bind(position_offset),
+            |query, question_id| query.bind(question_id.into_inner().to_string()),
+        )
+        .execute(&mut *txn)
+        .await?;
+
+    Ok(())
 }
 
 async fn delete_choices(txn: &mut MySqlConnection, choice_ids: Vec<i32>) -> Result<(), InfraError> {
