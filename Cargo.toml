@@ -49,7 +49,7 @@ regex = "1.13.1"
 redis = { version = "1.7.1", features = ["tokio-comp"] }
 meilisearch-sdk = "0.33.0"
 serenity = "0.12.5"
-lapin = "4.12.0"
+lapin = "4.12.1"
 # OpenTelemetry API。メトリクス計装と trace context の伝播 (CDC の AMQP ヘッダ / チャンネル) に使う。
 # entrypoint の opentelemetry-otlp / opentelemetry_sdk、reqwest-tracing の opentelemetry_0_32 と同じ版に揃える
 opentelemetry = "0.32.0"
