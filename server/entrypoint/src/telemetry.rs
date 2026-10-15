@@ -1,10 +1,12 @@
 use opentelemetry::{KeyValue, global, metrics::ObservableGauge};
-use opentelemetry_otlp::{MetricExporter, Protocol, SpanExporter, WithExportConfig};
+use opentelemetry_otlp::{
+    MetricExporter, Protocol, SpanExporter, WithExportConfig, WithHttpConfig,
+};
 use opentelemetry_sdk::{
     Resource, metrics::SdkMeterProvider, propagation::TraceContextPropagator,
     trace::SdkTracerProvider,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::{
     extract::{MatchedPath, Request},
@@ -73,9 +75,12 @@ pub fn init_providers() -> Option<TelemetryProviders> {
 
     let resource = resource();
 
+    let http_client = otlp_http_client();
+
     let span_exporter = SpanExporter::builder()
         .with_http()
         .with_protocol(Protocol::HttpBinary)
+        .with_http_client(http_client.clone())
         .build()
         .expect("failed to build OTLP span exporter");
     let tracer_provider = SdkTracerProvider::builder()
@@ -87,6 +92,7 @@ pub fn init_providers() -> Option<TelemetryProviders> {
     let metric_exporter = MetricExporter::builder()
         .with_http()
         .with_protocol(Protocol::HttpBinary)
+        .with_http_client(http_client)
         .build()
         .expect("failed to build OTLP metric exporter");
     let meter_provider = SdkMeterProvider::builder()
@@ -99,6 +105,35 @@ pub fn init_providers() -> Option<TelemetryProviders> {
         tracer_provider,
         meter_provider,
     })
+}
+
+/// OTLP exporter の HTTP 接続をクライアント側で手放すまでの idle 時間。
+///
+/// 受信側の Alloy (OpenTelemetry Collector の confighttp) は keep-alive 接続を idle 60 秒で
+/// 閉じる一方、reqwest の既定ではクライアント側の idle 接続を 90 秒保持する。backend が
+/// 暇なときはトレースの export が検索インデックス整合性チェック (60 秒間隔) に合わせて
+/// 約 60 秒おきになるため、サーバーが閉じた直後の接続を掴んで
+/// `HTTP export failed: network error` になり、そのバッチは破棄されていた
+/// (1 日約 195 回。毎分出る `search_engine.watch_out_of_sync` span の約 13% が欠損)。
+/// サーバーより先にクライアント側で idle 接続を捨てることで、常に生きた接続か新規接続で送る。
+const OTLP_HTTP_POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// opentelemetry-otlp が既定で使う export タイムアウト (`OTEL_EXPORTER_OTLP_TIMEOUT` 未設定時) と同じ
+const OTLP_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// トレース・メトリクスの両 exporter で共有する blocking HTTP クライアント。
+fn otlp_http_client() -> reqwest::blocking::Client {
+    // reqwest::blocking::Client は async ランタイムのスレッド上では組み立てられないため、
+    // opentelemetry-otlp の既定実装と同じく専用スレッドで作る
+    std::thread::spawn(|| {
+        reqwest::blocking::Client::builder()
+            .timeout(OTLP_HTTP_TIMEOUT)
+            .pool_idle_timeout(OTLP_HTTP_POOL_IDLE_TIMEOUT)
+            .build()
+            .expect("failed to build OTLP HTTP client")
+    })
+    .join()
+    .expect("OTLP HTTP client builder thread panicked")
 }
 
 fn resource() -> Resource {

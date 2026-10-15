@@ -16,6 +16,10 @@ json-subscriber = { version = "0.3.0", features = ["tracing-opentelemetry-0-33"]
 opentelemetry = { workspace = true }
 # cross ビルドの rustls 縛りに合わせ、TLS フィーチャーなし (in-cluster http://) + blocking reqwest 構成にする
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["http-proto", "trace", "metrics", "reqwest-blocking-client"] }
+# opentelemetry-otlp (opentelemetry-http) が受け取る reqwest と同じ 0.13 系。exporter に渡す
+# blocking client の接続プール設定 (idle timeout) を調整するためだけに直接依存し、
+# このクレートからは TLS フィーチャーを有効化しない
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking"] }
 opentelemetry_sdk = { workspace = true }
 presentation = { path = "../presentation" }
 # 継続プロファイリング (Grafana Pyroscope への push)。

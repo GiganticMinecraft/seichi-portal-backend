@@ -1632,6 +1632,7 @@ dependencies = [
  "opentelemetry_sdk",
  "presentation",
  "pyroscope",
+ "reqwest 0.13.5",
  "resource",
  "serde_json",
  "serenity",
