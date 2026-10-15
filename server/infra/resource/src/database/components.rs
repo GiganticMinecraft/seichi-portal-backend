@@ -191,6 +191,11 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
         &self,
         answer_id: AnswerId,
     ) -> Result<Vec<AnswerLabelRecord>, InfraError>;
+    /// 複数回答のラベルをまとめて引く。戻り値は (回答 ID, ラベル) の組で、順序は不定。
+    async fn get_labels_for_answers_by_answer_ids(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<(AnswerId, AnswerLabelRecord)>, InfraError>;
     async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), InfraError>;
     async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
     async fn replace_answer_labels(

@@ -1,8 +1,11 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use domain::form::answer::{AnswerId, AnswerLabel, AnswerLabelId};
 use errors::infra::InfraError;
 use itertools::Itertools;
 use sqlx::{AssertSqlSafe, Row, query};
+use uuid::Uuid;
 
 use crate::{
     database::{
@@ -158,6 +161,62 @@ impl FormAnswerLabelDatabase for ConnectionPool {
             })
         })
             .await
+    }
+
+    #[tracing::instrument(skip_all, fields(answer_count = answer_ids.len()))]
+    async fn get_labels_for_answers_by_answer_ids(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<(AnswerId, AnswerLabelRecord)>, InfraError> {
+        if answer_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let answer_ids = answer_ids
+            .into_iter()
+            .map(|answer_id| answer_id.into_inner().to_string())
+            .collect_vec();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                // 回答数に応じて `IN (...)` の placeholder 数が変わるため、
+                // typed query ではなく AssertSqlSafe で組み立てた SQL を実行する。
+                let sql = format!(
+                    "SELECT label_settings_for_form_answers.answer_id AS answer_id, \
+                     label_for_form_answers.id AS label_id, name FROM label_for_form_answers \
+                     INNER JOIN label_settings_for_form_answers \
+                     ON label_for_form_answers.id = label_settings_for_form_answers.label_id \
+                     WHERE label_settings_for_form_answers.answer_id IN ({})",
+                    std::iter::repeat_n("?", answer_ids.len()).join(", ")
+                );
+                let labels_rs = answer_ids
+                    .iter()
+                    .fold(query(AssertSqlSafe(&*sql)), |query, answer_id| {
+                        query.bind(answer_id)
+                    })
+                    .fetch_all(&mut **txn)
+                    .await?;
+
+                labels_rs
+                    .into_iter()
+                    .map(|rs| {
+                        let answer_id: String = rs.try_get("answer_id")?;
+                        let answer_id: AnswerId = Uuid::from_str(&answer_id)
+                            .map_err(Into::<InfraError>::into)?
+                            .into();
+
+                        Ok::<_, InfraError>((
+                            answer_id,
+                            AnswerLabelRecord {
+                                id: rs.try_get("label_id")?,
+                                name: rs.try_get("name")?,
+                            },
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+        })
+        .await
     }
 
     #[tracing::instrument(skip_all, fields(label_id = %label_id))]
