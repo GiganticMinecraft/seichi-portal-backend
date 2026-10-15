@@ -1583,6 +1583,24 @@ mod tests {
         );
     }
 
+    /// スパンを検証するテストの前に、プロセス全体の既定 subscriber を空の Registry にする。
+    ///
+    /// tracing はコールサイトごとの interest をキャッシュし、初回登録時に
+    /// 「登録しているスレッドの既定 subscriber」で評価する (tracing-core の
+    /// `Rebuilder::JustOne`)。並列に走る別のテストが subscriber なしで同じ関数を先に
+    /// 呼ぶと、その評価は `NoSubscriber` で `Interest::never` になり、こちらのスレッドで
+    /// `set_default` した subscriber にスパンが届かなくなる (CI で散発していた
+    /// "span search_engine.watch_out_of_sync must be exported")。既定を Registry
+    /// (interest は常に `always`) にしておけば、どのスレッドで評価されても
+    /// `never` にはならず、スパンはそのスレッドの既定 subscriber に記録される。
+    fn install_global_fallback_subscriber() {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            // 他のテストが先に設定していても構わないので失敗は無視する
+            let _ = tracing::subscriber::set_global_default(tracing_subscriber::registry());
+        });
+    }
+
     /// 定期チェックは、呼び出し元のスパンの中で動いても独立したトレースになり、
     /// 結果 (乖離したインデックス数・再同期中か) と流れの種類をスパンに残す
     #[tokio::test]
@@ -1591,6 +1609,8 @@ mod tests {
         use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
         use tracing::Instrument as _;
         use tracing_subscriber::layer::SubscriberExt as _;
+
+        install_global_fallback_subscriber();
 
         let exporter = InMemorySpanExporter::default();
         let provider = SdkTracerProvider::builder()
