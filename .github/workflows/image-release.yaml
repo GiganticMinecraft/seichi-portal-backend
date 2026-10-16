@@ -95,7 +95,7 @@ jobs:
       - name: Read Rust version
         run: echo "RUST_VERSION=$(sed -n 's/channel = \"\(.*\)\"/\1/p' rust-toolchain.toml)" >> "$GITHUB_ENV"
       - name: Setup rust toolchain
-        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           target: ${{ matrix.cross-target }}
