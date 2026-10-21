@@ -1,4 +1,5 @@
 use crate::database::config::{MEILISEARCH, MeiliSearch};
+use crate::database::meilisearch_http::MeilisearchClient;
 use crate::database::meilisearch_schemas::MeilisearchStatsSchema;
 use crate::database::{
     components::{FormAnswerDatabase, SearchDatabase},
@@ -25,7 +26,6 @@ use errors::infra::InfraError;
 use futures::{StreamExt, TryStreamExt, future::try_join_all, stream, try_join};
 use itertools::{Either, Itertools};
 use meilisearch_sdk::{
-    client::Client,
     documents::DocumentsQuery,
     errors::{Error as MeilisearchError, ErrorCode},
     search::Selectors,
@@ -86,7 +86,7 @@ enum SearchDocumentRequest {
 }
 
 impl SearchDocumentRequest {
-    async fn execute(self, client: &Client) -> Result<(), InfraError> {
+    async fn execute(self, client: &MeilisearchClient) -> Result<(), InfraError> {
         let task = match self {
             Self::Upsert { index, documents } => {
                 client
@@ -147,7 +147,7 @@ fn search_document_requests(
 }
 
 async fn execute_search_document_requests(
-    client: &Client,
+    client: &MeilisearchClient,
     requests: Vec<SearchDocumentRequest>,
 ) -> Result<(), InfraError> {
     stream::iter(requests)

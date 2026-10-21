@@ -1,4 +1,4 @@
-use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
+use std::{future::IntoFuture, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     Extension, Json, Router,
@@ -49,9 +49,17 @@ use tower_http::{
     catch_panic::CatchPanicLayer,
     cors::{Any, CorsLayer},
 };
-use tracing::{info, log};
+use tracing::{info, log, warn};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
+
+/// 停止シグナルを受けてから、各コンポーネントの停止と処理中リクエストの drain を待つ上限。
+///
+/// Discord gateway の切断や詰まったリクエスト、実行中の検索エンジン再同期などが残っても、
+/// この時間で打ち切って OTel / Pyroscope の flush に進み、terminationGracePeriodSeconds 内に
+/// プロセスを終える。seichi_infra の deployment.yaml の terminationGracePeriodSeconds は
+/// preStop 5 秒 + この 15 秒 + flush の上限を足して決めているため、変えるときはそちらも見直す。
+const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -270,47 +278,61 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await.unwrap();
 
     let (search_sync_shutdown_sender, search_sync_shutdown_status) = watch::channel(false);
+    let (shutdown_started_sender, shutdown_started_receiver) = watch::channel(false);
     let (search_engine_initialization_sender, search_engine_initialization_receiver) =
         watch::channel(SearchEngineInitializationStatus::Pending);
     let messaging_search_engine_initialization = search_engine_initialization_receiver.clone();
 
-    let (_discord, _axum, _search_engine_initializer, _syncer, _messaging, _auto_of_sync_watcher) = join!(
-        discord_connection.pool.start(),
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(graceful_handler(
-            shared_manager,
-            messaging_conn.clone(),
-            search_sync_shutdown_sender.clone(),
-            search_engine_initialization_sender.clone(),
-        ))
-        .into_future(),
-        start_initialize_search_engine(
-            shared_repository.to_owned(),
-            search_engine_initialization_sender,
-            search_engine_initialization_receiver.clone(),
-        ),
-        start_sync(
-            shared_repository.to_owned(),
-            receiver,
-            search_sync_shutdown_status.clone(),
-            search_engine_initialization_receiver.clone(),
-        ),
-        async move {
-            if wait_for_search_engine_initialization(messaging_search_engine_initialization).await {
-                messaging_conn.consumer().await
-            } else {
-                Ok(())
-            }
-        },
-        start_watch_out_of_sync(
-            shared_repository.to_owned(),
-            search_sync_shutdown_status,
-            search_engine_initialization_receiver,
-        )
-    );
+    let components = async {
+        let (
+            _discord,
+            _axum,
+            _search_engine_initializer,
+            _syncer,
+            _messaging,
+            _auto_of_sync_watcher,
+        ) = join!(
+            discord_connection.pool.start(),
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(graceful_handler(
+                shared_manager,
+                messaging_conn.clone(),
+                search_sync_shutdown_sender.clone(),
+                search_engine_initialization_sender.clone(),
+                shutdown_started_sender,
+            ))
+            .into_future(),
+            start_initialize_search_engine(
+                shared_repository.to_owned(),
+                search_engine_initialization_sender,
+                search_engine_initialization_receiver.clone(),
+            ),
+            start_sync(
+                shared_repository.to_owned(),
+                receiver,
+                search_sync_shutdown_status.clone(),
+                search_engine_initialization_receiver.clone(),
+            ),
+            async move {
+                if wait_for_search_engine_initialization(messaging_search_engine_initialization)
+                    .await
+                {
+                    messaging_conn.consumer().await
+                } else {
+                    Ok(())
+                }
+            },
+            start_watch_out_of_sync(
+                shared_repository.to_owned(),
+                search_sync_shutdown_status,
+                search_engine_initialization_receiver,
+            )
+        );
+    };
+    run_with_shutdown_deadline(components, shutdown_started_receiver).await;
 
     if let Some(agent) = pyroscope_agent {
         // stop() は最終プロファイルの送信を伴うため専用スレッドで行う
@@ -342,11 +364,40 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
+/// 停止シグナルを受けてからの各コンポーネントの終了待ちに [`SHUTDOWN_DRAIN_TIMEOUT`] の上限を付ける。
+///
+/// `shutdown_started` が true になって (= graceful_handler が停止シグナルを受けて) から上限を数える。
+/// 上限を超えたら `components` (axum の serve、検索エンジン同期、メッセージングなど) の future を drop して戻る。
+/// 残った接続のタスクなどはプロセス終了とともに破棄される。
+async fn run_with_shutdown_deadline(
+    components: impl Future<Output = ()>,
+    mut shutdown_started: watch::Receiver<bool>,
+) {
+    let deadline = async {
+        if shutdown_started.wait_for(|started| *started).await.is_err() {
+            // graceful_handler が通知せずに終わることは無いが、念のため上限を掛けずに components の完了を待つ
+            std::future::pending::<()>().await;
+        }
+        tokio::time::sleep(SHUTDOWN_DRAIN_TIMEOUT).await;
+    };
+
+    tokio::select! {
+        () = components => {},
+        () = deadline => {
+            warn!(
+                timeout = ?SHUTDOWN_DRAIN_TIMEOUT,
+                "components did not stop before the shutdown drain timeout; abandoning in-flight work"
+            );
+        }
+    }
+}
+
 async fn graceful_handler(
     serenity_shared_manager: Arc<ShardManager>,
     messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
     search_sync_shutdown_sender: watch::Sender<bool>,
     search_engine_initialization_sender: watch::Sender<SearchEngineInitializationStatus>,
+    shutdown_started_sender: watch::Sender<bool>,
 ) {
     let ctrl_c = async {
         signal::ctrl_c()
@@ -374,6 +425,8 @@ async fn graceful_handler(
     }
 
     info!("Gracefully shutdown...");
+    // ここから SHUTDOWN_DRAIN_TIMEOUT を数える。以降の停止処理 (Discord gateway の切断など) が詰まっても上限で打ち切る
+    let _ = shutdown_started_sender.send(true);
     let _ = search_sync_shutdown_sender.send(true);
     update_search_engine_initialization_status(
         &search_engine_initialization_sender,
