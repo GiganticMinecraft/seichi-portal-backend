@@ -15,6 +15,13 @@ const DISCORD_FIELD_NAME_LIMIT: usize = 256;
 const DISCORD_FIELD_VALUE_LIMIT: usize = 1024;
 const DISCORD_EMBED_TITLE_LIMIT: usize = 256;
 
+/// リトライの待機を含めた Webhook 送信 1 件全体の上限。
+///
+/// 1 回の送信は共有クライアントの上限 (10 秒) で打ち切られるが、[`DiscordWebhookSender::retry_policy`]
+/// の 6 回試行と待機 (1+2+4+8+16 = 31 秒) を足すと最悪 90 秒を超える。待機を全部消化できる
+/// 45 秒を全体の上限とし、Discord が応答しない間に送信タスクが溜まり続けないようにする。
+const DISCORD_WEBHOOK_SEND_TIMEOUT: Duration = Duration::from_secs(45);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiscordWebhookField {
     pub name: String,
@@ -53,7 +60,7 @@ impl DiscordWebhookSender {
     }
 
     pub async fn send_with_retry(&self, message: DiscordWebhookMessage) -> Result<(), InfraError> {
-        retry_async_if(
+        let send = retry_async_if(
             Self::retry_policy(),
             |_| {
                 let sender = self.clone();
@@ -61,9 +68,12 @@ impl DiscordWebhookSender {
                 async move { sender.send(message).await }
             },
             DiscordWebhookSendError::is_retryable,
-        )
-        .await
-        .map_err(Into::into)
+        );
+
+        tokio::time::timeout(DISCORD_WEBHOOK_SEND_TIMEOUT, send)
+            .await
+            .unwrap_or_else(|_| Err(DiscordWebhookSendError::Retryable(send_timeout_error())))
+            .map_err(Into::into)
     }
 
     async fn send(&self, message: DiscordWebhookMessage) -> Result<(), DiscordWebhookSendError> {
@@ -121,6 +131,14 @@ fn is_retryable_status(status: StatusCode) -> bool {
 fn status_error(status: StatusCode) -> InfraError {
     InfraError::Outgoing {
         cause: format!("Discord webhook returned non-success status: {status}"),
+    }
+}
+
+fn send_timeout_error() -> InfraError {
+    InfraError::Outgoing {
+        cause: format!(
+            "Discord webhook was not delivered within {DISCORD_WEBHOOK_SEND_TIMEOUT:?} including retries"
+        ),
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
+use std::{future::IntoFuture, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     Extension, Json, Router,
@@ -49,9 +49,15 @@ use tower_http::{
     catch_panic::CatchPanicLayer,
     cors::{Any, CorsLayer},
 };
-use tracing::{info, log};
+use tracing::{info, log, warn};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
+
+/// graceful shutdown で処理中のリクエストの完了を待つ上限。
+///
+/// 外向き HTTP などが詰まったリクエストが残っても、この時間で打ち切って
+/// OTel / Pyroscope の flush に進み、terminationGracePeriodSeconds 内にプロセスを終える。
+const HTTP_DRAIN_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -270,23 +276,28 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await.unwrap();
 
     let (search_sync_shutdown_sender, search_sync_shutdown_status) = watch::channel(false);
+    let (drain_started_sender, drain_started_receiver) = watch::channel(false);
     let (search_engine_initialization_sender, search_engine_initialization_receiver) =
         watch::channel(SearchEngineInitializationStatus::Pending);
     let messaging_search_engine_initialization = search_engine_initialization_receiver.clone();
 
     let (_discord, _axum, _search_engine_initializer, _syncer, _messaging, _auto_of_sync_watcher) = join!(
         discord_connection.pool.start(),
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(graceful_handler(
-            shared_manager,
-            messaging_conn.clone(),
-            search_sync_shutdown_sender.clone(),
-            search_engine_initialization_sender.clone(),
-        ))
-        .into_future(),
+        serve_with_drain_timeout(
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(graceful_handler(
+                shared_manager,
+                messaging_conn.clone(),
+                search_sync_shutdown_sender.clone(),
+                search_engine_initialization_sender.clone(),
+                drain_started_sender,
+            ))
+            .into_future(),
+            drain_started_receiver,
+        ),
         start_initialize_search_engine(
             shared_repository.to_owned(),
             search_engine_initialization_sender,
@@ -342,11 +353,41 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
+/// axum の graceful shutdown に [`HTTP_DRAIN_TIMEOUT`] の上限を付ける。
+///
+/// `drain_started` が true になって (= graceful_handler が完了して axum が新規接続の受付を止め、
+/// 処理中のリクエストの完了待ちに入って) から上限を数える。上限を超えたら serve の future を drop して
+/// 戻る。残った接続のタスクはプロセス終了とともに破棄される。
+async fn serve_with_drain_timeout(
+    serve: impl Future<Output = std::io::Result<()>>,
+    mut drain_started: watch::Receiver<bool>,
+) -> std::io::Result<()> {
+    let drain_deadline = async {
+        if drain_started.wait_for(|started| *started).await.is_err() {
+            // graceful_handler が通知せずに終わることは無いが、念のため上限を掛けずに serve の完了を待つ
+            std::future::pending::<()>().await;
+        }
+        tokio::time::sleep(HTTP_DRAIN_TIMEOUT).await;
+    };
+
+    tokio::select! {
+        result = serve => result,
+        () = drain_deadline => {
+            warn!(
+                timeout = ?HTTP_DRAIN_TIMEOUT,
+                "in-flight HTTP requests did not finish before the drain timeout; abandoning them"
+            );
+            Ok(())
+        }
+    }
+}
+
 async fn graceful_handler(
     serenity_shared_manager: Arc<ShardManager>,
     messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
     search_sync_shutdown_sender: watch::Sender<bool>,
     search_engine_initialization_sender: watch::Sender<SearchEngineInitializationStatus>,
+    drain_started_sender: watch::Sender<bool>,
 ) {
     let ctrl_c = async {
         signal::ctrl_c()
@@ -381,4 +422,6 @@ async fn graceful_handler(
     );
     serenity_shared_manager.shutdown_all().await;
     messaging_connection.shutdown().await;
+    // この関数が返ると axum が処理中のリクエストの drain に入るので、そこから上限を数え始める
+    let _ = drain_started_sender.send(true);
 }

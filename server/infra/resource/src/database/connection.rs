@@ -21,6 +21,7 @@ use sqlx::{
 use crate::database::{
     components::DatabaseComponents,
     config::{MEILISEARCH, MYSQL, MeiliSearch, MySQL, REDIS, Redis},
+    meilisearch_http::{MeilisearchClient, TimeoutHttpClient},
 };
 
 pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
@@ -28,6 +29,13 @@ pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
 /// セッションの読み書きなど、リクエスト処理中に行う Valkey 操作 1 回あたりの上限。
 /// 再接続待ちとやり直しもこの時間に含めるため、Valkey が応答しない間もリクエストは詰まらずにエラーで返る。
 const VALKEY_OPERATION_TIMEOUT: Duration = Duration::from_secs(1);
+
+/// `/health` での Meilisearch の疎通確認の上限。
+///
+/// readiness probe の timeoutSeconds (3 秒) より十分短くする。Meilisearch は Optional 依存なので、
+/// 応答しないときに `/health` 自体が probe のタイムアウトを超えると、degraded のはずの Pod が
+/// Service から外れてしまう。
+const MEILISEARCH_PING_TIMEOUT: Duration = Duration::from_secs(1);
 /// 接続の確立とコマンドの応答それぞれの上限。応答の時間切れで接続を作り直してやり直す余地を
 /// [`VALKEY_OPERATION_TIMEOUT`] の中に残すため半分にする (クラスタ内なら張り直しは数 ms で終わる)。
 const VALKEY_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(500);
@@ -141,7 +149,7 @@ impl ValkeyConnection {
 pub struct ConnectionPool {
     pub(crate) rdb_pool: sqlx::MySqlPool,
     pub(crate) minecraft_bans_pool: sqlx::MySqlPool,
-    pub(crate) meilisearch_client: meilisearch_sdk::client::Client,
+    pub(crate) meilisearch_client: MeilisearchClient,
     /// 起動時に 1 つだけ作り、clone して使い回す。内部は 1 本の多重化接続。
     pub(crate) valkey_connection: ValkeyConnection,
 }
@@ -193,8 +201,12 @@ impl ConnectionPool {
         Self {
             rdb_pool,
             minecraft_bans_pool,
-            meilisearch_client: meilisearch_sdk::client::Client::new(host, api_key.to_owned())
-                .unwrap_or_else(|_| panic!("Cannot establish connect to MeiliSearch.")),
+            meilisearch_client: MeilisearchClient::new_with_client(
+                host,
+                api_key.to_owned(),
+                TimeoutHttpClient::new(api_key.as_deref())
+                    .unwrap_or_else(|_| panic!("Cannot establish connect to MeiliSearch.")),
+            ),
             valkey_connection,
         }
     }
@@ -302,12 +314,13 @@ impl ConnectionPool {
         matches!(response, Ok(Ok(Ok(response))) if response == "PONG")
     }
 
+    /// Meilisearch の `/health` が [`MEILISEARCH_PING_TIMEOUT`] 内に `available` を返すかを見る。
+    ///
+    /// 通常のリクエスト上限 (10 秒) まで待たずに打ち切り、`/health` 全体の応答を遅らせない。
     pub async fn ping_meilisearch(&self) -> bool {
-        self.meilisearch_client
-            .health()
-            .await
-            .map(|h| h.status == "available")
-            .unwrap_or(false)
+        let health =
+            tokio::time::timeout(MEILISEARCH_PING_TIMEOUT, self.meilisearch_client.health());
+        matches!(health.await, Ok(Ok(health)) if health.status == "available")
     }
 
     pub async fn migrate(&self) -> anyhow::Result<()> {

@@ -4,6 +4,7 @@ pub mod connection;
 pub mod count;
 pub mod forms;
 pub mod global_discord_webhook;
+mod meilisearch_http;
 mod meilisearch_schemas;
 pub mod minecraft_ban;
 pub mod notification;
