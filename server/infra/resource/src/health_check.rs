@@ -6,10 +6,7 @@ use domain::repository::health_check_repository::{
 };
 use serenity::gateway::ConnectionStage;
 
-use crate::{
-    database::connection::{ConnectionPool, ping_valkey},
-    messaging::connection::MessagingConnectionPool,
-};
+use crate::{database::connection::ConnectionPool, messaging::connection::MessagingConnectionPool};
 
 pub struct HealthCheckRepositoryImpl {
     pub(crate) db_conn: Arc<ConnectionPool>,
@@ -36,7 +33,7 @@ impl HealthCheckRepository for HealthCheckRepositoryImpl {
     async fn check_components(&self) -> Vec<ComponentHealth> {
         let (db, valkey, meilisearch, rabbitmq, discord) = tokio::join!(
             self.db_conn.ping_db(),
-            ping_valkey(),
+            self.db_conn.ping_valkey(),
             self.db_conn.ping_meilisearch(),
             async { self.rabbitmq_conn.is_rabbitmq_connected() },
             async {
