@@ -1,9 +1,19 @@
-use std::{fmt::Debug, future::Future, pin::Pin, str::FromStr, time::Duration};
+use std::{
+    fmt::Debug,
+    future::Future,
+    pin::Pin,
+    str::FromStr,
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use opentelemetry::{KeyValue, global, metrics::ObservableGauge};
 use redis::{
-    Client, RedisResult,
+    Client, RedisError, RedisResult,
     aio::{ConnectionManager, ConnectionManagerConfig},
 };
 use sqlx::{
@@ -19,18 +29,123 @@ use crate::database::{
 pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
 
 /// セッションの読み書きなど、リクエスト処理中に行う Valkey 操作 1 回あたりの上限。
-/// 再接続待ちもこの時間に含めるため、Valkey が応答しない間もリクエストは詰まらずにエラーで返る。
+/// 再接続待ちとやり直しもこの時間に含めるため、Valkey が応答しない間もリクエストは詰まらずにエラーで返る。
 const VALKEY_OPERATION_TIMEOUT: Duration = Duration::from_secs(1);
+/// 接続の確立とコマンドの応答それぞれの上限。1 回やり直しても [`VALKEY_OPERATION_TIMEOUT`] に収まるよう半分にする。
+const VALKEY_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(500);
 /// ヘルスチェックの PING の上限。readiness probe を素早く返すため、通常の操作より短くする。
 const VALKEY_PING_TIMEOUT: Duration = Duration::from_millis(250);
+
+/// プロセスで共有する Valkey 接続。
+///
+/// `ConnectionManager` は接続が切れたこと (RST や EOF) を検知すれば自分で張り直すが、応答が返らないだけの
+/// 時間切れでは張り直さない。相手が RST を返さずに消えた half-open の接続だと、OS が TCP を諦めるまで
+/// 全操作が時間切れになり続けるため、時間切れや張り直しが必要なエラーのときはこちらで作り直す。
+#[derive(Clone, Debug)]
+pub(crate) struct ValkeyConnection(Arc<ValkeyConnectionInner>);
+
+#[derive(Debug)]
+struct ValkeyConnectionInner {
+    client: Client,
+    config: ConnectionManagerConfig,
+    /// (世代, 接続)。同時に失敗した複数の操作が何度も作り直さないよう、世代が一致したときだけ差し替える。
+    current: RwLock<(u64, ConnectionManager)>,
+}
+
+impl ValkeyConnection {
+    async fn connect() -> Self {
+        let Redis { host, port } = &*REDIS;
+        let client = Client::open(format!("redis://{host}:{port}/"))
+            .unwrap_or_else(|_| panic!("Invalid Valkey connection URL."));
+        let config = ConnectionManagerConfig::new()
+            .set_connection_timeout(Some(VALKEY_ATTEMPT_TIMEOUT))
+            .set_response_timeout(Some(VALKEY_ATTEMPT_TIMEOUT));
+
+        let manager = ConnectionManager::new_with_config(client.clone(), config.clone())
+            .await
+            .unwrap_or_else(|_| panic!("Cannot establish Valkey connection."));
+
+        Self(Arc::new(ValkeyConnectionInner {
+            client,
+            config,
+            current: RwLock::new((0, manager)),
+        }))
+    }
+
+    fn current(&self) -> (u64, ConnectionManager) {
+        self.0
+            .current
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    /// 世代 `generation` の接続を捨てて作り直す。実行中の操作は古い接続の clone を持っているので途中で切れない。
+    fn reset(&self, generation: u64) {
+        let mut current = self
+            .0
+            .current
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if current.0 != generation {
+            return;
+        }
+        match ConnectionManager::new_lazy_with_config(self.0.client.clone(), self.0.config.clone())
+        {
+            Ok(manager) => *current = (generation + 1, manager),
+            Err(error) => tracing::warn!(%error, "failed to recreate Valkey connection"),
+        }
+    }
+
+    /// `command` を共有接続で実行し、全体を `timeout` で打ち切る。時間切れは I/O の TimedOut として返す。
+    ///
+    /// 1 回目が失敗したときだけ 1 回やり直すため、やり直しても安全な冪等なコマンドだけを渡すこと。
+    /// - 応答の時間切れ: 接続を作り直し、新しい接続でやり直す
+    /// - 接続が切れた (`is_unrecoverable_error()`): `ConnectionManager` が張り直しを始めているので同じ接続でやり直す
+    async fn run<T, F, Fut>(&self, timeout: Duration, command: F) -> RedisResult<T>
+    where
+        F: Fn(ConnectionManager) -> Fut,
+        Fut: Future<Output = RedisResult<T>>,
+    {
+        let (generation, connection) = self.current();
+        let used_generation = AtomicU64::new(generation);
+        let operation = async {
+            match command(connection.clone()).await {
+                Err(error) if error.is_timeout() => {
+                    self.reset(generation);
+                    let (generation, connection) = self.current();
+                    used_generation.store(generation, Ordering::Relaxed);
+                    command(connection).await
+                }
+                Err(error) if error.is_unrecoverable_error() => command(connection).await,
+                result => result,
+            }
+        };
+
+        let result = tokio::time::timeout(timeout, operation)
+            .await
+            .unwrap_or_else(|_| {
+                Err(RedisError::from(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Valkey operation timed out",
+                )))
+            });
+        if let Err(error) = &result
+            && (error.is_timeout() || error.is_unrecoverable_error())
+        {
+            self.reset(used_generation.load(Ordering::Relaxed));
+        }
+        result
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
     pub(crate) rdb_pool: sqlx::MySqlPool,
     pub(crate) minecraft_bans_pool: sqlx::MySqlPool,
     pub(crate) meilisearch_client: meilisearch_sdk::client::Client,
-    /// 起動時に 1 つだけ作り、clone して使い回す。内部は 1 本の多重化接続で、切断時は自動で張り直す。
-    pub(crate) valkey_connection: ConnectionManager,
+    /// 起動時に 1 つだけ作り、clone して使い回す。内部は 1 本の多重化接続。
+    pub(crate) valkey_connection: ValkeyConnection,
 }
 
 impl ConnectionPool {
@@ -60,19 +175,6 @@ impl ConnectionPool {
             .disable_statement_logging()
     }
 
-    async fn valkey_connection() -> ConnectionManager {
-        let Redis { host, port } = &*REDIS;
-        let client = Client::open(format!("redis://{host}:{port}/"))
-            .unwrap_or_else(|_| panic!("Invalid Valkey connection URL."));
-        let config = ConnectionManagerConfig::new()
-            .set_connection_timeout(Some(VALKEY_OPERATION_TIMEOUT))
-            .set_response_timeout(Some(VALKEY_OPERATION_TIMEOUT));
-
-        ConnectionManager::new_with_config(client, config)
-            .await
-            .unwrap_or_else(|_| panic!("Cannot establish Valkey connection."))
-    }
-
     pub async fn new() -> Self {
         let database_url = Self::database_url();
         let MeiliSearch { host, api_key } = &*MEILISEARCH;
@@ -88,7 +190,7 @@ impl ConnectionPool {
             .await
             .unwrap_or_else(|_| panic!("Cannot establish Minecraft bans database connection."));
 
-        let valkey_connection = Self::valkey_connection().await;
+        let valkey_connection = ValkeyConnection::connect().await;
 
         Self {
             rdb_pool,
@@ -165,45 +267,29 @@ impl ConnectionPool {
         connection.ping().await.is_ok()
     }
 
-    /// 共有の Valkey 接続でコマンドを実行する。全体を [`VALKEY_OPERATION_TIMEOUT`] で打ち切り、
-    /// 時間切れは I/O の TimedOut として返す。
-    ///
-    /// `ConnectionManager` は接続が切れたことを検知したコマンド自体はエラーで返し、裏で張り直す。
-    /// Valkey の再起動直後に認証が 1 回だけ失敗しないよう、その場合に限って 1 回だけやり直す。
-    /// セッションの操作 (SET EX / GET / DEL) は冪等なので再実行して問題ない。
+    /// 共有の Valkey 接続でコマンドを実行する。全体を [`VALKEY_OPERATION_TIMEOUT`] で打ち切る。
+    /// 接続が切れた場合は 1 回だけやり直すため、冪等なコマンドだけを渡すこと。
     pub(crate) async fn valkey_command<T, F, Fut>(&self, command: F) -> Result<T, InfraError>
     where
         F: Fn(ConnectionManager) -> Fut,
         Fut: Future<Output = RedisResult<T>>,
     {
-        let operation = async {
-            match command(self.valkey_connection.clone()).await {
-                Err(error) if error.is_unrecoverable_error() => {
-                    command(self.valkey_connection.clone()).await
-                }
-                result => result,
-            }
-        };
-
-        tokio::time::timeout(VALKEY_OPERATION_TIMEOUT, operation)
+        self.valkey_connection
+            .run(VALKEY_OPERATION_TIMEOUT, command)
             .await
-            .map_err(|_| {
-                redis::RedisError::from(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "Valkey operation timed out",
-                ))
-            })?
             .map_err(InfraError::from)
     }
 
     pub async fn ping_valkey(&self) -> bool {
-        let mut connection = self.valkey_connection.clone();
-        let response = tokio::time::timeout(
-            VALKEY_PING_TIMEOUT,
-            redis::cmd("PING").query_async::<String>(&mut connection),
-        )
-        .await;
-        matches!(response, Ok(Ok(response)) if response == "PONG")
+        let response = self
+            .valkey_connection
+            .run(VALKEY_PING_TIMEOUT, |mut connection| async move {
+                redis::cmd("PING")
+                    .query_async::<String>(&mut connection)
+                    .await
+            })
+            .await;
+        matches!(response, Ok(response) if response == "PONG")
     }
 
     pub async fn ping_meilisearch(&self) -> bool {
