@@ -1,8 +1,18 @@
-use std::{fmt::Debug, future::Future, pin::Pin, str::FromStr, time::Duration};
+use std::{
+    fmt::Debug,
+    future::Future,
+    pin::Pin,
+    str::FromStr,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use opentelemetry::{KeyValue, global, metrics::ObservableGauge};
-use redis::Client;
+use redis::{
+    Client, RedisError, RedisResult,
+    aio::{ConnectionManager, ConnectionManagerConfig},
+};
 use sqlx::{
     ConnectOptions, Connection, MySql,
     mysql::{MySqlConnectOptions, MySqlPoolOptions},
@@ -15,13 +25,125 @@ use crate::database::{
 
 pub type DatabaseTransaction = sqlx::Transaction<'static, MySql>;
 
-const VALKEY_OPERATION_TIMEOUT: Duration = Duration::from_millis(250);
+/// セッションの読み書きなど、リクエスト処理中に行う Valkey 操作 1 回あたりの上限。
+/// 再接続待ちとやり直しもこの時間に含めるため、Valkey が応答しない間もリクエストは詰まらずにエラーで返る。
+const VALKEY_OPERATION_TIMEOUT: Duration = Duration::from_secs(1);
+/// 接続の確立とコマンドの応答それぞれの上限。応答の時間切れで接続を作り直してやり直す余地を
+/// [`VALKEY_OPERATION_TIMEOUT`] の中に残すため半分にする (クラスタ内なら張り直しは数 ms で終わる)。
+const VALKEY_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(500);
+/// ヘルスチェックの PING の上限。readiness probe を素早く返すため、通常の操作より短くする。
+const VALKEY_PING_TIMEOUT: Duration = Duration::from_millis(250);
+
+/// プロセスで共有する Valkey 接続。
+///
+/// `ConnectionManager` は接続が切れたこと (RST や EOF) を検知すれば自分で張り直すが、応答が返らないだけの
+/// 時間切れでは張り直さない。相手が RST を返さずに消えた half-open の接続だと、OS が TCP を諦めるまで
+/// 全操作が時間切れになり続けるため、コマンドの応答が [`VALKEY_ATTEMPT_TIMEOUT`] 内に返らなかったときは
+/// こちらで作り直す。切断の検知による張り直しは `ConnectionManager` に任せる。
+#[derive(Clone, Debug)]
+pub(crate) struct ValkeyConnection(Arc<ValkeyConnectionInner>);
+
+#[derive(Debug)]
+struct ValkeyConnectionInner {
+    client: Client,
+    config: ConnectionManagerConfig,
+    /// (世代, 接続)。同時に失敗した複数の操作が何度も作り直さないよう、世代が一致したときだけ差し替える。
+    current: RwLock<(u64, ConnectionManager)>,
+}
+
+impl ValkeyConnection {
+    async fn connect() -> Self {
+        let Redis { host, port } = &*REDIS;
+        let client = Client::open(format!("redis://{host}:{port}/"))
+            .unwrap_or_else(|error| panic!("Invalid Valkey connection URL: {error}"));
+        let config = ConnectionManagerConfig::new()
+            .set_connection_timeout(Some(VALKEY_ATTEMPT_TIMEOUT))
+            .set_response_timeout(Some(VALKEY_ATTEMPT_TIMEOUT));
+
+        let manager = ConnectionManager::new_with_config(client.clone(), config.clone())
+            .await
+            .unwrap_or_else(|error| panic!("Cannot establish Valkey connection: {error}"));
+
+        Self(Arc::new(ValkeyConnectionInner {
+            client,
+            config,
+            current: RwLock::new((0, manager)),
+        }))
+    }
+
+    fn current(&self) -> (u64, ConnectionManager) {
+        self.0
+            .current
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    /// 世代 `generation` の接続を捨てて作り直す。実行中の操作は古い接続の clone を持っているので途中で切れない。
+    fn reset(&self, generation: u64) {
+        let mut current = self
+            .0
+            .current
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if current.0 != generation {
+            return;
+        }
+        match ConnectionManager::new_lazy_with_config(self.0.client.clone(), self.0.config.clone())
+        {
+            Ok(manager) => *current = (generation + 1, manager),
+            Err(error) => tracing::warn!(%error, "failed to recreate Valkey connection"),
+        }
+    }
+
+    /// `command` を共有接続で実行し、全体を `timeout` で打ち切る。時間切れは I/O の TimedOut として返す。
+    ///
+    /// 1 回目が失敗したときだけ 1 回やり直すため、やり直しても安全な冪等なコマンドだけを渡すこと。
+    /// - 応答の時間切れ (`is_timeout()`): 接続を作り直し、新しい接続でやり直す
+    /// - 接続が切れた (`is_unrecoverable_error()`): `ConnectionManager` が張り直しを始めているので同じ接続でやり直す
+    ///
+    /// `timeout` による打ち切り (再接続待ちを含む) では作り直さない。Valkey が落ちている間に作り直すと、
+    /// 古い `ConnectionManager` の再接続と並んで再接続が積み重なるため。
+    async fn run<T, F, Fut>(&self, timeout: Duration, command: F) -> RedisResult<T>
+    where
+        F: Fn(ConnectionManager) -> Fut,
+        Fut: Future<Output = RedisResult<T>>,
+    {
+        let operation = async {
+            let (generation, connection) = self.current();
+            match command(connection.clone()).await {
+                Err(error) if error.is_timeout() => {
+                    self.reset(generation);
+                    let (generation, connection) = self.current();
+                    let result = command(connection).await;
+                    if matches!(&result, Err(error) if error.is_timeout()) {
+                        self.reset(generation);
+                    }
+                    result
+                }
+                Err(error) if error.is_unrecoverable_error() => command(connection).await,
+                result => result,
+            }
+        };
+
+        tokio::time::timeout(timeout, operation)
+            .await
+            .unwrap_or_else(|_| {
+                Err(RedisError::from(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Valkey operation timed out",
+                )))
+            })
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ConnectionPool {
     pub(crate) rdb_pool: sqlx::MySqlPool,
     pub(crate) minecraft_bans_pool: sqlx::MySqlPool,
     pub(crate) meilisearch_client: meilisearch_sdk::client::Client,
+    /// 起動時に 1 つだけ作り、clone して使い回す。内部は 1 本の多重化接続。
+    pub(crate) valkey_connection: ValkeyConnection,
 }
 
 impl ConnectionPool {
@@ -66,11 +188,14 @@ impl ConnectionPool {
             .await
             .unwrap_or_else(|_| panic!("Cannot establish Minecraft bans database connection."));
 
+        let valkey_connection = ValkeyConnection::connect().await;
+
         Self {
             rdb_pool,
             minecraft_bans_pool,
             meilisearch_client: meilisearch_sdk::client::Client::new(host, api_key.to_owned())
                 .unwrap_or_else(|_| panic!("Cannot establish connect to MeiliSearch.")),
+            valkey_connection,
         }
     }
 
@@ -138,6 +263,43 @@ impl ConnectionPool {
             return false;
         };
         connection.ping().await.is_ok()
+    }
+
+    /// 共有の Valkey 接続でコマンドを実行する。全体を [`VALKEY_OPERATION_TIMEOUT`] で打ち切る。
+    /// 失敗時に 1 回だけやり直すため、SET / GET / DEL のような冪等なコマンドだけを渡すこと
+    /// (INCR や LPUSH などは二重に適用されうる)。
+    pub(crate) async fn idempotent_valkey_command<T, F, Fut>(
+        &self,
+        command: F,
+    ) -> Result<T, InfraError>
+    where
+        F: Fn(ConnectionManager) -> Fut,
+        Fut: Future<Output = RedisResult<T>>,
+    {
+        self.valkey_connection
+            .run(VALKEY_OPERATION_TIMEOUT, command)
+            .await
+            .map_err(InfraError::from)
+    }
+
+    /// 共有の Valkey 接続に PING を送り、[`VALKEY_PING_TIMEOUT`] 内に PONG が返るかを見る。
+    ///
+    /// PING 自体は別タスクで通常の操作と同じ上限まで走らせる。probe の上限 (250ms) で打ち切ると、
+    /// 応答の時間切れ (500ms) による接続の作り直しが起きず、half-open の接続のまま readiness が
+    /// 落ち続けて (トラフィックが来ないので) 戻らなくなるため。
+    pub async fn ping_valkey(&self) -> bool {
+        let connection = self.valkey_connection.clone();
+        let ping = tokio::spawn(async move {
+            connection
+                .run(VALKEY_OPERATION_TIMEOUT, |mut connection| async move {
+                    redis::cmd("PING")
+                        .query_async::<String>(&mut connection)
+                        .await
+                })
+                .await
+        });
+        let response = tokio::time::timeout(VALKEY_PING_TIMEOUT, ping).await;
+        matches!(response, Ok(Ok(Ok(response))) if response == "PONG")
     }
 
     pub async fn ping_meilisearch(&self) -> bool {
@@ -296,40 +458,6 @@ impl DatabaseComponents for ConnectionPool {
     fn minecraft_ban(&self) -> &Self::ConcreteMinecraftBanDatabase {
         self
     }
-}
-
-pub async fn redis_connection() -> Client {
-    let Redis { host, port } = &*REDIS;
-
-    let redis_url = format!("redis://{host}:{port}/");
-
-    let client_result = Client::open(redis_url);
-
-    client_result.unwrap_or_else(|_| panic!("Cannot connect to Valkey."))
-}
-
-pub async fn ping_valkey() -> bool {
-    let (Ok(host), Ok(port)) = (std::env::var("REDIS_HOST"), std::env::var("REDIS_PORT")) else {
-        return false;
-    };
-    let Ok(client) = Client::open(format!("redis://{host}:{port}/")) else {
-        return false;
-    };
-    let connection = tokio::time::timeout(
-        VALKEY_OPERATION_TIMEOUT,
-        client.get_multiplexed_async_connection(),
-    )
-    .await;
-    let Ok(Ok(mut connection)) = connection else {
-        return false;
-    };
-
-    let response = tokio::time::timeout(
-        VALKEY_OPERATION_TIMEOUT,
-        redis::cmd("PING").query_async::<String>(&mut connection),
-    )
-    .await;
-    matches!(response, Ok(Ok(response)) if response == "PONG")
 }
 
 use errors::infra::InfraError;
