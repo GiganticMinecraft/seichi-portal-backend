@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT c.id AS comment_id, c.answer_id, c.commented_by AS commented_by_id,\n                u.name AS commented_by_name, u.role AS commented_by_role, c.content,\n                c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n            FROM form_answer_comments c\n            INNER JOIN users u ON u.id = c.commented_by\n            WHERE c.id = ? AND c.answer_id = ?",
+  "query": "SELECT id AS comment_id, answer_id, commented_by AS commented_by_id, content,\n                timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n            FROM form_answer_comments\n            WHERE id = ? AND answer_id = ? FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -53,38 +53,6 @@
       },
       {
         "ordinal": 3,
-        "name": "commented_by_name",
-        "type_info": {
-          "type": "VarString",
-          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
-          "collation": 224,
-          "max_size": 64
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.users",
-            "name": "name"
-          }
-        }
-      },
-      {
-        "ordinal": 4,
-        "name": "commented_by_role",
-        "type_info": {
-          "type": "String",
-          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
-          "collation": 224,
-          "max_size": 52
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.users",
-            "name": "role"
-          }
-        }
-      },
-      {
-        "ordinal": 5,
         "name": "content",
         "type_info": {
           "type": "Blob",
@@ -100,7 +68,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 4,
         "name": "timestamp!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -124,10 +92,8 @@
       false,
       false,
       false,
-      false,
-      false,
       false
     ]
   },
-  "hash": "6f96d1a6a5f9e36ec4244a2bf9e386d3c860f71e1415dde6476bfac247f2b842"
+  "hash": "d9c50fed6e23a7c48e1f22c4ae811db2e72ae7c20939fdbc9d5e607e4f152757"
 }

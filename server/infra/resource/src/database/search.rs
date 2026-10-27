@@ -91,17 +91,6 @@ struct CommentHit {
     answer_id: AnswerId,
 }
 
-/// 回答本文のイベントを、回答の現在の状態をもとに検索ドキュメントへ投影した結果。
-#[derive(Default)]
-struct AnswerContentProjection {
-    documents: HashMap<FormAnswerContentId, AnswerContentSearchDocument>,
-    /// 回答がすでに存在しない (削除またはアーカイブ済み) 本文。
-    ///
-    /// CDC のイベントは本文が作られた時点のもので、同期するころには回答が消えていることがある。
-    /// 検索エンジンに残すべきではないので、投入ではなく削除として扱う。
-    orphaned: Vec<FormAnswerContentId>,
-}
-
 /// 検索エンジンへ反映したいドキュメント 1 件分の操作。
 enum SearchDocumentWrite {
     Upsert(SearchIndex, serde_json::Value),
@@ -226,10 +215,16 @@ fn answer_filter(form_id: Option<FormId>, status: Option<AnswerStatus>) -> Optio
     .reduce(|left, right| format!("{left} AND {right}"))
 }
 
+/// 回答本文のイベントを、回答の現在の状態 (`metadata_by_answer_id`) をもとに検索ドキュメントへ
+/// 投影する。
+///
+/// 回答がすでに存在しない (削除またはアーカイブ済み) 本文は結果に含まれない。CDC のイベントは
+/// 本文が作られた時点のもので、同期するころには回答が消えていることがあるため、呼び出し側は
+/// 含まれなかった本文を検索エンジンから削除する。
 fn answer_content_documents(
     data: &[SearchableFieldsWithOperation],
     metadata_by_answer_id: &HashMap<AnswerId, (FormId, AnswerStatus)>,
-) -> AnswerContentProjection {
+) -> HashMap<FormAnswerContentId, AnswerContentSearchDocument> {
     data.iter()
         .filter_map(|(fields, operation)| match (fields, operation) {
             (SearchableFields::RealAnswers(content), Operation::Create | Operation::Update) => {
@@ -237,28 +232,21 @@ fn answer_content_documents(
             }
             _ => None,
         })
-        .fold(
-            AnswerContentProjection::default(),
-            |mut projection, content| {
-                match metadata_by_answer_id.get(&content.answer_id).copied() {
-                    Some((form_id, status)) => {
-                        projection.documents.insert(
-                            content.id,
-                            AnswerContentSearchDocument {
-                                id: content.id,
-                                form_id,
-                                answer_id: content.answer_id,
-                                question_id: content.question_id,
-                                answer: content.answer.clone(),
-                                status,
-                            },
-                        );
-                    }
-                    None => projection.orphaned.push(content.id),
-                }
-                projection
-            },
-        )
+        .filter_map(|content| {
+            let (form_id, status) = metadata_by_answer_id.get(&content.answer_id).copied()?;
+            Some((
+                content.id,
+                AnswerContentSearchDocument {
+                    id: content.id,
+                    form_id,
+                    answer_id: content.answer_id,
+                    question_id: content.question_id,
+                    answer: content.answer.clone(),
+                    status,
+                },
+            ))
+        })
+        .collect()
 }
 
 fn answer_metadata_from_records(
@@ -639,16 +627,8 @@ impl SearchDatabase for ConnectionPool {
                 documents.extend(result?);
                 Ok::<_, InfraError>(documents)
             })?;
-        let AnswerContentProjection {
-            documents: content_documents,
-            orphaned: orphaned_contents,
-        } = answer_content_documents(data, &metadata_by_answer_id);
-        if !orphaned_contents.is_empty() {
-            tracing::warn!(
-                count = orphaned_contents.len(),
-                "answers of some answer contents no longer exist; removing their search documents instead of indexing them",
-            );
-        }
+        let content_documents = answer_content_documents(data, &metadata_by_answer_id);
+        let mut orphaned_contents = 0usize;
 
         let reprojected_writes =
             reprojected_documents
@@ -712,10 +692,13 @@ impl SearchDatabase for ConnectionPool {
                             })
                             .map_err(InfraError::from),
                         // 回答が消えているので、投入ではなく検索エンジンから消す
-                        None => Ok(SearchDocumentWrite::Delete(
-                            SearchIndex::RealAnswers,
-                            searchable_fields.document_id().to_string(),
-                        )),
+                        None => {
+                            orphaned_contents += 1;
+                            Ok(SearchDocumentWrite::Delete(
+                                SearchIndex::RealAnswers,
+                                searchable_fields.document_id().to_string(),
+                            ))
+                        }
                     },
                     (_, Operation::Create | Operation::Update) => {
                         upsert_document(searchable_fields).map(|document| {
@@ -732,6 +715,12 @@ impl SearchDatabase for ConnectionPool {
         let writes = reprojected_writes
             .chain(event_writes)
             .collect::<Result<Vec<_>, InfraError>>()?;
+        if orphaned_contents > 0 {
+            tracing::warn!(
+                count = orphaned_contents,
+                "answers of some answer contents no longer exist; removing their search documents instead of indexing them",
+            );
+        }
 
         execute_search_document_requests(&self.meilisearch_client, search_document_requests(writes))
             .await
@@ -968,7 +957,7 @@ mod tests {
     }
 
     #[test]
-    fn answer_contents_of_missing_answers_are_reported_as_orphaned() {
+    fn answer_contents_of_missing_answers_are_left_out_of_the_projection() {
         let existing_answer = answer_id(1);
         let missing_answer = answer_id(2);
         let existing_content = Uuid::from_u128(3).into();
@@ -990,7 +979,7 @@ mod tests {
             content(orphaned_content, missing_answer),
         ];
 
-        let projection = answer_content_documents(
+        let documents = answer_content_documents(
             &data,
             &HashMap::from([(
                 existing_answer,
@@ -998,9 +987,8 @@ mod tests {
             )]),
         );
 
-        assert!(projection.documents.contains_key(&existing_content));
-        assert!(!projection.documents.contains_key(&orphaned_content));
-        assert_eq!(projection.orphaned, vec![orphaned_content]);
+        assert!(documents.contains_key(&existing_content));
+        assert!(!documents.contains_key(&orphaned_content));
     }
 
     #[test]
@@ -1022,7 +1010,6 @@ mod tests {
             &data,
             &HashMap::from([(answer_id, (form_id, AnswerStatus::UNADDRESSED))]),
         )
-        .documents
         .remove(&content_id)
         .unwrap();
 

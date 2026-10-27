@@ -5,10 +5,10 @@ use domain::{
         UserGroup, UserGroupId, UserPagePosition, UserSessionLifetime,
     },
     pagination::{Page, PageRequest},
-    repository::user_repository::UserRepository,
+    repository::user_repository::{DiscordLinkOutcome, UserRepository},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
-use errors::{Error, infra::InfraError, usecase::UseCaseError};
+use errors::{Error, infra::InfraError};
 use itertools::Itertools;
 use reqwest::{
     StatusCode,
@@ -302,13 +302,14 @@ impl<Client: DatabaseComponents + 'static> UserRepository for Repository<Client>
     async fn link_discord_user(
         &self,
         link: Allowed<DiscordAccountLink, Update>,
-    ) -> Result<(), Error> {
+    ) -> Result<DiscordLinkOutcome, Error> {
         let linked = self.client.user().link_discord_user(link.value()).await?;
-        if !linked {
-            return Err(UseCaseError::DiscordAccountAlreadyLinked.into());
-        }
 
-        Ok(())
+        Ok(if linked {
+            DiscordLinkOutcome::Linked
+        } else {
+            DiscordLinkOutcome::AlreadyLinkedToAnotherUser
+        })
     }
 
     async fn unlink_discord_user(

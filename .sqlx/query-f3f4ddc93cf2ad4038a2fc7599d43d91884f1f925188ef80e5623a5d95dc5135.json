@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT publication, author_type, user, users.name AS user_name, users.role AS user_role,\n            temporary_user_id, temporary_users.name AS temporary_user_name,\n            temporary_users.contact_text AS temporary_user_contact_text,\n            answers.redmine_user_id, answers.redmine_author_name\n        FROM answers\n        LEFT JOIN users ON answers.user = users.id\n        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n        WHERE answers.id = ? AND answers.form_id = ?",
+  "query": "SELECT publication, author_type, user, temporary_user_id,\n            redmine_user_id, redmine_author_name\n        FROM answers\n        WHERE id = ? AND form_id = ? FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -53,38 +53,6 @@
       },
       {
         "ordinal": 3,
-        "name": "user_name",
-        "type_info": {
-          "type": "VarString",
-          "flags": "NO_DEFAULT_VALUE",
-          "collation": 224,
-          "max_size": 64
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.users",
-            "name": "name"
-          }
-        }
-      },
-      {
-        "ordinal": 4,
-        "name": "user_role",
-        "type_info": {
-          "type": "String",
-          "flags": "ENUM | NO_DEFAULT_VALUE",
-          "collation": 224,
-          "max_size": 52
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.users",
-            "name": "role"
-          }
-        }
-      },
-      {
-        "ordinal": 5,
         "name": "temporary_user_id",
         "type_info": {
           "type": "String",
@@ -100,39 +68,7 @@
         }
       },
       {
-        "ordinal": 6,
-        "name": "temporary_user_name",
-        "type_info": {
-          "type": "Blob",
-          "flags": "BLOB | NO_DEFAULT_VALUE",
-          "collation": 224,
-          "max_size": 262140
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.temporary_users",
-            "name": "name"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
-        "name": "temporary_user_contact_text",
-        "type_info": {
-          "type": "Blob",
-          "flags": "BLOB | NO_DEFAULT_VALUE",
-          "collation": 224,
-          "max_size": 262140
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.temporary_users",
-            "name": "contact_text"
-          }
-        }
-      },
-      {
-        "ordinal": 8,
+        "ordinal": 4,
         "name": "redmine_user_id",
         "type_info": {
           "type": "LongLong",
@@ -148,7 +84,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 5,
         "name": "redmine_author_name",
         "type_info": {
           "type": "Blob",
@@ -173,12 +109,8 @@
       true,
       true,
       true,
-      true,
-      true,
-      true,
-      true,
       true
     ]
   },
-  "hash": "226a3837e1bad5fd98e58100caa5bc3d94da8a3a892f99b7f900a47745c4be07"
+  "hash": "f3f4ddc93cf2ad4038a2fc7599d43d91884f1f925188ef80e5623a5d95dc5135"
 }

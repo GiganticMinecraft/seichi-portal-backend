@@ -462,26 +462,14 @@ async fn lock_comment_thread(
             .map_err(InfraError::from)
     })
     .collect::<Result<Vec<_>, _>>()?;
-    // JOIN したまま FOR UPDATE にすると回答者の users 行まで排他ロックされ、ログイン時の
-    // ユーザー更新などと競合するため、回答行だけをロックしてから結合して読む
-    sqlx::query!(
-        "SELECT id FROM answers WHERE id = ? AND form_id = ? FOR UPDATE",
-        answer_id_text,
-        form_id,
-    )
-    .fetch_optional(&mut **transaction)
-    .await
-    .map_err(InfraError::from)?
-    .ok_or(DomainError::NotFound)?;
+    // 回答行は排他ロックして最新の状態を読む。users / temporary_users を JOIN したまま
+    // FOR UPDATE にすると回答者の行まで排他ロックされ、ログイン時のユーザー更新などと
+    // 競合するため、投稿者の情報は共有ロックで別に読む
     let answer = sqlx::query!(
-        "SELECT publication, author_type, user, users.name AS user_name, users.role AS user_role,
-            temporary_user_id, temporary_users.name AS temporary_user_name,
-            temporary_users.contact_text AS temporary_user_contact_text,
-            answers.redmine_user_id, answers.redmine_author_name
+        "SELECT publication, author_type, user, temporary_user_id,
+            redmine_user_id, redmine_author_name
         FROM answers
-        LEFT JOIN users ON answers.user = users.id
-        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-        WHERE answers.id = ? AND answers.form_id = ?",
+        WHERE id = ? AND form_id = ? FOR UPDATE",
         answer_id_text,
         form_id,
     )
@@ -489,15 +477,35 @@ async fn lock_comment_thread(
     .await
     .map_err(InfraError::from)?
     .ok_or(DomainError::NotFound)?;
+    let author_user = match &answer.user {
+        Some(user_id) => sqlx::query!(
+            "SELECT name, role FROM users WHERE id = ? LOCK IN SHARE MODE",
+            user_id,
+        )
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(InfraError::from)?,
+        None => None,
+    };
+    let temporary_author = match &answer.temporary_user_id {
+        Some(temporary_user_id) => sqlx::query!(
+            "SELECT name, contact_text FROM temporary_users WHERE id = ? LOCK IN SHARE MODE",
+            temporary_user_id,
+        )
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(InfraError::from)?,
+        None => None,
+    };
 
     let answer_author = match author_from_values(
         answer.author_type,
         answer.user,
-        answer.user_name,
-        answer.user_role,
+        author_user.as_ref().map(|user| user.name.clone()),
+        author_user.map(|user| user.role),
         answer.temporary_user_id,
-        answer.temporary_user_name,
-        answer.temporary_user_contact_text,
+        temporary_author.as_ref().map(|user| user.name.clone()),
+        temporary_author.map(|user| user.contact_text),
         answer.redmine_user_id,
         answer.redmine_author_name,
     )? {
@@ -508,23 +516,12 @@ async fn lock_comment_thread(
 
     let comments = match comment_id {
         Some(comment_id) => {
-            // コメント行だけをロックし、投稿者の users 行は巻き込まない
-            sqlx::query!(
-                "SELECT id FROM form_answer_comments WHERE id = ? AND answer_id = ? FOR UPDATE",
-                comment_id.to_string(),
-                answer_id_text,
-            )
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(InfraError::from)?;
-            let portal_comment = sqlx::query_as!(
-                PortalCommentRecord,
-                r"SELECT c.id AS comment_id, c.answer_id, c.commented_by AS commented_by_id,
-                u.name AS commented_by_name, u.role AS commented_by_role, c.content,
-                c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
-            FROM form_answer_comments c
-            INNER JOIN users u ON u.id = c.commented_by
-            WHERE c.id = ? AND c.answer_id = ?",
+            // コメント行は排他ロックして最新の状態を読み、投稿者の users 行は共有ロックに留める
+            let portal_comment = sqlx::query!(
+                r"SELECT id AS comment_id, answer_id, commented_by AS commented_by_id, content,
+                timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+            FROM form_answer_comments
+            WHERE id = ? AND answer_id = ? FOR UPDATE",
                 comment_id.to_string(),
                 answer_id_text,
             )
@@ -532,7 +529,22 @@ async fn lock_comment_thread(
             .await
             .map_err(InfraError::from)?;
             let record = if let Some(comment) = portal_comment {
-                CommentRecord::Portal(comment)
+                let author = sqlx::query!(
+                    "SELECT name, role FROM users WHERE id = ? LOCK IN SHARE MODE",
+                    comment.commented_by_id,
+                )
+                .fetch_one(&mut **transaction)
+                .await
+                .map_err(InfraError::from)?;
+                CommentRecord::Portal(PortalCommentRecord {
+                    answer_id: comment.answer_id,
+                    comment_id: comment.comment_id,
+                    content: comment.content,
+                    timestamp: comment.timestamp,
+                    commented_by_name: author.name,
+                    commented_by_id: comment.commented_by_id,
+                    commented_by_role: author.role,
+                })
             } else {
                 CommentRecord::ImportedFromRedmine(
                     sqlx::query_as!(

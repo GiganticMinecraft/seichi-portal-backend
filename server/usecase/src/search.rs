@@ -75,7 +75,7 @@ const OUT_OF_SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// 1 回の再同期で走査するドキュメント数の上限。
 ///
 /// 全件を一度に処理すると、検索エンジンへの投入とデータベースの読み出しが同時に跳ね上がるため、
-/// ここまで走査したら打ち切り、続きは次の [`OUT_OF_SYNC_CHECK_INTERVAL`] で再開する。
+/// ここまで走査したら打ち切り、続きは次の [`RESYNC_STEP_INTERVAL`] で再開する。
 const RESYNC_DOCUMENT_SCAN_BUDGET: usize = 2_000;
 
 fn resync_page_limit() -> PageLimit {
@@ -809,6 +809,8 @@ impl<
                         Ok(next) => pass = next,
                         Err(error) => {
                             tracing::error!(error = %error, "failed to check search engine synchronization");
+                            // 次の tick で件数の突き合わせからやり直す
+                            last_check = None;
                         }
                     }
                 }
