@@ -1,25 +1,22 @@
-use crate::database::config::{MEILISEARCH, MeiliSearch};
-use crate::database::meilisearch_http::MeilisearchClient;
-use crate::database::meilisearch_schemas::MeilisearchStatsSchema;
+use crate::database::meilisearch_http::{MeilisearchClient, TimeoutHttpClient};
 use crate::database::{
     components::{FormAnswerDatabase, SearchDatabase},
     connection::ConnectionPool,
 };
-use crate::outgoing::http::HTTP_CLIENT;
 use crate::records::FormAnswerRecord;
 use async_trait::async_trait;
 use domain::{
     account::models::UserId,
     form::{
         answer::{AnswerEntry, AnswerId, AnswerStatus, FormAnswerContentId},
+        comment::CommentId,
         models::FormId,
         question::QuestionId,
     },
     search::models::{
         AnswerLabelSearchHit, AnswerSearchHit, AnswerTitleSearchDocument, CommentSearchHit,
-        FormAnswerComments, FormLabelSearchHit, FormMetaData, FormSearchHit, LabelForFormAnswers,
-        LabelForForms, NumberOfRecordsPerAggregate, Operation, SearchIndex, SearchableFields,
-        SearchableFieldsWithOperation, UserSearchHit, Users,
+        FormLabelSearchHit, FormSearchHit, NumberOfRecords, NumberOfRecordsPerAggregate, Operation,
+        SearchIndex, SearchableFields, SearchableFieldsWithOperation, UserSearchHit,
     },
 };
 use errors::infra::InfraError;
@@ -28,7 +25,9 @@ use itertools::{Either, Itertools};
 use meilisearch_sdk::{
     documents::DocumentsQuery,
     errors::{Error as MeilisearchError, ErrorCode},
-    search::Selectors,
+    indexes::Index,
+    search::{SearchQuery, Selectors},
+    settings::{LocalizedAttributes, Settings},
     tasks::Task,
 };
 use serde::{Deserialize, Serialize};
@@ -51,6 +50,20 @@ const SYNC_TASK_TIMEOUT: Duration = Duration::from_secs(120);
 const INDEXED_ID_FETCH_LIMIT: usize = 1_000;
 /// 回答を投影しているインデックス。`form_id` と `status` で絞り込めるようにしている。
 const ANSWER_SEARCH_INDEXES: [SearchIndex; 2] = [SearchIndex::Answers, SearchIndex::RealAnswers];
+/// 1 回の検索で検索エンジンから受け取るヒット数の上限。
+///
+/// 検索エンジンの既定値 (20 件) のままだと、呼び出し側が権限で除外したあとに残る件数が
+/// 少なすぎる。ヒットは ID だけを受け取るので、多めに取っても応答は小さい。
+const SEARCH_HIT_LIMIT: usize = 200;
+/// 検索対象の言語。
+///
+/// 日本語の分かち書きを明示し、クエリとドキュメントで同じトークナイザを使わせる。
+/// 自動判定に任せると短い漢字の語が中国語と判定され、トークンが食い違ってヒットしないことがある。
+const SEARCH_LOCALES: [&str; 1] = ["jpn"];
+/// 検索で受け取る属性。ヒットの中身は使わず ID だけ使うので、本文は受け取らない。
+const ID_ONLY: [&str; 1] = ["id"];
+const ANSWER_ID_ONLY: [&str; 1] = ["answer_id"];
+const ID_AND_ANSWER_ID: [&str; 2] = ["id", "answer_id"];
 
 #[derive(Serialize, Deserialize)]
 struct AnswerContentSearchDocument {
@@ -65,6 +78,28 @@ struct AnswerContentSearchDocument {
 #[derive(Deserialize)]
 struct IndexedDocumentId {
     id: Uuid,
+}
+
+#[derive(Deserialize)]
+struct AnswerContentHit {
+    answer_id: AnswerId,
+}
+
+#[derive(Deserialize)]
+struct CommentHit {
+    id: CommentId,
+    answer_id: AnswerId,
+}
+
+/// 回答本文のイベントを、回答の現在の状態をもとに検索ドキュメントへ投影した結果。
+#[derive(Default)]
+struct AnswerContentProjection {
+    documents: HashMap<FormAnswerContentId, AnswerContentSearchDocument>,
+    /// 回答がすでに存在しない (削除またはアーカイブ済み) 本文。
+    ///
+    /// CDC のイベントは本文が作られた時点のもので、同期するころには回答が消えていることがある。
+    /// 検索エンジンに残すべきではないので、投入ではなく削除として扱う。
+    orphaned: Vec<FormAnswerContentId>,
 }
 
 /// 検索エンジンへ反映したいドキュメント 1 件分の操作。
@@ -157,17 +192,14 @@ async fn execute_search_document_requests(
         .await
 }
 
-fn upsert_document(
-    fields: &SearchableFields,
-    content_documents: &HashMap<FormAnswerContentId, AnswerContentSearchDocument>,
-) -> Result<serde_json::Value, InfraError> {
+fn upsert_document(fields: &SearchableFields) -> Result<serde_json::Value, InfraError> {
     Ok(match fields {
         SearchableFields::FormMetaData(data) => serde_json::to_value(data)?,
         SearchableFields::AnswerTitle(_) => {
             unreachable!("answer title updates are handled by database reprojection")
         }
-        SearchableFields::RealAnswers(answers) => {
-            serde_json::to_value(&content_documents[&answers.id])?
+        SearchableFields::RealAnswers(_) => {
+            unreachable!("answer contents are projected with the answer's form id and status")
         }
         SearchableFields::FormAnswerComments(comments) => serde_json::to_value(comments)?,
         SearchableFields::LabelForFormAnswers(label) => serde_json::to_value(label)?,
@@ -197,7 +229,7 @@ fn answer_filter(form_id: Option<FormId>, status: Option<AnswerStatus>) -> Optio
 fn answer_content_documents(
     data: &[SearchableFieldsWithOperation],
     metadata_by_answer_id: &HashMap<AnswerId, (FormId, AnswerStatus)>,
-) -> Result<HashMap<FormAnswerContentId, AnswerContentSearchDocument>, InfraError> {
+) -> AnswerContentProjection {
     data.iter()
         .filter_map(|(fields, operation)| match (fields, operation) {
             (SearchableFields::RealAnswers(content), Operation::Create | Operation::Update) => {
@@ -205,30 +237,28 @@ fn answer_content_documents(
             }
             _ => None,
         })
-        .map(|content| {
-            let (form_id, status) = metadata_by_answer_id
-                .get(&content.answer_id)
-                .copied()
-                .ok_or_else(|| InfraError::Unexpected {
-                    cause: format!(
-                        "form id for answer {} was not found while updating its search document",
-                        content.answer_id
-                    ),
-                })?;
-
-            Ok((
-                content.id,
-                AnswerContentSearchDocument {
-                    id: content.id,
-                    form_id,
-                    answer_id: content.answer_id,
-                    question_id: content.question_id,
-                    answer: content.answer.clone(),
-                    status,
-                },
-            ))
-        })
-        .collect()
+        .fold(
+            AnswerContentProjection::default(),
+            |mut projection, content| {
+                match metadata_by_answer_id.get(&content.answer_id).copied() {
+                    Some((form_id, status)) => {
+                        projection.documents.insert(
+                            content.id,
+                            AnswerContentSearchDocument {
+                                id: content.id,
+                                form_id,
+                                answer_id: content.answer_id,
+                                question_id: content.question_id,
+                                answer: content.answer.clone(),
+                                status,
+                            },
+                        );
+                    }
+                    None => projection.orphaned.push(content.id),
+                }
+                projection
+            },
+        )
 }
 
 fn answer_metadata_from_records(
@@ -321,14 +351,65 @@ fn merge_answer_hits(
         .collect()
 }
 
-fn add_meilisearch_stats_auth(
-    request: reqwest_middleware::RequestBuilder,
-    api_key: Option<&str>,
-) -> reqwest_middleware::RequestBuilder {
-    match api_key {
-        Some(api_key) => request.bearer_auth(api_key),
-        None => request,
+/// 検索リクエストを組み立てる。ヒット数の上限、言語、受け取る属性をすべての検索でそろえる。
+fn configured_search<'a>(
+    index: &'a Index<TimeoutHttpClient>,
+    query: &'a str,
+    attributes_to_retrieve: &'a [&'a str],
+    filter: Option<&'a str>,
+) -> SearchQuery<'a, TimeoutHttpClient> {
+    let mut search = index.search();
+    search
+        .with_query(query)
+        .with_limit(SEARCH_HIT_LIMIT)
+        .with_locales(&SEARCH_LOCALES)
+        .with_attributes_to_retrieve(Selectors::Some(attributes_to_retrieve));
+    if let Some(filter) = filter {
+        search.with_filter(filter);
     }
+    search
+}
+
+/// 各インデックスに適用する設定。
+///
+/// - `searchableAttributes`: 本文に当たる属性だけを検索対象にする。既定 (`*`) では ID や
+///   ステータスも検索対象になり、`COMPLETED` のような語で全件がヒットしてしまう
+/// - `localizedAttributes`: [`SEARCH_LOCALES`] の分かち書きをドキュメント側にも明示する
+/// - `filterableAttributes`: 回答のインデックスは `form_id` と `status` で絞り込む
+fn index_settings(index: SearchIndex) -> Settings {
+    let searchable_attributes: &[&str] = match index {
+        SearchIndex::FormMetaData => &["title", "description"],
+        SearchIndex::Answers => &["title"],
+        SearchIndex::RealAnswers => &["answer"],
+        SearchIndex::FormAnswerComments => &["content"],
+        SearchIndex::LabelForFormAnswers | SearchIndex::LabelForForms | SearchIndex::Users => {
+            &["name"]
+        }
+    };
+    let settings = Settings::new()
+        .with_searchable_attributes(searchable_attributes)
+        .with_localized_attributes([LocalizedAttributes {
+            locales: SEARCH_LOCALES.iter().map(ToString::to_string).collect(),
+            attribute_patterns: vec!["*".to_string()],
+        }]);
+
+    if ANSWER_SEARCH_INDEXES.contains(&index) {
+        settings.with_filterable_attributes(["form_id", "status"])
+    } else {
+        settings
+    }
+}
+
+/// `desired` で指定した設定が `current` にすべて反映されているか。
+///
+/// 指定していない設定 (`None`) は比較しない。
+fn settings_match(current: &Settings, desired: &Settings) -> bool {
+    current.searchable_attributes == desired.searchable_attributes
+        && current.localized_attributes == desired.localized_attributes
+        && desired
+            .filterable_attributes
+            .as_ref()
+            .is_none_or(|filterable| current.filterable_attributes.as_ref() == Some(filterable))
 }
 
 fn is_index_not_found(error: &MeilisearchError) -> bool {
@@ -357,22 +438,85 @@ fn ensure_meilisearch_task_succeeded(
     ))))
 }
 
+impl ConnectionPool {
+    /// `index` を検索し、ヒットしたドキュメントの ID を返す。
+    async fn search_document_ids(
+        &self,
+        index: SearchIndex,
+        query: &str,
+    ) -> Result<Vec<Uuid>, InfraError> {
+        let index = self.meilisearch_client.index(index.as_str());
+        Ok(configured_search(&index, query, &ID_ONLY, None)
+            .execute::<IndexedDocumentId>()
+            .await?
+            .hits
+            .into_iter()
+            .map(|hit| hit.result.id)
+            .collect())
+    }
+
+    /// インデックスが無ければ作る。
+    ///
+    /// 毎回 `create_index` を投げると、既存のときに失敗したタスクが検索エンジンのタスク履歴に
+    /// 残り続けるため、先に存在を確認する。
+    async fn ensure_search_index(&self, index: SearchIndex) -> Result<(), InfraError> {
+        match self.meilisearch_client.get_index(index.as_str()).await {
+            Ok(_) => return Ok(()),
+            Err(error) if is_index_not_found(&error) => {}
+            Err(error) => return Err(error.into()),
+        }
+
+        let task = self
+            .meilisearch_client
+            .create_index(index.as_str(), Some("id"))
+            .await?
+            .wait_for_completion(
+                &self.meilisearch_client,
+                Some(SYNC_TASK_POLL_INTERVAL),
+                Some(SYNC_TASK_TIMEOUT),
+            )
+            .await?;
+
+        // 存在確認と作成の間に別のプロセスが作った場合だけ already exists になる
+        ensure_meilisearch_task_succeeded(task, true).map_err(Into::into)
+    }
+
+    /// インデックスの設定が [`index_settings`] と違うときだけ更新する。
+    ///
+    /// 設定の更新はドキュメントの再インデックスを伴うため、変わっていなければ投げない。
+    async fn ensure_search_index_settings(&self, index: SearchIndex) -> Result<(), InfraError> {
+        let meilisearch_index = self.meilisearch_client.index(index.as_str());
+        let desired = index_settings(index);
+        let current = meilisearch_index.get_settings().await?;
+        if settings_match(&current, &desired) {
+            return Ok(());
+        }
+
+        tracing::info!(index = index.as_str(), "updating search index settings");
+        let task = meilisearch_index
+            .set_settings(&desired)
+            .await?
+            .wait_for_completion(
+                &self.meilisearch_client,
+                Some(SYNC_TASK_POLL_INTERVAL),
+                Some(SYNC_TASK_TIMEOUT),
+            )
+            .await?;
+
+        ensure_meilisearch_task_succeeded(task, false).map_err(Into::into)
+    }
+}
+
 #[async_trait]
 impl SearchDatabase for ConnectionPool {
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "users"))]
     async fn search_users(&self, query: &str) -> Result<Vec<UserSearchHit>, InfraError> {
         Ok(self
-            .meilisearch_client
-            .index("users")
-            .search()
-            .with_query(query)
-            .with_attributes_to_highlight(Selectors::All)
-            .execute::<Users>()
+            .search_document_ids(SearchIndex::Users, query)
             .await?
-            .hits
             .into_iter()
-            .map(|hit| UserSearchHit {
-                user_id: UserId::from(hit.result.id),
+            .map(|id| UserSearchHit {
+                user_id: UserId::from(id),
             })
             .collect_vec())
     }
@@ -380,17 +524,11 @@ impl SearchDatabase for ConnectionPool {
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "form_meta_data"))]
     async fn search_forms(&self, query: &str) -> Result<Vec<FormSearchHit>, InfraError> {
         Ok(self
-            .meilisearch_client
-            .index("form_meta_data")
-            .search()
-            .with_query(query)
-            .with_attributes_to_highlight(Selectors::All)
-            .execute::<FormMetaData>()
+            .search_document_ids(SearchIndex::FormMetaData, query)
             .await?
-            .hits
             .into_iter()
-            .map(|hit| FormSearchHit {
-                form_id: hit.result.id,
+            .map(|id| FormSearchHit {
+                form_id: FormId::from(id),
             })
             .collect_vec())
     }
@@ -401,17 +539,11 @@ impl SearchDatabase for ConnectionPool {
         query: &str,
     ) -> Result<Vec<FormLabelSearchHit>, InfraError> {
         Ok(self
-            .meilisearch_client
-            .index("label_for_forms")
-            .search()
-            .with_query(query)
-            .with_attributes_to_highlight(Selectors::All)
-            .execute::<LabelForForms>()
+            .search_document_ids(SearchIndex::LabelForForms, query)
             .await?
-            .hits
             .into_iter()
-            .map(|hit| FormLabelSearchHit {
-                label_id: hit.result.id,
+            .map(|id| FormLabelSearchHit {
+                label_id: id.into(),
             })
             .collect_vec())
     }
@@ -422,17 +554,11 @@ impl SearchDatabase for ConnectionPool {
         query: &str,
     ) -> Result<Vec<AnswerLabelSearchHit>, InfraError> {
         Ok(self
-            .meilisearch_client
-            .index("label_for_form_answers")
-            .search()
-            .with_query(query)
-            .with_attributes_to_highlight(Selectors::All)
-            .execute::<LabelForFormAnswers>()
+            .search_document_ids(SearchIndex::LabelForFormAnswers, query)
             .await?
-            .hits
             .into_iter()
-            .map(|hit| AnswerLabelSearchHit {
-                label_id: hit.result.id,
+            .map(|id| AnswerLabelSearchHit {
+                label_id: id.into(),
             })
             .collect_vec())
     }
@@ -445,32 +571,23 @@ impl SearchDatabase for ConnectionPool {
         status: Option<AnswerStatus>,
     ) -> Result<Vec<AnswerSearchHit>, InfraError> {
         let filter = answer_filter(form_id, status);
-        let title_search = async {
-            let index = self.meilisearch_client.index("answers");
-            let mut search = index.search();
-            search
-                .with_query(query)
-                .with_attributes_to_highlight(Selectors::All);
-            if let Some(filter) = filter.as_deref() {
-                search.with_filter(filter);
-            }
-            search.execute::<AnswerTitleSearchDocument>().await
-        };
-        let content_search = async {
-            let index = self.meilisearch_client.index("real_answers");
-            let mut search = index.search();
-            search
-                .with_query(query)
-                .with_attributes_to_highlight(Selectors::All);
-            if let Some(filter) = filter.as_deref() {
-                search.with_filter(filter);
-            }
-            search.execute::<AnswerContentSearchDocument>().await
-        };
-        let (title_results, content_results) = try_join!(title_search, content_search)?;
+        let title_index = self.meilisearch_client.index(SearchIndex::Answers.as_str());
+        let content_index = self
+            .meilisearch_client
+            .index(SearchIndex::RealAnswers.as_str());
+        let title_search = configured_search(&title_index, query, &ID_ONLY, filter.as_deref());
+        let content_search =
+            configured_search(&content_index, query, &ANSWER_ID_ONLY, filter.as_deref());
+        let (title_results, content_results) = try_join!(
+            title_search.execute::<IndexedDocumentId>(),
+            content_search.execute::<AnswerContentHit>(),
+        )?;
 
         Ok(merge_answer_hits(
-            title_results.hits.into_iter().map(|hit| hit.result.id),
+            title_results
+                .hits
+                .into_iter()
+                .map(|hit| AnswerId::from(hit.result.id)),
             content_results
                 .hits
                 .into_iter()
@@ -480,13 +597,11 @@ impl SearchDatabase for ConnectionPool {
 
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search", db.collection.name = "form_answer_comments"))]
     async fn search_comments(&self, query: &str) -> Result<Vec<CommentSearchHit>, InfraError> {
-        Ok(self
+        let index = self
             .meilisearch_client
-            .index("form_answer_comments")
-            .search()
-            .with_query(query)
-            .with_attributes_to_highlight(Selectors::All)
-            .execute::<FormAnswerComments>()
+            .index(SearchIndex::FormAnswerComments.as_str());
+        Ok(configured_search(&index, query, &ID_AND_ANSWER_ID, None)
+            .execute::<CommentHit>()
             .await?
             .hits
             .into_iter()
@@ -524,7 +639,16 @@ impl SearchDatabase for ConnectionPool {
                 documents.extend(result?);
                 Ok::<_, InfraError>(documents)
             })?;
-        let content_documents = answer_content_documents(data, &metadata_by_answer_id)?;
+        let AnswerContentProjection {
+            documents: content_documents,
+            orphaned: orphaned_contents,
+        } = answer_content_documents(data, &metadata_by_answer_id);
+        if !orphaned_contents.is_empty() {
+            tracing::warn!(
+                count = orphaned_contents.len(),
+                "answers of some answer contents no longer exist; removing their search documents instead of indexing them",
+            );
+        }
 
         let reprojected_writes =
             reprojected_documents
@@ -576,17 +700,34 @@ impl SearchDatabase for ConnectionPool {
                     )
                 )
             })
-            .map(|(searchable_fields, operation)| match operation {
-                Operation::Create | Operation::Update => {
-                    upsert_document(searchable_fields, &content_documents).map(|document| {
-                        SearchDocumentWrite::Upsert(searchable_fields.index(), document)
-                    })
-                }
-                Operation::Delete => Ok(SearchDocumentWrite::Delete(
-                    searchable_fields.index(),
-                    searchable_fields.document_id().to_string(),
-                )),
-            });
+            .map(
+                |(searchable_fields, operation)| match (searchable_fields, operation) {
+                    (
+                        SearchableFields::RealAnswers(content),
+                        Operation::Create | Operation::Update,
+                    ) => match content_documents.get(&content.id) {
+                        Some(document) => serde_json::to_value(document)
+                            .map(|document| {
+                                SearchDocumentWrite::Upsert(SearchIndex::RealAnswers, document)
+                            })
+                            .map_err(InfraError::from),
+                        // 回答が消えているので、投入ではなく検索エンジンから消す
+                        None => Ok(SearchDocumentWrite::Delete(
+                            SearchIndex::RealAnswers,
+                            searchable_fields.document_id().to_string(),
+                        )),
+                    },
+                    (_, Operation::Create | Operation::Update) => {
+                        upsert_document(searchable_fields).map(|document| {
+                            SearchDocumentWrite::Upsert(searchable_fields.index(), document)
+                        })
+                    }
+                    (_, Operation::Delete) => Ok(SearchDocumentWrite::Delete(
+                        searchable_fields.index(),
+                        searchable_fields.document_id().to_string(),
+                    )),
+                },
+            );
 
         let writes = reprojected_writes
             .chain(event_writes)
@@ -652,52 +793,48 @@ impl SearchDatabase for ConnectionPool {
 
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "search_engine_stats"))]
     async fn search_engine_stats(&self) -> Result<NumberOfRecordsPerAggregate, InfraError> {
-        let MeiliSearch { host, api_key } = &*MEILISEARCH;
-
-        let response = add_meilisearch_stats_auth(
-            HTTP_CLIENT.get(format!("{}/stats", host)),
-            api_key.as_deref(),
-        )
-        .send()
-        .await?;
-
-        Ok(
-            serde_json::from_str::<MeilisearchStatsSchema>(response.text().await?.as_str())?
+        let stats = self.meilisearch_client.get_stats().await?;
+        // まだ作られていないインデックスはドキュメント 0 件として扱う
+        let records_of = |index: SearchIndex| {
+            let documents = stats
                 .indexes
-                .into(),
-        )
+                .get(index.as_str())
+                .map_or(0, |index_stats| index_stats.number_of_documents);
+            u32::try_from(documents)
+                .map(NumberOfRecords)
+                .map_err(|_| InfraError::Unexpected {
+                    cause: format!(
+                        "search index {} holds too many documents to count: {documents}",
+                        index.as_str()
+                    ),
+                })
+        };
+
+        Ok(NumberOfRecordsPerAggregate {
+            form_meta_data: records_of(SearchIndex::FormMetaData)?,
+            answers: records_of(SearchIndex::Answers)?,
+            real_answers: records_of(SearchIndex::RealAnswers)?,
+            form_answer_comments: records_of(SearchIndex::FormAnswerComments)?,
+            label_for_form_answers: records_of(SearchIndex::LabelForFormAnswers)?,
+            label_for_forms: records_of(SearchIndex::LabelForForms)?,
+            users: records_of(SearchIndex::Users)?,
+        })
     }
 
     #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "meilisearch", db.operation.name = "initialize_search_engine"))]
     async fn initialize_search_engine(&self) -> Result<bool, InfraError> {
-        let futures = SearchIndex::ALL
-            .into_iter()
-            .map(async |index| {
-                let task = self
-                    .meilisearch_client
-                    .create_index(index.as_str(), Some("id"))
-                    .await?
-                    .wait_for_completion(&self.meilisearch_client, None, None)
-                    .await?;
-
-                ensure_meilisearch_task_succeeded(task, true)
-            })
-            .collect_vec();
-
-        try_join_all(futures).await?;
-
-        let settings_futures = ANSWER_SEARCH_INDEXES.into_iter().map(async |index| {
-            let task = self
-                .meilisearch_client
-                .index(index.as_str())
-                .set_filterable_attributes(["form_id", "status"])
-                .await?
-                .wait_for_completion(&self.meilisearch_client, None, None)
-                .await?;
-
-            ensure_meilisearch_task_succeeded(task, false)
-        });
-        try_join_all(settings_futures).await?;
+        try_join_all(
+            SearchIndex::ALL
+                .into_iter()
+                .map(|index| self.ensure_search_index(index)),
+        )
+        .await?;
+        try_join_all(
+            SearchIndex::ALL
+                .into_iter()
+                .map(|index| self.ensure_search_index_settings(index)),
+        )
+        .await?;
 
         answer_documents_need_reprojection(self).await
     }
@@ -707,8 +844,8 @@ impl SearchDatabase for ConnectionPool {
 mod tests {
     use super::{
         SYNC_DOCUMENT_CHUNK_SIZE, SearchDocumentRequest, SearchDocumentWrite,
-        add_meilisearch_stats_auth, answer_content_documents, answer_documents_from_entry,
-        answer_filter, merge_answer_hits, search_document_requests,
+        answer_content_documents, answer_documents_from_entry, answer_filter, index_settings,
+        merge_answer_hits, search_document_requests, settings_match,
     };
     use domain::search::models::SearchIndex;
     use domain::{
@@ -719,6 +856,7 @@ mod tests {
         search::models::{Operation, RealAnswers, SearchableFields},
     };
     use itertools::Itertools;
+    use meilisearch_sdk::settings::{FilterableAttribute, Settings};
     use std::collections::HashMap;
     use uuid::Uuid;
 
@@ -778,20 +916,91 @@ mod tests {
     }
 
     #[test]
-    fn meilisearch_stats_uses_bearer_authorization() {
-        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build();
-        let request =
-            add_meilisearch_stats_auth(client.get("http://localhost/stats"), Some("sentinel"))
-                .build()
-                .unwrap();
+    fn index_settings_restrict_searchable_attributes_and_declare_japanese() {
+        let settings = index_settings(SearchIndex::RealAnswers);
 
-        assert!(
-            request
-                .headers()
-                .get(reqwest::header::AUTHORIZATION)
-                .is_some_and(|value| value.as_bytes() == b"Bearer sentinel")
+        assert_eq!(
+            settings.searchable_attributes,
+            Some(vec!["answer".to_string()])
         );
-        assert!(request.headers().get("X-Meili-API-Key").is_none());
+        assert_eq!(
+            settings.filterable_attributes,
+            Some(vec![
+                FilterableAttribute::Attribute("form_id".to_string()),
+                FilterableAttribute::Attribute("status".to_string()),
+            ])
+        );
+        let localized = settings.localized_attributes.unwrap();
+        assert_eq!(localized.len(), 1);
+        assert_eq!(localized[0].locales, vec!["jpn".to_string()]);
+        assert_eq!(localized[0].attribute_patterns, vec!["*".to_string()]);
+        assert!(
+            index_settings(SearchIndex::Users)
+                .filterable_attributes
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn settings_match_ignores_unspecified_settings_and_detects_differences() {
+        let desired = index_settings(SearchIndex::Users);
+        let applied = Settings {
+            // 検索エンジンは指定していない設定も返す
+            displayed_attributes: Some(vec!["*".to_string()]),
+            filterable_attributes: Some(Vec::new()),
+            ..desired.clone()
+        };
+        assert!(settings_match(&applied, &desired));
+
+        let default_settings = Settings {
+            searchable_attributes: Some(vec!["*".to_string()]),
+            localized_attributes: None,
+            ..Settings::new()
+        };
+        assert!(!settings_match(&default_settings, &desired));
+
+        let desired_answers = index_settings(SearchIndex::Answers);
+        let without_filterable = Settings {
+            filterable_attributes: Some(Vec::new()),
+            ..desired_answers.clone()
+        };
+        assert!(!settings_match(&without_filterable, &desired_answers));
+    }
+
+    #[test]
+    fn answer_contents_of_missing_answers_are_reported_as_orphaned() {
+        let existing_answer = answer_id(1);
+        let missing_answer = answer_id(2);
+        let existing_content = Uuid::from_u128(3).into();
+        let orphaned_content = Uuid::from_u128(4).into();
+        let content = |id, answer_id| {
+            (
+                SearchableFields::RealAnswers(RealAnswers {
+                    id,
+                    answer_id,
+                    question_id: Uuid::from_u128(5).into(),
+                    answer: "content".to_string(),
+                    status: AnswerStatus::UNADDRESSED,
+                }),
+                Operation::Create,
+            )
+        };
+        let data = [
+            content(existing_content, existing_answer),
+            content(orphaned_content, missing_answer),
+        ];
+
+        let projection = answer_content_documents(
+            &data,
+            &HashMap::from([(
+                existing_answer,
+                (FormId::from(Uuid::from_u128(6)), AnswerStatus::UNADDRESSED),
+            )]),
+        );
+
+        assert!(projection.documents.contains_key(&existing_content));
+        assert!(!projection.documents.contains_key(&orphaned_content));
+        assert_eq!(projection.orphaned, vec![orphaned_content]);
     }
 
     #[test]
@@ -813,7 +1022,7 @@ mod tests {
             &data,
             &HashMap::from([(answer_id, (form_id, AnswerStatus::UNADDRESSED))]),
         )
-        .unwrap()
+        .documents
         .remove(&content_id)
         .unwrap();
 
