@@ -229,6 +229,12 @@ fn handle_usecase_error(err: UseCaseError) -> ApiError {
             "Discord is not linked.",
             "DISCORD_NOT_LINKED",
         ),
+        UseCaseError::DiscordAccountAlreadyLinked => problem_response(
+            StatusCode::CONFLICT,
+            "Conflict",
+            "Discord account is already linked to another user.",
+            "DISCORD_ACCOUNT_ALREADY_LINKED",
+        ),
     }
 }
 

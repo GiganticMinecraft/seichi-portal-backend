@@ -529,7 +529,7 @@ impl UserDatabase for ConnectionPool {
         Ok(())
     }
 
-    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError> {
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<bool, InfraError> {
         let user_id = link.user_id().to_string();
         let discord_user_id = link.discord_user().id().to_owned().into_inner();
         let discord_username = link
@@ -541,6 +541,19 @@ impl UserDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
+                // discord_linked_users は user_id (PK) と discord_id (UNIQUE) の 2 つの一意キーを
+                // 持つ。ON DUPLICATE KEY UPDATE だけだと、他の利用者がすでに同じ Discord アカウント
+                // を連携しているときにその利用者の行を書き換えてしまうため、先に所有者を確認する
+                let current_owner = sqlx::query_scalar!(
+                    "SELECT user_id FROM discord_linked_users WHERE discord_id = ? FOR UPDATE",
+                    discord_user_id,
+                )
+                .fetch_optional(&mut **txn)
+                .await?;
+                if current_owner.is_some_and(|owner| owner != user_id) {
+                    return Ok(false);
+                }
+
                 sqlx::query!(
                     r#"INSERT INTO discord_linked_users (user_id, discord_id, discord_username)
                     VALUES (?, ?, ?)
@@ -555,7 +568,7 @@ impl UserDatabase for ConnectionPool {
                 .execute(&mut **txn)
                 .await?;
 
-                Ok::<(), InfraError>(())
+                Ok::<bool, InfraError>(true)
             })
         })
         .await
