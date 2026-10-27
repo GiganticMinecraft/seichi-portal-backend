@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE form_questions\n         SET template_key = CONCAT(?, question_id),\n             position = position + ?\n         WHERE form_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "d40905cb15099a00dd1b9994fbcc20c36b4432625c4fa975cca1183cfb48fe61"
+}

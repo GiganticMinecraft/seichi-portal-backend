@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT c.id AS comment_id, c.answer_id, c.commented_by AS commented_by_id,\n                u.name AS commented_by_name, u.role AS commented_by_role, c.content,\n                c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n            FROM form_answer_comments c\n            INNER JOIN users u ON u.id = c.commented_by\n            WHERE c.id = ? AND c.answer_id = ? FOR UPDATE",
+  "query": "SELECT messages.id AS id, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`\n                    FROM messages\n                    INNER JOIN users ON users.id = messages.sender\n                    WHERE related_answer_id = ?\n                    ORDER BY messages.timestamp, messages.id",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "comment_id",
+        "name": "id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -14,14 +14,14 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comments",
+            "table": "seichi_portal.messages",
             "name": "id"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "answer_id",
+        "name": "sender_id",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
@@ -30,30 +30,14 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comments",
-            "name": "answer_id"
+            "table": "seichi_portal.messages",
+            "name": "sender"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "commented_by_id",
-        "type_info": {
-          "type": "String",
-          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "collation": 224,
-          "max_size": 144
-        },
-        "origin": {
-          "Table": {
-            "table": "seichi_portal.form_answer_comments",
-            "name": "commented_by"
-          }
-        }
-      },
-      {
-        "ordinal": 3,
-        "name": "commented_by_name",
+        "name": "sender_name",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
@@ -68,8 +52,8 @@
         }
       },
       {
-        "ordinal": 4,
-        "name": "commented_by_role",
+        "ordinal": 3,
+        "name": "sender_role",
         "type_info": {
           "type": "String",
           "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
@@ -84,8 +68,8 @@
         }
       },
       {
-        "ordinal": 5,
-        "name": "content",
+        "ordinal": 4,
+        "name": "body",
         "type_info": {
           "type": "Blob",
           "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
@@ -94,13 +78,13 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comments",
-            "name": "content"
+            "table": "seichi_portal.messages",
+            "name": "body"
           }
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "timestamp!: chrono::DateTime<chrono::Utc>",
         "type_info": {
           "type": "Timestamp",
@@ -110,17 +94,16 @@
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_comments",
+            "table": "seichi_portal.messages",
             "name": "timestamp"
           }
         }
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
-      false,
       false,
       false,
       false,
@@ -129,5 +112,5 @@
       false
     ]
   },
-  "hash": "6c8dad59c79b9fd9a1e98bae5f3486f3447bc4dea047678770d88c23db27e9de"
+  "hash": "fec9cc4591187542fbc9bdcb54df7310ebc5e30c42641c277bc6ae26bdd47eac"
 }

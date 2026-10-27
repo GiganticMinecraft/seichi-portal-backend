@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id FROM discord_linked_users WHERE discord_id = ? FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.discord_linked_users",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "50a638c76ef45a176435b4a0c22c53efdcef2a511aee32f8caa16bc5027cb5ac"
+}

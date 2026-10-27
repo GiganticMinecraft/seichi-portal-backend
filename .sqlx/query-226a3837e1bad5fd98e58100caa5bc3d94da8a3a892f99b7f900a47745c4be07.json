@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT publication, author_type, user, users.name AS user_name, users.role AS user_role,\n            temporary_user_id, temporary_users.name AS temporary_user_name,\n            temporary_users.contact_text AS temporary_user_contact_text,\n            answers.redmine_user_id, answers.redmine_author_name\n        FROM answers\n        LEFT JOIN users ON answers.user = users.id\n        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n        WHERE answers.id = ? AND answers.form_id = ? FOR UPDATE",
+  "query": "SELECT publication, author_type, user, users.name AS user_name, users.role AS user_role,\n            temporary_user_id, temporary_users.name AS temporary_user_name,\n            temporary_users.contact_text AS temporary_user_contact_text,\n            answers.redmine_user_id, answers.redmine_author_name\n        FROM answers\n        LEFT JOIN users ON answers.user = users.id\n        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id\n        WHERE answers.id = ? AND answers.form_id = ?",
   "describe": {
     "columns": [
       {
@@ -180,5 +180,5 @@
       true
     ]
   },
-  "hash": "e16308777855e166f1422a20d66ecad51db5af2af4c721e7c5b9d8e809fca7fa"
+  "hash": "226a3837e1bad5fd98e58100caa5bc3d94da8a3a892f99b7f900a47745c4be07"
 }
