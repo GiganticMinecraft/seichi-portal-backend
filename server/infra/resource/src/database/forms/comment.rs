@@ -410,9 +410,11 @@ async fn lock_comment_thread(
 ) -> Result<Allowed<CommentThread, Update>, Error> {
     let answer_id_text = answer_id.to_string();
     let form_id = form_id.to_string();
+    // アーカイブ (form_meta_data を FOR UPDATE で取る) と同時に走らないようにするための
+    // ロック。コメント書き込み同士は互いを待たなくてよいので共有ロックにする
     let locked_form = sqlx::query!(
         "SELECT visibility, answer_visibility, answer_response_visibility
-         FROM form_meta_data WHERE id = ? FOR UPDATE",
+         FROM form_meta_data WHERE id = ? LOCK IN SHARE MODE",
         form_id,
     )
     .fetch_optional(&mut **transaction)
@@ -460,6 +462,17 @@ async fn lock_comment_thread(
             .map_err(InfraError::from)
     })
     .collect::<Result<Vec<_>, _>>()?;
+    // JOIN したまま FOR UPDATE にすると回答者の users 行まで排他ロックされ、ログイン時の
+    // ユーザー更新などと競合するため、回答行だけをロックしてから結合して読む
+    sqlx::query!(
+        "SELECT id FROM answers WHERE id = ? AND form_id = ? FOR UPDATE",
+        answer_id_text,
+        form_id,
+    )
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(InfraError::from)?
+    .ok_or(DomainError::NotFound)?;
     let answer = sqlx::query!(
         "SELECT publication, author_type, user, users.name AS user_name, users.role AS user_role,
             temporary_user_id, temporary_users.name AS temporary_user_name,
@@ -468,7 +481,7 @@ async fn lock_comment_thread(
         FROM answers
         LEFT JOIN users ON answers.user = users.id
         LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-        WHERE answers.id = ? AND answers.form_id = ? FOR UPDATE",
+        WHERE answers.id = ? AND answers.form_id = ?",
         answer_id_text,
         form_id,
     )
@@ -495,6 +508,15 @@ async fn lock_comment_thread(
 
     let comments = match comment_id {
         Some(comment_id) => {
+            // コメント行だけをロックし、投稿者の users 行は巻き込まない
+            sqlx::query!(
+                "SELECT id FROM form_answer_comments WHERE id = ? AND answer_id = ? FOR UPDATE",
+                comment_id.to_string(),
+                answer_id_text,
+            )
+            .fetch_optional(&mut **transaction)
+            .await
+            .map_err(InfraError::from)?;
             let portal_comment = sqlx::query_as!(
                 PortalCommentRecord,
                 r"SELECT c.id AS comment_id, c.answer_id, c.commented_by AS commented_by_id,
@@ -502,7 +524,7 @@ async fn lock_comment_thread(
                 c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
             FROM form_answer_comments c
             INNER JOIN users u ON u.id = c.commented_by
-            WHERE c.id = ? AND c.answer_id = ? FOR UPDATE",
+            WHERE c.id = ? AND c.answer_id = ?",
                 comment_id.to_string(),
                 answer_id_text,
             )

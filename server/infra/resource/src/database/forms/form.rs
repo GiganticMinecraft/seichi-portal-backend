@@ -14,7 +14,6 @@ use domain::{
     repository::form::answer_entry_repository::AnswerListFilter,
 };
 use errors::{Error, infra::InfraError};
-use futures::{TryStreamExt, stream};
 use itertools::Itertools;
 use sqlx::{AssertSqlSafe, MySql, MySqlConnection, QueryBuilder, Row, query};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -141,34 +140,73 @@ impl TryFrom<ArchivedFormQueryRow> for ArchivedFormRow {
     }
 }
 
-async fn get_questions_txn_with_tables(
+/// active / archived で異なる、フォームに付随するテーブル名の組。
+#[derive(Clone, Copy)]
+struct FormTables {
+    questions: &'static str,
+    choices: &'static str,
+    revisions: &'static str,
+}
+
+const ACTIVE_FORM_TABLES: FormTables = FormTables {
+    questions: "form_questions",
+    choices: "form_choices",
+    revisions: "form_revisions",
+};
+
+const ARCHIVED_FORM_TABLES: FormTables = FormTables {
+    questions: "archived_form_questions",
+    choices: "archived_form_choices",
+    revisions: "archived_form_revisions",
+};
+
+/// 複数フォームの質問と選択肢をまとめて取り、フォーム ID ごとに分ける。
+///
+/// フォーム一覧でフォームごとに質問・選択肢・リビジョンを引くと 3N 回のクエリになるため、
+/// 一覧に含まれるフォーム ID をまとめて IN 句で引く。
+async fn fetch_questions_batch(
     txn: &mut DatabaseTransaction,
-    form_id: FormId,
-    questions_table: &str,
-    choices_table: &str,
-) -> Result<Vec<QuestionRecord>, InfraError> {
-    let form_id = form_id.into_inner().to_string();
+    tables: FormTables,
+    form_ids: &[String],
+) -> Result<HashMap<String, Vec<QuestionRecord>>, InfraError> {
+    if form_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    // 対象テーブル (active / archived) と form_id の数で SQL が変わるため typed query にできない
+    let placeholders = std::iter::repeat_n("?", form_ids.len()).join(", ");
+    let FormTables {
+        questions: questions_table,
+        choices: choices_table,
+        ..
+    } = tables;
     let questions_sql = format!(
         "SELECT question_id, form_id, template_key, position, title, description, question_type, is_required
         FROM {questions_table}
-        WHERE form_id = ?
-        ORDER BY position ASC, question_id ASC"
+        WHERE form_id IN ({placeholders})
+        ORDER BY form_id ASC, position ASC, question_id ASC"
     );
     let choices_sql = format!(
         "SELECT c.id, c.question_id, c.position, c.label
         FROM {choices_table} c
         INNER JOIN {questions_table} q ON c.question_id = q.question_id
-        WHERE q.form_id = ?
+        WHERE q.form_id IN ({placeholders})
         ORDER BY c.position ASC, c.id ASC"
     );
 
-    let questions_rs = sqlx::query(AssertSqlSafe(&*questions_sql))
-        .bind(form_id.clone())
+    let questions_rs = form_ids
+        .iter()
+        .fold(sqlx::query(AssertSqlSafe(&*questions_sql)), |q, fid| {
+            q.bind(fid)
+        })
         .fetch_all(&mut **txn)
         .await?;
 
-    let choices_by_question_id = sqlx::query(AssertSqlSafe(&*choices_sql))
-        .bind(form_id)
+    let choices_by_question_id = form_ids
+        .iter()
+        .fold(sqlx::query(AssertSqlSafe(&*choices_sql)), |q, fid| {
+            q.bind(fid)
+        })
         .fetch_all(&mut **txn)
         .await?
         .into_iter()
@@ -191,25 +229,98 @@ async fn get_questions_txn_with_tables(
         .into_iter()
         .map(|question_rs| {
             let question_id = Uuid::parse_str(&question_rs.try_get::<String, _>("question_id")?)?;
+            let form_id: String = question_rs.try_get("form_id")?;
 
-            Ok::<_, InfraError>(QuestionRecord {
-                id: question_id.to_string(),
-                form_id: question_rs.try_get("form_id")?,
-                template_key: question_rs.try_get("template_key")?,
-                position: question_rs.try_get::<u16, _>("position")?,
-                title: question_rs.try_get("title")?,
-                description: question_rs.try_get("description")?,
-                question_type: question_rs.try_get::<String, _>("question_type")?,
-                choices: choices_by_question_id
-                    .get(&question_id)
-                    .cloned()
-                    .unwrap_or_default(),
-                is_required: question_rs
-                    .try_get::<Option<bool>, _>("is_required")?
-                    .unwrap_or(false),
-            })
+            Ok::<_, InfraError>((
+                form_id.clone(),
+                QuestionRecord {
+                    id: question_id.to_string(),
+                    form_id,
+                    template_key: question_rs.try_get("template_key")?,
+                    position: question_rs.try_get::<u16, _>("position")?,
+                    title: question_rs.try_get("title")?,
+                    description: question_rs.try_get("description")?,
+                    question_type: question_rs.try_get::<String, _>("question_type")?,
+                    choices: choices_by_question_id
+                        .get(&question_id)
+                        .cloned()
+                        .unwrap_or_default(),
+                    is_required: question_rs
+                        .try_get::<Option<bool>, _>("is_required")?
+                        .unwrap_or(false),
+                },
+            ))
         })
-        .collect::<Result<Vec<QuestionRecord>, _>>()
+        .collect::<Result<Vec<_>, _>>()
+        .map(|pairs| pairs.into_iter().into_group_map())
+}
+
+/// 複数フォームの最新リビジョン ID をまとめて取る。
+async fn fetch_latest_revision_ids_batch(
+    txn: &mut DatabaseTransaction,
+    tables: FormTables,
+    form_ids: &[String],
+) -> Result<HashMap<String, String>, InfraError> {
+    if form_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    // 対象テーブル (active / archived) と form_id の数で SQL が変わるため typed query にできない
+    let placeholders = std::iter::repeat_n("?", form_ids.len()).join(", ");
+    let revisions_table = tables.revisions;
+    let sql = format!(
+        "SELECT r.form_id, r.id
+        FROM {revisions_table} r
+        INNER JOIN (
+            SELECT form_id, MAX(revision_number) AS revision_number
+            FROM {revisions_table}
+            WHERE form_id IN ({placeholders})
+            GROUP BY form_id
+        ) latest ON latest.form_id = r.form_id AND latest.revision_number = r.revision_number"
+    );
+
+    form_ids
+        .iter()
+        .fold(sqlx::query(AssertSqlSafe(&*sql)), |q, fid| q.bind(fid))
+        .fetch_all(&mut **txn)
+        .await?
+        .into_iter()
+        .map(|row| Ok::<_, InfraError>((row.try_get("form_id")?, row.try_get("id")?)))
+        .collect()
+}
+
+/// 一覧のフォームに付随する質問と最新リビジョンをまとめて取ったもの。
+struct FormDetailsBatch {
+    questions: HashMap<String, Vec<QuestionRecord>>,
+    revision_ids: HashMap<String, String>,
+}
+
+impl FormDetailsBatch {
+    async fn fetch(
+        txn: &mut DatabaseTransaction,
+        tables: FormTables,
+        form_ids: &[String],
+    ) -> Result<Self, InfraError> {
+        Ok(Self {
+            questions: fetch_questions_batch(txn, tables, form_ids).await?,
+            revision_ids: fetch_latest_revision_ids_batch(txn, tables, form_ids).await?,
+        })
+    }
+
+    /// `form_id` の最新リビジョン ID と質問を取り出す。
+    fn take(&mut self, form_id: &str) -> Result<(String, Vec<QuestionRecord>), InfraError> {
+        let revision_id =
+            self.revision_ids
+                .remove(form_id)
+                .ok_or_else(|| InfraError::Unexpected {
+                    cause: format!("form {form_id} has no revision"),
+                })?;
+
+        Ok((
+            revision_id,
+            self.questions.remove(form_id).unwrap_or_default(),
+        ))
+    }
 }
 
 async fn fetch_label_ids(
@@ -263,26 +374,14 @@ async fn fetch_label_ids_batch(
         .map(|pairs| pairs.into_iter().into_group_map())
 }
 
-async fn build_active_form_record(
-    txn: &mut DatabaseTransaction,
+fn build_active_form_record(
     row: FormRow,
     restrictions: FormGroupRestrictions,
     label_ids: Vec<FormLabelId>,
-    questions_table: &str,
-    choices_table: &str,
-    revisions_table: &str,
-) -> Result<ActiveFormRecord, InfraError> {
-    let form_id = FormId::from(Uuid::parse_str(&row.id)?);
-    let revision_sql = format!(
-        "SELECT id FROM {revisions_table} WHERE form_id = ? ORDER BY revision_number DESC LIMIT 1"
-    );
-    let revision_id = sqlx::query(AssertSqlSafe(&*revision_sql))
-        .bind(&row.id)
-        .fetch_one(&mut **txn)
-        .await?
-        .try_get("id")?;
-
-    Ok(ActiveFormRecord {
+    revision_id: String,
+    questions: Vec<QuestionRecord>,
+) -> ActiveFormRecord {
+    ActiveFormRecord {
         id: row.id,
         revision_id,
         title: row.title,
@@ -300,10 +399,37 @@ async fn build_active_form_record(
         default_answer_title: row.default_answer_title,
         allowed_group_ids: restrictions.allowed_group_ids,
         answer_group_ids: restrictions.answer_group_ids,
-        questions: get_questions_txn_with_tables(txn, form_id, questions_table, choices_table)
-            .await?,
+        questions,
         label_ids,
-    })
+    }
+}
+
+/// 一覧のフォーム行から、付随する質問・リビジョンをまとめて引いてレコードを組み立てる。
+async fn build_active_form_records(
+    txn: &mut DatabaseTransaction,
+    form_rows: Vec<FormRow>,
+    mut restrictions: HashMap<String, FormGroupRestrictions>,
+    mut labels: HashMap<String, Vec<FormLabelId>>,
+) -> Result<Vec<ActiveFormRecord>, InfraError> {
+    let form_ids = form_rows.iter().map(|row| row.id.clone()).collect_vec();
+    let mut details = FormDetailsBatch::fetch(txn, ACTIVE_FORM_TABLES, &form_ids).await?;
+
+    form_rows
+        .into_iter()
+        .map(|row| {
+            let restrictions = restrictions.remove(&row.id).unwrap_or_default();
+            let label_ids = labels.remove(&row.id).unwrap_or_default();
+            let (revision_id, questions) = details.take(&row.id)?;
+
+            Ok(build_active_form_record(
+                row,
+                restrictions,
+                label_ids,
+                revision_id,
+                questions,
+            ))
+        })
+        .collect()
 }
 
 async fn active_form_record_from_row(
@@ -324,16 +450,17 @@ async fn active_form_record_from_row(
 
     let label_ids = fetch_label_ids(txn, "label_settings_for_forms", &row.id).await?;
 
-    build_active_form_record(
-        txn,
+    let mut details =
+        FormDetailsBatch::fetch(txn, ACTIVE_FORM_TABLES, std::slice::from_ref(&row.id)).await?;
+    let (revision_id, questions) = details.take(&row.id)?;
+
+    Ok(build_active_form_record(
         row,
         restrictions,
         label_ids,
-        "form_questions",
-        "form_choices",
-        "form_revisions",
-    )
-    .await
+        revision_id,
+        questions,
+    ))
 }
 
 async fn fetch_form_group_restriction_ids(
@@ -417,33 +544,51 @@ async fn fetch_form_group_restrictions_batch(
         .collect())
 }
 
-async fn build_archived_form_record(
-    txn: &mut DatabaseTransaction,
+fn build_archived_form_record(
     row: ArchivedFormRow,
     restrictions: FormGroupRestrictions,
     label_ids: Vec<FormLabelId>,
-    questions_table: &str,
-    choices_table: &str,
-    revisions_table: &str,
-) -> Result<ArchivedFormRecord, InfraError> {
-    let form = build_active_form_record(
-        txn,
-        row.form,
-        restrictions,
-        label_ids,
-        questions_table,
-        choices_table,
-        revisions_table,
-    )
-    .await?;
-
-    Ok(ArchivedFormRecord {
-        form,
+    revision_id: String,
+    questions: Vec<QuestionRecord>,
+) -> ArchivedFormRecord {
+    ArchivedFormRecord {
+        form: build_active_form_record(row.form, restrictions, label_ids, revision_id, questions),
         archived_at: row.archived_at,
         archived_by_name: row.archived_by_name,
         archived_by_id: row.archived_by_id,
         archived_by_role: row.archived_by_role,
-    })
+    }
+}
+
+/// 一覧のアーカイブ済みフォーム行から、付随する質問・リビジョンをまとめて引いてレコードを組み立てる。
+async fn build_archived_form_records(
+    txn: &mut DatabaseTransaction,
+    form_rows: Vec<ArchivedFormRow>,
+    mut restrictions: HashMap<String, FormGroupRestrictions>,
+    mut labels: HashMap<String, Vec<FormLabelId>>,
+) -> Result<Vec<ArchivedFormRecord>, InfraError> {
+    let form_ids = form_rows
+        .iter()
+        .map(|row| row.form.id.clone())
+        .collect_vec();
+    let mut details = FormDetailsBatch::fetch(txn, ARCHIVED_FORM_TABLES, &form_ids).await?;
+
+    form_rows
+        .into_iter()
+        .map(|row| {
+            let restrictions = restrictions.remove(&row.form.id).unwrap_or_default();
+            let label_ids = labels.remove(&row.form.id).unwrap_or_default();
+            let (revision_id, questions) = details.take(&row.form.id)?;
+
+            Ok(build_archived_form_record(
+                row,
+                restrictions,
+                label_ids,
+                revision_id,
+                questions,
+            ))
+        })
+        .collect()
 }
 
 async fn archived_form_record_from_row(
@@ -468,16 +613,21 @@ async fn archived_form_record_from_row(
 
     let label_ids = fetch_label_ids(txn, "archived_label_settings_for_forms", &row.form.id).await?;
 
-    build_archived_form_record(
+    let mut details = FormDetailsBatch::fetch(
         txn,
+        ARCHIVED_FORM_TABLES,
+        std::slice::from_ref(&row.form.id),
+    )
+    .await?;
+    let (revision_id, questions) = details.take(&row.form.id)?;
+
+    Ok(build_archived_form_record(
         row,
         restrictions,
         label_ids,
-        "archived_form_questions",
-        "archived_form_choices",
-        "archived_form_revisions",
-    )
-    .await
+        revision_id,
+        questions,
+    ))
 }
 
 async fn fetch_answer_entries_page(
@@ -1292,34 +1442,9 @@ impl FormDatabase for ConnectionPool {
                 let labels_by_form =
                     fetch_label_ids_batch(txn, "label_settings_for_forms", &form_ids).await?;
 
-                let records = stream::try_unfold(
-                    (
-                        form_rows.into_iter(),
-                        group_restrictions,
-                        labels_by_form,
-                        txn,
-                    ),
-                    |(mut rows, mut restrictions, mut labels, txn)| async move {
-                        let Some(row) = rows.next() else {
-                            return Ok::<_, InfraError>(None);
-                        };
-                        let r = restrictions.remove(&row.id).unwrap_or_default();
-                        let l = labels.remove(&row.id).unwrap_or_default();
-                        let record = build_active_form_record(
-                            txn,
-                            row,
-                            r,
-                            l,
-                            "form_questions",
-                            "form_choices",
-                            "form_revisions",
-                        )
+                let records =
+                    build_active_form_records(txn, form_rows, group_restrictions, labels_by_form)
                         .await?;
-                        Ok(Some((record, (rows, restrictions, labels, txn))))
-                    },
-                )
-                .try_collect()
-                .await?;
 
                 Ok::<_, InfraError>(Page::from_overfetched_items(
                     records,
@@ -1362,34 +1487,7 @@ impl FormDatabase for ConnectionPool {
                 let labels_by_form =
                     fetch_label_ids_batch(txn, "label_settings_for_forms", &form_ids).await?;
 
-                stream::try_unfold(
-                    (
-                        form_rows.into_iter(),
-                        group_restrictions,
-                        labels_by_form,
-                        txn,
-                    ),
-                    |(mut rows, mut restrictions, mut labels, txn)| async move {
-                        let Some(row) = rows.next() else {
-                            return Ok::<_, InfraError>(None);
-                        };
-                        let r = restrictions.remove(&row.id).unwrap_or_default();
-                        let l = labels.remove(&row.id).unwrap_or_default();
-                        let record = build_active_form_record(
-                            txn,
-                            row,
-                            r,
-                            l,
-                            "form_questions",
-                            "form_choices",
-                            "form_revisions",
-                        )
-                        .await?;
-                        Ok(Some((record, (rows, restrictions, labels, txn))))
-                    },
-                )
-                .try_collect()
-                .await
+                build_active_form_records(txn, form_rows, group_restrictions, labels_by_form).await
             })
         })
         .await
@@ -1535,34 +1633,9 @@ impl FormDatabase for ConnectionPool {
                     fetch_label_ids_batch(txn, "archived_label_settings_for_forms", &form_ids)
                         .await?;
 
-                let records = stream::try_unfold(
-                    (
-                        form_rows.into_iter(),
-                        group_restrictions,
-                        labels_by_form,
-                        txn,
-                    ),
-                    |(mut rows, mut restrictions, mut labels, txn)| async move {
-                        let Some(row) = rows.next() else {
-                            return Ok::<_, InfraError>(None);
-                        };
-                        let r = restrictions.remove(&row.form.id).unwrap_or_default();
-                        let l = labels.remove(&row.form.id).unwrap_or_default();
-                        let record = build_archived_form_record(
-                            txn,
-                            row,
-                            r,
-                            l,
-                            "archived_form_questions",
-                            "archived_form_choices",
-                            "archived_form_revisions",
-                        )
+                let records =
+                    build_archived_form_records(txn, form_rows, group_restrictions, labels_by_form)
                         .await?;
-                        Ok(Some((record, (rows, restrictions, labels, txn))))
-                    },
-                )
-                .try_collect()
-                .await?;
 
                 Ok::<_, InfraError>(Page::from_overfetched_items(
                     records,
@@ -1704,10 +1777,10 @@ impl FormDatabase for ConnectionPool {
     async fn size(&self) -> Result<u32, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let row = sqlx::query("SELECT COUNT(*) AS count FROM form_meta_data")
-                    .fetch_one(&mut **txn)
-                    .await?;
-                let size: i64 = row.try_get("count")?;
+                let size =
+                    sqlx::query_scalar!("SELECT COUNT(*) AS `count!: i64` FROM form_meta_data")
+                        .fetch_one(&mut **txn)
+                        .await?;
                 count_as_u32(size, "form_meta_data")
             })
         })
@@ -1968,15 +2041,16 @@ async fn fetch_question_ids(
     txn: &mut MySqlConnection,
     form_id: &str,
 ) -> Result<Vec<Uuid>, InfraError> {
-    let rows = sqlx::query(
+    let question_ids = sqlx::query_scalar!(
         "SELECT question_id FROM form_questions WHERE form_id = ? ORDER BY position ASC",
+        form_id,
     )
-    .bind(form_id)
     .fetch_all(&mut *txn)
     .await?;
 
-    rows.into_iter()
-        .map(|row| Ok::<_, InfraError>(Uuid::parse_str(&row.try_get::<String, _>("question_id")?)?))
+    question_ids
+        .iter()
+        .map(|question_id| Ok::<_, InfraError>(Uuid::parse_str(question_id)?))
         .collect()
 }
 
@@ -1991,19 +2065,19 @@ async fn fetch_existing_questions(
     txn: &mut MySqlConnection,
     form_id: &str,
 ) -> Result<Vec<ExistingQuestionRow>, InfraError> {
-    let rows = sqlx::query(
+    let rows = sqlx::query!(
         "SELECT question_id, template_key, position FROM form_questions WHERE form_id = ? ORDER BY position ASC, question_id ASC",
+        form_id,
     )
-    .bind(form_id)
     .fetch_all(&mut *txn)
     .await?;
 
     rows.into_iter()
         .map(|row| {
             Ok::<_, InfraError>(ExistingQuestionRow {
-                question_id: Uuid::parse_str(&row.try_get::<String, _>("question_id")?)?.into(),
-                template_key: row.try_get("template_key")?,
-                position: row.try_get("position")?,
+                question_id: Uuid::parse_str(&row.question_id)?.into(),
+                template_key: row.template_key,
+                position: row.position,
             })
         })
         .collect()
@@ -2053,15 +2127,15 @@ async fn temporarily_relocate_existing_questions(
             .map(|_| ())
     })?;
 
-    sqlx::query(
+    sqlx::query!(
         "UPDATE form_questions
          SET template_key = CONCAT(?, question_id),
              position = position + ?
          WHERE form_id = ?",
+        temporary_prefix,
+        position_offset,
+        form_id,
     )
-    .bind(temporary_prefix)
-    .bind(position_offset)
-    .bind(form_id)
     .execute(&mut *txn)
     .await?;
 
