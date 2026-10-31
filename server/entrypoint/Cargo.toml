@@ -12,7 +12,9 @@ axum = { workspace = true }
 axum-tracing-opentelemetry = { version = "0.42.1", features = ["tracing_level_info"] }
 common = { path = "../common" }
 hyper = { version = "1.12.0", features = ["full"] }
-json-subscriber = { version = "0.3.1", features = ["tracing-opentelemetry-0-33"] }
+# tracing-opentelemetry の更新時は、対応するバージョンの feature へ更新すること。
+# 一致しない場合、JSON ログの openTelemetry.traceId / spanId が出力されない。
+json-subscriber = { version = "0.3.1", features = ["tracing-opentelemetry-0-34"] }
 opentelemetry = { workspace = true }
 # cross ビルドの rustls 縛りに合わせ、TLS フィーチャーなし (in-cluster http://) + blocking reqwest 構成にする
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "trace", "metrics", "reqwest-blocking-client"] }
