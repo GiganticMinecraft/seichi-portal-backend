@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT real_answers.id, real_answers.question_id,\n                        questions.title AS question_title, real_answers.answer\n                    FROM real_answers\n                    INNER JOIN form_revision_questions questions\n                        ON questions.form_revision_id = real_answers.form_revision_id\n                        AND questions.question_id = real_answers.question_id\n                    WHERE real_answers.answer_id = ?",
+  "query": "SELECT real_answers.id, real_answers.question_id,\n                        questions.title AS question_title, real_answers.answer\n                    FROM real_answers\n                    INNER JOIN form_revision_questions questions\n                        ON questions.form_revision_id = real_answers.form_revision_id\n                        AND questions.question_id = real_answers.question_id\n                    WHERE real_answers.answer_id = ?\n                    ORDER BY questions.position, real_answers.id",
   "describe": {
     "columns": [
       {
@@ -78,5 +78,5 @@
       false
     ]
   },
-  "hash": "a3edfb3e064bbc4c050927cf522ba590ca55e9603cff33febb330a7e4d92a071"
+  "hash": "99e5df3f5370abfcb5faad010d8ccff56bc3b1c883ab0fd897d5f7bc8b0c751b"
 }

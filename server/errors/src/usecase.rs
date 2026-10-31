@@ -24,4 +24,6 @@ pub enum UseCaseError {
     UserGroupNotFound,
     #[error("Discord not linked.")]
     DiscordNotLinked,
+    #[error("Discord account is already linked to another user.")]
+    DiscordAccountAlreadyLinked,
 }

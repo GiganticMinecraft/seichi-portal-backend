@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:11.8
+    image: mariadb:12.3
     container_name: mariadb
     command: --log-bin --binlog-format=ROW --binlog_row_image=FULL
     environment:
@@ -16,7 +16,7 @@ services:
       - seichi_portal
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
       - ./docker/create-debezium-user.sql:/docker-entrypoint-initdb.d/create-debezium-user.sql
     healthcheck:
       test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "-P", "3306", "-u", "root", "-proot", "--silent"]
@@ -69,7 +69,7 @@ services:
       - seichi_portal
     restart: "no"
   db-seed:
-    image: mariadb:11.8
+    image: mariadb:12.3
     container_name: db-seed
     depends_on:
       migrate:
@@ -84,10 +84,12 @@ services:
       - seichi_portal
     restart: "no"
   meilisearch:
-    # NOTE: meilisearch の公式 Docker イメージをそのまま使用すると、全文検索時に日本語の漢字と中国語の漢字が衝突するために検索できない場合があるため、
-    # 中国語のトークン化が無効化された日本語用の Docker イメージを使用する
-    # ref: https://github.com/meilisearch/meilisearch/pull/3882
-    image: getmeili/meilisearch:prototype-japanese-13
+    # 本番 (seichi_infra) と同じ公式イメージを使う。
+    # 日本語の分かち書きは、かつては日本語専用のプロトタイプイメージ (prototype-japanese-*) で
+    # 対応していたが、現在は backend が起動時に各インデックスへ localizedAttributes (jpn) を
+    # 設定し、検索時も locales を指定することで公式イメージのまま扱えるようにしている。
+    # ref: https://www.meilisearch.com/docs/learn/relevancy/language
+    image: getmeili/meilisearch:v1.56.0
     ports:
       - "7700:7700"
     environment:
@@ -95,7 +97,9 @@ services:
     networks:
       - seichi_portal
     volumes:
-      - meili_data:/data.ms
+      # 公式イメージは /meili_data を作業ディレクトリにし、データを /meili_data/data.ms に置く。
+      # /data.ms にマウントするとデータが volume に乗らず、コンテナの再作成で消える
+      - meili_data:/meili_data
     restart: always
   rabbitmq:
     image: rabbitmq:4.4.0-management-alpine

@@ -371,7 +371,10 @@ pub trait UserDatabase: Send + Sync {
         session_id: String,
     ) -> Result<Option<AccountUser>, InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
-    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
+    /// Discord アカウントを利用者に連携する。
+    ///
+    /// 同じ Discord アカウントが別の利用者に連携済みのときは何も変更せず `false` を返す。
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<bool, InfraError>;
     async fn unlink_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
     async fn fetch_discord_user(
         &self,

@@ -32,7 +32,7 @@ use domain::{
         },
         form_submission_restriction_repository::FormSubmissionRestrictionRepository,
         notification_repository::NotificationRepository,
-        user_repository::UserRepository,
+        user_repository::{DiscordLinkOutcome, UserRepository},
     },
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
@@ -1697,8 +1697,8 @@ impl UserRepository for InMemoryUserRepository {
     async fn link_discord_user(
         &self,
         _link: Allowed<DiscordAccountLink, Update>,
-    ) -> Result<(), Error> {
-        Ok(())
+    ) -> Result<DiscordLinkOutcome, Error> {
+        Ok(DiscordLinkOutcome::Linked)
     }
 
     async fn unlink_discord_user(

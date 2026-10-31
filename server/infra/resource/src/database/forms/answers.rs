@@ -157,13 +157,15 @@ where
         return Ok(Vec::new());
     }
 
+    // 回答 ID の数に応じて `IN (...)` の placeholder 数が変わるため typed query にできない
     let sql = format!(
         "SELECT real_answers.id, real_answers.question_id, questions.title AS question_title, real_answers.answer, real_answers.answer_id \
          FROM real_answers \
          INNER JOIN form_revision_questions questions \
             ON questions.form_revision_id = real_answers.form_revision_id \
             AND questions.question_id = real_answers.question_id \
-         WHERE real_answers.answer_id IN ({})",
+         WHERE real_answers.answer_id IN ({}) \
+         ORDER BY real_answers.answer_id, questions.position, real_answers.id",
         std::iter::repeat_n("?", answer_ids.len()).join(", ")
     );
 
@@ -228,6 +230,7 @@ where
         return Ok(Vec::new());
     }
 
+    // 回答 ID の数に応じて `IN (...)` の placeholder 数が変わるため typed query にできない
     let sql = format!(
         r"SELECT messages.id AS id, related_answer_id AS related_answer,
             sender AS sender_id, users.name AS sender_name,
@@ -235,7 +238,8 @@ where
             timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
         FROM messages
         INNER JOIN users ON users.id = messages.sender
-        WHERE related_answer_id IN ({})",
+        WHERE related_answer_id IN ({})
+        ORDER BY messages.timestamp, messages.id",
         std::iter::repeat_n("?", answer_ids.len()).join(", ")
     );
 
@@ -422,7 +426,8 @@ impl FormAnswerDatabase for ConnectionPool {
                     INNER JOIN form_revision_questions questions
                         ON questions.form_revision_id = real_answers.form_revision_id
                         AND questions.question_id = real_answers.question_id
-                    WHERE real_answers.answer_id = ?",
+                    WHERE real_answers.answer_id = ?
+                    ORDER BY questions.position, real_answers.id",
                     answer_id.into_inner().to_string(),
                 )
                 .fetch_all(&mut **txn)
