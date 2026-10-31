@@ -6,6 +6,23 @@
   ],
   "automerge": true,
   "platformAutomerge": true,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "server/entrypoint/Cargo.toml"
+      ],
+      "matchStrings": [
+        "(?<currentValue>tracing-opentelemetry-\\d+-\\d+)"
+      ],
+      "depNameTemplate": "tracing-opentelemetry",
+      "depTypeTemplate": "features",
+      "datasourceTemplate": "crate",
+      // クレートのバージョンと feature 名を major/minor で比較する。feature に patch 番号は含めない。
+      "versioningTemplate": "regex:^(?:tracing-opentelemetry-)?(?<major>\\d+)[.-](?<minor>\\d+)(?:\\.\\d+)?$",
+      "autoReplaceStringTemplate": "tracing-opentelemetry-{{newMajor}}-{{newMinor}}"
+    }
+  ],
   "packageRules": [
     {
       "matchManagers": [
@@ -15,7 +32,8 @@
     },
     {
       "matchManagers": [
-        "cargo"
+        "cargo",
+        "custom.regex"
       ],
       "matchPackageNames": [
         "opentelemetry",
