@@ -182,3 +182,5 @@ jobs:
         run: docker exec -i "${{ job.services.db.id }}" mariadb -u user -ppassword seichi_portal < docker/minecraft-bans-schema.sql
       - name: Check sqlx offline metadata
         run: cargo sqlx prepare --check --workspace
+      - name: MariaDB comment lock integration test
+        run: cargo test -p resource --lib concurrent_comment -- --ignored
