@@ -89,7 +89,7 @@ services:
     # 対応していたが、現在は backend が起動時に各インデックスへ localizedAttributes (jpn) を
     # 設定し、検索時も locales を指定することで公式イメージのまま扱えるようにしている。
     # ref: https://www.meilisearch.com/docs/learn/relevancy/language
-    image: getmeili/meilisearch:v1.56.0
+    image: getmeili/meilisearch:v1.56.1
     ports:
       - "7700:7700"
     environment:
