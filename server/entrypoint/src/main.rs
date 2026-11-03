@@ -1,4 +1,4 @@
-use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
+use std::{future::IntoFuture, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     Extension, Json, Router,
@@ -12,7 +12,7 @@ use axum::{
 };
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use common::config::{ENV, HTTP};
-use domain::search::models::SearchableFieldsWithOperation;
+use domain::search::models::SearchSyncEvent;
 use entrypoint::{
     logging, openapi, panic_hook, profiling, session::SessionConfig, telemetry,
     turnstile::TurnstileConfig,
@@ -49,45 +49,39 @@ use tower_http::{
     catch_panic::CatchPanicLayer,
     cors::{Any, CorsLayer},
 };
-use tracing::{info, log};
+use tracing::{info, log, warn};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
+
+/// 停止シグナルを受けてから、各コンポーネントの停止と処理中リクエストの drain を待つ上限。
+///
+/// Discord gateway の切断や詰まったリクエスト、実行中の検索エンジン再同期などが残っても、
+/// この時間で打ち切って OTel / Pyroscope の flush に進み、terminationGracePeriodSeconds 内に
+/// プロセスを終える。seichi_infra の deployment.yaml の terminationGracePeriodSeconds は
+/// preStop 5 秒 + この 15 秒 + flush の上限を足して決めているため、変えるときはそちらも見直す。
+const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let turnstile_config = TurnstileConfig::from_environment()?;
     let session_config = SessionConfig::from_environment()?;
-    let tracer_provider = telemetry::init_tracer_provider();
+    let telemetry_providers = telemetry::init_providers();
 
-    // SQL 文の出力 (bind 値を含みうる) はログへ出さない
-    let stdout_log_filter = || {
-        tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
-        )
-        .add_directive("sqlx::query=off".parse().expect("directive must be valid"))
-    };
-    let json_logs_enabled = logging::json_logs_enabled(
-        ENV.name.as_str(),
-        std::env::var("LOG_FORMAT").ok().as_deref(),
+    let stdout_log_layer = logging::stdout_log_layer(
+        logging::json_logs_enabled(
+            ENV.name.as_str(),
+            std::env::var("LOG_FORMAT").ok().as_deref(),
+        ),
+        std::env::var("RUST_LOG").ok().as_deref(),
     );
-    let (json_log_layer, pretty_log_layer) = if json_logs_enabled {
-        (
-            Some(logging::json_log_layer().with_filter(stdout_log_filter())),
-            None,
-        )
-    } else {
-        (
-            None,
-            Some(tracing_subscriber::fmt::layer().with_filter(stdout_log_filter())),
-        )
-    };
 
     tracing_subscriber::registry()
-        .with(tracer_provider.as_ref().map(|provider| {
-            tracing_opentelemetry::layer().with_tracer(provider.tracer("seichi-portal-backend"))
+        .with(telemetry_providers.as_ref().map(|providers| {
+            tracing_opentelemetry::layer()
+                .with_tracer(providers.tracer_provider.tracer("seichi-portal-backend"))
+                .with_filter(telemetry::otel_span_filter())
         }))
-        .with(json_log_layer)
-        .with(pretty_log_layer)
+        .with(stdout_log_layer)
         .init();
     panic_hook::install();
 
@@ -99,9 +93,15 @@ async fn main() -> anyhow::Result<()> {
     let conn = ConnectionPool::new().await;
     conn.migrate().await?;
 
+    // コールバック型のメトリクスはハンドルを drop すると外れうるため、プロセス終了まで保持する
+    let _observable_metrics = (
+        conn.register_pool_metrics(),
+        telemetry::register_runtime_metrics(tokio::runtime::Handle::current()),
+    );
+
     let mut discord_connection = resource::outgoing::connection::ConnectionPool::new().await;
 
-    let (sender, receiver) = mpsc::channel::<SearchableFieldsWithOperation>(100);
+    let (sender, receiver) = mpsc::channel::<SearchSyncEvent>(100);
 
     let messaging_conn = resource::messaging::connection::MessagingConnectionPool::new(sender);
 
@@ -236,6 +236,8 @@ async fn main() -> anyhow::Result<()> {
         .fallback(not_found_handler)
         // handler 内 panic で 500 を返し、コネクションを維持する
         .layer(CatchPanicLayer::new())
+        // 流れの種類の属性と trace ID 付きアクセスログ (OtelAxumLayer より内側に置く)
+        .layer(middleware::from_fn(telemetry::record_request))
         // レスポンスヘッダーへの trace context 挿入 (OtelAxumLayer より内側に置く)
         .layer(OtelInResponseLayer)
         // リクエストごとの OTel スパン開始。/health はトレース対象外
@@ -276,47 +278,61 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await.unwrap();
 
     let (search_sync_shutdown_sender, search_sync_shutdown_status) = watch::channel(false);
+    let (shutdown_started_sender, shutdown_started_receiver) = watch::channel(false);
     let (search_engine_initialization_sender, search_engine_initialization_receiver) =
         watch::channel(SearchEngineInitializationStatus::Pending);
     let messaging_search_engine_initialization = search_engine_initialization_receiver.clone();
 
-    let (_discord, _axum, _search_engine_initializer, _syncer, _messaging, _auto_of_sync_watcher) = join!(
-        discord_connection.pool.start(),
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(graceful_handler(
-            shared_manager,
-            messaging_conn.clone(),
-            search_sync_shutdown_sender.clone(),
-            search_engine_initialization_sender.clone(),
-        ))
-        .into_future(),
-        start_initialize_search_engine(
-            shared_repository.to_owned(),
-            search_engine_initialization_sender,
-            search_engine_initialization_receiver.clone(),
-        ),
-        start_sync(
-            shared_repository.to_owned(),
-            receiver,
-            search_sync_shutdown_status.clone(),
-            search_engine_initialization_receiver.clone(),
-        ),
-        async move {
-            if wait_for_search_engine_initialization(messaging_search_engine_initialization).await {
-                messaging_conn.consumer().await
-            } else {
-                Ok(())
-            }
-        },
-        start_watch_out_of_sync(
-            shared_repository.to_owned(),
-            search_sync_shutdown_status,
-            search_engine_initialization_receiver,
-        )
-    );
+    let components = async {
+        let (
+            _discord,
+            _axum,
+            _search_engine_initializer,
+            _syncer,
+            _messaging,
+            _auto_of_sync_watcher,
+        ) = join!(
+            discord_connection.pool.start(),
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(graceful_handler(
+                shared_manager,
+                messaging_conn.clone(),
+                search_sync_shutdown_sender.clone(),
+                search_engine_initialization_sender.clone(),
+                shutdown_started_sender,
+            ))
+            .into_future(),
+            start_initialize_search_engine(
+                shared_repository.to_owned(),
+                search_engine_initialization_sender,
+                search_engine_initialization_receiver.clone(),
+            ),
+            start_sync(
+                shared_repository.to_owned(),
+                receiver,
+                search_sync_shutdown_status.clone(),
+                search_engine_initialization_receiver.clone(),
+            ),
+            async move {
+                if wait_for_search_engine_initialization(messaging_search_engine_initialization)
+                    .await
+                {
+                    messaging_conn.consumer().await
+                } else {
+                    Ok(())
+                }
+            },
+            start_watch_out_of_sync(
+                shared_repository.to_owned(),
+                search_sync_shutdown_status,
+                search_engine_initialization_receiver,
+            )
+        );
+    };
+    run_with_shutdown_deadline(components, shutdown_started_receiver).await;
 
     if let Some(agent) = pyroscope_agent {
         // stop() は最終プロファイルの送信を伴うため専用スレッドで行う
@@ -327,12 +343,12 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     }
 
-    if let Some(provider) = tracer_provider {
-        // provider.shutdown() は残りのスパンを blocking export するため専用スレッドで行う
+    if let Some(providers) = telemetry_providers {
+        // shutdown() は残りのスパンとメトリクスを blocking export するため専用スレッドで行う
         tokio::task::spawn_blocking(move || {
-            if let Err(error) = provider.shutdown() {
-                info!("failed to shutdown OpenTelemetry tracer provider: {error}");
-            }
+            providers.shutdown().into_iter().for_each(|error| {
+                info!("failed to shutdown OpenTelemetry {error}");
+            });
         })
         .await?;
     }
@@ -348,11 +364,40 @@ async fn not_found_handler() -> impl IntoResponse {
         .into_response()
 }
 
+/// 停止シグナルを受けてからの各コンポーネントの終了待ちに [`SHUTDOWN_DRAIN_TIMEOUT`] の上限を付ける。
+///
+/// `shutdown_started` が true になって (= graceful_handler が停止シグナルを受けて) から上限を数える。
+/// 上限を超えたら `components` (axum の serve、検索エンジン同期、メッセージングなど) の future を drop して戻る。
+/// 残った接続のタスクなどはプロセス終了とともに破棄される。
+async fn run_with_shutdown_deadline(
+    components: impl Future<Output = ()>,
+    mut shutdown_started: watch::Receiver<bool>,
+) {
+    let deadline = async {
+        if shutdown_started.wait_for(|started| *started).await.is_err() {
+            // graceful_handler が通知せずに終わることは無いが、念のため上限を掛けずに components の完了を待つ
+            std::future::pending::<()>().await;
+        }
+        tokio::time::sleep(SHUTDOWN_DRAIN_TIMEOUT).await;
+    };
+
+    tokio::select! {
+        () = components => {},
+        () = deadline => {
+            warn!(
+                timeout = ?SHUTDOWN_DRAIN_TIMEOUT,
+                "components did not stop before the shutdown drain timeout; abandoning in-flight work"
+            );
+        }
+    }
+}
+
 async fn graceful_handler(
     serenity_shared_manager: Arc<ShardManager>,
     messaging_connection: Arc<resource::messaging::connection::MessagingConnectionPool>,
     search_sync_shutdown_sender: watch::Sender<bool>,
     search_engine_initialization_sender: watch::Sender<SearchEngineInitializationStatus>,
+    shutdown_started_sender: watch::Sender<bool>,
 ) {
     let ctrl_c = async {
         signal::ctrl_c()
@@ -380,6 +425,8 @@ async fn graceful_handler(
     }
 
     info!("Gracefully shutdown...");
+    // ここから SHUTDOWN_DRAIN_TIMEOUT を数える。以降の停止処理 (Discord gateway の切断など) が詰まっても上限で打ち切る
+    let _ = shutdown_started_sender.send(true);
     let _ = search_sync_shutdown_sender.send(true);
     update_search_engine_initialization_status(
         &search_engine_initialization_sender,

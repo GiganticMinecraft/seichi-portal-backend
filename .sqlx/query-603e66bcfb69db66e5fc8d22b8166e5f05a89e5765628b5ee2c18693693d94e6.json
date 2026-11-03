@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT visibility, answer_visibility, answer_response_visibility\n         FROM form_meta_data WHERE id = ? FOR UPDATE",
+  "query": "SELECT visibility, answer_visibility, answer_response_visibility\n         FROM form_meta_data WHERE id = ? LOCK IN SHARE MODE",
   "describe": {
     "columns": [
       {
@@ -61,5 +61,5 @@
       false
     ]
   },
-  "hash": "7fb80adfea3423f52a9240f94d431ea8a07831829b7ec1209b2a27b00cc99def"
+  "hash": "603e66bcfb69db66e5fc8d22b8166e5f05a89e5765628b5ee2c18693693d94e6"
 }

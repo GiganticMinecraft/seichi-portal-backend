@@ -205,15 +205,15 @@ impl<
             .flat_map(|form| form.try_read(actor.clone()).map(|form| form.into_inner()))
             .collect::<Vec<_>>();
 
-        let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
-            self.form_label_repository
-                .fetch_labels_by_form_id(*form.id())
-        }))
-        .await?;
+        // フォームごとに問い合わせると件数分のクエリになるため、ページ内のラベルをまとめて取得する
+        let mut form_labels = self
+            .form_label_repository
+            .fetch_labels_by_form_ids(forms.iter().map(|form| *form.id()).collect())
+            .await?;
         let forms_with_labels = forms
             .into_iter()
-            .zip(form_labels)
-            .map(|(form, labels)| {
+            .map(|form| {
+                let labels = form_labels.remove(form.id()).unwrap_or_default();
                 Ok::<_, Error>((
                     form,
                     labels
@@ -275,16 +275,21 @@ impl<
             })
             .collect::<Vec<_>>();
 
-        let form_labels = futures::future::try_join_all(forms.iter().map(|form| {
-            self.form_label_repository
-                .fetch_labels_by_form_id(form.form().id().to_owned())
-        }))
-        .await?;
+        // フォームごとに問い合わせると件数分のクエリになるため、ページ内のラベルをまとめて取得する
+        let mut form_labels = self
+            .form_label_repository
+            .fetch_labels_by_form_ids(
+                forms
+                    .iter()
+                    .map(|form| form.form().id().to_owned())
+                    .collect(),
+            )
+            .await?;
 
         let forms_with_labels = forms
             .into_iter()
-            .zip(form_labels)
-            .map(|(form, labels)| {
+            .map(|form| {
+                let labels = form_labels.remove(form.form().id()).unwrap_or_default();
                 let actor_user = actor_user.clone();
                 async move {
                     let archived_by = self
@@ -1009,8 +1014,8 @@ mod tests {
         account::models::{AccountUser, Role},
         form::{
             models::{
-                ActiveForm, FormDescription, FormLabelAssignment, FormMeta, FormRevision,
-                FormSettings, FormTitle,
+                ActiveForm, FormDescription, FormLabelAssignment, FormLabelName, FormMeta,
+                FormRevision, FormSettings, FormTitle,
             },
             question::{QuestionId, QuestionSet, QuestionType},
         },
@@ -1345,6 +1350,67 @@ mod tests {
                 Some(&default_answer_title(Some("$second"))),
             )
             .is_err()
+        );
+    }
+
+    fn form_label(name: &str) -> FormLabel {
+        FormLabel::new(FormLabelName::new(name.to_string().try_into().unwrap()))
+    }
+
+    fn label_names(labels: &[FormLabel]) -> Vec<String> {
+        labels
+            .iter()
+            .map(|label| label.name().to_string())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn form_list_fetches_labels_of_all_forms_in_a_single_batch() {
+        let user = admin_user();
+        let labeled_form_id = FormId::from(Uuid::now_v7());
+        let unlabeled_form_id = FormId::from(Uuid::now_v7());
+        let repositories = FormUseCaseTestRepositories::with_active_forms(vec![
+            sample_form(labeled_form_id),
+            sample_form(unlabeled_form_id),
+        ]);
+        repositories.form_label_repository.set_labels(
+            labeled_form_id,
+            vec![form_label("イベント"), form_label("建築")],
+        );
+
+        let page = repositories
+            .form_use_case()
+            .form_list(
+                &Actor::from(user),
+                PageRequest::first(PageLimit::default_limit()),
+            )
+            .await
+            .unwrap();
+        let (forms, _) = page.into_parts();
+
+        let labels_by_form = forms
+            .iter()
+            .map(|(form, labels)| (*form.id(), label_names(labels)))
+            .collect::<HashMap<_, _>>();
+        assert_eq!(
+            labels_by_form,
+            HashMap::from([
+                (
+                    labeled_form_id,
+                    vec!["イベント".to_string(), "建築".to_string()]
+                ),
+                (unlabeled_form_id, vec![]),
+            ])
+        );
+        assert_eq!(
+            repositories.form_label_repository.batch_fetches(),
+            1,
+            "ページ内のラベルは 1 回の問い合わせでまとめて取る"
+        );
+        assert_eq!(
+            repositories.form_label_repository.single_form_fetches(),
+            0,
+            "フォームごとの問い合わせ (N+1) をしない"
         );
     }
 

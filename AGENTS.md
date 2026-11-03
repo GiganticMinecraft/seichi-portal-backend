@@ -36,3 +36,4 @@ Claude Code 向けには `.claude` を `.agents` へのシンボリックリン�
 
 - `Bearer debug_session` — ADMINISTRATOR ロール
 - `Bearer debug_session_standard` — STANDARD_USER ロール
+- `Bearer debug_user` — ADMINISTRATOR ロール (seichi-portal-frontend のデバッグモードが送るセッション)

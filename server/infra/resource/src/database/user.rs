@@ -15,7 +15,7 @@ use domain::{
 };
 use errors::infra::InfraError;
 use itertools::Itertools;
-use redis::Commands;
+use redis::AsyncCommands;
 use sha256::digest;
 use sqlx::{AssertSqlSafe, Row, query};
 use types::non_empty_string::NonEmptyString;
@@ -24,7 +24,7 @@ use uuid::Uuid;
 use crate::{
     database::{
         components::{FormSubmissionRestrictionDatabase, UserDatabase},
-        connection::{ConnectionPool, DatabaseTransaction, redis_connection},
+        connection::{ConnectionPool, DatabaseTransaction},
         count::count_as_u32,
     },
     records::DiscordUserRecord,
@@ -480,7 +480,7 @@ impl UserDatabase for ConnectionPool {
         .await
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis", db.operation.name = "start_user_session"))]
     async fn start_user_session(
         &self,
         xbox_token: String,
@@ -490,26 +490,26 @@ impl UserDatabase for ConnectionPool {
         let now = Utc::now().timestamp_millis();
         let session_id = digest(format!("{xbox_token}{now}"));
 
-        let mut redis_connection = redis_connection().await;
-
         let user_json = serde_json::to_string(user)?;
-        redis_connection.set_ex::<&str, String, ()>(
-            &session_id,
-            user_json,
-            u64::from(lifetime.into_seconds()),
-        )?;
+        let (key, value) = (session_id.as_str(), user_json.as_str());
+        let seconds = u64::from(lifetime.into_seconds());
+        self.idempotent_valkey_command(|mut connection| async move {
+            connection.set_ex::<_, _, ()>(key, value, seconds).await
+        })
+        .await?;
 
         Ok(session_id)
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis", db.operation.name = "fetch_user_by_session_id"))]
     async fn fetch_user_by_session_id(
         &self,
         session_id: String,
     ) -> Result<Option<AccountUser>, InfraError> {
-        let mut redis_connection = redis_connection().await;
-
-        let result: Option<String> = redis_connection.get(&session_id)?;
+        let key = session_id.as_str();
+        let result: Option<String> = self
+            .idempotent_valkey_command(|mut connection| async move { connection.get(key).await })
+            .await?;
         let Some(cached_user) = result.and_then(|s| serde_json::from_str::<AccountUser>(&s).ok())
         else {
             return Ok(None);
@@ -518,16 +518,18 @@ impl UserDatabase for ConnectionPool {
         self.find_by(cached_user.id().into_inner()).await
     }
 
-    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis"))]
+    #[tracing::instrument(skip_all, fields(otel.kind = "client", db.system = "redis", db.operation.name = "end_user_session"))]
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError> {
-        let mut redis_connection = redis_connection().await;
-
-        redis_connection.del::<&str, ()>(&session_id)?;
+        let key = session_id.as_str();
+        self.idempotent_valkey_command(|mut connection| async move {
+            connection.del::<_, ()>(key).await
+        })
+        .await?;
 
         Ok(())
     }
 
-    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError> {
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<bool, InfraError> {
         let user_id = link.user_id().to_string();
         let discord_user_id = link.discord_user().id().to_owned().into_inner();
         let discord_username = link
@@ -539,21 +541,45 @@ impl UserDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                sqlx::query!(
+                // discord_linked_users は user_id (PK) と discord_id (UNIQUE) の 2 つの一意キーを
+                // 持つ。素の ON DUPLICATE KEY UPDATE だと、他の利用者がすでに同じ Discord
+                // アカウントを連携しているときにその利用者の行を書き換えてしまうため、重複した
+                // 行が自分のものであるときだけ更新する。
+                // 先に SELECT ... FOR UPDATE で所有者を確かめると、まだ無い discord_id への
+                // ギャップロックで同時の連携同士がデッドロックするため、INSERT を先に行う
+                let inserted = sqlx::query!(
                     r#"INSERT INTO discord_linked_users (user_id, discord_id, discord_username)
                     VALUES (?, ?, ?)
                     ON DUPLICATE KEY UPDATE
-                    discord_id = VALUES(discord_id),
-                    discord_username = VALUES(discord_username)
+                    discord_id = IF(user_id = VALUES(user_id), VALUES(discord_id), discord_id),
+                    discord_username =
+                        IF(user_id = VALUES(user_id), VALUES(discord_username), discord_username)
                     "#,
                     user_id,
                     discord_user_id,
                     discord_username,
                 )
                 .execute(&mut **txn)
+                .await;
+                match inserted {
+                    Ok(_) => {}
+                    // 自分の行 (user_id) と他の利用者の行 (discord_id) の両方に重複すると、
+                    // 自分の行の discord_id を他の利用者のものへ変えようとして一意制約に当たる
+                    Err(sqlx::Error::Database(error)) if error.is_unique_violation() => {
+                        return Ok(false);
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+
+                // 行は存在するので、FOR UPDATE は行ロックになりギャップロックにはならない
+                let owner = sqlx::query_scalar!(
+                    "SELECT user_id FROM discord_linked_users WHERE discord_id = ? FOR UPDATE",
+                    discord_user_id,
+                )
+                .fetch_optional(&mut **txn)
                 .await?;
 
-                Ok::<(), InfraError>(())
+                Ok::<bool, InfraError>(owner.is_some_and(|owner| owner == user_id))
             })
         })
         .await

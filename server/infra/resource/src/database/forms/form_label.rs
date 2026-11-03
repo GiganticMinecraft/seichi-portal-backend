@@ -36,19 +36,13 @@ impl FormLabelDatabase for ConnectionPool {
     async fn fetch_labels(&self) -> Result<Vec<FormLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = sqlx::query("SELECT id, name FROM label_for_forms")
-                    .fetch_all(&mut **txn)
-                    .await?;
-
-                labels_rs
-                    .into_iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>(FormLabelRecord {
-                            id: rs.try_get("id")?,
-                            name: rs.try_get("name")?,
-                        })
-                    })
-                    .collect::<Result<Vec<FormLabelRecord>, _>>()
+                sqlx::query_as!(
+                    FormLabelRecord,
+                    "SELECT id, name FROM label_for_forms ORDER BY id"
+                )
+                .fetch_all(&mut **txn)
+                .await
+                .map_err(Into::<InfraError>::into)
             })
         })
         .await
@@ -117,19 +111,14 @@ impl FormLabelDatabase for ConnectionPool {
     async fn fetch_label(&self, id: FormLabelId) -> Result<Option<FormLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let label_rs = sqlx::query("SELECT id, name FROM label_for_forms WHERE id = ?")
-                    .bind(id.into_inner().to_string())
-                    .fetch_optional(&mut **txn)
-                    .await?;
-
-                label_rs
-                    .map(|rs| {
-                        Ok::<_, InfraError>(FormLabelRecord {
-                            id: rs.try_get("id")?,
-                            name: rs.try_get("name")?,
-                        })
-                    })
-                    .transpose()
+                sqlx::query_as!(
+                    FormLabelRecord,
+                    "SELECT id, name FROM label_for_forms WHERE id = ?",
+                    id.into_inner().to_string(),
+                )
+                .fetch_optional(&mut **txn)
+                .await
+                .map_err(Into::<InfraError>::into)
             })
         })
         .await
@@ -165,27 +154,75 @@ impl FormLabelDatabase for ConnectionPool {
         let form_id = form_id.into_inner().to_string();
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = sqlx::query(
+                sqlx::query_as!(
+                    FormLabelRecord,
                     "SELECT id, name FROM label_for_forms WHERE id IN (
                         SELECT label_id FROM label_settings_for_forms WHERE form_id = ?
                         UNION
                         SELECT label_id FROM archived_label_settings_for_forms WHERE form_id = ?
-                    )",
+                    )
+                    ORDER BY id",
+                    form_id,
+                    form_id,
                 )
-                .bind(form_id.clone())
-                .bind(form_id)
                 .fetch_all(&mut **txn)
-                .await?;
+                .await
+                .map_err(Into::<InfraError>::into)
+            })
+        })
+        .await
+    }
+
+    #[tracing::instrument(skip_all, fields(form_count = form_ids.len()))]
+    async fn fetch_labels_by_form_ids(
+        &self,
+        form_ids: Vec<FormId>,
+    ) -> Result<Vec<(String, FormLabelRecord)>, InfraError> {
+        if form_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let form_ids = form_ids
+            .into_iter()
+            .map(|id| id.into_inner().to_string())
+            .collect_vec();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                // フォーム数に応じて `IN (...)` の placeholder 数が変わるため、
+                // typed query ではなく AssertSqlSafe で組み立てた SQL を実行する。
+                // fetch_labels_by_form_id と同じく、アーカイブ済みフォームのラベル設定も含める
+                let placeholders = std::iter::repeat_n("?", form_ids.len()).join(", ");
+                let sql = format!(
+                    "SELECT settings.form_id, label_for_forms.id, label_for_forms.name
+                    FROM label_for_forms
+                    INNER JOIN (
+                        SELECT form_id, label_id FROM label_settings_for_forms WHERE form_id IN ({placeholders})
+                        UNION
+                        SELECT form_id, label_id FROM archived_label_settings_for_forms WHERE form_id IN ({placeholders})
+                    ) AS settings ON settings.label_id = label_for_forms.id"
+                );
+                let labels_rs = form_ids
+                    .iter()
+                    .chain(form_ids.iter())
+                    .fold(query(AssertSqlSafe(&*sql)), |query, form_id| {
+                        query.bind(form_id)
+                    })
+                    .fetch_all(&mut **txn)
+                    .await?;
 
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(FormLabelRecord {
-                            id: rs.try_get("id")?,
-                            name: rs.try_get("name")?,
-                        })
+                        Ok::<_, InfraError>((
+                            rs.try_get("form_id")?,
+                            FormLabelRecord {
+                                id: rs.try_get("id")?,
+                                name: rs.try_get("name")?,
+                            },
+                        ))
                     })
-                    .collect::<Result<Vec<FormLabelRecord>, _>>()
+                    .collect::<Result<Vec<_>, _>>()
             })
         })
         .await

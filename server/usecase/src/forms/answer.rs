@@ -401,35 +401,50 @@ impl<
         let author_disclosure = form.answer_settings().author_disclosure_for(&actor_ref);
         let answer_response_visibility = *form.answer_settings().answer_response_visibility();
 
-        let answers = stream::iter(visible_answers)
-            .then(|form_answer| async {
-                let answer_id = *form_answer.id();
-                let labels = self
-                    .answer_label_repository
-                    .get_labels_for_answers_by_answer_id(answer_id)
-                    .await?
-                    .into_iter()
-                    .map(|label| {
-                        label
-                            .try_read(actor_ref.clone())
-                            .map(|label| label.into_inner())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+        // 回答ごとにラベルを引くと 1 ページ分 (最大 50 件) の問い合わせになるため、
+        // ページ内の回答のラベルを 1 回でまとめて取得する
+        let mut labels_by_answer_id = self
+            .answer_label_repository
+            .get_labels_for_answers_by_answer_ids(
+                visible_answers
+                    .iter()
+                    .map(|form_answer| *form_answer.id())
+                    .collect(),
+            )
+            .await?;
+        let actor_ref = &actor_ref;
 
-                let answer_response_visibility = answer_response_visibility_for(
-                    answer_response_visibility,
-                    form_answer.value(),
-                    actor,
-                );
-                self.build_answer_details(
-                    actor,
-                    form_id,
-                    form_answer,
-                    author_disclosure,
-                    answer_response_visibility,
-                    labels,
-                )
-                .await
+        let answers = stream::iter(visible_answers)
+            .then(|form_answer| {
+                let labels = labels_by_answer_id
+                    .remove(form_answer.id())
+                    .unwrap_or_default();
+
+                async move {
+                    let labels = labels
+                        .into_iter()
+                        .map(|label| {
+                            label
+                                .try_read(actor_ref.clone())
+                                .map(|label| label.into_inner())
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    let answer_response_visibility = answer_response_visibility_for(
+                        answer_response_visibility,
+                        form_answer.value(),
+                        actor,
+                    );
+                    self.build_answer_details(
+                        actor,
+                        form_id,
+                        form_answer,
+                        author_disclosure,
+                        answer_response_visibility,
+                        labels,
+                    )
+                    .await
+                }
             })
             .collect::<Vec<Result<AnswerDetails, Error>>>()
             .await
@@ -492,18 +507,28 @@ impl<
             })
             .collect();
 
+        // 回答ごとにラベルを引くと 1 ページ分の問い合わせになるため、まとめて取得する
+        let mut labels_by_answer_id = self
+            .answer_label_repository
+            .get_labels_for_answers_by_answer_ids(
+                visible_answers
+                    .iter()
+                    .map(|(_, _, _, form_answer)| *form_answer.id())
+                    .collect(),
+            )
+            .await?;
+
         let answers = stream::iter(visible_answers)
             .then(
                 |(form_id, author_disclosure, response_visibility, form_answer)| {
                     let user = user.clone();
+                    let labels = labels_by_answer_id
+                        .remove(form_answer.id())
+                        .unwrap_or_default();
                     async move {
                         let actor_ref = Actor::from(user.clone());
 
-                        let answer_id = *form_answer.id();
-                        let labels = self
-                            .answer_label_repository
-                            .get_labels_for_answers_by_answer_id(answer_id)
-                            .await?
+                        let labels = labels
                             .into_iter()
                             .map(|label| {
                                 label
@@ -746,7 +771,9 @@ mod tests {
             question::Question,
         },
         pagination::PageLimit,
-        repository::form::answer_label_repository::AnswerLabelRepository,
+        repository::form::answer_label_repository::{
+            AnswerLabelRepository, AnswerLabelsByAnswerId,
+        },
         types::authorization_guard::{AuthorizationGuard, Create, Delete, Update},
     };
     use errors::domain::DomainError;
@@ -825,6 +852,13 @@ mod tests {
             _answer_id: AnswerId,
         ) -> Result<Vec<AuthorizationGuard<AnswerLabel, Read>>, Error> {
             Ok(vec![])
+        }
+
+        async fn get_labels_for_answers_by_answer_ids(
+            &self,
+            _answer_ids: Vec<AnswerId>,
+        ) -> Result<AnswerLabelsByAnswerId, Error> {
+            Ok(AnswerLabelsByAnswerId::new())
         }
 
         async fn delete_label_for_answers(

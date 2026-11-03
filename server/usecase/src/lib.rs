@@ -7,6 +7,7 @@ pub mod minecraft_ban;
 pub mod models;
 pub mod notification;
 pub mod search;
+mod search_metrics;
 #[cfg(test)]
 pub(crate) mod test_utils;
 pub mod user;

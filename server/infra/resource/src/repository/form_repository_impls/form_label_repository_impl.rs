@@ -1,11 +1,14 @@
+use std::{collections::HashMap, str::FromStr};
+
 use async_trait::async_trait;
 use domain::{
     form::models::{FormId, FormLabel, FormLabelId},
     repository::form::form_label_repository::FormLabelRepository,
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
-use errors::Error;
+use errors::{Error, infra::InfraError};
 use itertools::Itertools;
+use uuid::Uuid;
 
 use crate::{
     database::components::{DatabaseComponents, FormLabelDatabase},
@@ -100,6 +103,33 @@ impl<Client: DatabaseComponents + 'static> FormLabelRepository for Repository<Cl
             .map(TryInto::<FormLabel>::try_into)
             .map_ok(Into::<AuthorizationGuard<_, Read>>::into)
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    #[tracing::instrument(skip_all, fields(form_count = form_ids.len()))]
+    async fn fetch_labels_by_form_ids(
+        &self,
+        form_ids: Vec<FormId>,
+    ) -> Result<HashMap<FormId, Vec<AuthorizationGuard<FormLabel, Read>>>, Error> {
+        let mut labels_by_form = form_ids
+            .iter()
+            .map(|form_id| (*form_id, Vec::new()))
+            .collect::<HashMap<_, _>>();
+
+        for (form_id, record) in self
+            .client
+            .form_label()
+            .fetch_labels_by_form_ids(form_ids)
+            .await?
+        {
+            let form_id = FormId::from(Uuid::from_str(&form_id).map_err(Into::<InfraError>::into)?);
+            let label = FormLabel::try_from(record)?;
+            labels_by_form
+                .entry(form_id)
+                .or_default()
+                .push(AuthorizationGuard::<_, Read>::from(label));
+        }
+
+        Ok(labels_by_form)
     }
 
     #[tracing::instrument(skip_all)]

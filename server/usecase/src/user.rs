@@ -5,7 +5,7 @@ use domain::{
     },
     auth::Actor,
     pagination::{Page, PageRequest},
-    repository::user_repository::UserRepository,
+    repository::user_repository::{DiscordLinkOutcome, UserRepository},
     types::authorization_guard::{AuthorizationGuard, Create, Delete, Read, Update},
 };
 use errors::{Error, usecase::UseCaseError};
@@ -343,11 +343,18 @@ impl<R: UserRepository> UserUseCase<'_, R> {
 
         let link = DiscordAccountLink::new(*user.id(), discord_user);
 
-        self.repository
+        match self
+            .repository
             .link_discord_user(
                 AuthorizationGuard::<_, Update>::from(link).try_update(Actor::from(user))?,
             )
-            .await
+            .await?
+        {
+            DiscordLinkOutcome::Linked => Ok(()),
+            DiscordLinkOutcome::AlreadyLinkedToAnotherUser => {
+                Err(UseCaseError::DiscordAccountAlreadyLinked.into())
+            }
+        }
     }
 
     pub async fn unlink_discord_user(&self, user: AccountUser) -> Result<(), Error> {

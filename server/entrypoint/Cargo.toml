@@ -7,24 +7,32 @@ default-run = "entrypoint"
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
-axum-tracing-opentelemetry = "0.39.1"
+# リクエストのスパンを INFO にし、info で絞った stdout ログ側からも見えるようにする
+# (ログ行に trace_id を付けるため。既定の TRACE だとログのレイヤーから見えない)
+axum-tracing-opentelemetry = { version = "0.42.1", features = ["tracing_level_info"] }
 common = { path = "../common" }
-hyper = { version = "1.11.1", features = ["full"] }
-json-subscriber = { version = "0.3.0", features = ["tracing-opentelemetry-0-33"] }
-opentelemetry = "0.32.0"
+hyper = { version = "1.12.0", features = ["full"] }
+# tracing-opentelemetry の更新時は、対応するバージョンの feature へ更新すること。
+# 一致しない場合、JSON ログの openTelemetry.traceId / spanId が出力されない。
+json-subscriber = { version = "0.3.1", features = ["tracing-opentelemetry-0-34"] }
+opentelemetry = { workspace = true }
 # cross ビルドの rustls 縛りに合わせ、TLS フィーチャーなし (in-cluster http://) + blocking reqwest 構成にする
-opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["http-proto", "trace", "reqwest-blocking-client"] }
-opentelemetry_sdk = "0.32.1"
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "trace", "metrics", "reqwest-blocking-client"] }
+# opentelemetry-otlp (opentelemetry-http) が受け取る reqwest と同じ 0.13 系。exporter に渡す
+# blocking client の接続プール設定 (idle timeout) を調整するためだけに直接依存し、
+# このクレートからは TLS フィーチャーを有効化しない
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking"] }
+opentelemetry_sdk = { workspace = true }
 presentation = { path = "../presentation" }
 # 継続プロファイリング (Grafana Pyroscope への push)。
 # in-cluster http:// のみを想定し、このクレートからは TLS フィーチャーを有効化しない
 # (ワークスペースの他依存が reqwest の TLS を有効化する分は feature unification で共存する)
-pyroscope = { version = "2.1.1", default-features = false, features = ["backend-pprof-rs"] }
+pyroscope = { version = "2.1.5", default-features = false, features = ["backend-pprof-rs"] }
 resource = { path = "../infra/resource" }
 tokio = { workspace = true }
 tower-http = { version = "0.7.1", features = ["catch-panic", "cors"] }
 tracing = { workspace = true }
-tracing-opentelemetry = "0.33.0"
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { version = "0.3.23", features = ["std", "registry", "env-filter"] }
 serde_json = { workspace = true }
 futures = { workspace = true }
@@ -37,6 +45,9 @@ utoipa-swagger-ui = { workspace = true }
 
 [package.metadata.cargo-udeps.ignore]
 development = ["cargo-husky"]
+
+[dev-dependencies]
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
 
 [dev-dependencies.cargo-husky]
 version = "1.5.0"

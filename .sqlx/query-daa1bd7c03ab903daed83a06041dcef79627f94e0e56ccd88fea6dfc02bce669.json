@@ -1,0 +1,48 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT name, role FROM users WHERE id = ? LOCK IN SHARE MODE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 64
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "role",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 52
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.users",
+            "name": "role"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "daa1bd7c03ab903daed83a06041dcef79627f94e0e56ccd88fea6dfc02bce669"
+}

@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use domain::{
     form::answer::{AnswerId, AnswerLabel, AnswerLabelId},
-    repository::form::answer_label_repository::AnswerLabelRepository,
+    repository::form::answer_label_repository::{AnswerLabelRepository, AnswerLabelsByAnswerId},
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 use errors::Error;
@@ -83,6 +85,30 @@ impl<Client: DatabaseComponents + 'static> AnswerLabelRepository for Repository<
             .map(TryInto::<AnswerLabel>::try_into)
             .map_ok(Into::<AuthorizationGuard<AnswerLabel, Read>>::into)
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    #[tracing::instrument(skip_all, fields(answer_count = answer_ids.len()))]
+    async fn get_labels_for_answers_by_answer_ids(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<AnswerLabelsByAnswerId, Error> {
+        self.client
+            .form_answer_label()
+            .get_labels_for_answers_by_answer_ids(answer_ids)
+            .await?
+            .into_iter()
+            .try_fold(
+                HashMap::new(),
+                |mut labels_by_answer_id, (answer_id, record)| {
+                    let label = TryInto::<AnswerLabel>::try_into(record)?;
+                    labels_by_answer_id
+                        .entry(answer_id)
+                        .or_insert_with(Vec::new)
+                        .push(Into::<AuthorizationGuard<AnswerLabel, Read>>::into(label));
+
+                    Ok::<_, Error>(labels_by_answer_id)
+                },
+            )
     }
 
     #[tracing::instrument(skip_all)]

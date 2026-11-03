@@ -191,6 +191,11 @@ pub trait FormAnswerLabelDatabase: Send + Sync {
         &self,
         answer_id: AnswerId,
     ) -> Result<Vec<AnswerLabelRecord>, InfraError>;
+    /// 複数回答のラベルをまとめて引く。戻り値は (回答 ID, ラベル) の組で、順序は不定。
+    async fn get_labels_for_answers_by_answer_ids(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<(AnswerId, AnswerLabelRecord)>, InfraError>;
     async fn delete_label_for_answers(&self, label_id: AnswerLabelId) -> Result<(), InfraError>;
     async fn edit_label_for_answers(&self, label: &AnswerLabel) -> Result<(), InfraError>;
     async fn replace_answer_labels(
@@ -315,6 +320,11 @@ pub trait FormLabelDatabase: Send + Sync {
         &self,
         form_id: FormId,
     ) -> Result<Vec<FormLabelRecord>, InfraError>;
+    /// 複数フォームのラベルを (フォーム ID, ラベル) の組で返す
+    async fn fetch_labels_by_form_ids(
+        &self,
+        form_ids: Vec<FormId>,
+    ) -> Result<Vec<(String, FormLabelRecord)>, InfraError>;
     async fn size(&self) -> Result<u32, InfraError>;
 }
 
@@ -361,7 +371,10 @@ pub trait UserDatabase: Send + Sync {
         session_id: String,
     ) -> Result<Option<AccountUser>, InfraError>;
     async fn end_user_session(&self, session_id: String) -> Result<(), InfraError>;
-    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
+    /// Discord アカウントを利用者に連携する。
+    ///
+    /// 同じ Discord アカウントが別の利用者に連携済みのときは何も変更せず `false` を返す。
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<bool, InfraError>;
     async fn unlink_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError>;
     async fn fetch_discord_user(
         &self,

@@ -1,0 +1,31 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT group_id FROM form_answer_groups WHERE form_id = ? ORDER BY id ASC\n         LOCK IN SHARE MODE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "collation": 224,
+          "max_size": 144
+        },
+        "origin": {
+          "Table": {
+            "table": "seichi_portal.form_answer_groups",
+            "name": "group_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a9f65cf1d1df7a09d2d34b85303724206d3a3a819bfc0feaa6c813deb7dba9cf"
+}

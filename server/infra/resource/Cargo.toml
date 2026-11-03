@@ -31,7 +31,10 @@ serde_json = { workspace = true }
 meilisearch-sdk = { workspace = true }
 serenity = { workspace = true }
 lapin = { workspace = true }
+opentelemetry = { workspace = true }
+tracing-opentelemetry = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+opentelemetry_sdk = { workspace = true }
 axum = { workspace = true }

@@ -1,8 +1,11 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use domain::form::answer::{AnswerId, AnswerLabel, AnswerLabelId};
 use errors::infra::InfraError;
 use itertools::Itertools;
 use sqlx::{AssertSqlSafe, Row, query};
+use uuid::Uuid;
 
 use crate::{
     database::{
@@ -38,19 +41,13 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = sqlx::query("SELECT id, name FROM label_for_form_answers")
-                    .fetch_all(&mut **txn)
-                    .await?;
-
-                labels_rs
-                    .into_iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelRecord {
-                            id: rs.try_get("id")?,
-                            name: rs.try_get("name")?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()
+                sqlx::query_as!(
+                    AnswerLabelRecord,
+                    "SELECT id, name FROM label_for_form_answers ORDER BY id"
+                )
+                .fetch_all(&mut **txn)
+                .await
+                .map_err(Into::<InfraError>::into)
             })
         })
         .await
@@ -65,22 +62,14 @@ impl FormAnswerLabelDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let label_rs =
-                    sqlx::query("SELECT id, name FROM label_for_form_answers WHERE id = ?")
-                        .bind(label_id.to_string())
-                        .fetch_all(&mut **txn)
-                        .await?;
-
-                label_rs
-                    .into_iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelRecord {
-                            id: rs.try_get("id")?,
-                            name: rs.try_get("name")?,
-                        })
-                    })
-                    .next()
-                    .transpose()
+                sqlx::query_as!(
+                    AnswerLabelRecord,
+                    "SELECT id, name FROM label_for_form_answers WHERE id = ?",
+                    label_id.to_string(),
+                )
+                .fetch_optional(&mut **txn)
+                .await
+                .map_err(Into::<InfraError>::into)
             })
         })
         .await
@@ -137,27 +126,76 @@ impl FormAnswerLabelDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = sqlx::query(
-                    r"SELECT label_for_form_answers.id AS label_id, name FROM label_for_form_answers
+                sqlx::query_as!(
+                    AnswerLabelRecord,
+                    r"SELECT label_for_form_answers.id AS id, name FROM label_for_form_answers
                     INNER JOIN label_settings_for_form_answers ON label_for_form_answers.id = label_settings_for_form_answers.label_id
-                    WHERE answer_id = ?",
+                    WHERE answer_id = ?
+                    ORDER BY label_settings_for_form_answers.id",
+                    answer_id,
                 )
-                .bind(answer_id)
                 .fetch_all(&mut **txn)
-                .await?;
+                .await
+                .map_err(Into::<InfraError>::into)
+            })
+        })
+            .await
+    }
+
+    #[tracing::instrument(skip_all, fields(answer_count = answer_ids.len()))]
+    async fn get_labels_for_answers_by_answer_ids(
+        &self,
+        answer_ids: Vec<AnswerId>,
+    ) -> Result<Vec<(AnswerId, AnswerLabelRecord)>, InfraError> {
+        if answer_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let answer_ids = answer_ids
+            .into_iter()
+            .map(|answer_id| answer_id.into_inner().to_string())
+            .collect_vec();
+
+        self.read_only_transaction(|txn| {
+            Box::pin(async move {
+                // 回答数に応じて `IN (...)` の placeholder 数が変わるため、
+                // typed query ではなく AssertSqlSafe で組み立てた SQL を実行する。
+                let sql = format!(
+                    "SELECT label_settings_for_form_answers.answer_id AS answer_id, \
+                     label_for_form_answers.id AS label_id, name FROM label_for_form_answers \
+                     INNER JOIN label_settings_for_form_answers \
+                     ON label_for_form_answers.id = label_settings_for_form_answers.label_id \
+                     WHERE label_settings_for_form_answers.answer_id IN ({})",
+                    std::iter::repeat_n("?", answer_ids.len()).join(", ")
+                );
+                let labels_rs = answer_ids
+                    .iter()
+                    .fold(query(AssertSqlSafe(&*sql)), |query, answer_id| {
+                        query.bind(answer_id)
+                    })
+                    .fetch_all(&mut **txn)
+                    .await?;
 
                 labels_rs
                     .into_iter()
                     .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelRecord {
-                            id: rs.try_get("label_id")?,
-                            name: rs.try_get("name")?,
-                        })
+                        let answer_id: String = rs.try_get("answer_id")?;
+                        let answer_id: AnswerId = Uuid::from_str(&answer_id)
+                            .map_err(Into::<InfraError>::into)?
+                            .into();
+
+                        Ok::<_, InfraError>((
+                            answer_id,
+                            AnswerLabelRecord {
+                                id: rs.try_get("label_id")?,
+                                name: rs.try_get("name")?,
+                            },
+                        ))
                     })
-                    .collect::<Result<Vec<AnswerLabelRecord>, _>>()
+                    .collect::<Result<Vec<_>, _>>()
             })
         })
-            .await
+        .await
     }
 
     #[tracing::instrument(skip_all, fields(label_id = %label_id))]

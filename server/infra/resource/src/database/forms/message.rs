@@ -162,7 +162,8 @@ impl FormMessageDatabase for ConnectionPool {
                     r"SELECT messages.id AS id, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
-                    WHERE related_answer_id = ?",
+                    WHERE related_answer_id = ?
+                    ORDER BY messages.timestamp, messages.id",
                     answer_id.to_string(),
                 )
                 .fetch_all(&mut **txn)
@@ -188,7 +189,8 @@ impl FormMessageDatabase for ConnectionPool {
                     r"SELECT messages.id AS id, sender AS sender_id, users.name AS sender_name, users.role AS sender_role, body, timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
                     FROM messages
                     INNER JOIN users ON users.id = messages.sender
-                    WHERE related_answer_id = ?",
+                    WHERE related_answer_id = ?
+                    ORDER BY messages.timestamp, messages.id",
                     answer_id,
                 )
                 .fetch_all(&mut **txn)

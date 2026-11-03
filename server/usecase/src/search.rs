@@ -6,6 +6,8 @@ use crate::{
     },
     user_reference_resolver::resolve_user_references,
 };
+use chrono::Utc;
+use common::trace_flow;
 use domain::repository::form::answer_entry_repository::{AnswerEntryRepository, AnswerListFilter};
 use domain::repository::form::answer_label_repository::AnswerLabelRepository;
 use domain::repository::form::comment_attachment_repository::CommentAttachmentRepository;
@@ -32,8 +34,8 @@ use domain::{
     search::models::{
         AnswerSearchHit, AnswerTitleSearchDocument, FormAnswerComments, FormMetaData,
         LabelForFormAnswers, LabelForForms, NumberOfRecords, NumberOfRecordsPerAggregate,
-        Operation, RealAnswers, SearchIndex, SearchableFields, SearchableFieldsWithOperation,
-        UserSearchHit, Users,
+        Operation, RealAnswers, SearchIndex, SearchSyncEvent, SearchableFields,
+        SearchableFieldsWithOperation, UserSearchHit, Users,
     },
     types::authorization_guard::{
         Allowed, AuthorizationGuard, AuthorizationGuardDefinitions, Read,
@@ -41,15 +43,19 @@ use domain::{
 };
 use errors::{Error, domain::DomainError};
 use futures::{StreamExt, TryStreamExt, stream, try_join};
+use opentelemetry::global;
 use std::{
     collections::{HashMap, HashSet},
     future::ready,
     iter::once,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::sync::{mpsc::Receiver, watch};
 use tokio::time;
 use tracing::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+use crate::search_metrics::{SEARCH_SYNC_METRICS, SyncOutcome};
 use uuid::Uuid;
 
 const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
@@ -57,11 +63,19 @@ const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
 const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::from_secs(10);
 #[cfg(test)]
 const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::ZERO;
-const OUT_OF_SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+/// 再同期 1 巡の途中で、続きのステップを実行する間隔。
+const RESYNC_STEP_INTERVAL: Duration = Duration::from_secs(60);
+/// 検索エンジンとリポジトリの件数を突き合わせる間隔。
+///
+/// 件数の取得はリポジトリ側で全テーブルの `COUNT(*)` になり、InnoDB ではインデックスの全走査に
+/// なる。本番では毎分の実行がデータベースの読み取りの大半を占めていたため、CDC の取りこぼしを
+/// 拾う保険として十分な頻度まで落とす。再同期が始まったあとの続きは [`RESYNC_STEP_INTERVAL`]
+/// で進める。
+const OUT_OF_SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// 1 回の再同期で走査するドキュメント数の上限。
 ///
 /// 全件を一度に処理すると、検索エンジンへの投入とデータベースの読み出しが同時に跳ね上がるため、
-/// ここまで走査したら打ち切り、続きは次の [`OUT_OF_SYNC_CHECK_INTERVAL`] で再開する。
+/// ここまで走査したら打ち切り、続きは次の [`RESYNC_STEP_INTERVAL`] で再開する。
 const RESYNC_DOCUMENT_SCAN_BUDGET: usize = 2_000;
 
 fn resync_page_limit() -> PageLimit {
@@ -666,7 +680,7 @@ impl<
 
     pub async fn start_sync(
         &self,
-        receiver: Receiver<SearchableFieldsWithOperation>,
+        receiver: Receiver<SearchSyncEvent>,
         mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
         let mut receiver = receiver;
@@ -681,27 +695,64 @@ impl<
                 _ = shutdown_status.changed() => return Ok(()),
                 pending = receiver.recv() => pending,
             };
-            let Some(pending) = pending else {
+            let Some(SearchSyncEvent {
+                fields: pending,
+                source_committed_at,
+                trace_context,
+            }) = pending
+            else {
                 return Ok(());
             };
+            let index = pending.0.index().as_str();
+            let parent =
+                global::get_text_map_propagator(|propagator| propagator.extract(&trace_context));
 
             loop {
                 if *shutdown_status.borrow() {
                     return Ok(());
                 }
 
+                // CDC consumer の cdc.process スパンを親にして、MariaDB の変更から
+                // 検索エンジンへの反映までを 1 本のトレースにつなぐ。
+                // キャリアが空 (CDC 以外の経路) の場合はルートスパンになる
+                let span = tracing::info_span!(
+                    parent: None,
+                    "search_engine.sync",
+                    seichi_portal.flow = trace_flow::CDC,
+                    search.index = index,
+                    otel.status_code = tracing::field::Empty,
+                );
+                // 親の設定に失敗してもトレースが分かれるだけで同期には影響しないため無視する
+                let _ = span.set_parent(parent.clone());
+                let started_at = Instant::now();
+
                 let result = tokio::select! {
                     biased;
                     _ = shutdown_status.changed() => return Ok(()),
                     result = self.search_repository
                         .sync_search_engine(std::slice::from_ref(&pending))
-                        // CDC consumer からチャンネル越しに受け取るため trace context はなく、
-                        // 同期 1 件ごとに新しいルートスパンを作る
-                        .instrument(tracing::info_span!(parent: None, "search_engine.sync")) => result,
+                        .instrument(span.clone()) => result,
                 };
+                let outcome = if result.is_ok() {
+                    SyncOutcome::Success
+                } else {
+                    span.record("otel.status_code", "ERROR");
+                    SyncOutcome::Error
+                };
+                SEARCH_SYNC_METRICS.record_sync_attempt(
+                    index,
+                    outcome,
+                    started_at.elapsed().as_secs_f64(),
+                );
 
                 match result {
-                    Ok(()) => break,
+                    Ok(()) => {
+                        if let Some(committed_at) = source_committed_at {
+                            let lag = (Utc::now() - committed_at).as_seconds_f64().max(0.0);
+                            SEARCH_SYNC_METRICS.record_sync_lag(index, lag);
+                        }
+                        break;
+                    }
                     Err(error) => {
                         tracing::warn!(
                             error = %error,
@@ -724,11 +775,13 @@ impl<
         &self,
         mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
-        let mut interval = time::interval(OUT_OF_SYNC_CHECK_INTERVAL);
+        let mut interval = time::interval(RESYNC_STEP_INTERVAL);
         // 1 回の再同期が interval より長引いても、溜まった tick が一斉に発火して
         // 再同期を多重に走らせないようにする
         interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-        let mut pass = None;
+        let mut pass: Option<ResyncPass> = None;
+        // 最初の tick で件数を突き合わせ、以降は OUT_OF_SYNC_CHECK_INTERVAL ごとに突き合わせる
+        let mut last_check: Option<Instant> = None;
 
         loop {
             if *shutdown_status.borrow() {
@@ -743,10 +796,21 @@ impl<
                     }
                 },
                 _ = interval.tick() => {
+                    let check_due = last_check
+                        .is_none_or(|checked_at| checked_at.elapsed() >= OUT_OF_SYNC_CHECK_INTERVAL);
+                    if pass.is_none() && !check_due {
+                        continue;
+                    }
+                    if pass.is_none() {
+                        last_check = Some(Instant::now());
+                    }
+
                     match self.resync_search_engine_step(pass.take()).await {
                         Ok(next) => pass = next,
                         Err(error) => {
                             tracing::error!(error = %error, "failed to check search engine synchronization");
+                            // 次の tick で件数の突き合わせからやり直す
+                            last_check = None;
                         }
                     }
                 }
@@ -787,7 +851,19 @@ impl<
     /// 途中経過を [`ResyncPass`] として返して次の呼び出しで再開する。
     ///
     /// 定期実行タスクのため、実行ごとに新しいルートスパンを作る。
-    #[tracing::instrument(name = "search_engine.watch_out_of_sync", parent = None, skip_all)]
+    ///
+    /// 毎分ルートスパンができるが、意味があるのは乖離を見つけて再同期したときだけなので、
+    /// `search.out_of_sync_indexes` / `search.resync_in_progress` で絞り込めるようにする。
+    #[tracing::instrument(
+        name = "search_engine.watch_out_of_sync",
+        parent = None,
+        skip_all,
+        fields(
+            seichi_portal.flow = trace_flow::SCHEDULED,
+            search.out_of_sync_indexes = tracing::field::Empty,
+            search.resync_in_progress = tracing::field::Empty,
+        )
+    )]
     async fn resync_search_engine_step(
         &self,
         pass: Option<ResyncPass>,
@@ -796,6 +872,7 @@ impl<
             Some(pass) => Some(pass),
             None => self.start_resync_pass().await?,
         };
+        tracing::Span::current().record("search.resync_in_progress", started.is_some());
         let Some(mut pass) = started else {
             return Ok(None);
         };
@@ -824,6 +901,8 @@ impl<
         let search_engine_records = self.search_repository.fetch_search_engine_stats().await?;
         let repository_records = self.repository_records().await?;
         let out_of_sync_indexes = search_engine_records.out_of_sync_indexes(&repository_records);
+        SEARCH_SYNC_METRICS.record_out_of_sync_indexes(out_of_sync_indexes.len());
+        tracing::Span::current().record("search.out_of_sync_indexes", out_of_sync_indexes.len());
 
         if out_of_sync_indexes.is_empty() {
             return Ok(None);
@@ -1213,7 +1292,7 @@ mod tests {
             Self {
                 active_form_repository: InMemoryActiveFormRepository::default(),
                 form_answer_label_repository: MockAnswerLabelRepository::new(),
-                form_label_repository: InMemoryFormLabelRepository,
+                form_label_repository: InMemoryFormLabelRepository::default(),
                 user_repository: InMemoryUserRepository::default(),
                 answer_entry_repository: InMemoryAnswerEntryRepository::default(),
                 comment_thread_repository: MockCommentThreadRepository::new(),
@@ -1246,14 +1325,14 @@ mod tests {
         }
     }
 
-    fn user_search_event(id: Uuid) -> SearchableFieldsWithOperation {
-        (
+    fn user_search_event(id: Uuid) -> SearchSyncEvent {
+        SearchSyncEvent::new((
             SearchableFields::Users(Users {
                 id,
                 name: id.to_string(),
             }),
             Operation::Update,
-        )
+        ))
     }
 
     fn user_id_from_search_event(data: &[SearchableFieldsWithOperation]) -> Uuid {
@@ -1389,7 +1468,7 @@ mod tests {
         user_repository.save_user(indexed_user.clone());
         user_repository.save_user(missing_user.clone());
         let active_form_repository = InMemoryActiveFormRepository::default();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -1462,7 +1541,7 @@ mod tests {
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(missing_user.clone());
         let active_form_repository = InMemoryActiveFormRepository::new(vec![form]);
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let use_case = SearchUseCase {
             search_repository: &search_repository,
@@ -1502,7 +1581,7 @@ mod tests {
 
         let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
         let active_form_repository = InMemoryActiveFormRepository::default();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let use_case = SearchUseCase {
@@ -1522,6 +1601,107 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none()
+        );
+    }
+
+    /// スパンを検証するテストの前に、プロセス全体の既定 subscriber を空の Registry にする。
+    ///
+    /// tracing はコールサイトごとの interest をキャッシュし、初回登録時に
+    /// 「登録しているスレッドの既定 subscriber」で評価する (tracing-core の
+    /// `Rebuilder::JustOne`)。並列に走る別のテストが subscriber なしで同じ関数を先に
+    /// 呼ぶと、その評価は `NoSubscriber` で `Interest::never` になり、こちらのスレッドで
+    /// `set_default` した subscriber にスパンが届かなくなる (CI で散発していた
+    /// "span search_engine.watch_out_of_sync must be exported")。既定を Registry
+    /// (interest は常に `always`) にしておけば、どのスレッドで評価されても
+    /// `never` にはならず、スパンはそのスレッドの既定 subscriber に記録される。
+    fn install_global_fallback_subscriber() {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            // 他のテストが先に設定していても構わないので失敗は無視する
+            let _ = tracing::subscriber::set_global_default(tracing_subscriber::registry());
+        });
+    }
+
+    /// 定期チェックは、呼び出し元のスパンの中で動いても独立したトレースになり、
+    /// 結果 (乖離したインデックス数・再同期中か) と流れの種類をスパンに残す
+    #[tokio::test]
+    async fn resync_step_is_recorded_as_an_independent_scheduled_trace() {
+        use opentelemetry::trace::{SpanId, TracerProvider as _};
+        use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
+        use tracing::Instrument as _;
+        use tracing_subscriber::layer::SubscriberExt as _;
+
+        install_global_fallback_subscriber();
+
+        let exporter = InMemorySpanExporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_simple_exporter(exporter.clone())
+            .build();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let mut search_repository = MockSearchRepository::new();
+        search_repository
+            .expect_fetch_search_engine_stats()
+            .returning(|| Ok(NumberOfRecordsPerAggregate::default()));
+        let (answer_label_repository, comment_thread_repository) = empty_aggregate_dependencies();
+        let active_form_repository = InMemoryActiveFormRepository::default();
+        let form_label_repository = InMemoryFormLabelRepository::default();
+        let user_repository = InMemoryUserRepository::default();
+        let answer_entry_repository = InMemoryAnswerEntryRepository::default();
+        let use_case = SearchUseCase {
+            search_repository: &search_repository,
+            active_form_repository: &active_form_repository,
+            form_answer_label_repository: &answer_label_repository,
+            form_label_repository: &form_label_repository,
+            user_repository: &user_repository,
+            answer_entry_repository: &answer_entry_repository,
+            comment_thread_repository: &comment_thread_repository,
+            comment_attachment_repository: None,
+        };
+
+        use_case
+            .resync_search_engine_step(None)
+            .instrument(tracing::info_span!("caller"))
+            .await
+            .unwrap();
+
+        provider.force_flush().expect("flush must succeed");
+        let spans = exporter
+            .get_finished_spans()
+            .expect("spans must be exported");
+        let span = |name: &str| {
+            spans
+                .iter()
+                .find(|span| span.name == name)
+                .unwrap_or_else(|| panic!("span {name} must be exported"))
+        };
+        let watch = span("search_engine.watch_out_of_sync");
+        let attribute = |key: &str| {
+            watch
+                .attributes
+                .iter()
+                .find(|kv| kv.key.as_str() == key)
+                .map(|kv| kv.value.to_string())
+        };
+
+        assert_eq!(watch.parent_span_id, SpanId::INVALID);
+        assert_ne!(
+            watch.span_context.trace_id(),
+            span("caller").span_context.trace_id()
+        );
+        assert_eq!(
+            attribute("seichi_portal.flow").as_deref(),
+            Some(trace_flow::SCHEDULED)
+        );
+        assert_eq!(
+            attribute("search.out_of_sync_indexes").as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            attribute("search.resync_in_progress").as_deref(),
+            Some("false")
         );
     }
 
@@ -1614,7 +1794,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let comment_repository = MockCommentThreadRepository::new();
@@ -1723,7 +1903,7 @@ mod tests {
             .expect_get_labels_for_answers_by_answer_id()
             .times(3)
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(answer_author.clone());
         let mut answer_entry_repository = MockAnswerEntryRepository::new();
@@ -1823,7 +2003,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
         let comment_repository = MockCommentThreadRepository::new();
@@ -1862,7 +2042,7 @@ mod tests {
         let search_repository = MockSearchRepository::new();
         let active_form_repository = InMemoryActiveFormRepository::default();
         let answer_label_repository = MockAnswerLabelRepository::new();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let comment_repository = MockCommentThreadRepository::new();
@@ -1900,7 +2080,7 @@ mod tests {
         let search_repository = MockSearchRepository::new();
         let active_form_repository = InMemoryActiveFormRepository::new(vec![unreadable_form]);
         let answer_label_repository = MockAnswerLabelRepository::new();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         let answer_entry_repository = InMemoryAnswerEntryRepository::default();
         let comment_repository = MockCommentThreadRepository::new();
@@ -1999,7 +2179,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let answer_entry_repository =
@@ -2126,7 +2306,7 @@ mod tests {
             .expect_get_labels_for_answers_by_answer_id()
             .times(2)
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let mut answer_entry_repository = MockAnswerEntryRepository::new();
@@ -2359,7 +2539,7 @@ mod tests {
         let active_form_repository =
             InMemoryActiveFormRepository::new(vec![form_a, form_b, unreadable_form]);
         let answer_label_repository = MockAnswerLabelRepository::new();
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![
@@ -2477,7 +2657,7 @@ mod tests {
         answer_label_repository
             .expect_get_labels_for_answers_by_answer_id()
             .returning(|_| Ok(vec![]));
-        let form_label_repository = InMemoryFormLabelRepository;
+        let form_label_repository = InMemoryFormLabelRepository::default();
         let user_repository = InMemoryUserRepository::default();
         user_repository.save_user(actor.clone());
         let answer_entry_repository = InMemoryAnswerEntryRepository::new(vec![answer]);
