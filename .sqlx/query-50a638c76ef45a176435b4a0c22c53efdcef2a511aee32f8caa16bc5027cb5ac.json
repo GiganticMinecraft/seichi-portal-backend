@@ -1,21 +1,21 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT group_id FROM form_answer_groups WHERE form_id = ? ORDER BY id ASC",
+  "query": "SELECT user_id FROM discord_linked_users WHERE discord_id = ? FOR UPDATE",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "group_id",
+        "name": "user_id",
         "type_info": {
           "type": "String",
-          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
           "collation": 224,
           "max_size": 144
         },
         "origin": {
           "Table": {
-            "table": "seichi_portal.form_answer_groups",
-            "name": "group_id"
+            "table": "seichi_portal.discord_linked_users",
+            "name": "user_id"
           }
         }
       }
@@ -27,5 +27,5 @@
       false
     ]
   },
-  "hash": "e532db28379ecf5146cc219e52cd550d9c7b67327539274130e9f57d4a3a5525"
+  "hash": "50a638c76ef45a176435b4a0c22c53efdcef2a511aee32f8caa16bc5027cb5ac"
 }

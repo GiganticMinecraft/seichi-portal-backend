@@ -63,11 +63,19 @@ const SEARCH_DETAIL_FETCH_CONCURRENCY: usize = 10;
 const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::from_secs(10);
 #[cfg(test)]
 const SEARCH_ENGINE_SYNC_RETRY_DELAY: Duration = Duration::ZERO;
-const OUT_OF_SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+/// 再同期 1 巡の途中で、続きのステップを実行する間隔。
+const RESYNC_STEP_INTERVAL: Duration = Duration::from_secs(60);
+/// 検索エンジンとリポジトリの件数を突き合わせる間隔。
+///
+/// 件数の取得はリポジトリ側で全テーブルの `COUNT(*)` になり、InnoDB ではインデックスの全走査に
+/// なる。本番では毎分の実行がデータベースの読み取りの大半を占めていたため、CDC の取りこぼしを
+/// 拾う保険として十分な頻度まで落とす。再同期が始まったあとの続きは [`RESYNC_STEP_INTERVAL`]
+/// で進める。
+const OUT_OF_SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// 1 回の再同期で走査するドキュメント数の上限。
 ///
 /// 全件を一度に処理すると、検索エンジンへの投入とデータベースの読み出しが同時に跳ね上がるため、
-/// ここまで走査したら打ち切り、続きは次の [`OUT_OF_SYNC_CHECK_INTERVAL`] で再開する。
+/// ここまで走査したら打ち切り、続きは次の [`RESYNC_STEP_INTERVAL`] で再開する。
 const RESYNC_DOCUMENT_SCAN_BUDGET: usize = 2_000;
 
 fn resync_page_limit() -> PageLimit {
@@ -767,11 +775,13 @@ impl<
         &self,
         mut shutdown_status: watch::Receiver<bool>,
     ) -> Result<(), Error> {
-        let mut interval = time::interval(OUT_OF_SYNC_CHECK_INTERVAL);
+        let mut interval = time::interval(RESYNC_STEP_INTERVAL);
         // 1 回の再同期が interval より長引いても、溜まった tick が一斉に発火して
         // 再同期を多重に走らせないようにする
         interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-        let mut pass = None;
+        let mut pass: Option<ResyncPass> = None;
+        // 最初の tick で件数を突き合わせ、以降は OUT_OF_SYNC_CHECK_INTERVAL ごとに突き合わせる
+        let mut last_check: Option<Instant> = None;
 
         loop {
             if *shutdown_status.borrow() {
@@ -786,10 +796,21 @@ impl<
                     }
                 },
                 _ = interval.tick() => {
+                    let check_due = last_check
+                        .is_none_or(|checked_at| checked_at.elapsed() >= OUT_OF_SYNC_CHECK_INTERVAL);
+                    if pass.is_none() && !check_due {
+                        continue;
+                    }
+                    if pass.is_none() {
+                        last_check = Some(Instant::now());
+                    }
+
                     match self.resync_search_engine_step(pass.take()).await {
                         Ok(next) => pass = next,
                         Err(error) => {
                             tracing::error!(error = %error, "failed to check search engine synchronization");
+                            // 次の tick で件数の突き合わせからやり直す
+                            last_check = None;
                         }
                     }
                 }

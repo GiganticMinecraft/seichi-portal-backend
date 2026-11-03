@@ -529,7 +529,7 @@ impl UserDatabase for ConnectionPool {
         Ok(())
     }
 
-    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<(), InfraError> {
+    async fn link_discord_user(&self, link: &DiscordAccountLink) -> Result<bool, InfraError> {
         let user_id = link.user_id().to_string();
         let discord_user_id = link.discord_user().id().to_owned().into_inner();
         let discord_username = link
@@ -541,21 +541,45 @@ impl UserDatabase for ConnectionPool {
 
         self.read_write_transaction(|txn| {
             Box::pin(async move {
-                sqlx::query!(
+                // discord_linked_users は user_id (PK) と discord_id (UNIQUE) の 2 つの一意キーを
+                // 持つ。素の ON DUPLICATE KEY UPDATE だと、他の利用者がすでに同じ Discord
+                // アカウントを連携しているときにその利用者の行を書き換えてしまうため、重複した
+                // 行が自分のものであるときだけ更新する。
+                // 先に SELECT ... FOR UPDATE で所有者を確かめると、まだ無い discord_id への
+                // ギャップロックで同時の連携同士がデッドロックするため、INSERT を先に行う
+                let inserted = sqlx::query!(
                     r#"INSERT INTO discord_linked_users (user_id, discord_id, discord_username)
                     VALUES (?, ?, ?)
                     ON DUPLICATE KEY UPDATE
-                    discord_id = VALUES(discord_id),
-                    discord_username = VALUES(discord_username)
+                    discord_id = IF(user_id = VALUES(user_id), VALUES(discord_id), discord_id),
+                    discord_username =
+                        IF(user_id = VALUES(user_id), VALUES(discord_username), discord_username)
                     "#,
                     user_id,
                     discord_user_id,
                     discord_username,
                 )
                 .execute(&mut **txn)
+                .await;
+                match inserted {
+                    Ok(_) => {}
+                    // 自分の行 (user_id) と他の利用者の行 (discord_id) の両方に重複すると、
+                    // 自分の行の discord_id を他の利用者のものへ変えようとして一意制約に当たる
+                    Err(sqlx::Error::Database(error)) if error.is_unique_violation() => {
+                        return Ok(false);
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+
+                // 行は存在するので、FOR UPDATE は行ロックになりギャップロックにはならない
+                let owner = sqlx::query_scalar!(
+                    "SELECT user_id FROM discord_linked_users WHERE discord_id = ? FOR UPDATE",
+                    discord_user_id,
+                )
+                .fetch_optional(&mut **txn)
                 .await?;
 
-                Ok::<(), InfraError>(())
+                Ok::<bool, InfraError>(owner.is_some_and(|owner| owner == user_id))
             })
         })
         .await

@@ -41,19 +41,13 @@ impl FormAnswerLabelDatabase for ConnectionPool {
     async fn get_labels_for_answers(&self) -> Result<Vec<AnswerLabelRecord>, InfraError> {
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = sqlx::query("SELECT id, name FROM label_for_form_answers")
-                    .fetch_all(&mut **txn)
-                    .await?;
-
-                labels_rs
-                    .into_iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelRecord {
-                            id: rs.try_get("id")?,
-                            name: rs.try_get("name")?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()
+                sqlx::query_as!(
+                    AnswerLabelRecord,
+                    "SELECT id, name FROM label_for_form_answers ORDER BY id"
+                )
+                .fetch_all(&mut **txn)
+                .await
+                .map_err(Into::<InfraError>::into)
             })
         })
         .await
@@ -68,22 +62,14 @@ impl FormAnswerLabelDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let label_rs =
-                    sqlx::query("SELECT id, name FROM label_for_form_answers WHERE id = ?")
-                        .bind(label_id.to_string())
-                        .fetch_all(&mut **txn)
-                        .await?;
-
-                label_rs
-                    .into_iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelRecord {
-                            id: rs.try_get("id")?,
-                            name: rs.try_get("name")?,
-                        })
-                    })
-                    .next()
-                    .transpose()
+                sqlx::query_as!(
+                    AnswerLabelRecord,
+                    "SELECT id, name FROM label_for_form_answers WHERE id = ?",
+                    label_id.to_string(),
+                )
+                .fetch_optional(&mut **txn)
+                .await
+                .map_err(Into::<InfraError>::into)
             })
         })
         .await
@@ -140,24 +126,17 @@ impl FormAnswerLabelDatabase for ConnectionPool {
 
         self.read_only_transaction(|txn| {
             Box::pin(async move {
-                let labels_rs = sqlx::query(
-                    r"SELECT label_for_form_answers.id AS label_id, name FROM label_for_form_answers
+                sqlx::query_as!(
+                    AnswerLabelRecord,
+                    r"SELECT label_for_form_answers.id AS id, name FROM label_for_form_answers
                     INNER JOIN label_settings_for_form_answers ON label_for_form_answers.id = label_settings_for_form_answers.label_id
-                    WHERE answer_id = ?",
+                    WHERE answer_id = ?
+                    ORDER BY label_settings_for_form_answers.id",
+                    answer_id,
                 )
-                .bind(answer_id)
                 .fetch_all(&mut **txn)
-                .await?;
-
-                labels_rs
-                    .into_iter()
-                    .map(|rs| {
-                        Ok::<_, InfraError>(AnswerLabelRecord {
-                            id: rs.try_get("label_id")?,
-                            name: rs.try_get("name")?,
-                        })
-                    })
-                    .collect::<Result<Vec<AnswerLabelRecord>, _>>()
+                .await
+                .map_err(Into::<InfraError>::into)
             })
         })
             .await

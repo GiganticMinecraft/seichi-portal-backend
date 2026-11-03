@@ -410,9 +410,20 @@ async fn lock_comment_thread(
 ) -> Result<Allowed<CommentThread, Update>, Error> {
     let answer_id_text = answer_id.to_string();
     let form_id = form_id.to_string();
+    // アーカイブ (form_meta_data を FOR UPDATE で取る) と同時に走らないようにするための
+    // ロック。コメント書き込み同士は互いを待たなくてよいので共有ロックにする。
+    //
+    // この関数では answers / form_answer_comments の排他ロックを取るまで、通常の (ロックなし)
+    // SELECT を実行してはいけない。REPEATABLE READ では最初の通常の SELECT でスナップショットが
+    // 固定され、MariaDB の innodb_snapshot_isolation (11.6 以降の既定) では、そのあとの
+    // FOR UPDATE がスナップショットより新しい行に当たると
+    // `ERROR 1020: Record has changed since last read` で失敗する。同じコメントを並行して
+    // 編集・削除すると、後続側は共有ロックのフォームを通過して回答行の排他ロックを待ち、先行側の
+    // コミット後にコメント行の FOR UPDATE でこのエラーになる。そのため以下の読み取りはすべて
+    // ロック付き (LOCK IN SHARE MODE か FOR UPDATE) にしている
     let locked_form = sqlx::query!(
         "SELECT visibility, answer_visibility, answer_response_visibility
-         FROM form_meta_data WHERE id = ? FOR UPDATE",
+         FROM form_meta_data WHERE id = ? LOCK IN SHARE MODE",
         form_id,
     )
     .fetch_optional(&mut **transaction)
@@ -425,7 +436,8 @@ async fn lock_comment_thread(
         AnswerResponseVisibility::try_from(locked_form.answer_response_visibility)?;
 
     let form_group_ids = sqlx::query!(
-        "SELECT group_id FROM form_allowed_user_groups WHERE form_id = ? ORDER BY id ASC",
+        "SELECT group_id FROM form_allowed_user_groups WHERE form_id = ? ORDER BY id ASC
+         LOCK IN SHARE MODE",
         form_id,
     )
     .fetch_all(&mut **transaction)
@@ -447,7 +459,8 @@ async fn lock_comment_thread(
     }
 
     let answer_group_ids = sqlx::query!(
-        "SELECT group_id FROM form_answer_groups WHERE form_id = ? ORDER BY id ASC",
+        "SELECT group_id FROM form_answer_groups WHERE form_id = ? ORDER BY id ASC
+         LOCK IN SHARE MODE",
         form_id,
     )
     .fetch_all(&mut **transaction)
@@ -460,15 +473,14 @@ async fn lock_comment_thread(
             .map_err(InfraError::from)
     })
     .collect::<Result<Vec<_>, _>>()?;
+    // 回答行は排他ロックして最新の状態を読む。users / temporary_users を JOIN したまま
+    // FOR UPDATE にすると回答者の行まで排他ロックされ、ログイン時のユーザー更新などと
+    // 競合するため、投稿者の情報は共有ロックで別に読む
     let answer = sqlx::query!(
-        "SELECT publication, author_type, user, users.name AS user_name, users.role AS user_role,
-            temporary_user_id, temporary_users.name AS temporary_user_name,
-            temporary_users.contact_text AS temporary_user_contact_text,
-            answers.redmine_user_id, answers.redmine_author_name
+        "SELECT publication, author_type, user, temporary_user_id,
+            redmine_user_id, redmine_author_name
         FROM answers
-        LEFT JOIN users ON answers.user = users.id
-        LEFT JOIN temporary_users ON answers.temporary_user_id = temporary_users.id
-        WHERE answers.id = ? AND answers.form_id = ? FOR UPDATE",
+        WHERE id = ? AND form_id = ? FOR UPDATE",
         answer_id_text,
         form_id,
     )
@@ -476,15 +488,35 @@ async fn lock_comment_thread(
     .await
     .map_err(InfraError::from)?
     .ok_or(DomainError::NotFound)?;
+    let author_user = match &answer.user {
+        Some(user_id) => sqlx::query!(
+            "SELECT name, role FROM users WHERE id = ? LOCK IN SHARE MODE",
+            user_id,
+        )
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(InfraError::from)?,
+        None => None,
+    };
+    let temporary_author = match &answer.temporary_user_id {
+        Some(temporary_user_id) => sqlx::query!(
+            "SELECT name, contact_text FROM temporary_users WHERE id = ? LOCK IN SHARE MODE",
+            temporary_user_id,
+        )
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(InfraError::from)?,
+        None => None,
+    };
 
     let answer_author = match author_from_values(
         answer.author_type,
         answer.user,
-        answer.user_name,
-        answer.user_role,
+        author_user.as_ref().map(|user| user.name.clone()),
+        author_user.map(|user| user.role),
         answer.temporary_user_id,
-        answer.temporary_user_name,
-        answer.temporary_user_contact_text,
+        temporary_author.as_ref().map(|user| user.name.clone()),
+        temporary_author.map(|user| user.contact_text),
         answer.redmine_user_id,
         answer.redmine_author_name,
     )? {
@@ -495,14 +527,12 @@ async fn lock_comment_thread(
 
     let comments = match comment_id {
         Some(comment_id) => {
-            let portal_comment = sqlx::query_as!(
-                PortalCommentRecord,
-                r"SELECT c.id AS comment_id, c.answer_id, c.commented_by AS commented_by_id,
-                u.name AS commented_by_name, u.role AS commented_by_role, c.content,
-                c.timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
-            FROM form_answer_comments c
-            INNER JOIN users u ON u.id = c.commented_by
-            WHERE c.id = ? AND c.answer_id = ? FOR UPDATE",
+            // コメント行は排他ロックして最新の状態を読み、投稿者の users 行は共有ロックに留める
+            let portal_comment = sqlx::query!(
+                r"SELECT id AS comment_id, answer_id, commented_by AS commented_by_id, content,
+                timestamp AS `timestamp!: chrono::DateTime<chrono::Utc>`
+            FROM form_answer_comments
+            WHERE id = ? AND answer_id = ? FOR UPDATE",
                 comment_id.to_string(),
                 answer_id_text,
             )
@@ -510,7 +540,22 @@ async fn lock_comment_thread(
             .await
             .map_err(InfraError::from)?;
             let record = if let Some(comment) = portal_comment {
-                CommentRecord::Portal(comment)
+                let author = sqlx::query!(
+                    "SELECT name, role FROM users WHERE id = ? LOCK IN SHARE MODE",
+                    comment.commented_by_id,
+                )
+                .fetch_one(&mut **transaction)
+                .await
+                .map_err(InfraError::from)?;
+                CommentRecord::Portal(PortalCommentRecord {
+                    answer_id: comment.answer_id,
+                    comment_id: comment.comment_id,
+                    content: comment.content,
+                    timestamp: comment.timestamp,
+                    commented_by_name: author.name,
+                    commented_by_id: comment.commented_by_id,
+                    commented_by_role: author.role,
+                })
             } else {
                 CommentRecord::ImportedFromRedmine(
                     sqlx::query_as!(
@@ -718,5 +763,217 @@ mod tests {
             keys,
             vec!["imported-2", "imported-10", "portal-a", "portal-b"]
         );
+    }
+
+    /// 同じコメントの並行する編集を MariaDB 上で再現する。
+    ///
+    /// フォームを共有ロックにしているため、2 つのトランザクションはどちらもフォームのロックを
+    /// 通過して回答行の排他ロックで直列化される。後続側がロックを取る前に通常の SELECT で
+    /// スナップショットを固定していると、先行側のコミット後のコメント行 FOR UPDATE が
+    /// `ERROR 1020: Record has changed since last read` になる (innodb_snapshot_isolation=ON)。
+    ///
+    /// 実行方法 (migration 済みの DB が必要):
+    ///
+    /// `DATABASE_URL=mysql://user:password@127.0.0.1:3306/seichi_portal cargo test -p resource --lib concurrent_comment -- --ignored`
+    #[tokio::test]
+    #[ignore = "requires a migrated MariaDB (DATABASE_URL); executed by the CI sqlx prepare job"]
+    async fn concurrent_comment_updates_serialize_without_snapshot_conflict() {
+        use domain::{
+            account::models::{AccountUser, Role},
+            form::comment::CommentContent,
+        };
+        use sqlx::mysql::MySqlPoolOptions;
+        use std::time::Duration;
+
+        let url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set for the MariaDB comment lock test");
+        let pool = MySqlPoolOptions::new()
+            .max_connections(4)
+            .connect(&url)
+            .await
+            .expect("connect to MariaDB");
+
+        let user_id = Uuid::new_v4();
+        let form_id = FormId::new();
+        let revision_id = Uuid::now_v7();
+        let answer_id = AnswerId::new();
+        let comment_id = CommentId::new();
+        let user_text = user_id.to_string();
+        let form_text = form_id.to_string();
+        let revision_text = revision_id.to_string();
+        let answer_text = answer_id.to_string();
+        let comment_text = comment_id.to_string();
+
+        // このテスト内の SQL は typed query にしない。`cargo sqlx prepare` はテストターゲットを
+        // コンパイルしないため `.sqlx/` に載らず、DB のない CI の `cargo test` がオフラインで
+        // コンパイルできなくなる。
+        let seed = async {
+            sqlx::query(
+                "INSERT INTO users (id, name, role) VALUES (?, 'lock-test', 'ADMINISTRATOR')",
+            )
+            .bind(&user_text)
+            .execute(&pool)
+            .await?;
+            sqlx::query(
+                "INSERT INTO form_meta_data (id, title, description, visibility, answer_visibility,
+                    created_by, updated_by)
+                 VALUES (?, 'lock test', '', 'PUBLIC', 'PUBLIC', ?, ?)",
+            )
+            .bind(&form_text)
+            .bind(&user_text)
+            .bind(&user_text)
+            .execute(&pool)
+            .await?;
+            sqlx::query(
+                "INSERT INTO form_revisions (id, form_id, revision_number) VALUES (?, ?, 1)",
+            )
+            .bind(&revision_text)
+            .bind(&form_text)
+            .execute(&pool)
+            .await?;
+            sqlx::query(
+                "INSERT INTO answers (id, form_id, form_revision_id, author_type, user)
+                 VALUES (?, ?, ?, 'AUTHENTICATED_USER', ?)",
+            )
+            .bind(&answer_text)
+            .bind(&form_text)
+            .bind(&revision_text)
+            .bind(&user_text)
+            .execute(&pool)
+            .await?;
+            sqlx::query(
+                "INSERT INTO form_answer_comments (id, answer_id, commented_by, content)
+                 VALUES (?, ?, ?, 'original')",
+            )
+            .bind(&comment_text)
+            .bind(&answer_text)
+            .bind(&user_text)
+            .execute(&pool)
+            .await?;
+            Ok::<_, sqlx::Error>(())
+        };
+
+        let actor = Actor::AccountUser(AccountUser::new(
+            "lock-test".to_string(),
+            user_id.into(),
+            Role::Administrator,
+        ));
+        let content = |text: &str| CommentContent::new(text.to_string().try_into().unwrap());
+
+        // 失敗しても後片付けが走るように、本体は Result で受けてから assert する
+        let scenario = async {
+            seed.await.map_err(|error| format!("seed: {error}"))?;
+
+            // 先行トランザクション: スレッドをロックしてコメントを書き換え、まだコミットしない
+            let mut first = pool
+                .begin_with("START TRANSACTION READ WRITE")
+                .await
+                .map_err(|error| format!("begin first: {error}"))?;
+            let thread = lock_comment_thread(
+                &mut first,
+                form_id,
+                actor.clone(),
+                answer_id,
+                Some(comment_id),
+            )
+            .await
+            .map_err(|error| format!("first lock: {error}"))?;
+            let comment = thread
+                .authorize_comment_update(comment_id, content("first"))
+                .map_err(|error| format!("first authorize: {error}"))?
+                .into_inner();
+            update_comment_with_history(&mut first, &comment, thread.actor(), Utc::now())
+                .await
+                .map_err(|error| format!("first update: {error}"))?;
+
+            // 後続トランザクション: 共有ロックのフォームは通過し、回答行の排他ロックで待つ
+            let second_pool = pool.clone();
+            let second_actor = actor.clone();
+            let second = tokio::spawn(async move {
+                let mut second = second_pool
+                    .begin_with("START TRANSACTION READ WRITE")
+                    .await
+                    .map_err(InfraError::from)?;
+                let thread = lock_comment_thread(
+                    &mut second,
+                    form_id,
+                    second_actor,
+                    answer_id,
+                    Some(comment_id),
+                )
+                .await?;
+                let seen = thread.comments()[0].content().clone();
+                let comment = thread
+                    .authorize_comment_update(comment_id, content("second"))?
+                    .into_inner();
+                update_comment_with_history(&mut second, &comment, thread.actor(), Utc::now())
+                    .await?;
+                second.commit().await.map_err(InfraError::from)?;
+                Ok::<_, Error>(seen)
+            });
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            if second.is_finished() {
+                return Err(
+                    "the second transaction must wait for the first transaction's row locks"
+                        .to_string(),
+                );
+            }
+
+            first
+                .commit()
+                .await
+                .map_err(|error| format!("first commit: {error}"))?;
+            let seen = second
+                .await
+                .map_err(|error| format!("second task: {error}"))?
+                .map_err(|error| format!("second update failed after the first commit: {error}"))?;
+
+            let stored: String =
+                sqlx::query_scalar("SELECT content FROM form_answer_comments WHERE id = ?")
+                    .bind(&comment_text)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|error| format!("read comment: {error}"))?;
+            let history: Vec<String> = sqlx::query_scalar(
+                "SELECT content FROM form_answer_comment_history WHERE comment_id = ? ORDER BY id ASC",
+            )
+            .bind(&comment_text)
+            .fetch_all(&pool)
+            .await
+            .map_err(|error| format!("read history: {error}"))?;
+            Ok::<_, String>((seen, stored, history))
+        }
+        .await;
+
+        // 後片付け (answers → form_revisions は ON DELETE RESTRICT なので親から順に消さず明示する)
+        for (statement, id) in [
+            (
+                "DELETE FROM form_answer_comment_history WHERE comment_id = ?",
+                &comment_text,
+            ),
+            (
+                "DELETE FROM form_answer_comments WHERE id = ?",
+                &comment_text,
+            ),
+            ("DELETE FROM answers WHERE id = ?", &answer_text),
+            ("DELETE FROM form_revisions WHERE id = ?", &revision_text),
+            ("DELETE FROM form_meta_data WHERE id = ?", &form_text),
+            ("DELETE FROM users WHERE id = ?", &user_text),
+        ] {
+            sqlx::query(statement)
+                .bind(id)
+                .execute(&pool)
+                .await
+                .expect("clean up test rows");
+        }
+
+        let (seen, stored, history) = scenario.unwrap();
+        assert_eq!(
+            seen,
+            content("first"),
+            "the second transaction must read the content committed by the first one"
+        );
+        assert_eq!(stored, "second");
+        assert_eq!(history, vec!["first", "second"]);
     }
 }

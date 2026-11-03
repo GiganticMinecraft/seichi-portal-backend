@@ -12,6 +12,14 @@ use crate::{
     types::authorization_guard::{Allowed, AuthorizationGuard, Create, Delete, Read, Update},
 };
 
+/// Discord アカウント連携の結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscordLinkOutcome {
+    Linked,
+    /// 同じ Discord アカウントが別の利用者に連携済みで、何も変更しなかった。
+    AlreadyLinkedToAnotherUser,
+}
+
 #[automock]
 #[async_trait]
 pub trait UserRepository: Send + Sync + 'static {
@@ -67,7 +75,7 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn link_discord_user(
         &self,
         link: Allowed<DiscordAccountLink, Update>,
-    ) -> Result<(), Error>;
+    ) -> Result<DiscordLinkOutcome, Error>;
     async fn unlink_discord_user(
         &self,
         link: Allowed<DiscordAccountLink, Delete>,
