@@ -102,7 +102,7 @@ services:
       - meili_data:/meili_data
     restart: always
   rabbitmq:
-    image: rabbitmq:4.4.0-management-alpine
+    image: rabbitmq:4.4.1-management-alpine
     container_name: rabbitmq
     environment:
       - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_management load_definitions "/etc/rabbitmq/definitions.json"
