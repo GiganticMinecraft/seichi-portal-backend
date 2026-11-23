@@ -9,7 +9,6 @@ env:
 
 permissions:
   contents: read
-  checks: write
 
 jobs:
   workspace-version-check:
@@ -118,11 +117,8 @@ jobs:
           git ls-files --error-unmatch docs/openapi.json
           git diff --exit-code -- docs/openapi.json
 
-      - uses: LoliGothick/clippy-check@c267b18864fd79a1bb9bbde99fb51a9cd9822b9a # v0.3.2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          deny: warnings
-          working-directory: .
+      - name: Clippy
+        run: cargo clippy -- --deny warnings
 
       - name: Cargo test
         run: cargo test --all-features
