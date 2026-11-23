@@ -11,7 +11,7 @@ axum = { workspace = true }
 # (ログ行に trace_id を付けるため。既定の TRACE だとログのレイヤーから見えない)
 axum-tracing-opentelemetry = { version = "0.42.1", features = ["tracing_level_info"] }
 common = { path = "../common" }
-hyper = { version = "1.12.0", features = ["full"] }
+hyper = { version = "1.13.0", features = ["full"] }
 # tracing-opentelemetry の更新時は、対応するバージョンの feature へ更新すること。
 # 一致しない場合、JSON ログの openTelemetry.traceId / spanId が出力されない。
 json-subscriber = { version = "0.3.1", features = ["tracing-opentelemetry-0-34"] }
